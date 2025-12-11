@@ -1,0 +1,36 @@
+Source: chairlift
+Section: utils
+Priority: optional
+Maintainer: Brian Ketelsen <bketelsen@gmail.com>
+Build-Depends:
+            build-essential,
+            debhelper,
+            python3,
+            meson,
+            gettext,
+            desktop-file-utils,
+            make,
+            ninja-build,
+            pkgconf,
+            libgio-2.0-dev,
+            libgio-2.0-dev-bin,
+            libxml2-utils,
+            gtk-update-icon-cache
+Homepage: https://github.com/frostyard/chairlift/
+Vcs-Browser: https://github.com/frostyard/chairlift
+Vcs-Git: https://github.com/frostyard/chairlift.git
+Rules-Requires-Root: no
+
+Package: chairlift
+Architecture: all
+Depends: python3,
+         python3-gi,
+         python3-pytz,
+         python3-requests,
+         libadwaita-1-0,
+         gir1.2-gtk-4.0,
+         gir1.2-adw-1,
+         gir1.2-gweather-4.0,
+         gir1.2-gnomedesktop-4.0,
+         pkexec
+Description: This utility is meant to be used in SNOW Linux as a system management tool.

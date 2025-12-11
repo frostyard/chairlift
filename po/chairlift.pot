@@ -1,0 +1,273 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the chairlift package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: chairlift\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-12-11 14:25-0500\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: chairlift/application.py:75
+msgid "Don't make any changes to the system."
+msgstr ""
+
+#: chairlift/window.py:50
+msgid "Execution failed: "
+msgstr ""
+
+#: chairlift/window.py:60
+msgid "Details"
+msgstr ""
+
+#: chairlift/window.py:66
+msgid "Error log"
+msgstr ""
+
+#: chairlift/views/user_home.py:55
+msgid "System Information"
+msgstr ""
+
+#: chairlift/views/user_home.py:56
+msgid "View system details and hardware information"
+msgstr ""
+
+#: chairlift/views/user_home.py:60
+msgid "Operating System Details"
+msgstr ""
+
+#. Fallback if /etc/os-release doesn't exist
+#: chairlift/views/user_home.py:84
+msgid "OS Information"
+msgstr ""
+
+#: chairlift/views/user_home.py:84
+msgid "Not available"
+msgstr ""
+
+#: chairlift/views/user_home.py:87 chairlift/views/user_home.py:295
+#: chairlift/views/user_home.py:472
+msgid "Error"
+msgstr ""
+
+#: chairlift/views/user_home.py:98
+msgid "System Updates"
+msgstr ""
+
+#: chairlift/views/user_home.py:99
+msgid "Check for and install system updates"
+msgstr ""
+
+#: chairlift/views/user_home.py:104
+msgid "Homebrew Updates"
+msgstr ""
+
+#: chairlift/views/user_home.py:105
+msgid "Check for and install Homebrew package updates"
+msgstr ""
+
+#: chairlift/views/user_home.py:110
+msgid "Update Homebrew"
+msgstr ""
+
+#: chairlift/views/user_home.py:111
+msgid "Update Homebrew itself and all formulae definitions"
+msgstr ""
+
+#: chairlift/views/user_home.py:114
+msgid "Update"
+msgstr ""
+
+#: chairlift/views/user_home.py:125
+msgid "Outdated Packages"
+msgstr ""
+
+#: chairlift/views/user_home.py:126 chairlift/views/user_home.py:163
+#: chairlift/views/user_home.py:169 chairlift/views/user_home.py:345
+#: chairlift/views/user_home.py:522
+msgid "Loading..."
+msgstr ""
+
+#: chairlift/views/user_home.py:134
+msgid "Update Settings"
+msgstr ""
+
+#: chairlift/views/user_home.py:135
+msgid "Configure update preferences"
+msgstr ""
+
+#: chairlift/views/user_home.py:142
+msgid "Installed Applications"
+msgstr ""
+
+#: chairlift/views/user_home.py:143
+msgid "Manage your installed applications"
+msgstr ""
+
+#: chairlift/views/user_home.py:146
+msgid "Manage Flatpaks"
+msgstr ""
+
+#: chairlift/views/user_home.py:147
+msgid "Open the application manager to install and manage applications"
+msgstr ""
+
+#: chairlift/views/user_home.py:156
+msgid "Homebrew"
+msgstr ""
+
+#: chairlift/views/user_home.py:157
+msgid "Manage Homebrew packages installed on your system"
+msgstr ""
+
+#: chairlift/views/user_home.py:162
+msgid "Formulae"
+msgstr ""
+
+#: chairlift/views/user_home.py:168
+msgid "Casks"
+msgstr ""
+
+#: chairlift/views/user_home.py:177
+msgid "Preconfigured Bundles"
+msgstr ""
+
+#: chairlift/views/user_home.py:178
+msgid "Install and manage preconfigured application bundles"
+msgstr ""
+
+#: chairlift/views/user_home.py:185
+msgid "System Cleanup"
+msgstr ""
+
+#: chairlift/views/user_home.py:186
+msgid "Clean up temporary files and free up disk space"
+msgstr ""
+
+#: chairlift/views/user_home.py:191
+msgid "System Optimization"
+msgstr ""
+
+#: chairlift/views/user_home.py:192
+msgid "Optimize system performance"
+msgstr ""
+
+#: chairlift/views/user_home.py:199
+msgid "Help Resources"
+msgstr ""
+
+#: chairlift/views/user_home.py:200
+msgid "Access help and support resources"
+msgstr ""
+
+#: chairlift/views/user_home.py:215
+msgid "Updating..."
+msgstr ""
+
+#: chairlift/views/user_home.py:223 chairlift/views/user_home.py:272
+#: chairlift/views/user_home.py:377 chairlift/views/user_home.py:439
+msgid "Homebrew is not installed"
+msgstr ""
+
+#: chairlift/views/user_home.py:229
+msgid "Homebrew updated successfully"
+msgstr ""
+
+#: chairlift/views/user_home.py:239
+msgid "Failed to update Homebrew: {}"
+msgstr ""
+
+#: chairlift/views/user_home.py:288
+msgid "Failed to load outdated packages: {}"
+msgstr ""
+
+#: chairlift/views/user_home.py:300 chairlift/views/user_home.py:477
+msgid "Failed to load"
+msgstr ""
+
+#: chairlift/views/user_home.py:310
+msgid "{} packages need updates"
+msgstr ""
+
+#: chairlift/views/user_home.py:315
+msgid "{} → {}"
+msgstr ""
+
+#: chairlift/views/user_home.py:325 chairlift/views/user_home.py:419
+msgid "Upgrade"
+msgstr ""
+
+#: chairlift/views/user_home.py:335
+msgid "All packages are up to date"
+msgstr ""
+
+#: chairlift/views/user_home.py:336
+msgid "No updates available"
+msgstr ""
+
+#: chairlift/views/user_home.py:341
+msgid "Up to date"
+msgstr ""
+
+#: chairlift/views/user_home.py:346
+msgid "Checking for outdated packages"
+msgstr ""
+
+#: chairlift/views/user_home.py:369
+msgid "Upgrading..."
+msgstr ""
+
+#: chairlift/views/user_home.py:383
+msgid "{} upgraded successfully"
+msgstr ""
+
+#: chairlift/views/user_home.py:393
+msgid "Failed to upgrade {}: {}"
+msgstr ""
+
+#: chairlift/views/user_home.py:463
+msgid "Failed to load Homebrew packages: {}"
+msgstr ""
+
+#. Populate formulae expander
+#. Populate casks expander
+#: chairlift/views/user_home.py:484 chairlift/views/user_home.py:502
+msgid "{} installed"
+msgstr ""
+
+#: chairlift/views/user_home.py:489 chairlift/views/user_home.py:507
+msgid "Version: {}"
+msgstr ""
+
+#: chairlift/views/user_home.py:496
+msgid "No formulae installed"
+msgstr ""
+
+#: chairlift/views/user_home.py:497
+msgid "Install formulae using 'brew install <formula>'"
+msgstr ""
+
+#: chairlift/views/user_home.py:514
+msgid "No casks installed"
+msgstr ""
+
+#: chairlift/views/user_home.py:515
+msgid "Install casks using 'brew install --cask <cask>'"
+msgstr ""
+
+#: chairlift/views/user_home.py:523
+msgid "Fetching installed packages"
+msgstr ""
+
+#: data/org.frostyard.ChairLift.desktop.in:2
+msgid "SNOW First Setup"
+msgstr ""

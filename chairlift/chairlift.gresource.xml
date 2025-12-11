@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/org/frostyard/ChairLift">
+    <file>style.css</file>
+    <file>gtk/window.ui</file>
+    <file>gtk/dialog.ui</file>
+    <file>gtk/user-home.ui</file>
+    <file>assets/theme-default.svg</file>
+    <file>assets/theme-dark.svg</file>
+    <file>assets/background_replacement.png</file>
+  </gresource>
+  <gresource prefix="/org/frostyard/ChairLift/icons/symbolic/apps/">
+    <file preprocess="xml-stripblanks" alias="org.gnome.Software-symbolic.svg">assets/symbolic/apps/org.gnome.Software-symbolic.svg</file>
+  </gresource>
+  <gresource prefix="/org/frostyard/ChairLift/icons/scalable/actions/">
+    <file preprocess="xml-stripblanks" alias="emblem-default-symbolic.svg">assets/symbolic/actions/emblem-default-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="network-wired-acquiring-symbolic.svg">assets/symbolic/actions/network-wired-acquiring-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="computer-symbolic.svg">assets/symbolic/actions/computer-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="input-keyboard-symbolic.svg">assets/symbolic/actions/input-keyboard-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="preferences-desktop-locale-symbolic.svg">assets/symbolic/actions/preferences-desktop-locale-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="go-next-symbolic.svg">assets/symbolic/actions/go-next-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="preferences-system-time-symbolic.svg">assets/symbolic/actions/preferences-system-time-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="go-previous-symbolic.svg">assets/symbolic/actions/go-previous-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="network-wired-disconnected-symbolic.svg">assets/symbolic/actions/network-wired-disconnected-symbolic.svg</file>
+    <file preprocess="xml-stripblanks" alias="dialog-warning-symbolic.svg">assets/symbolic/actions/dialog-warning-symbolic.svg</file>
+  </gresource>
+</gresources>

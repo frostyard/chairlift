@@ -1,0 +1,13 @@
+.vscode/
+mesonbuild/
+build/
+debian/files
+debian/chairlift.debhelper.log
+debian/chairlift
+debian/.debhelper
+*/__pycache__
+*.pyc
+chairlift/chairlift.gresource
+.buildconfig
+install/
+localegen/

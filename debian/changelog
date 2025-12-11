@@ -1,0 +1,5 @@
+chairlift (0.1.0) unstable; urgency=medium
+ 
+  * Initial release of chairlift, a system management tool for SNOW Linux.
+ 
+ -- Brian Ketelsen <bketelsen@gmail.com>  Thu, 06 Jun 2024 12:00:00 +0000

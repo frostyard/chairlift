@@ -1,0 +1,42 @@
+# syntax=ghcr.io/project-dalec/dalec/frontend:latest
+name: chairlift
+version: 0.1.0
+revision: "1"
+packager: Brian Ketelsen
+vendor: Frostyard
+license: GPL
+description: Manage your SNOW Linux system with ease.
+website: https://snowlinux.org
+
+sources:
+  src:
+    path: .
+    context: {}
+
+dependencies:
+  build:
+    build-essential:
+    debhelper:
+    python3:
+    meson:
+    gettext:
+    desktop-file-utils:
+    make:
+    ninja-build:
+    pkgconf:
+    libgio-2.0-dev:
+    libgio-2.0-dev-bin:
+    libxml2-utils:
+    gtk-update-icon-cache:
+
+
+build:
+
+  steps:
+
+    - command: |
+        cd src
+        meson setup build
+        meson compile -C build
+
+        

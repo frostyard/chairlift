@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=ChairLift
+Exec=chairlift
+Icon=org.frostyard.ChairLift
+Terminal=false
+Type=Application
+Categories=System;GTK;
+StartupNotify=true
+NoDisplay=false

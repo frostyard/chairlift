@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk" version="4.0"/>
+  <requires lib="libadwaita" version="1.0" />
+  <template class="ChairLiftWindow" parent="AdwApplicationWindow">
+    <property name="default-width">800</property>
+    <property name="default-height">800</property>
+    <property name="title">Chair Lift</property>
+    <property name="deletable">True</property>
+    <child>
+      <object class="AdwBin">
+        <property name="child">
+          <object class="AdwToolbarView">
+            <property name="content">
+              <object class="GtkOverlay" id="content_overlay">
+                <property name="valign">center</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">horizontal</property>
+                    <property name="vexpand">true</property>
+                    <property name="hexpand">true</property>
+                    <child>
+                      <object class="AdwToastOverlay" id="toasts">
+                        <child>
+                          <object class="GtkStack" id="stack">
+                            <property name="vexpand">True</property>
+                            <property name="hexpand">True</property>
+                            <property name="transition-type">slide-left-right</property>
+                          </object>
+                        </child>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </property>
+          </object>
+        </property>
+      </object>
+    </child>
+  </template>
+</interface>
