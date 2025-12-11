@@ -148,7 +148,7 @@ class ChairLiftUserHome(Adw.Bin):
         )
         view_apps.set_activatable(True)
         view_apps.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
-        view_apps.connect("activated", self.__on_url_row_activated, "app://org.gnome.Software")
+        view_apps.connect("activated", self.__on_launch_app_row_activated, "io.github.kolunmi.Bazaar")
         applications_installed_group.add(view_apps)
 
         # Brew group
@@ -206,6 +206,23 @@ class ChairLiftUserHome(Adw.Bin):
             Gio.AppInfo.launch_default_for_uri(url, None)
         except Exception as e:
             print(f"Error opening URL: {e}")
+
+    def __on_launch_app_row_activated(self, row, app_id):
+        """Launch a Flatpak application when a row is clicked"""
+        try:
+            app_info = Gio.DesktopAppInfo.new(f"{app_id}.desktop")
+            if app_info:
+                app_info.launch([], None)
+            else:
+                # If desktop file not found, try launching via the app ID directly
+                Gio.AppInfo.launch_default_for_uri(f"appstream://{app_id}", None)
+        except Exception as e:
+            print(f"Error launching application {app_id}: {e}")
+            # Fallback: try to open in software center
+            try:
+                Gio.AppInfo.launch_default_for_uri(f"appstream://{app_id}", None)
+            except Exception as e2:
+                print(f"Error opening in software center: {e2}")
 
     def __on_update_homebrew_clicked(self, button):
         """Handle Homebrew update button click"""
