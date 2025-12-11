@@ -6,6 +6,6 @@
 
 </div>
 
-## Forked from Vanilla OS
+## Adapted from Vanilla OS first-setup
 
 https://github.com/Vanilla-OS/first-setup
