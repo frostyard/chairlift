@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=ChairLift
-Exec=chairlift
+Exec=chairlift-wrapper
 Icon=org.frostyard.ChairLift
 Terminal=false
 Type=Application
