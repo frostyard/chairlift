@@ -16,16 +16,6 @@ desktop_file = i18n.merge_file(
   install: true,
   install_dir: join_paths(get_option('datadir'), 'applications'),
 )
-custom_target(
-  'install-autostart-desktop',
-  input: desktop_file,
-  output: 'org.frostyard.ChairLift.autostart.desktop',
-  command: ['cp', '@INPUT@', '@OUTPUT@'],
-  install_dir: join_paths(get_option('sysconfdir'), 'skel', '.config', 'autostart'),
-  build_by_default: true,
-  install : true,
-)
-
 desktop_utils = find_program('desktop-file-validate', required: false)
 if desktop_utils.found()
   test('Validate desktop file', desktop_utils,
