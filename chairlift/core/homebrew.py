@@ -183,6 +183,7 @@ def list_outdated_packages(formula_only: bool = True) -> List[Dict[str, Any]]:
 def search_formula(query: str, limit: Optional[int] = None) -> List[Dict[str, str]]:
     """
     Search for available Homebrew formulae using the Homebrew API.
+    Exact matches are prioritized and returned first.
     
     Args:
         query: Search query string
@@ -206,29 +207,43 @@ def search_formula(query: str, limit: Optional[int] = None) -> List[Dict[str, st
             
             data = json.loads(response.read().decode('utf-8'))
         
-        # Search through formulae
-        results = []
+        # Search through formulae - prioritize exact matches
+        exact_matches = []
+        partial_matches = []
         query_lower = query.lower()
         
         for formula in data:
-            # Search in name, full_name, and desc fields
-            name = formula.get('name', '').lower()
-            full_name = formula.get('full_name', '').lower()
-            desc = formula.get('desc', '').lower()
+            # Get fields
+            name = formula.get('name', '')
+            full_name = formula.get('full_name', '')
+            desc = formula.get('desc', '')
             
-            # Check if query matches any of the fields
-            if (query_lower in name or 
-                query_lower in full_name or 
-                query_lower in desc):
-                
-                results.append({
-                    'name': formula.get('name', ''),
-                    'description': formula.get('desc', '')
+            name_lower = name.lower()
+            full_name_lower = full_name.lower()
+            desc_lower = desc.lower()
+            
+            # Check for exact match first (name or full_name)
+            if name_lower == query_lower or full_name_lower == query_lower:
+                exact_matches.append({
+                    'name': name,
+                    'description': desc
                 })
+            # Check if query matches any of the fields (partial match)
+            elif (query_lower in name_lower or 
+                  query_lower in full_name_lower or 
+                  query_lower in desc_lower):
                 
-                # Stop if we've reached the limit
-                if limit and len(results) >= limit:
-                    break
+                partial_matches.append({
+                    'name': name,
+                    'description': desc
+                })
+        
+        # Combine exact matches first, then partial matches
+        results = exact_matches + partial_matches
+        
+        # Apply limit if specified
+        if limit:
+            results = results[:limit]
         
         return results
         

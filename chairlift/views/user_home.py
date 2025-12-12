@@ -559,8 +559,10 @@ class ChairLiftUserHome(Adw.Bin):
             formulae_expander.set_subtitle(_("{} installed").format(len(formulae)))
             if formulae:
                 for pkg in sorted(formulae, key=lambda x: x['name']):
+                    # Sanitize description to handle HTML entities
+                    desc = GLib.markup_escape_text(pkg.get('desc', ''))
                     pkg_row = Adw.ActionRow(
-                        title=pkg['name'] + " - " + pkg.get('desc', ''),
+                        title=pkg['name'] + " - " + desc,
                         subtitle=_("Version: {}").format(pkg['version'])
                     )
                     
@@ -863,11 +865,18 @@ class ChairLiftUserHome(Adw.Bin):
                         'message': _("Homebrew is not installed")
                     }
                 
+                # Get search results
                 results = homebrew.search_formula(query, limit=20)
+                
+                # Get installed packages to check against search results
+                installed = homebrew.list_installed_packages(formula_only=False)
+                installed_names = {pkg['name'] for pkg in installed}
+                
                 return {
                     'error': False,
                     'results': results,
-                    'query': query
+                    'query': query,
+                    'installed_names': installed_names
                 }
             except homebrew.HomebrewError as e:
                 return {
@@ -901,22 +910,36 @@ class ChairLiftUserHome(Adw.Bin):
             
             results = result['results']
             query = result['query']
+            installed_names = result.get('installed_names', set())
             
             if results:
                 expander.set_subtitle(_("{} results for '{}'").format(len(results), query))
                 
                 for pkg in results:
+                    # Sanitize description to handle HTML entities
+                    desc = pkg.get('description', _("No description available"))
+                    if desc:
+                        desc = GLib.markup_escape_text(desc)
                     pkg_row = Adw.ActionRow(
                         title=pkg['name'],
-                        subtitle=pkg.get('description', _("No description available"))
+                        subtitle=desc
                     )
+                    
+                    # Check if package is already installed
+                    is_installed = pkg['name'] in installed_names
                     
                     # Add install button
                     install_button = Gtk.Button()
-                    install_button.set_label(_("Install"))
                     install_button.set_valign(Gtk.Align.CENTER)
-                    install_button.add_css_class("suggested-action")
-                    install_button.connect("clicked", self.__on_install_package_clicked, pkg['name'])
+                    
+                    if is_installed:
+                        install_button.set_label(_("Installed"))
+                        install_button.set_sensitive(False)
+                        install_button.add_css_class("success")
+                    else:
+                        install_button.set_label(_("Install"))
+                        install_button.add_css_class("suggested-action")
+                        install_button.connect("clicked", self.__on_install_package_clicked, pkg['name'])
                     
                     pkg_row.add_suffix(install_button)
                     expander.add_row(pkg_row)
