@@ -124,6 +124,7 @@ def list_installed_packages(formula_only: bool = True) -> List[Dict[str, Any]]:
             packages.append({
                 'name': str(name),
                 'version': version,
+                'desc': item.get('desc', ''),
                 'installed_on_request': item.get('installed_on_request', False)
             })
         return packages

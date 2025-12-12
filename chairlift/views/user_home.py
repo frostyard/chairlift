@@ -502,7 +502,7 @@ class ChairLiftUserHome(Adw.Bin):
             if formulae:
                 for pkg in sorted(formulae, key=lambda x: x['name']):
                     pkg_row = Adw.ActionRow(
-                        title=pkg['name'],
+                        title=pkg['name'] + " - " + pkg.get('desc', ''),
                         subtitle=_("Version: {}").format(pkg['version'])
                     )
                     if pkg.get('installed_on_request'):
