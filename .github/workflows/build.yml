@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/frostyard/snow:latest
+      volumes:
+        - /proc:/proc
+        - /:/run/host
+      options: --privileged -it
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y git-buildpackage devscripts lintian
+          apt-get build-dep -y .
+
+      - name: Build .deb package
+        run: |
+            dpkg-buildpackage
+            mv ../chairlift_*.deb chairlift.deb
+
+      - name: Calculate and Save Checksums
+        run: |
+          sha256sum chairlift.deb >> checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: first-setup
+          path: |
+              checksums.txt
+              chairlift.deb
+
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+            token: "${{ secrets.GITHUB_TOKEN }}"
+            tag_name: "continuous"
+            prerelease: true
+            name: "Continuous Build"
+            files: |
+              checksums.txt
+              chairlift.deb
