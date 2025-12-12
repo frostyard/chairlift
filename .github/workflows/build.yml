@@ -18,7 +18,7 @@ jobs:
       options: --privileged -it
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install build dependencies
         run: |
@@ -30,8 +30,8 @@ jobs:
 
       - name: Commit changelog update
         run: |
-          git config --global user.name 'Your Name'
-          git config --global user.email 'bketelsen@users.noreply.github.com'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add debian/changelog
           git commit -m "chore: Update changelog for build $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
           git push
