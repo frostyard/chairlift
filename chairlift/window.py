@@ -215,7 +215,7 @@ class ChairLiftWindow(Adw.ApplicationWindow):
     
     def __on_show_help(self, action, param):
         """Show help documentation"""
-        Gtk.show_uri(self, "https://github.com/FrostyYard/chairlift", Gdk.CURRENT_TIME)
+        Gtk.show_uri(self, "https://github.com/frostyard/chairlift", Gdk.CURRENT_TIME)
     
     def __on_show_about(self, action, param):
         """Show about dialog"""
