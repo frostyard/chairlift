@@ -29,15 +29,7 @@ jobs:
           apt-get install -y git-buildpackage devscripts lintian
           apt-get build-dep -y .
           export EMAIL="bketelsen@gmail.com"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           gbp dch --ignore-branch --new-version=$(date +'%Y.%m.%d')-ci "Continuous Integration build"
-
-      - name: Commit changelog update
-        run: |
-          git add debian/changelog
-          git commit -m "chore: Update changelog for build $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
-          git push
 
       - name: Build .deb package
         run: |
