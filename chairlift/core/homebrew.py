@@ -10,6 +10,7 @@ import subprocess
 import json
 import urllib.request
 import urllib.error
+import os
 from typing import List, Dict, Optional, Any
 
 
@@ -393,3 +394,73 @@ def uninstall_package(package_name: str, force: bool = False) -> bool:
     
     _run_brew_command(args, timeout=120)
     return True
+
+
+def install_bundle(bundle_path: str) -> bool:
+    """
+    Install packages from a Brewfile bundle.
+    
+    Args:
+        bundle_path: Path to the Brewfile bundle file
+        
+    Returns:
+        True if bundle install was successful
+        
+    Raises:
+        HomebrewNotFoundError: If Homebrew is not installed
+        HomebrewError: If the command fails
+    """
+    print(f"Installing bundle from {bundle_path}...")
+    output = _run_brew_command(['bundle', 'install', '--file', bundle_path], timeout=600)
+    print(output)
+    return True
+
+
+def available_bundles(path: str) -> List[Dict[str, str]]:
+    """
+    List all available Brewfile bundles in a directory.
+    
+    Args:
+        path: Directory path to search for Brewfile bundles
+        
+    Returns:
+        List of dictionaries containing bundle information with keys:
+        - filename: Name of the bundle file
+        - description: First line of the file (used as description)
+        - path: Full path to the bundle file
+        
+    Raises:
+        HomebrewError: If the directory cannot be read
+    """
+    try:
+        if not os.path.isdir(path):
+            return []
+        
+        bundles = []
+        
+        for filename in os.listdir(path):
+            if filename.endswith('.Brewfile'):
+                file_path = os.path.join(path, filename)
+                description = ''
+                
+                try:
+                    with open(file_path, 'r') as f:
+                        first_line = f.readline().strip()
+                        # Remove comment marker if present
+                        if first_line.startswith('#'):
+                            description = first_line[1:].strip()
+                        else:
+                            description = first_line
+                except (IOError, OSError):
+                    description = 'No description available'
+                
+                bundles.append({
+                    'filename': filename,
+                    'description': description,
+                    'path': file_path
+                })
+        
+        return sorted(bundles, key=lambda x: x['filename'])
+        
+    except (OSError, PermissionError) as e:
+        raise HomebrewError(f"Failed to read bundles directory: {e}")

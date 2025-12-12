@@ -90,6 +90,21 @@ class ChairLiftUserHome(Adw.Bin):
         system_info_group.add(os_expander)
         self.system_page.add(system_info_group)
 
+        health_group = Adw.PreferencesGroup()
+        health_group.set_title(_("System Health"))
+        health_group.set_description(_("Overview of system health and diagnostics"))
+        self.system_page.add(health_group)
+
+        # Add System Performance row
+        system_performance_row = Adw.ActionRow(
+            title=_("System Performance"),
+            subtitle=_("Monitor CPU, memory, and system resources")
+        )
+        system_performance_row.set_activatable(True)
+        system_performance_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
+        system_performance_row.connect("activated", self.__on_launch_app_row_activated, "io.missioncenter.MissionCenter")
+        health_group.add(system_performance_row)
+
 
     def __build_updates_page(self):
         """Build the Updates tab preference groups"""
@@ -216,11 +231,14 @@ class ChairLiftUserHome(Adw.Bin):
         self.__search_results_expander = search_results_expander
         self.__search_entry = search_entry
 
-        # Application Sources group
-        applications_sources_group = Adw.PreferencesGroup()
-        applications_sources_group.set_title(_("Preconfigured Bundles"))
-        applications_sources_group.set_description(_("Install and manage preconfigured application bundles"))
-        self.applications_page.add(applications_sources_group)
+        # Brew Bundles group
+        brew_bundles_group = Adw.PreferencesGroup()
+        brew_bundles_group.set_title(_("Curated Brew Bundles"))
+        brew_bundles_group.set_description(_("Install and manage curated Homebrew bundles"))
+        self.applications_page.add(brew_bundles_group)
+
+        # Load and display available bundles
+        self.__load_available_bundles(brew_bundles_group)
 
     def __build_maintenance_page(self):
         """Build the Maintenance tab preference groups"""
@@ -1024,6 +1042,110 @@ class ChairLiftUserHome(Adw.Bin):
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
+    def __load_available_bundles(self, group):
+        """Load and display available Brewfile bundles"""
+        try:
+            bundles = homebrew.available_bundles("/usr/share/snow/bundles")
+            
+            if not bundles:
+                empty_row = Adw.ActionRow(
+                    title=_("No bundles available"),
+                    subtitle=_("No preconfigured bundles found")
+                )
+                group.add(empty_row)
+                return
+            
+            for bundle in bundles:
+                bundle_row = Adw.ActionRow(
+                    title=bundle['filename'].replace('.Brewfile', ''),
+                    subtitle=bundle['description']
+                )
+                
+                # Add install button
+                install_button = Gtk.Button()
+                install_button.set_label(_("Install"))
+                install_button.set_valign(Gtk.Align.CENTER)
+                install_button.add_css_class("suggested-action")
+                install_button.connect("clicked", self.__on_install_bundle_clicked, bundle['path'], bundle['filename'])
+                
+                bundle_row.add_suffix(install_button)
+                group.add(bundle_row)
+                
+        except homebrew.HomebrewError as e:
+            error_row = Adw.ActionRow(
+                title=_("Error loading bundles"),
+                subtitle=str(e)
+            )
+            error_row.add_prefix(Gtk.Image.new_from_icon_name("dialog-error-symbolic"))
+            group.add(error_row)
+        except Exception as e:
+            error_row = Adw.ActionRow(
+                title=_("Error loading bundles"),
+                subtitle=_("Failed to load bundles: {}").format(str(e))
+            )
+            error_row.add_prefix(Gtk.Image.new_from_icon_name("dialog-error-symbolic"))
+            group.add(error_row)
+
+    def __on_install_bundle_clicked(self, button, bundle_path, bundle_name):
+        """Handle bundle install button click"""
+        # Disable button and show loading state
+        button.set_sensitive(False)
+        button.set_label(_("Installing..."))
+        
+        def install_in_thread():
+            """Install bundle in a background thread"""
+            try:
+                if not homebrew.is_homebrew_installed():
+                    return {
+                        'success': False,
+                        'message': _("Homebrew is not installed")
+                    }
+                
+                homebrew.install_bundle(bundle_path)
+                return {
+                    'success': True,
+                    'message': _("{} bundle installed successfully").format(bundle_name.replace('.Brewfile', ''))
+                }
+            except homebrew.HomebrewError as e:
+                return {
+                    'success': False,
+                    'message': str(e)
+                }
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': _("Failed to install bundle: {}").format(str(e))
+                }
+        
+        def on_install_complete(result):
+            """Handle install completion on main thread"""
+            # Show toast notification
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(result['message'])
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
+            else:
+                print(result['message'])
+            
+            if result['success']:
+                # Change button to show installed state
+                button.set_label(_("Installed"))
+                button.add_css_class("success")
+                # Reload the installed packages list
+                self.__load_homebrew_packages(self.__formulae_expander, self.__casks_expander)
+            else:
+                # Re-enable button on error
+                button.set_sensitive(True)
+                button.set_label(_("Install"))
+        
+        # Run install in background thread
+        import threading
+        def run():
+            result = install_in_thread()
+            GLib.idle_add(lambda: on_install_complete(result))
+        
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
 
 
     def finish(self):
