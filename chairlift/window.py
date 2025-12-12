@@ -79,7 +79,7 @@ class ChairLiftWindow(Adw.ApplicationWindow):
         nav_items = [
             {"name": "applications", "title": _("Applications"), "icon": "application-x-executable-symbolic"},
             {"name": "maintenance", "title": _("Maintenance"), "icon": "emblem-system-symbolic"},
-            {"name": "updates", "title": _("Updates"), "icon": "emblem-synchronizing-symbolic"},
+            {"name": "updates", "title": _("Updates"), "icon": "software-update-available-symbolic"},
             {"name": "system", "title": _("System"), "icon": "computer-symbolic"},
             {"name": "help", "title": _("Help"), "icon": "help-browser-symbolic"},
         ]
