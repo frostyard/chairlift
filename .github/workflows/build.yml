@@ -42,7 +42,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-            token: "${{ secrets.GITHUB_TOKEN }}"
+            token: "${{ secrets.ORG_PAT }}"
             tag_name: "continuous"
             prerelease: true
             name: "Continuous Build"
