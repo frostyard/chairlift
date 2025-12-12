@@ -28,8 +28,6 @@ jobs:
           apt-get update
           apt-get install -y git-buildpackage devscripts lintian
           apt-get build-dep -y .
-          export EMAIL="bketelsen@gmail.com"
-          gbp dch --ignore-branch --new-version=$(date +'%Y.%m.%d')-ci "Continuous Integration build"
 
       - name: Build .deb package
         run: |
