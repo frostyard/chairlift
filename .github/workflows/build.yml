@@ -19,6 +19,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Important: Need full history for gbp dch
 
       - name: Install build dependencies
         run: |
