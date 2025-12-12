@@ -34,7 +34,7 @@ jobs:
           sha256sum chairlift.deb >> checksums.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: first-setup
+          name: chairlift
           path: |
               checksums.txt
               chairlift.deb
