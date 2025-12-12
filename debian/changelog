@@ -1,3 +1,27 @@
+chairlift (0.1.1) UNRELEASED; urgency=medium
+
+  * chore: docs
+  * chore: docs
+  * chore: docs
+  * fix: missing import
+  * fix: no auto launcher in skel
+  * fix: launch app, not browser
+  * fix: add wrapper script
+  * chore: add formula title to rows
+  * chore: pin, unpin, delete
+  * feat: search and install brew formula
+  * fix: prioritize exact matches, sanitize description
+  * feat: brew bundles
+  * docs: update readme
+  * chore: move to adw navigation split view
+  * fix: garbage icon
+  * fix: url
+  * try: build
+  * fix: artifact name
+  * try: build
+
+ -- Brian Ketelsen <bketelsen@gmail.com>  Fri, 12 Dec 2025 15:22:39 -0500
+
 chairlift (0.1.0) unstable; urgency=medium
  
   * Initial release of chairlift, a system management tool for SNOW Linux.
