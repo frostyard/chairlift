@@ -8,6 +8,8 @@ and searching for available formulae.
 
 import subprocess
 import json
+import urllib.request
+import urllib.error
 from typing import List, Dict, Optional, Any
 
 
@@ -180,7 +182,7 @@ def list_outdated_packages(formula_only: bool = True) -> List[Dict[str, Any]]:
 
 def search_formula(query: str, limit: Optional[int] = None) -> List[Dict[str, str]]:
     """
-    Search for available Homebrew formulae.
+    Search for available Homebrew formulae using the Homebrew API.
     
     Args:
         query: Search query string
@@ -192,39 +194,50 @@ def search_formula(query: str, limit: Optional[int] = None) -> List[Dict[str, st
         - description: Formula description
         
     Raises:
-        HomebrewNotFoundError: If Homebrew is not installed
-        HomebrewError: If the command fails
+        HomebrewError: If the API request fails
     """
-    output = _run_brew_command(['search', '--formula', '--json', query])
-    
     try:
-        data = json.loads(output)
+        # Fetch formula data from Homebrew API
+        api_url = "https://formulae.brew.sh/api/formula.json"
+        
+        with urllib.request.urlopen(api_url, timeout=10) as response:
+            if response.status != 200:
+                raise HomebrewError(f"API request failed with status {response.status}")
+            
+            data = json.loads(response.read().decode('utf-8'))
+        
+        # Search through formulae
         results = []
+        query_lower = query.lower()
         
-        # Get formula names from search results
-        formulae = data.get('formulae', [])
-        
-        for formula in formulae[:limit] if limit else formulae:
-            # Get detailed info for each formula
-            try:
-                info_output = _run_brew_command(['info', '--json=v2', formula.get('name', '')])
-                info_data = json.loads(info_output)
-                formula_info = info_data.get('formulae', [{}])[0]
+        for formula in data:
+            # Search in name, full_name, and desc fields
+            name = formula.get('name', '').lower()
+            full_name = formula.get('full_name', '').lower()
+            desc = formula.get('desc', '').lower()
+            
+            # Check if query matches any of the fields
+            if (query_lower in name or 
+                query_lower in full_name or 
+                query_lower in desc):
                 
                 results.append({
-                    'name': formula_info.get('name', formula.get('name', '')),
-                    'description': formula_info.get('desc', '')
-                })
-            except (HomebrewError, json.JSONDecodeError):
-                # If detailed info fails, use basic info
-                results.append({
                     'name': formula.get('name', ''),
-                    'description': ''
+                    'description': formula.get('desc', '')
                 })
+                
+                # Stop if we've reached the limit
+                if limit and len(results) >= limit:
+                    break
         
         return results
+        
+    except urllib.error.URLError as e:
+        raise HomebrewError(f"Failed to access Homebrew API: {e}")
     except json.JSONDecodeError as e:
-        raise HomebrewError(f"Failed to parse brew output: {e}")
+        raise HomebrewError(f"Failed to parse API response: {e}")
+    except Exception as e:
+        raise HomebrewError(f"Search failed: {e}")
 
 
 def get_package_info(package_name: str) -> Optional[Dict[str, Any]]:

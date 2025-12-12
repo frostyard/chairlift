@@ -176,6 +176,46 @@ class ChairLiftUserHome(Adw.Bin):
         # Load Homebrew packages asynchronously
         self.__load_homebrew_packages(formulae_expander, casks_expander)
 
+        # Homebrew Search group
+        brew_search_group = Adw.PreferencesGroup()
+        brew_search_group.set_title(_("Search Homebrew"))
+        brew_search_group.set_description(_("Search for and install Homebrew formulae"))
+        self.applications_page.add(brew_search_group)
+
+        # Search entry row
+        search_entry_row = Adw.ActionRow()
+        search_entry_row.set_title(_("Search for packages"))
+        
+        search_entry = Gtk.SearchEntry()
+        search_entry.set_placeholder_text(_("Enter package name..."))
+        search_entry.set_hexpand(True)
+        search_entry.connect("activate", self.__on_homebrew_search)
+        
+        search_button = Gtk.Button()
+        search_button.set_icon_name("system-search-symbolic")
+        search_button.set_valign(Gtk.Align.CENTER)
+        search_button.add_css_class("flat")
+        search_button.connect("clicked", lambda btn: self.__on_homebrew_search(search_entry))
+        
+        search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        search_box.append(search_entry)
+        search_box.append(search_button)
+        search_box.set_hexpand(True)
+        
+        search_entry_row.add_suffix(search_box)
+        brew_search_group.add(search_entry_row)
+
+        # Search results expander
+        search_results_expander = Adw.ExpanderRow()
+        search_results_expander.set_title(_("Search Results"))
+        search_results_expander.set_subtitle(_("No search performed"))
+        search_results_expander.set_enable_expansion(False)
+        brew_search_group.add(search_results_expander)
+        
+        # Store reference for updating
+        self.__search_results_expander = search_results_expander
+        self.__search_entry = search_entry
+
         # Application Sources group
         applications_sources_group = Adw.PreferencesGroup()
         applications_sources_group.set_title(_("Preconfigured Bundles"))
@@ -785,8 +825,183 @@ class ChairLiftUserHome(Adw.Bin):
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
+    def __on_homebrew_search(self, entry):
+        """Handle Homebrew search"""
+        query = entry.get_text().strip()
+        if not query:
+            return
+        
+        expander = self.__search_results_expander
+        
+        # Clear previous results
+        if hasattr(expander, 'search_rows'):
+            for row in expander.search_rows:
+                expander.remove(row)
+            expander.search_rows = []
+        else:
+            expander.search_rows = []
+        
+        # Show loading state
+        expander.set_subtitle(_("Searching..."))
+        expander.set_enable_expansion(True)
+        loading_row = Adw.ActionRow(
+            title=_("Searching for '{}'...").format(query),
+            subtitle=_("Please wait")
+        )
+        loading_spinner = Gtk.Spinner()
+        loading_spinner.start()
+        loading_row.add_prefix(loading_spinner)
+        expander.add_row(loading_row)
+        expander.search_rows.append(loading_row)
+        
+        def search_in_thread():
+            """Search in background thread"""
+            try:
+                if not homebrew.is_homebrew_installed():
+                    return {
+                        'error': True,
+                        'message': _("Homebrew is not installed")
+                    }
+                
+                results = homebrew.search_formula(query, limit=20)
+                return {
+                    'error': False,
+                    'results': results,
+                    'query': query
+                }
+            except homebrew.HomebrewError as e:
+                return {
+                    'error': True,
+                    'message': str(e)
+                }
+            except Exception as e:
+                return {
+                    'error': True,
+                    'message': _("Search failed: {}").format(str(e))
+                }
+        
+        def on_search_complete(result):
+            """Handle search completion on main thread"""
+            # Clear loading row
+            if expander.search_rows:
+                for row in expander.search_rows:
+                    expander.remove(row)
+                expander.search_rows = []
+            
+            if result['error']:
+                error_row = Adw.ActionRow(
+                    title=_("Error"),
+                    subtitle=result['message']
+                )
+                error_row.add_prefix(Gtk.Image.new_from_icon_name("dialog-error-symbolic"))
+                expander.add_row(error_row)
+                expander.search_rows.append(error_row)
+                expander.set_subtitle(_("Search failed"))
+                return
+            
+            results = result['results']
+            query = result['query']
+            
+            if results:
+                expander.set_subtitle(_("{} results for '{}'").format(len(results), query))
+                
+                for pkg in results:
+                    pkg_row = Adw.ActionRow(
+                        title=pkg['name'],
+                        subtitle=pkg.get('description', _("No description available"))
+                    )
+                    
+                    # Add install button
+                    install_button = Gtk.Button()
+                    install_button.set_label(_("Install"))
+                    install_button.set_valign(Gtk.Align.CENTER)
+                    install_button.add_css_class("suggested-action")
+                    install_button.connect("clicked", self.__on_install_package_clicked, pkg['name'])
+                    
+                    pkg_row.add_suffix(install_button)
+                    expander.add_row(pkg_row)
+                    expander.search_rows.append(pkg_row)
+            else:
+                empty_row = Adw.ActionRow(
+                    title=_("No results found"),
+                    subtitle=_("Try a different search term")
+                )
+                expander.add_row(empty_row)
+                expander.search_rows.append(empty_row)
+                expander.set_subtitle(_("No results for '{}'").format(query))
+        
+        # Run search in background thread
+        import threading
+        def run():
+            result = search_in_thread()
+            GLib.idle_add(lambda: on_search_complete(result))
+        
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
 
-        return
+    def __on_install_package_clicked(self, button, package_name):
+        """Handle package install button click"""
+        # Disable button and show loading state
+        button.set_sensitive(False)
+        button.set_label(_("Installing..."))
+        
+        def install_in_thread():
+            """Install package in a background thread"""
+            try:
+                if not homebrew.is_homebrew_installed():
+                    return {
+                        'success': False,
+                        'message': _("Homebrew is not installed")
+                    }
+                
+                # Use brew install command
+                homebrew._run_brew_command(['install', package_name], timeout=600)
+                return {
+                    'success': True,
+                    'message': _("{} installed successfully").format(package_name)
+                }
+            except homebrew.HomebrewError as e:
+                return {
+                    'success': False,
+                    'message': str(e)
+                }
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': _("Failed to install {}: {}").format(package_name, str(e))
+                }
+        
+        def on_install_complete(result):
+            """Handle install completion on main thread"""
+            # Show toast notification
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(result['message'])
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
+            else:
+                print(result['message'])
+            
+            if result['success']:
+                # Change button to show installed state
+                button.set_label(_("Installed"))
+                button.add_css_class("success")
+                # Reload the installed packages list
+                self.__load_homebrew_packages(self.__formulae_expander, self.__casks_expander)
+            else:
+                # Re-enable button on error
+                button.set_sensitive(True)
+                button.set_label(_("Install"))
+        
+        # Run install in background thread
+        import threading
+        def run():
+            result = install_in_thread()
+            GLib.idle_add(lambda: on_install_complete(result))
+        
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+
 
     def finish(self):
         return True
