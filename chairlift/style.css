@@ -23,3 +23,22 @@
   .appearance-thumbnail {
     border-radius: 6px;
   }
+
+/* Navigation sidebar styling */
+.navigation-sidebar {
+    background: none;
+    border-radius: 12px;
+}
+
+.navigation-sidebar row {
+    padding: 8px 12px;
+    min-height: 30px;
+}
+
+.navigation-sidebar row:selected {
+    background-color: alpha(@accent_bg_color, 0.15);
+}
+
+.navigation-sidebar row:selected:hover {
+    background-color: alpha(@accent_bg_color, 0.2);
+}
