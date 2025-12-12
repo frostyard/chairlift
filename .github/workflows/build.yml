@@ -4,6 +4,8 @@ on:
   push:
     branches: ["main"]
   pull_request:
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -33,7 +35,7 @@ jobs:
           git add debian/changelog
           git commit -m "chore: Update changelog for build $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
           git push
-          
+
       - name: Build .deb package
         run: |
             dpkg-buildpackage
