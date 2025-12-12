@@ -169,6 +169,10 @@ class ChairLiftUserHome(Adw.Bin):
         casks_expander.set_subtitle(_("Loading..."))
         brew_group.add(casks_expander)
 
+        # Store references for reloading
+        self.__formulae_expander = formulae_expander
+        self.__casks_expander = casks_expander
+
         # Load Homebrew packages asynchronously
         self.__load_homebrew_packages(formulae_expander, casks_expander)
 
@@ -446,6 +450,13 @@ class ChairLiftUserHome(Adw.Bin):
 
     def __load_homebrew_packages(self, formulae_expander, casks_expander):
         """Load Homebrew packages and populate the expander rows"""
+        # Clear existing rows if this is a reload
+        for expander in [formulae_expander, casks_expander]:
+            if hasattr(expander, 'package_rows'):
+                for row in expander.package_rows:
+                    expander.remove(row)
+                expander.package_rows = []
+        
         def load_in_thread():
             """Load packages in a background thread"""
             try:
@@ -482,6 +493,12 @@ class ChairLiftUserHome(Adw.Bin):
 
         def on_packages_loaded(result):
             """Update UI with loaded packages on the main thread"""
+            # Initialize package_rows tracking for both expanders
+            if not hasattr(formulae_expander, 'package_rows'):
+                formulae_expander.package_rows = []
+            if not hasattr(casks_expander, 'package_rows'):
+                casks_expander.package_rows = []
+            
             if result['error']:
                 # Show error in both expanders
                 for expander in [formulae_expander, casks_expander]:
@@ -491,6 +508,7 @@ class ChairLiftUserHome(Adw.Bin):
                     )
                     error_row.add_prefix(Gtk.Image.new_from_icon_name("dialog-error-symbolic"))
                     expander.add_row(error_row)
+                    expander.package_rows.append(error_row)
                     expander.set_subtitle(_("Failed to load"))
                 return
 
@@ -505,15 +523,49 @@ class ChairLiftUserHome(Adw.Bin):
                         title=pkg['name'] + " - " + pkg.get('desc', ''),
                         subtitle=_("Version: {}").format(pkg['version'])
                     )
+                    
+                    # Add pin/unpin button based on current pinned status
+                    pin_button = Gtk.Button()
+                    pin_button.set_valign(Gtk.Align.CENTER)
+                    pin_button.add_css_class("flat")
+                    
+                    if pkg.get('pinned'):
+                        # Package is pinned, show unpin button
+                        pin_button.set_icon_name("changes-allow-symbolic")
+                        pin_button.set_tooltip_text(_("Unpin package"))
+                        pin_button.connect("clicked", self.__on_unpin_package_clicked, pkg['name'], formulae_expander)
+                    else:
+                        # Package is not pinned, show pin button
+                        pin_button.set_icon_name("view-pin-symbolic")
+                        pin_button.set_tooltip_text(_("Pin package"))
+                        pin_button.connect("clicked", self.__on_pin_package_clicked, pkg['name'], formulae_expander)
+                    
+                    pkg_row.add_suffix(pin_button)
+                    
+                    # Add remove button
+                    remove_button = Gtk.Button()
+                    remove_button.set_icon_name("user-trash-symbolic")
+                    remove_button.set_valign(Gtk.Align.CENTER)
+                    remove_button.add_css_class("flat")
+                    remove_button.add_css_class("destructive-action")
+                    remove_button.set_tooltip_text(_("Uninstall package"))
+                    remove_button.connect("clicked", self.__on_remove_package_clicked, pkg['name'], formulae_expander)
+                    pkg_row.add_suffix(remove_button)
+                    
                     if pkg.get('installed_on_request'):
-                        pkg_row.add_suffix(Gtk.Image.new_from_icon_name("emblem-default-symbolic"))
+                        request_icon = Gtk.Image.new_from_icon_name("emblem-default-symbolic")
+                        request_icon.set_tooltip_text(_("Installed on request"))
+                        pkg_row.add_suffix(request_icon)
+                    
                     formulae_expander.add_row(pkg_row)
+                    formulae_expander.package_rows.append(pkg_row)
             else:
                 empty_row = Adw.ActionRow(
                     title=_("No formulae installed"),
                     subtitle=_("Install formulae using 'brew install <formula>'")
                 )
                 formulae_expander.add_row(empty_row)
+                formulae_expander.package_rows.append(empty_row)
 
             # Populate casks expander
             casks_expander.set_subtitle(_("{} installed").format(len(casks)))
@@ -526,12 +578,14 @@ class ChairLiftUserHome(Adw.Bin):
                     if pkg.get('installed_on_request'):
                         pkg_row.add_suffix(Gtk.Image.new_from_icon_name("emblem-default-symbolic"))
                     casks_expander.add_row(pkg_row)
+                    casks_expander.package_rows.append(pkg_row)
             else:
                 empty_row = Adw.ActionRow(
                     title=_("No casks installed"),
                     subtitle=_("Install casks using 'brew install --cask <cask>'")
                 )
                 casks_expander.add_row(empty_row)
+                casks_expander.package_rows.append(empty_row)
 
         # Show loading state in both expanders
         for expander in [formulae_expander, casks_expander]:
@@ -558,10 +612,180 @@ class ChairLiftUserHome(Adw.Bin):
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
+    def __on_pin_package_clicked(self, button, package_name, expander):
+        """Handle package pin button click"""
+        # Disable button during operation
+        button.set_sensitive(False)
+        
+        def pin_in_thread():
+            """Pin package in a background thread"""
+            try:
+                if not homebrew.is_homebrew_installed():
+                    return {
+                        'success': False,
+                        'message': _("Homebrew is not installed")
+                    }
+                
+                homebrew.pin_package(package_name)
+                return {
+                    'success': True,
+                    'message': _("{} pinned successfully").format(package_name)
+                }
+            except homebrew.HomebrewError as e:
+                return {
+                    'success': False,
+                    'message': str(e)
+                }
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': _("Failed to pin {}: {}").format(package_name, str(e))
+                }
+        
+        def on_pin_complete(result):
+            """Handle pin completion on main thread"""
+            # Show toast notification
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(result['message'])
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
+            else:
+                print(result['message'])
+            
+            button.set_sensitive(True)
+            
+            # Reload packages to reflect new pinned state
+            if result['success']:
+                self.__load_homebrew_packages(self.__formulae_expander, self.__casks_expander)
+        
+        # Run pin in background thread
+        import threading
+        def run():
+            result = pin_in_thread()
+            GLib.idle_add(lambda: on_pin_complete(result))
+        
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+    def __on_unpin_package_clicked(self, button, package_name, expander):
+        """Handle package unpin button click"""
+        # Disable button during operation
+        button.set_sensitive(False)
+        
+        def unpin_in_thread():
+            """Unpin package in a background thread"""
+            try:
+                if not homebrew.is_homebrew_installed():
+                    return {
+                        'success': False,
+                        'message': _("Homebrew is not installed")
+                    }
+                
+                homebrew.unpin_package(package_name)
+                return {
+                    'success': True,
+                    'message': _("{} unpinned successfully").format(package_name)
+                }
+            except homebrew.HomebrewError as e:
+                return {
+                    'success': False,
+                    'message': str(e)
+                }
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': _("Failed to unpin {}: {}").format(package_name, str(e))
+                }
+        
+        def on_unpin_complete(result):
+            """Handle unpin completion on main thread"""
+            # Show toast notification
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(result['message'])
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
+            else:
+                print(result['message'])
+            
+            button.set_sensitive(True)
+            
+            # Reload packages to reflect new unpinned state
+            if result['success']:
+                self.__load_homebrew_packages(self.__formulae_expander, self.__casks_expander)
+        
+        # Run unpin in background thread
+        import threading
+        def run():
+            result = unpin_in_thread()
+            GLib.idle_add(lambda: on_unpin_complete(result))
+        
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+    def __on_remove_package_clicked(self, button, package_name, expander):
+        """Handle package remove button click"""
+        # Disable button during operation
+        button.set_sensitive(False)
+        
+        def remove_in_thread():
+            """Remove package in a background thread"""
+            try:
+                if not homebrew.is_homebrew_installed():
+                    return {
+                        'success': False,
+                        'message': _("Homebrew is not installed")
+                    }
+                
+                homebrew.uninstall_package(package_name)
+                return {
+                    'success': True,
+                    'message': _("{} uninstalled successfully").format(package_name)
+                }
+            except homebrew.HomebrewError as e:
+                return {
+                    'success': False,
+                    'message': str(e)
+                }
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': _("Failed to uninstall {}: {}").format(package_name, str(e))
+                }
+        
+        def on_remove_complete(result):
+            """Handle remove completion on main thread"""
+            # Show toast notification
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(result['message'])
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
+            else:
+                print(result['message'])
+            
+            if result['success']:
+                # Reload the packages list
+                # Clear existing rows
+                if hasattr(expander, 'package_rows'):
+                    for row in expander.package_rows:
+                        expander.remove(row)
+                    expander.package_rows = []
+                
+                # Get parent to find both expanders
+                # For now just re-enable button on success
+                # TODO: Reload the full list properly
+            
+            button.set_sensitive(True)
+        
+        # Run remove in background thread
+        import threading
+        def run():
+            result = remove_in_thread()
+            GLib.idle_add(lambda: on_remove_complete(result))
+        
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
 
 
-
-    def set_page_inactive(self):
         return
 
     def finish(self):

@@ -125,6 +125,7 @@ def list_installed_packages(formula_only: bool = True) -> List[Dict[str, Any]]:
                 'name': str(name),
                 'version': version,
                 'desc': item.get('desc', ''),
+                'pinned': item.get('pinned', False),
                 'installed_on_request': item.get('installed_on_request', False)
             })
         return packages
@@ -304,4 +305,63 @@ def upgrade_package(package_name: Optional[str] = None) -> bool:
         args.append(package_name)
     
     _run_brew_command(args, timeout=300)
+    return True
+
+
+def pin_package(package_name: str) -> bool:
+    """
+    Pin a package to prevent it from being upgraded.
+    
+    Args:
+        package_name: Name of package to pin
+        
+    Returns:
+        True if pin was successful
+        
+    Raises:
+        HomebrewNotFoundError: If Homebrew is not installed
+        HomebrewError: If the command fails
+    """
+    _run_brew_command(['pin', package_name])
+    return True
+
+
+def unpin_package(package_name: str) -> bool:
+    """
+    Unpin a package to allow it to be upgraded.
+    
+    Args:
+        package_name: Name of package to unpin
+        
+    Returns:
+        True if unpin was successful
+        
+    Raises:
+        HomebrewNotFoundError: If Homebrew is not installed
+        HomebrewError: If the command fails
+    """
+    _run_brew_command(['unpin', package_name])
+    return True
+
+
+def uninstall_package(package_name: str, force: bool = False) -> bool:
+    """
+    Uninstall a package.
+    
+    Args:
+        package_name: Name of package to uninstall
+        force: If True, force removal even if other packages depend on it
+        
+    Returns:
+        True if uninstall was successful
+        
+    Raises:
+        HomebrewNotFoundError: If Homebrew is not installed
+        HomebrewError: If the command fails
+    """
+    args = ['uninstall', package_name]
+    if force:
+        args.append('--force')
+    
+    _run_brew_command(args, timeout=120)
     return True
