@@ -16,7 +16,7 @@
 
 import threading
 
-from gi.repository import Gtk, Adw, GLib
+from gi.repository import Gtk, Adw, GLib, Gio, Gdk
 
 import chairlift.core.backend as backend
 
@@ -28,13 +28,13 @@ _ = __builtins__["_"]
 class ChairLiftWindow(Adw.ApplicationWindow):
     __gtype_name__ = "ChairLiftWindow"
 
-    stack = Gtk.Template.Child()
+    split_view = Gtk.Template.Child()
+    sidebar_list = Gtk.Template.Child()
+    content_stack = Gtk.Template.Child()
     toasts = Gtk.Template.Child()
-    content_overlay = Gtk.Template.Child()
     style_manager = Adw.StyleManager().get_default()
 
-
-    pages = []
+    pages = {}
 
     def __init__(self, moduledir: str,  **kwargs):
         super().__init__(**kwargs)
@@ -42,6 +42,7 @@ class ChairLiftWindow(Adw.ApplicationWindow):
         self.moduledir = moduledir
 
         self.__build_ui()
+        self.__setup_actions()
 
         backend.subscribe_errors(self.__error_received)
 
@@ -70,22 +71,180 @@ class ChairLiftWindow(Adw.ApplicationWindow):
 
 
     def __build_ui(self):
-
         from chairlift.views.user_home import ChairLiftUserHome
 
-        self.__view_welcome = ChairLiftUserHome(self)
+        self.__view_home = ChairLiftUserHome(self)
 
-        self.pages.append(self.__view_welcome)
+        # Setup sidebar navigation items
+        nav_items = [
+            {"name": "applications", "title": _("Applications"), "icon": "application-x-executable-symbolic"},
+            {"name": "maintenance", "title": _("Maintenance"), "icon": "emblem-system-symbolic"},
+            {"name": "updates", "title": _("Updates"), "icon": "emblem-synchronizing-symbolic"},
+            {"name": "system", "title": _("System"), "icon": "computer-symbolic"},
+            {"name": "help", "title": _("Help"), "icon": "help-browser-symbolic"},
+        ]
 
-        # Enable window controls in user mode
+        for item in nav_items:
+            row = Adw.ActionRow()
+            row.set_title(item["title"])
+            row.set_icon_name(item["icon"])
+            row.set_activatable(True)
+            row.page_name = item["name"]
+            self.sidebar_list.append(row)
+            
+            # Get page from view_home
+            page = self.__view_home.get_page(item["name"])
+            if page:
+                self.pages[item["name"]] = page
+                self.content_stack.add_child(page)
+        
+        # Connect sidebar selection
+        self.sidebar_list.connect("row-activated", self.__on_sidebar_row_activated)
+        
+        # Select first item by default
+        self.sidebar_list.select_row(self.sidebar_list.get_row_at_index(0))
+        if nav_items:
+            first_page = self.pages.get(nav_items[0]["name"])
+            if first_page:
+                self.content_stack.set_visible_child(first_page)
+        
+        # Enable window controls
         self.set_deletable(True)
-        # Make content fill the entire window vertically
-        self.content_overlay.set_valign(Gtk.Align.FILL)
-
-        for page in self.pages:
-            self.stack.add_child(page)
-
-        self.stack.set_visible_child(self.__view_welcome)
+    
+    def __on_sidebar_row_activated(self, listbox, row):
+        """Handle sidebar navigation"""
+        page_name = getattr(row, 'page_name', None)
+        if page_name and page_name in self.pages:
+            self.content_stack.set_visible_child(self.pages[page_name])
+            # Show content page in narrow mode
+            self.split_view.set_show_content(True)
+    
+    def __setup_actions(self):
+        """Setup window actions"""
+        # Keyboard shortcuts action
+        shortcuts_action = Gio.SimpleAction.new("show-shortcuts", None)
+        shortcuts_action.connect("activate", self.__on_show_shortcuts)
+        self.add_action(shortcuts_action)
+        
+        # Help action
+        help_action = Gio.SimpleAction.new("show-help", None)
+        help_action.connect("activate", self.__on_show_help)
+        self.add_action(help_action)
+        
+        # About action
+        about_action = Gio.SimpleAction.new("show-about", None)
+        about_action.connect("activate", self.__on_show_about)
+        self.add_action(about_action)
+        
+        # Navigation actions
+        for i, page_name in enumerate(["applications", "maintenance", "updates", "system", "help"], start=1):
+            action = Gio.SimpleAction.new(f"navigate-{page_name}", None)
+            action.connect("activate", self.__on_navigate_to_page, page_name)
+            self.add_action(action)
+    
+    def __on_show_shortcuts(self, action, param):
+        """Show keyboard shortcuts window"""
+        builder = Gtk.Builder.new_from_string("""
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkShortcutsWindow" id="shortcuts_window">
+    <property name="modal">true</property>
+    <child>
+      <object class="GtkShortcutsSection">
+        <property name="section-name">shortcuts</property>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title" translatable="yes">General</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Show Keyboard Shortcuts</property>
+                <property name="accelerator">&lt;Primary&gt;question</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Quit</property>
+                <property name="accelerator">&lt;Primary&gt;q</property>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkShortcutsGroup">
+            <property name="title" translatable="yes">Navigation</property>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Applications</property>
+                <property name="accelerator">&lt;Alt&gt;1</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Maintenance</property>
+                <property name="accelerator">&lt;Alt&gt;2</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Updates</property>
+                <property name="accelerator">&lt;Alt&gt;3</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">System</property>
+                <property name="accelerator">&lt;Alt&gt;4</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Help</property>
+                <property name="accelerator">&lt;Alt&gt;5</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+    </child>
+  </object>
+</interface>
+""", -1)
+        shortcuts_window = builder.get_object("shortcuts_window")
+        shortcuts_window.set_transient_for(self)
+        shortcuts_window.present()
+    
+    def __on_show_help(self, action, param):
+        """Show help documentation"""
+        Gtk.show_uri(self, "https://github.com/FrostyYard/chairlift", Gdk.CURRENT_TIME)
+    
+    def __on_show_about(self, action, param):
+        """Show about dialog"""
+        about = Adw.AboutDialog.new()
+        about.set_application_name("ChairLift")
+        about.set_application_icon("org.frostyard.ChairLift")
+        about.set_version("VTESTING")
+        about.set_developer_name("Brian Ketelsen")
+        about.set_license_type(Gtk.License.GPL_3_0)
+        about.set_comments(_("System management and configuration tool"))
+        about.set_website("https://github.com/frostyard/chairlift")
+        about.set_issue_url("https://github.com/frostyard/chairlift/issues")
+        about.set_developers([
+            "Brian Ketelsen https://github.com/bketelsen",
+        ])
+        about.set_copyright("© 2025 FrostYard")
+        about.present(self)
+    
+    def __on_navigate_to_page(self, action, param, page_name):
+        """Navigate to a specific page using keyboard shortcut"""
+        if page_name in self.pages:
+            self.content_stack.set_visible_child(self.pages[page_name])
+            # Select the corresponding row in the sidebar
+            for i, row in enumerate([self.sidebar_list.get_row_at_index(i) for i in range(5)]):
+                if hasattr(row, 'page_name') and row.page_name == page_name:
+                    self.sidebar_list.select_row(row)
+                    break
+            # Show content page in narrow mode
+            self.split_view.set_show_content(True)
 
 
 

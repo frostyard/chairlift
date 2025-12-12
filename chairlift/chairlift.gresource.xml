@@ -4,7 +4,6 @@
     <file>style.css</file>
     <file>gtk/window.ui</file>
     <file>gtk/dialog.ui</file>
-    <file>gtk/user-home.ui</file>
     <file>assets/theme-default.svg</file>
     <file>assets/theme-dark.svg</file>
     <file>assets/background_replacement.png</file>

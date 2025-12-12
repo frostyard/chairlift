@@ -64,6 +64,7 @@ class ChairLiftApplication(Adw.Application):
         self.dry_run = True
 
         self.__register_arguments()
+        self.__setup_keyboard_shortcuts()
 
     def __register_arguments(self):
         """Register the command line arguments."""
@@ -75,6 +76,21 @@ class ChairLiftApplication(Adw.Application):
             _("Don't make any changes to the system."),
             None,
         )
+    
+    def __setup_keyboard_shortcuts(self):
+        """Setup application-wide keyboard shortcuts."""
+        # Quit shortcut
+        self.set_accels_for_action("app.quit", ["<Primary>q"])
+        
+        # Keyboard shortcuts window
+        self.set_accels_for_action("win.show-shortcuts", ["<Primary>question"])
+        
+        # Navigation shortcuts
+        self.set_accels_for_action("win.navigate-applications", ["<Alt>1"])
+        self.set_accels_for_action("win.navigate-maintenance", ["<Alt>2"])
+        self.set_accels_for_action("win.navigate-updates", ["<Alt>3"])
+        self.set_accels_for_action("win.navigate-system", ["<Alt>4"])
+        self.set_accels_for_action("win.navigate-help", ["<Alt>5"])
 
     def do_command_line(self, command_line):
         """Handle command line arguments."""

@@ -20,26 +20,25 @@ from chairlift.core import homebrew
 _ = __builtins__["_"]
 
 
-@Gtk.Template(resource_path="/org/frostyard/ChairLift/gtk/user-home.ui")
-class ChairLiftUserHome(Adw.Bin):
-    __gtype_name__ = "ChairLiftUserHome"
+class ChairLiftUserHome:
+    """Manager for all content pages in the NavigationSplitView"""
 
-    view_stack = Gtk.Template.Child()
-    view_switcher_title = Gtk.Template.Child()
-    view_switcher_bar = Gtk.Template.Child()
-    system_page = Gtk.Template.Child()
-    updates_page = Gtk.Template.Child()
-    applications_page = Gtk.Template.Child()
-    maintenance_page = Gtk.Template.Child()
-    help_page = Gtk.Template.Child()
-
-    def __init__(self, window, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, window):
         self.__window = window
 
-        # Bind the view stack to the switchers
-        self.view_switcher_title.set_stack(self.view_stack)
-        self.view_switcher_bar.set_stack(self.view_stack)
+        # Create individual pages (returns ToolbarView with embedded PreferencesPage)
+        self.system_page_widget = self.__create_page()
+        self.updates_page_widget = self.__create_page()
+        self.applications_page_widget = self.__create_page()
+        self.maintenance_page_widget = self.__create_page()
+        self.help_page_widget = self.__create_page()
+
+        # Store references to the actual preferences pages for building content
+        self.system_page = self.system_page_widget.preferences_page
+        self.updates_page = self.updates_page_widget.preferences_page
+        self.applications_page = self.applications_page_widget.preferences_page
+        self.maintenance_page = self.maintenance_page_widget.preferences_page
+        self.help_page = self.help_page_widget.preferences_page
 
         # Build the preference groups dynamically
         self.__build_system_page()
@@ -47,6 +46,40 @@ class ChairLiftUserHome(Adw.Bin):
         self.__build_applications_page()
         self.__build_maintenance_page()
         self.__build_help_page()
+
+    def __create_page(self):
+        """Create a page with toolbar view and scrolled content"""
+        toolbar_view = Adw.ToolbarView()
+        
+        # Add header bar
+        header_bar = Adw.HeaderBar()
+        toolbar_view.add_top_bar(header_bar)
+        
+        # Create scrolled window with preferences page
+        scrolled_window = Gtk.ScrolledWindow()
+        scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled_window.set_vexpand(True)
+        
+        preferences_page = Adw.PreferencesPage()
+        scrolled_window.set_child(preferences_page)
+        
+        toolbar_view.set_content(scrolled_window)
+        
+        # Store the preferences_page in the toolbar_view for easy access
+        toolbar_view.preferences_page = preferences_page
+        
+        return toolbar_view
+
+    def get_page(self, page_name):
+        """Get a page widget (ToolbarView) by name"""
+        pages = {
+            "system": self.system_page_widget,
+            "updates": self.updates_page_widget,
+            "applications": self.applications_page_widget,
+            "maintenance": self.maintenance_page_widget,
+            "help": self.help_page_widget,
+        }
+        return pages.get(page_name)
 
     def __build_system_page(self):
         """Build the System tab preference groups"""
