@@ -7,6 +7,12 @@
 
 ---
 
+## Screenshots
+
+![ChairLift Home Page](data/screenshots/home-page.png)
+
+---
+
 ## Features
 
 ### 📦 Homebrew Package Management
