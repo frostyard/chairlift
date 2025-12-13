@@ -222,7 +222,7 @@ class ChairLiftWindow(Adw.ApplicationWindow):
         about = Adw.AboutDialog.new()
         about.set_application_name("ChairLift")
         about.set_application_icon("org.frostyard.ChairLift")
-        about.set_version("VTESTING")
+        about.set_version("v0.1.0+git")
         about.set_developer_name("Brian Ketelsen")
         about.set_license_type(Gtk.License.GPL_3_0)
         about.set_comments(_("System management and configuration tool"))
