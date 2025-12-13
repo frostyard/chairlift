@@ -13,7 +13,7 @@ updates_page:
   updates_status_group:
     enabled: true
     actions:
-      - title: Check for Updates
+      - title: Check for System Updates
         script: /usr/bin/bootc upgrade
         sudo: true
   brew_updates_group:
@@ -38,7 +38,7 @@ maintenance_page:
   maintenance_cleanup_group:
     enabled: true
     actions:
-      - title: Clean Up Boot Entries
+      - title: Clean Up Boot Old Entries
         script: /usr/libexec/bls-gc
         sudo: true
   maintenance_optimization_group:
