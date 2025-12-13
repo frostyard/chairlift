@@ -36,6 +36,7 @@ chairlift_sources = [
   'application.py',
   'main.py',
   'window.py',
-  'dialog.py']
+  'dialog.py',
+  'config.yml']
 
 install_data(chairlift_sources, install_dir: moduledir)

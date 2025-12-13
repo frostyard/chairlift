@@ -53,6 +53,7 @@ sudo meson install -C build
 ### Dependencies
 
 - Python 3.x
+- PyYAML (python3-yaml)
 - GTK4
 - libadwaita
 - Homebrew (for package management features)
@@ -88,6 +89,34 @@ chairlift
 ### Bundle Installation
 
 ChairLift supports installing curated package bundles (Brewfiles) located in `/usr/share/snow/bundles`. Each bundle is a pre-configured set of packages for specific use cases.
+
+---
+
+## Configuration
+
+ChairLift is highly configurable and can be adapted for different Linux distributions. The application uses a YAML configuration file to control which features are displayed and which applications are launched for various system management tasks.
+
+### Making ChairLift Portable
+
+While ChairLift was designed for Snow Linux, it can be easily customized for other distributions by:
+
+- **Disabling Snow-specific features**: Hide Homebrew package management if your distribution doesn't use it
+- **Customizing system tools**: Configure which applications to launch for system monitoring, Flatpak management, etc.
+- **Setting help resources**: Point users to your distribution's documentation, issue tracker, and community chat
+
+### Configuration File
+
+See [CONFIG.md](CONFIG.md) for detailed documentation on:
+- Available configuration options
+- How to show/hide specific feature groups
+- Customizing application launchers
+- Setting up help resource URLs
+- Example configurations for non-Snow distributions
+
+Configuration files are searched in the following locations (in order):
+1. `chairlift/config.yml` (source directory)
+2. `/etc/chairlift/config.yml` (system-wide)
+3. `/usr/share/chairlift/config.yml` (installed with package)
 
 ---
 

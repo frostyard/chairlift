@@ -16,6 +16,8 @@
 
 from gi.repository import Gtk, Adw, Gio, GLib
 from chairlift.core import homebrew
+import yaml
+import os
 
 _ = __builtins__["_"]
 
@@ -25,6 +27,9 @@ class ChairLiftUserHome:
 
     def __init__(self, window):
         self.__window = window
+        
+        # Load configuration
+        self.__config = self.__load_config()
 
         # Create individual pages (returns ToolbarView with embedded PreferencesPage)
         self.system_page_widget = self.__create_page()
@@ -81,6 +86,36 @@ class ChairLiftUserHome:
         }
         return pages.get(page_name)
 
+    def __load_config(self):
+        """Load configuration from YAML file"""
+        # Try multiple possible locations for the config file
+        config_paths = [
+            os.path.join(os.path.dirname(__file__), 'config.yml'),
+            os.path.join(os.path.dirname(__file__), '..', 'config.yml'),
+            '/etc/chairlift/config.yml',
+            '/usr/share/chairlift/config.yml',
+        ]
+        
+        for config_path in config_paths:
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r') as f:
+                        return yaml.safe_load(f)
+                except Exception as e:
+                    print(f"Error loading config from {config_path}: {e}")
+        
+        # Return default config if no file found
+        print("No config file found, using defaults (all groups enabled)")
+        return {}
+
+    def __is_group_enabled(self, page_name, group_name):
+        """Check if a preference group is enabled in the configuration"""
+        try:
+            return self.__config.get(page_name, {}).get(group_name, {}).get('enabled', True)
+        except Exception:
+            # Default to enabled if there's any issue reading config
+            return True
+
     def __build_system_page(self):
         """Build the System tab preference groups"""
         # System Information group
@@ -121,12 +156,12 @@ class ChairLiftUserHome:
             os_expander.add_row(row)
 
         system_info_group.add(os_expander)
-        self.system_page.add(system_info_group)
+        if self.__is_group_enabled('system_page', 'system_info_group'):
+            self.system_page.add(system_info_group)
 
         health_group = Adw.PreferencesGroup()
         health_group.set_title(_("System Health"))
         health_group.set_description(_("Overview of system health and diagnostics"))
-        self.system_page.add(health_group)
 
         # Add System Performance row
         system_performance_row = Adw.ActionRow(
@@ -135,8 +170,14 @@ class ChairLiftUserHome:
         )
         system_performance_row.set_activatable(True)
         system_performance_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
-        system_performance_row.connect("activated", self.__on_launch_app_row_activated, "io.missioncenter.MissionCenter")
+        
+        # Get app_id from config, default to Mission Center
+        app_id = self.__config.get('system_page', {}).get('health_group', {}).get('app_id', 'io.missioncenter.MissionCenter')
+        system_performance_row.connect("activated", self.__on_launch_app_row_activated, app_id)
         health_group.add(system_performance_row)
+        
+        if self.__is_group_enabled('system_page', 'health_group'):
+            self.system_page.add(health_group)
 
 
     def __build_updates_page(self):
@@ -145,13 +186,13 @@ class ChairLiftUserHome:
         updates_status_group = Adw.PreferencesGroup()
         updates_status_group.set_title(_("System Updates"))
         updates_status_group.set_description(_("Check for and install system updates"))
-        self.updates_page.add(updates_status_group)
+        if self.__is_group_enabled('updates_page', 'updates_status_group'):
+            self.updates_page.add(updates_status_group)
 
         # Brew Updates group
         brew_updates_group = Adw.PreferencesGroup()
         brew_updates_group.set_title(_("Homebrew Updates"))
         brew_updates_group.set_description(_("Check for and install Homebrew package updates"))
-        self.updates_page.add(brew_updates_group)
 
         # Add update Homebrew button
         update_brew_row = Adw.ActionRow()
@@ -176,12 +217,16 @@ class ChairLiftUserHome:
 
         # Load outdated packages asynchronously
         self.__load_outdated_packages(outdated_expander)
+        
+        if self.__is_group_enabled('updates_page', 'brew_updates_group'):
+            self.updates_page.add(brew_updates_group)
 
         # Update Settings group
         updates_settings_group = Adw.PreferencesGroup()
         updates_settings_group.set_title(_("Update Settings"))
         updates_settings_group.set_description(_("Configure update preferences"))
-        self.updates_page.add(updates_settings_group)
+        if self.__is_group_enabled('updates_page', 'updates_settings_group'):
+            self.updates_page.add(updates_settings_group)
 
     def __build_applications_page(self):
         """Build the Applications tab preference groups"""
@@ -189,21 +234,25 @@ class ChairLiftUserHome:
         applications_installed_group = Adw.PreferencesGroup()
         applications_installed_group.set_title(_("Installed Applications"))
         applications_installed_group.set_description(_("Manage your installed applications"))
-        self.applications_page.add(applications_installed_group)
         view_apps = Adw.ActionRow(
             title=_("Manage Flatpaks"),
             subtitle=_("Open the application manager to install and manage applications")
         )
         view_apps.set_activatable(True)
         view_apps.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
-        view_apps.connect("activated", self.__on_launch_app_row_activated, "io.github.kolunmi.Bazaar")
+        
+        # Get app_id from config, default to Bazaar
+        app_id = self.__config.get('applications_page', {}).get('applications_installed_group', {}).get('app_id', 'io.github.kolunmi.Bazaar')
+        view_apps.connect("activated", self.__on_launch_app_row_activated, app_id)
         applications_installed_group.add(view_apps)
+        
+        if self.__is_group_enabled('applications_page', 'applications_installed_group'):
+            self.applications_page.add(applications_installed_group)
 
         # Brew group
         brew_group = Adw.PreferencesGroup()
         brew_group.set_title(_("Homebrew"))
         brew_group.set_description(_("Manage Homebrew packages installed on your system"))
-        self.applications_page.add(brew_group)
 
         # Create expander row for Homebrew formulae
         formulae_expander = Adw.ExpanderRow()
@@ -223,12 +272,14 @@ class ChairLiftUserHome:
 
         # Load Homebrew packages asynchronously
         self.__load_homebrew_packages(formulae_expander, casks_expander)
+        
+        if self.__is_group_enabled('applications_page', 'brew_group'):
+            self.applications_page.add(brew_group)
 
         # Homebrew Search group
         brew_search_group = Adw.PreferencesGroup()
         brew_search_group.set_title(_("Search Homebrew"))
         brew_search_group.set_description(_("Search for and install Homebrew formulae"))
-        self.applications_page.add(brew_search_group)
 
         # Search entry row
         search_entry_row = Adw.ActionRow()
@@ -263,15 +314,20 @@ class ChairLiftUserHome:
         # Store reference for updating
         self.__search_results_expander = search_results_expander
         self.__search_entry = search_entry
+        
+        if self.__is_group_enabled('applications_page', 'brew_search_group'):
+            self.applications_page.add(brew_search_group)
 
         # Brew Bundles group
         brew_bundles_group = Adw.PreferencesGroup()
         brew_bundles_group.set_title(_("Curated Brew Bundles"))
         brew_bundles_group.set_description(_("Install and manage curated Homebrew bundles"))
-        self.applications_page.add(brew_bundles_group)
 
         # Load and display available bundles
         self.__load_available_bundles(brew_bundles_group)
+        
+        if self.__is_group_enabled('applications_page', 'brew_bundles_group'):
+            self.applications_page.add(brew_bundles_group)
 
     def __build_maintenance_page(self):
         """Build the Maintenance tab preference groups"""
@@ -279,13 +335,15 @@ class ChairLiftUserHome:
         maintenance_cleanup_group = Adw.PreferencesGroup()
         maintenance_cleanup_group.set_title(_("System Cleanup"))
         maintenance_cleanup_group.set_description(_("Clean up temporary files and free up disk space"))
-        self.maintenance_page.add(maintenance_cleanup_group)
+        if self.__is_group_enabled('maintenance_page', 'maintenance_cleanup_group'):
+            self.maintenance_page.add(maintenance_cleanup_group)
 
         # System Optimization group
         maintenance_optimization_group = Adw.PreferencesGroup()
         maintenance_optimization_group.set_title(_("System Optimization"))
         maintenance_optimization_group.set_description(_("Optimize system performance"))
-        self.maintenance_page.add(maintenance_optimization_group)
+        if self.__is_group_enabled('maintenance_page', 'maintenance_optimization_group'):
+            self.maintenance_page.add(maintenance_optimization_group)
 
     def __build_help_page(self):
         """Build the Help tab preference groups"""
@@ -293,7 +351,48 @@ class ChairLiftUserHome:
         help_resources_group = Adw.PreferencesGroup()
         help_resources_group.set_title(_("Help Resources"))
         help_resources_group.set_description(_("Access help and support resources"))
-        self.help_page.add(help_resources_group)
+        
+        # Get URLs from config
+        help_config = self.__config.get('help_page', {}).get('help_resources_group', {})
+        website_url = help_config.get('website')
+        issues_url = help_config.get('issues')
+        chat_url = help_config.get('chat')
+        
+        # Add website row if URL is configured
+        if website_url:
+            website_row = Adw.ActionRow(
+                title=_("Website"),
+                subtitle=_("Visit the project website")
+            )
+            website_row.set_activatable(True)
+            website_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
+            website_row.connect("activated", self.__on_url_row_activated, website_url)
+            help_resources_group.add(website_row)
+        
+        # Add issues row if URL is configured
+        if issues_url:
+            issues_row = Adw.ActionRow(
+                title=_("Report Issues"),
+                subtitle=_("Report bugs and request features")
+            )
+            issues_row.set_activatable(True)
+            issues_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
+            issues_row.connect("activated", self.__on_url_row_activated, issues_url)
+            help_resources_group.add(issues_row)
+        
+        # Add chat row if URL is configured
+        if chat_url:
+            chat_row = Adw.ActionRow(
+                title=_("Community Chat"),
+                subtitle=_("Join discussions and get help from the community")
+            )
+            chat_row.set_activatable(True)
+            chat_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
+            chat_row.connect("activated", self.__on_url_row_activated, chat_url)
+            help_resources_group.add(chat_row)
+        
+        if self.__is_group_enabled('help_page', 'help_resources_group'):
+            self.help_page.add(help_resources_group)
 
     def __on_url_row_activated(self, row, url):
         """Open URL in default browser when a URL row is clicked"""
