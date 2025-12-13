@@ -27,6 +27,8 @@ applications_page:
     enabled: true
   brew_bundles_group:
     enabled: true
+    bundles_paths:
+      - /usr/share/snow/bundles
 
 maintenance_page:
   maintenance_cleanup_group:

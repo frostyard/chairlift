@@ -1177,9 +1177,20 @@ class ChairLiftUserHome:
     def __load_available_bundles(self, group):
         """Load and display available Brewfile bundles"""
         try:
-            bundles = homebrew.available_bundles("/usr/share/snow/bundles")
+            # Get bundle paths from config, default to Snow Linux path
+            bundles_config = self.__config.get('applications_page', {}).get('brew_bundles_group', {})
+            bundles_paths = bundles_config.get('bundles_paths', ['/usr/share/snow/bundles'])
             
-            if not bundles:
+            # Collect all bundles from all paths
+            all_bundles = []
+            for path in bundles_paths:
+                try:
+                    bundles = homebrew.available_bundles(path)
+                    all_bundles.extend(bundles)
+                except Exception as e:
+                    print(f"Error loading bundles from {path}: {e}")
+            
+            if not all_bundles:
                 empty_row = Adw.ActionRow(
                     title=_("No bundles available"),
                     subtitle=_("No preconfigured bundles found")

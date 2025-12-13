@@ -40,6 +40,7 @@ page_name:
 - `brew_group`: Installed Homebrew formulae and casks
 - `brew_search_group`: Search and install Homebrew packages
 - `brew_bundles_group`: Curated Homebrew package bundles
+  - `bundles_paths`: Array of directory paths to search for Brewfile bundles (default: `['/usr/share/snow/bundles']`)
 
 ### Maintenance Page (`maintenance_page`)
 - `maintenance_cleanup_group`: System cleanup utilities

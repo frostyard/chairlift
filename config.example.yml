@@ -32,6 +32,8 @@ applications_page:
     enabled: false  # Hide Homebrew search
   brew_bundles_group:
     enabled: false  # Hide Homebrew bundles
+    bundles_paths:
+      - /usr/share/snow/bundles  # List of directories containing Brewfile bundles
 
 maintenance_page:
   maintenance_cleanup_group:
