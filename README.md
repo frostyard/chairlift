@@ -150,6 +150,46 @@ chairlift/
   - Async operations with threading
   - Toast notifications for user feedback
 
+### Development Environment
+
+ChairLift includes a preconfigured development environment using Distrobox and Just for easy setup:
+
+#### Using Just
+
+[Just](https://github.com/casey/just) is a command runner that provides convenient shortcuts for common development tasks. Available commands:
+
+```bash
+just setup    # Create and configure the distrobox development container
+just enter    # Enter the development container
+just build    # Build the project with meson
+just local    # Build and install to ./install directory
+just run      # Run the application in development mode
+just clean    # Clean build artifacts
+just pot      # Generate translation template
+```
+
+#### Using Distrobox
+
+The project includes a `distrobox.ini` configuration that sets up a Debian Trixie container with all required dependencies. This ensures a consistent development environment across different host systems.
+
+To get started:
+
+```bash
+# Create the development container
+just setup
+
+# Enter the container
+just enter
+
+# Inside the container, build and run
+just build
+just run
+```
+
+The distrobox configuration automatically mounts:
+- `/home/linuxbrew` - for Homebrew integration testing
+- `/usr/share/snow/bundles` - for bundle management testing
+
 ### Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
