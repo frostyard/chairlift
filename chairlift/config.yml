@@ -37,6 +37,6 @@ maintenance_page:
 help_page:
   help_resources_group:
     enabled: true
-    website: https://github.com/frostyard/chairlift
-    issues: https://github.com/frostyard/chairlift/issues
-    chat: https://github.com/frostyard/chairlift/discussions
+    website: https://github.com/frostyard/snow
+    issues: https://github.com/frostyard/snow/issues
+    chat: https://github.com/frostyard/snow/discussions
