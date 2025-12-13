@@ -31,6 +31,7 @@ class ChairLiftWindow(Adw.ApplicationWindow):
     split_view = Gtk.Template.Child()
     sidebar_list = Gtk.Template.Child()
     content_stack = Gtk.Template.Child()
+    content_page = Gtk.Template.Child()
     toasts = Gtk.Template.Child()
     style_manager = Adw.StyleManager().get_default()
 
@@ -102,11 +103,15 @@ class ChairLiftWindow(Adw.ApplicationWindow):
         self.sidebar_list.connect("row-activated", self.__on_sidebar_row_activated)
         
         # Select first item by default
-        self.sidebar_list.select_row(self.sidebar_list.get_row_at_index(0))
+        first_row = self.sidebar_list.get_row_at_index(0)
+        self.sidebar_list.select_row(first_row)
         if nav_items:
             first_page = self.pages.get(nav_items[0]["name"])
             if first_page:
                 self.content_stack.set_visible_child(first_page)
+                # Set initial title
+                if first_row:
+                    self.content_page.set_title(first_row.get_title())
         
         # Enable window controls
         self.set_deletable(True)
@@ -116,6 +121,8 @@ class ChairLiftWindow(Adw.ApplicationWindow):
         page_name = getattr(row, 'page_name', None)
         if page_name and page_name in self.pages:
             self.content_stack.set_visible_child(self.pages[page_name])
+            # Update the content page title
+            self.content_page.set_title(row.get_title())
             # Show content page in narrow mode
             self.split_view.set_show_content(True)
     
@@ -242,6 +249,8 @@ class ChairLiftWindow(Adw.ApplicationWindow):
             for i, row in enumerate([self.sidebar_list.get_row_at_index(i) for i in range(5)]):
                 if hasattr(row, 'page_name') and row.page_name == page_name:
                     self.sidebar_list.select_row(row)
+                    # Update the content page title
+                    self.content_page.set_title(row.get_title())
                     break
             # Show content page in narrow mode
             self.split_view.set_show_content(True)
