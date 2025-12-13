@@ -186,6 +186,39 @@ class ChairLiftUserHome:
         updates_status_group = Adw.PreferencesGroup()
         updates_status_group.set_title(_("System Updates"))
         updates_status_group.set_description(_("Check for and install system updates"))
+        
+        # Get actions from config
+        updates_config = self.__config.get('updates_page', {}).get('updates_status_group', {})
+        actions = updates_config.get('actions', [])
+        
+        # Add action rows for each configured action
+        for action in actions:
+            title = action.get('title', 'Unknown Action')
+            script = action.get('script')
+            requires_sudo = action.get('sudo', False)
+            
+            if script:
+                action_row = Adw.ActionRow(
+                    title=_(title),
+                    subtitle=script
+                )
+                
+                # Add sudo indicator if required
+                if requires_sudo:
+                    sudo_icon = Gtk.Image.new_from_icon_name("dialog-password-symbolic")
+                    sudo_icon.set_tooltip_text(_("Requires administrator privileges"))
+                    action_row.add_prefix(sudo_icon)
+                
+                # Add run button
+                run_button = Gtk.Button()
+                run_button.set_label(_("Run"))
+                run_button.set_valign(Gtk.Align.CENTER)
+                run_button.add_css_class("suggested-action")
+                run_button.connect("clicked", self.__on_run_maintenance_action, title, script, requires_sudo)
+                
+                action_row.add_suffix(run_button)
+                updates_status_group.add(action_row)
+        
         if self.__is_group_enabled('updates_page', 'updates_status_group'):
             self.updates_page.add(updates_status_group)
 
@@ -335,6 +368,39 @@ class ChairLiftUserHome:
         maintenance_cleanup_group = Adw.PreferencesGroup()
         maintenance_cleanup_group.set_title(_("System Cleanup"))
         maintenance_cleanup_group.set_description(_("Clean up temporary files and free up disk space"))
+        
+        # Get actions from config
+        cleanup_config = self.__config.get('maintenance_page', {}).get('maintenance_cleanup_group', {})
+        actions = cleanup_config.get('actions', [])
+        
+        # Add action rows for each configured action
+        for action in actions:
+            title = action.get('title', 'Unknown Action')
+            script = action.get('script')
+            requires_sudo = action.get('sudo', False)
+            
+            if script:
+                action_row = Adw.ActionRow(
+                    title=_(title),
+                    subtitle=script
+                )
+                
+                # Add sudo indicator if required
+                if requires_sudo:
+                    sudo_icon = Gtk.Image.new_from_icon_name("dialog-password-symbolic")
+                    sudo_icon.set_tooltip_text(_("Requires administrator privileges"))
+                    action_row.add_prefix(sudo_icon)
+                
+                # Add run button
+                run_button = Gtk.Button()
+                run_button.set_label(_("Run"))
+                run_button.set_valign(Gtk.Align.CENTER)
+                run_button.add_css_class("suggested-action")
+                run_button.connect("clicked", self.__on_run_maintenance_action, title, script, requires_sudo)
+                
+                action_row.add_suffix(run_button)
+                maintenance_cleanup_group.add(action_row)
+        
         if self.__is_group_enabled('maintenance_page', 'maintenance_cleanup_group'):
             self.maintenance_page.add(maintenance_cleanup_group)
 
@@ -417,6 +483,86 @@ class ChairLiftUserHome:
                 Gio.AppInfo.launch_default_for_uri(f"appstream://{app_id}", None)
             except Exception as e2:
                 print(f"Error opening in software center: {e2}")
+
+    def __on_run_maintenance_action(self, button, title, script, requires_sudo):
+        """Run a maintenance action script"""
+        # Disable button and show loading state
+        button.set_sensitive(False)
+        original_label = button.get_label()
+        button.set_label(_("Running..."))
+        
+        def run_in_thread():
+            """Run the maintenance script in a background thread"""
+            try:
+                import subprocess
+                import shlex
+                
+                # Split script into command and arguments
+                script_parts = shlex.split(script)
+                
+                # Build command
+                if requires_sudo:
+                    # Use pkexec for graphical sudo prompt
+                    cmd = ['pkexec'] + script_parts
+                else:
+                    cmd = script_parts
+                
+                # Run the script
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
+                )
+                
+                if result.returncode == 0:
+                    return {
+                        'success': True,
+                        'message': _('{} completed successfully').format(title)
+                    }
+                else:
+                    error_msg = result.stderr.strip() if result.stderr else _("Unknown error")
+                    return {
+                        'success': False,
+                        'message': _('{} failed: {}').format(title, error_msg)
+                    }
+            except subprocess.TimeoutExpired:
+                return {
+                    'success': False,
+                    'message': _('{} timed out').format(title)
+                }
+            except FileNotFoundError:
+                return {
+                    'success': False,
+                    'message': _('{} not found: {}').format(title, script)
+                }
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': _('{} failed: {}').format(title, str(e))
+                }
+        
+        def on_complete(result):
+            """Handle completion on main thread"""
+            button.set_sensitive(True)
+            button.set_label(original_label)
+            
+            # Show toast notification
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(result['message'])
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
+            else:
+                print(result['message'])
+        
+        # Run in background thread
+        import threading
+        def run():
+            result = run_in_thread()
+            GLib.idle_add(lambda: on_complete(result))
+        
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
 
     def __on_update_homebrew_clicked(self, button):
         """Handle Homebrew update button click"""

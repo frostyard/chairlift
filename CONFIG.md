@@ -31,6 +31,10 @@ page_name:
 
 ### Updates Page (`updates_page`)
 - `updates_status_group`: System-wide updates
+  - `actions`: Array of update scripts that can be executed
+    - `title`: Display name for the action
+    - `script`: Absolute path to the script to execute
+    - `sudo`: Boolean indicating if the script requires administrator privileges (uses pkexec)
 - `brew_updates_group`: Homebrew package updates and outdated packages
 - `updates_settings_group`: Update preferences and settings
 
@@ -44,6 +48,10 @@ page_name:
 
 ### Maintenance Page (`maintenance_page`)
 - `maintenance_cleanup_group`: System cleanup utilities
+  - `actions`: Array of maintenance scripts that can be executed
+    - `title`: Display name for the action
+    - `script`: Absolute path to the script to execute
+    - `sudo`: Boolean indicating if the script requires administrator privileges (uses pkexec)
 - `maintenance_optimization_group`: System optimization tools
 
 ### Help Page (`help_page`)

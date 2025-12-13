@@ -17,6 +17,10 @@ system_page:
 updates_page:
   updates_status_group:
     enabled: true  # Show system updates
+    actions:
+      - title: Check for Updates  # Display title for the action
+        script: /usr/bin/bootc upgrade  # Path to the script to execute
+        sudo: true  # Whether the script requires administrator privileges
   brew_updates_group:
     enabled: false  # Hide Homebrew updates (not typically used on other distros)
   updates_settings_group:
@@ -38,6 +42,10 @@ applications_page:
 maintenance_page:
   maintenance_cleanup_group:
     enabled: true  # Show cleanup tools
+    actions:
+      - title: Clean Up Boot Entries  # Display title for the action
+        script: /usr/libexec/bls-gc  # Path to the script to execute
+        sudo: true  # Whether the script requires administrator privileges
   maintenance_optimization_group:
     enabled: true  # Show optimization tools
 
