@@ -16,6 +16,7 @@
 ## Features
 
 ### 📦 Homebrew Package Management
+
 - **View Installed Packages**: Browse all installed formulae and casks in organized expandable lists
 - **Search & Install**: Search the Homebrew repository and install packages with one click
 - **Update & Upgrade**: Keep Homebrew up-to-date and upgrade outdated packages individually
@@ -23,10 +24,12 @@
 - **Curated Bundles**: Install pre-configured package bundles for common use cases
 
 ### 🏥 System Health Monitoring
+
 - **System Performance**: Quick access to Mission Center for detailed system monitoring
 - **Health Overview**: Check system diagnostics and health status
 
 ### 🔧 Updates & Maintenance
+
 - **Homebrew Updates**: Check for and install package updates
 - **Outdated Packages**: View and upgrade packages that have newer versions available
 - **System Maintenance**: Keep your system running smoothly
@@ -107,6 +110,7 @@ While ChairLift was designed for Snow Linux, it can be easily customized for oth
 ### Configuration File
 
 See [CONFIG.md](CONFIG.md) for detailed documentation on:
+
 - Available configuration options
 - How to show/hide specific feature groups
 - Customizing application launchers
@@ -114,9 +118,10 @@ See [CONFIG.md](CONFIG.md) for detailed documentation on:
 - Example configurations for non-Snow distributions
 
 Configuration files are searched in the following locations (in order):
-1. `chairlift/config.yml` (source directory)
-2. `/etc/chairlift/config.yml` (system-wide)
-3. `/usr/share/chairlift/config.yml` (installed with package)
+
+1. `/etc/chairlift/config.yml` (system-wide - highest priority)
+2. `/usr/share/chairlift/config.yml` (package maintainer defaults)
+3. `chairlift/config.yml` (development/source directory)
 
 ---
 
@@ -139,6 +144,7 @@ chairlift/
 ### Key Components
 
 - **chairlift/core/homebrew.py**: Python library for Homebrew integration
+
   - Package listing and searching
   - Installation and removal
   - Pin/unpin functionality
@@ -187,6 +193,7 @@ just run
 ```
 
 The distrobox configuration automatically mounts:
+
 - `/home/linuxbrew` - for Homebrew integration testing
 - `/usr/share/snow/bundles` - for bundle management testing
 

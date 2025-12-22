@@ -3,6 +3,7 @@
 ## Project Overview
 
 ChairLift is a modern GTK4/Libadwaita system management tool originally designed for Snow Linux but made portable to other distributions. It provides a unified interface for:
+
 - Homebrew package management
 - System health monitoring
 - Flatpak application management
@@ -11,6 +12,7 @@ ChairLift is a modern GTK4/Libadwaita system management tool originally designed
 ## Architecture
 
 ### Technology Stack
+
 - **UI Framework**: GTK4 + Libadwaita
 - **Language**: Python 3
 - **Build System**: Meson
@@ -46,23 +48,26 @@ chairlift/
 **Critical**: ChairLift uses a YAML configuration file to control UI behavior. Always maintain this pattern when adding new features.
 
 ### Config File Locations (searched in order)
-1. `chairlift/config.yml` (source)
-2. `/etc/chairlift/config.yml` (system-wide)
-3. `/usr/share/chairlift/config.yml` (installed)
+
+1. `/etc/chairlift/config.yml` (system-wide - highest priority)
+2. `/usr/share/chairlift/config.yml` (package maintainer defaults)
+3. `chairlift/config.yml` (development/source directory)
 
 ### Adding Configurable Features
 
 When adding new preference groups or external app integrations:
 
 1. **Add to config.yml**:
+
 ```yaml
 page_name:
   group_name:
     enabled: true
-    app_id: com.example.App  # for external apps
+    app_id: com.example.App # for external apps
 ```
 
 2. **Read in code**:
+
 ```python
 if self.__is_group_enabled('page_name', 'group_name'):
     self.page.add(group)
@@ -76,6 +81,7 @@ app_id = self.__config.get('page_name', {}).get('group_name', {}).get('app_id', 
 ## Coding Conventions
 
 ### Python Style
+
 - Use double underscore prefix for private methods: `__method_name()`
 - Use meaningful variable names, especially for UI widgets
 - Add docstrings to all methods
@@ -89,28 +95,28 @@ Always follow this pattern for async operations:
 def __on_action_clicked(self, button):
     button.set_sensitive(False)
     button.set_label(_("Processing..."))
-    
+
     def action_in_thread():
         try:
             # Do work
             return {'success': True, 'message': _("Success")}
         except Exception as e:
             return {'success': False, 'message': str(e)}
-    
+
     def on_action_complete(result):
         button.set_sensitive(True)
         button.set_label(_("Original Label"))
-        
+
         if hasattr(self.__window, 'add_toast'):
             toast = Adw.Toast.new(result['message'])
             toast.set_timeout(3)
             self.__window.add_toast(toast)
-    
+
     import threading
     def run():
         result = action_in_thread()
         GLib.idle_add(lambda: on_action_complete(result))
-    
+
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
 ```
@@ -156,6 +162,7 @@ ChairLift should work on any Linux distribution. When adding features:
 ## Testing
 
 When making changes:
+
 1. Test with and without Homebrew installed
 2. Test with different config.yml settings
 3. Verify threading doesn't block UI
@@ -186,6 +193,7 @@ To add a new page to the navigation:
 ## Package Dependencies
 
 When adding features that require new Python packages:
+
 1. Add to `debian/control` Dependencies
 2. Add to README.md Dependencies section
 3. Add to distrobox.ini for development
@@ -202,6 +210,7 @@ When adding features that require new Python packages:
 ## Commit Message Convention
 
 Use conventional commits format:
+
 - `feat:` - New features
 - `fix:` - Bug fixes
 - `docs:` - Documentation changes

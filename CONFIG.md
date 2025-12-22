@@ -6,9 +6,9 @@ ChairLift can be configured to show or hide specific feature groups, making it m
 
 ChairLift searches for the configuration file in the following locations (in order):
 
-1. `chairlift/config.yml` (in the application source directory)
-2. `/etc/chairlift/config.yml` (system-wide configuration)
-3. `/usr/share/chairlift/config.yml` (installed configuration)
+1. `/etc/chairlift/config.yml` (system-wide configuration - highest priority)
+2. `/usr/share/chairlift/config.yml` (package maintainer defaults)
+3. `chairlift/config.yml` (development/source directory)
 
 If no configuration file is found, all features are enabled by default.
 
@@ -25,11 +25,13 @@ page_name:
 ## Available Pages and Groups
 
 ### System Page (`system_page`)
+
 - `system_info_group`: Operating system information from /etc/os-release
 - `health_group`: System health monitoring and performance tools
   - `app_id`: Application ID for the system monitoring tool (default: `io.missioncenter.MissionCenter`)
 
 ### Updates Page (`updates_page`)
+
 - `updates_status_group`: System-wide updates
   - `actions`: Array of update scripts that can be executed
     - `title`: Display name for the action
@@ -39,6 +41,7 @@ page_name:
 - `updates_settings_group`: Update preferences and settings
 
 ### Applications Page (`applications_page`)
+
 - `applications_installed_group`: Flatpak application management
   - `app_id`: Application ID for the Flatpak manager (default: `io.github.kolunmi.Bazaar`)
 - `brew_group`: Installed Homebrew formulae and casks
@@ -47,6 +50,7 @@ page_name:
   - `bundles_paths`: Array of directory paths to search for Brewfile bundles (default: `['/usr/share/snow/bundles']`)
 
 ### Maintenance Page (`maintenance_page`)
+
 - `maintenance_cleanup_group`: System cleanup utilities
   - `actions`: Array of maintenance scripts that can be executed
     - `title`: Display name for the action
@@ -55,6 +59,7 @@ page_name:
 - `maintenance_optimization_group`: System optimization tools
 
 ### Help Page (`help_page`)
+
 - `help_resources_group`: Help and support resources
   - `website`: URL to the project website
   - `issues`: URL to the issue tracker for bug reports and feature requests
@@ -69,7 +74,7 @@ updates_page:
   updates_status_group:
     enabled: true
   brew_updates_group:
-    enabled: false  # Hide Homebrew updates
+    enabled: false # Hide Homebrew updates
   updates_settings_group:
     enabled: true
 
@@ -77,11 +82,11 @@ applications_page:
   applications_installed_group:
     enabled: true
   brew_group:
-    enabled: false  # Hide Homebrew packages
+    enabled: false # Hide Homebrew packages
   brew_search_group:
-    enabled: false  # Hide Homebrew search
+    enabled: false # Hide Homebrew search
   brew_bundles_group:
-    enabled: false  # Hide Homebrew bundles
+    enabled: false # Hide Homebrew bundles
 
 # Other pages remain fully enabled
 system_page:
@@ -120,6 +125,7 @@ When packaging ChairLift for different distributions:
 3. Install it to the appropriate location during package installation
 
 Example for Debian packaging:
+
 ```bash
 install -D -m 644 config.yml debian/tmp/etc/chairlift/config.yml
 ```

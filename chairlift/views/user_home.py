@@ -27,7 +27,7 @@ class ChairLiftUserHome:
 
     def __init__(self, window):
         self.__window = window
-        
+
         # Load configuration
         self.__config = self.__load_config()
 
@@ -55,24 +55,24 @@ class ChairLiftUserHome:
     def __create_page(self):
         """Create a page with toolbar view and scrolled content"""
         toolbar_view = Adw.ToolbarView()
-        
+
         # Add header bar
         header_bar = Adw.HeaderBar()
         toolbar_view.add_top_bar(header_bar)
-        
+
         # Create scrolled window with preferences page
         scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scrolled_window.set_vexpand(True)
-        
+
         preferences_page = Adw.PreferencesPage()
         scrolled_window.set_child(preferences_page)
-        
+
         toolbar_view.set_content(scrolled_window)
-        
+
         # Store the preferences_page in the toolbar_view for easy access
         toolbar_view.preferences_page = preferences_page
-        
+
         return toolbar_view
 
     def get_page(self, page_name):
@@ -89,13 +89,14 @@ class ChairLiftUserHome:
     def __load_config(self):
         """Load configuration from YAML file"""
         # Try multiple possible locations for the config file
+        # Order matters: system-wide config takes precedence over installed defaults
         config_paths = [
-            os.path.join(os.path.dirname(__file__), 'config.yml'),
-            os.path.join(os.path.dirname(__file__), '..', 'config.yml'),
-            '/etc/chairlift/config.yml',
-            '/usr/share/chairlift/config.yml',
+            '/etc/chairlift/config.yml',                                    # System-wide override
+            '/usr/share/chairlift/config.yml',                              # Package maintainer default
+            os.path.join(os.path.dirname(__file__), '..', 'config.yml'),    # Development (source tree)
+            os.path.join(os.path.dirname(__file__), 'config.yml'),          # Fallback
         ]
-        
+
         for config_path in config_paths:
             if os.path.exists(config_path):
                 try:
@@ -103,7 +104,7 @@ class ChairLiftUserHome:
                         return yaml.safe_load(f)
                 except Exception as e:
                     print(f"Error loading config from {config_path}: {e}")
-        
+
         # Return default config if no file found
         print("No config file found, using defaults (all groups enabled)")
         return {}
@@ -170,12 +171,12 @@ class ChairLiftUserHome:
         )
         system_performance_row.set_activatable(True)
         system_performance_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
-        
+
         # Get app_id from config, default to Mission Center
         app_id = self.__config.get('system_page', {}).get('health_group', {}).get('app_id', 'io.missioncenter.MissionCenter')
         system_performance_row.connect("activated", self.__on_launch_app_row_activated, app_id)
         health_group.add(system_performance_row)
-        
+
         if self.__is_group_enabled('system_page', 'health_group'):
             self.system_page.add(health_group)
 
@@ -186,39 +187,39 @@ class ChairLiftUserHome:
         updates_status_group = Adw.PreferencesGroup()
         updates_status_group.set_title(_("System Updates"))
         updates_status_group.set_description(_("Check for and install system updates"))
-        
+
         # Get actions from config
         updates_config = self.__config.get('updates_page', {}).get('updates_status_group', {})
         actions = updates_config.get('actions', [])
-        
+
         # Add action rows for each configured action
         for action in actions:
             title = action.get('title', 'Unknown Action')
             script = action.get('script')
             requires_sudo = action.get('sudo', False)
-            
+
             if script:
                 action_row = Adw.ActionRow(
                     title=_(title),
                     subtitle=script
                 )
-                
+
                 # Add sudo indicator if required
                 if requires_sudo:
                     sudo_icon = Gtk.Image.new_from_icon_name("dialog-password-symbolic")
                     sudo_icon.set_tooltip_text(_("Requires administrator privileges"))
                     action_row.add_prefix(sudo_icon)
-                
+
                 # Add run button
                 run_button = Gtk.Button()
                 run_button.set_label(_("Run"))
                 run_button.set_valign(Gtk.Align.CENTER)
                 run_button.add_css_class("suggested-action")
                 run_button.connect("clicked", self.__on_run_maintenance_action, title, script, requires_sudo)
-                
+
                 action_row.add_suffix(run_button)
                 updates_status_group.add(action_row)
-        
+
         if self.__is_group_enabled('updates_page', 'updates_status_group'):
             self.updates_page.add(updates_status_group)
 
@@ -231,13 +232,13 @@ class ChairLiftUserHome:
         update_brew_row = Adw.ActionRow()
         update_brew_row.set_title(_("Update Homebrew"))
         update_brew_row.set_subtitle(_("Update Homebrew itself and all formulae definitions"))
-        
+
         update_button = Gtk.Button()
         update_button.set_label(_("Update"))
         update_button.set_valign(Gtk.Align.CENTER)
         update_button.add_css_class("suggested-action")
         update_button.connect("clicked", self.__on_update_homebrew_clicked)
-        
+
         update_brew_row.add_suffix(update_button)
         update_brew_row.set_activatable_widget(update_button)
         brew_updates_group.add(update_brew_row)
@@ -250,7 +251,7 @@ class ChairLiftUserHome:
 
         # Load outdated packages asynchronously
         self.__load_outdated_packages(outdated_expander)
-        
+
         if self.__is_group_enabled('updates_page', 'brew_updates_group'):
             self.updates_page.add(brew_updates_group)
 
@@ -273,12 +274,12 @@ class ChairLiftUserHome:
         )
         view_apps.set_activatable(True)
         view_apps.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
-        
+
         # Get app_id from config, default to Bazaar
         app_id = self.__config.get('applications_page', {}).get('applications_installed_group', {}).get('app_id', 'io.github.kolunmi.Bazaar')
         view_apps.connect("activated", self.__on_launch_app_row_activated, app_id)
         applications_installed_group.add(view_apps)
-        
+
         if self.__is_group_enabled('applications_page', 'applications_installed_group'):
             self.applications_page.add(applications_installed_group)
 
@@ -305,7 +306,7 @@ class ChairLiftUserHome:
 
         # Load Homebrew packages asynchronously
         self.__load_homebrew_packages(formulae_expander, casks_expander)
-        
+
         if self.__is_group_enabled('applications_page', 'brew_group'):
             self.applications_page.add(brew_group)
 
@@ -317,23 +318,23 @@ class ChairLiftUserHome:
         # Search entry row
         search_entry_row = Adw.ActionRow()
         search_entry_row.set_title(_("Search for packages"))
-        
+
         search_entry = Gtk.SearchEntry()
         search_entry.set_placeholder_text(_("Enter package name..."))
         search_entry.set_hexpand(True)
         search_entry.connect("activate", self.__on_homebrew_search)
-        
+
         search_button = Gtk.Button()
         search_button.set_icon_name("system-search-symbolic")
         search_button.set_valign(Gtk.Align.CENTER)
         search_button.add_css_class("flat")
         search_button.connect("clicked", lambda btn: self.__on_homebrew_search(search_entry))
-        
+
         search_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         search_box.append(search_entry)
         search_box.append(search_button)
         search_box.set_hexpand(True)
-        
+
         search_entry_row.add_suffix(search_box)
         brew_search_group.add(search_entry_row)
 
@@ -343,11 +344,11 @@ class ChairLiftUserHome:
         search_results_expander.set_subtitle(_("No search performed"))
         search_results_expander.set_enable_expansion(False)
         brew_search_group.add(search_results_expander)
-        
+
         # Store reference for updating
         self.__search_results_expander = search_results_expander
         self.__search_entry = search_entry
-        
+
         if self.__is_group_enabled('applications_page', 'brew_search_group'):
             self.applications_page.add(brew_search_group)
 
@@ -358,7 +359,7 @@ class ChairLiftUserHome:
 
         # Load and display available bundles
         self.__load_available_bundles(brew_bundles_group)
-        
+
         if self.__is_group_enabled('applications_page', 'brew_bundles_group'):
             self.applications_page.add(brew_bundles_group)
 
@@ -368,39 +369,39 @@ class ChairLiftUserHome:
         maintenance_cleanup_group = Adw.PreferencesGroup()
         maintenance_cleanup_group.set_title(_("System Cleanup"))
         maintenance_cleanup_group.set_description(_("Clean up temporary files and free up disk space"))
-        
+
         # Get actions from config
         cleanup_config = self.__config.get('maintenance_page', {}).get('maintenance_cleanup_group', {})
         actions = cleanup_config.get('actions', [])
-        
+
         # Add action rows for each configured action
         for action in actions:
             title = action.get('title', 'Unknown Action')
             script = action.get('script')
             requires_sudo = action.get('sudo', False)
-            
+
             if script:
                 action_row = Adw.ActionRow(
                     title=_(title),
                     subtitle=script
                 )
-                
+
                 # Add sudo indicator if required
                 if requires_sudo:
                     sudo_icon = Gtk.Image.new_from_icon_name("dialog-password-symbolic")
                     sudo_icon.set_tooltip_text(_("Requires administrator privileges"))
                     action_row.add_prefix(sudo_icon)
-                
+
                 # Add run button
                 run_button = Gtk.Button()
                 run_button.set_label(_("Run"))
                 run_button.set_valign(Gtk.Align.CENTER)
                 run_button.add_css_class("suggested-action")
                 run_button.connect("clicked", self.__on_run_maintenance_action, title, script, requires_sudo)
-                
+
                 action_row.add_suffix(run_button)
                 maintenance_cleanup_group.add(action_row)
-        
+
         if self.__is_group_enabled('maintenance_page', 'maintenance_cleanup_group'):
             self.maintenance_page.add(maintenance_cleanup_group)
 
@@ -417,13 +418,13 @@ class ChairLiftUserHome:
         help_resources_group = Adw.PreferencesGroup()
         help_resources_group.set_title(_("Help Resources"))
         help_resources_group.set_description(_("Access help and support resources"))
-        
+
         # Get URLs from config
         help_config = self.__config.get('help_page', {}).get('help_resources_group', {})
         website_url = help_config.get('website')
         issues_url = help_config.get('issues')
         chat_url = help_config.get('chat')
-        
+
         # Add website row if URL is configured
         if website_url:
             website_row = Adw.ActionRow(
@@ -434,7 +435,7 @@ class ChairLiftUserHome:
             website_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
             website_row.connect("activated", self.__on_url_row_activated, website_url)
             help_resources_group.add(website_row)
-        
+
         # Add issues row if URL is configured
         if issues_url:
             issues_row = Adw.ActionRow(
@@ -445,7 +446,7 @@ class ChairLiftUserHome:
             issues_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
             issues_row.connect("activated", self.__on_url_row_activated, issues_url)
             help_resources_group.add(issues_row)
-        
+
         # Add chat row if URL is configured
         if chat_url:
             chat_row = Adw.ActionRow(
@@ -456,7 +457,7 @@ class ChairLiftUserHome:
             chat_row.add_suffix(Gtk.Image.new_from_icon_name("adw-external-link-symbolic"))
             chat_row.connect("activated", self.__on_url_row_activated, chat_url)
             help_resources_group.add(chat_row)
-        
+
         if self.__is_group_enabled('help_page', 'help_resources_group'):
             self.help_page.add(help_resources_group)
 
@@ -490,23 +491,23 @@ class ChairLiftUserHome:
         button.set_sensitive(False)
         original_label = button.get_label()
         button.set_label(_("Running..."))
-        
+
         def run_in_thread():
             """Run the maintenance script in a background thread"""
             try:
                 import subprocess
                 import shlex
-                
+
                 # Split script into command and arguments
                 script_parts = shlex.split(script)
-                
+
                 # Build command
                 if requires_sudo:
                     # Use pkexec for graphical sudo prompt
                     cmd = ['pkexec'] + script_parts
                 else:
                     cmd = script_parts
-                
+
                 # Run the script
                 result = subprocess.run(
                     cmd,
@@ -514,7 +515,7 @@ class ChairLiftUserHome:
                     text=True,
                     timeout=300  # 5 minute timeout
                 )
-                
+
                 if result.returncode == 0:
                     return {
                         'success': True,
@@ -541,12 +542,12 @@ class ChairLiftUserHome:
                     'success': False,
                     'message': _('{} failed: {}').format(title, str(e))
                 }
-        
+
         def on_complete(result):
             """Handle completion on main thread"""
             button.set_sensitive(True)
             button.set_label(original_label)
-            
+
             # Show toast notification
             if hasattr(self.__window, 'add_toast'):
                 toast = Adw.Toast.new(result['message'])
@@ -554,13 +555,13 @@ class ChairLiftUserHome:
                 self.__window.add_toast(toast)
             else:
                 print(result['message'])
-        
+
         # Run in background thread
         import threading
         def run():
             result = run_in_thread()
             GLib.idle_add(lambda: on_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -570,7 +571,7 @@ class ChairLiftUserHome:
         button.set_sensitive(False)
         original_label = button.get_label()
         button.set_label(_("Updating..."))
-        
+
         def update_in_thread():
             """Update Homebrew in a background thread"""
             try:
@@ -579,7 +580,7 @@ class ChairLiftUserHome:
                         'success': False,
                         'message': _("Homebrew is not installed")
                     }
-                
+
                 homebrew.update_homebrew()
                 return {
                     'success': True,
@@ -595,12 +596,12 @@ class ChairLiftUserHome:
                     'success': False,
                     'message': _("Failed to update Homebrew: {}").format(str(e))
                 }
-        
+
         def on_update_complete(result):
             """Handle update completion on main thread"""
             button.set_sensitive(True)
             button.set_label(original_label)
-            
+
             # Show a toast notification
             if hasattr(self.__window, 'add_toast'):
                 toast = Adw.Toast.new(result['message'])
@@ -608,13 +609,13 @@ class ChairLiftUserHome:
                 self.__window.add_toast(toast)
             else:
                 print(result['message'])
-        
+
         # Run update in background thread
         import threading
         def run():
             result = update_in_thread()
             GLib.idle_add(lambda: on_update_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -658,32 +659,32 @@ class ChairLiftUserHome:
                 return
 
             packages = result['packages']
-            
+
             # Store rows for later removal
             if not hasattr(expander, 'package_rows'):
                 expander.package_rows = []
-            
+
             if packages:
                 expander.set_subtitle(_("{} packages need updates").format(len(packages)))
-                
+
                 for pkg in sorted(packages, key=lambda x: x['name']):
                     pkg_row = Adw.ActionRow(
                         title=pkg['name'],
                         subtitle=_("{} → {}").format(pkg['current_version'], pkg['latest_version'])
                     )
-                    
+
                     # Add pinned indicator
                     if pkg.get('pinned'):
                         pin_icon = Gtk.Image.new_from_icon_name("view-pin-symbolic")
                         pkg_row.add_prefix(pin_icon)
-                    
+
                     # Add upgrade button
                     upgrade_button = Gtk.Button()
                     upgrade_button.set_label(_("Upgrade"))
                     upgrade_button.set_valign(Gtk.Align.CENTER)
                     upgrade_button.add_css_class("flat")
                     upgrade_button.connect("clicked", self.__on_upgrade_package_clicked, pkg['name'], expander)
-                    
+
                     pkg_row.add_suffix(upgrade_button)
                     expander.add_row(pkg_row)
                     expander.package_rows.append(pkg_row)
@@ -715,7 +716,7 @@ class ChairLiftUserHome:
                 expander.remove(loading_row),
                 on_packages_loaded(result)
             ))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -724,7 +725,7 @@ class ChairLiftUserHome:
         # Disable button and show loading state
         button.set_sensitive(False)
         button.set_label(_("Upgrading..."))
-        
+
         def upgrade_in_thread():
             """Upgrade package in a background thread"""
             try:
@@ -733,7 +734,7 @@ class ChairLiftUserHome:
                         'success': False,
                         'message': _("Homebrew is not installed")
                     }
-                
+
                 homebrew.upgrade_package(package_name)
                 return {
                     'success': True,
@@ -749,7 +750,7 @@ class ChairLiftUserHome:
                     'success': False,
                     'message': _("Failed to upgrade {}: {}").format(package_name, str(e))
                 }
-        
+
         def on_upgrade_complete(result):
             """Handle upgrade completion on main thread"""
             # Show toast notification
@@ -759,7 +760,7 @@ class ChairLiftUserHome:
                 self.__window.add_toast(toast)
             else:
                 print(result['message'])
-            
+
             if result['success']:
                 # Reload the outdated packages list
                 # Clear existing rows using stored references
@@ -767,20 +768,20 @@ class ChairLiftUserHome:
                     for row in expander.package_rows:
                         expander.remove(row)
                     expander.package_rows = []
-                
+
                 # Reload the list
                 self.__load_outdated_packages(expander)
             else:
                 # Re-enable button on error
                 button.set_sensitive(True)
                 button.set_label(_("Upgrade"))
-        
+
         # Run upgrade in background thread
         import threading
         def run():
             result = upgrade_in_thread()
             GLib.idle_add(lambda: on_upgrade_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -792,7 +793,7 @@ class ChairLiftUserHome:
                 for row in expander.package_rows:
                     expander.remove(row)
                 expander.package_rows = []
-        
+
         def load_in_thread():
             """Load packages in a background thread"""
             try:
@@ -806,7 +807,7 @@ class ChairLiftUserHome:
                 # Get installed formulae and casks
                 formulae = homebrew.list_installed_packages(formula_only=True)
                 all_packages = homebrew.list_installed_packages(formula_only=False)
-                
+
                 # Filter to get only casks (packages not in formulae)
                 formula_names = {str(pkg['name']) for pkg in formulae if pkg['name']}
                 casks_only = [pkg for pkg in all_packages if str(pkg['name']) not in formula_names]
@@ -834,7 +835,7 @@ class ChairLiftUserHome:
                 formulae_expander.package_rows = []
             if not hasattr(casks_expander, 'package_rows'):
                 casks_expander.package_rows = []
-            
+
             if result['error']:
                 # Show error in both expanders
                 for expander in [formulae_expander, casks_expander]:
@@ -850,7 +851,7 @@ class ChairLiftUserHome:
 
             formulae = result['formulae']
             casks = result['casks']
-            
+
             # Populate formulae expander
             formulae_expander.set_subtitle(_("{} installed").format(len(formulae)))
             if formulae:
@@ -861,12 +862,12 @@ class ChairLiftUserHome:
                         title=pkg['name'] + " - " + desc,
                         subtitle=_("Version: {}").format(pkg['version'])
                     )
-                    
+
                     # Add pin/unpin button based on current pinned status
                     pin_button = Gtk.Button()
                     pin_button.set_valign(Gtk.Align.CENTER)
                     pin_button.add_css_class("flat")
-                    
+
                     if pkg.get('pinned'):
                         # Package is pinned, show unpin button
                         pin_button.set_icon_name("changes-allow-symbolic")
@@ -877,9 +878,9 @@ class ChairLiftUserHome:
                         pin_button.set_icon_name("view-pin-symbolic")
                         pin_button.set_tooltip_text(_("Pin package"))
                         pin_button.connect("clicked", self.__on_pin_package_clicked, pkg['name'], formulae_expander)
-                    
+
                     pkg_row.add_suffix(pin_button)
-                    
+
                     # Add remove button
                     remove_button = Gtk.Button()
                     remove_button.set_icon_name("user-trash-symbolic")
@@ -889,12 +890,12 @@ class ChairLiftUserHome:
                     remove_button.set_tooltip_text(_("Uninstall package"))
                     remove_button.connect("clicked", self.__on_remove_package_clicked, pkg['name'], formulae_expander)
                     pkg_row.add_suffix(remove_button)
-                    
+
                     if pkg.get('installed_on_request'):
                         request_icon = Gtk.Image.new_from_icon_name("emblem-default-symbolic")
                         request_icon.set_tooltip_text(_("Installed on request"))
                         pkg_row.add_suffix(request_icon)
-                    
+
                     formulae_expander.add_row(pkg_row)
                     formulae_expander.package_rows.append(pkg_row)
             else:
@@ -946,7 +947,7 @@ class ChairLiftUserHome:
                 casks_expander.remove(casks_expander.loading_row),
                 on_packages_loaded(result)
             ))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -954,7 +955,7 @@ class ChairLiftUserHome:
         """Handle package pin button click"""
         # Disable button during operation
         button.set_sensitive(False)
-        
+
         def pin_in_thread():
             """Pin package in a background thread"""
             try:
@@ -963,7 +964,7 @@ class ChairLiftUserHome:
                         'success': False,
                         'message': _("Homebrew is not installed")
                     }
-                
+
                 homebrew.pin_package(package_name)
                 return {
                     'success': True,
@@ -979,7 +980,7 @@ class ChairLiftUserHome:
                     'success': False,
                     'message': _("Failed to pin {}: {}").format(package_name, str(e))
                 }
-        
+
         def on_pin_complete(result):
             """Handle pin completion on main thread"""
             # Show toast notification
@@ -989,19 +990,19 @@ class ChairLiftUserHome:
                 self.__window.add_toast(toast)
             else:
                 print(result['message'])
-            
+
             button.set_sensitive(True)
-            
+
             # Reload packages to reflect new pinned state
             if result['success']:
                 self.__load_homebrew_packages(self.__formulae_expander, self.__casks_expander)
-        
+
         # Run pin in background thread
         import threading
         def run():
             result = pin_in_thread()
             GLib.idle_add(lambda: on_pin_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -1009,7 +1010,7 @@ class ChairLiftUserHome:
         """Handle package unpin button click"""
         # Disable button during operation
         button.set_sensitive(False)
-        
+
         def unpin_in_thread():
             """Unpin package in a background thread"""
             try:
@@ -1018,7 +1019,7 @@ class ChairLiftUserHome:
                         'success': False,
                         'message': _("Homebrew is not installed")
                     }
-                
+
                 homebrew.unpin_package(package_name)
                 return {
                     'success': True,
@@ -1034,7 +1035,7 @@ class ChairLiftUserHome:
                     'success': False,
                     'message': _("Failed to unpin {}: {}").format(package_name, str(e))
                 }
-        
+
         def on_unpin_complete(result):
             """Handle unpin completion on main thread"""
             # Show toast notification
@@ -1044,19 +1045,19 @@ class ChairLiftUserHome:
                 self.__window.add_toast(toast)
             else:
                 print(result['message'])
-            
+
             button.set_sensitive(True)
-            
+
             # Reload packages to reflect new unpinned state
             if result['success']:
                 self.__load_homebrew_packages(self.__formulae_expander, self.__casks_expander)
-        
+
         # Run unpin in background thread
         import threading
         def run():
             result = unpin_in_thread()
             GLib.idle_add(lambda: on_unpin_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -1064,7 +1065,7 @@ class ChairLiftUserHome:
         """Handle package remove button click"""
         # Disable button during operation
         button.set_sensitive(False)
-        
+
         def remove_in_thread():
             """Remove package in a background thread"""
             try:
@@ -1073,7 +1074,7 @@ class ChairLiftUserHome:
                         'success': False,
                         'message': _("Homebrew is not installed")
                     }
-                
+
                 homebrew.uninstall_package(package_name)
                 return {
                     'success': True,
@@ -1089,7 +1090,7 @@ class ChairLiftUserHome:
                     'success': False,
                     'message': _("Failed to uninstall {}: {}").format(package_name, str(e))
                 }
-        
+
         def on_remove_complete(result):
             """Handle remove completion on main thread"""
             # Show toast notification
@@ -1099,7 +1100,7 @@ class ChairLiftUserHome:
                 self.__window.add_toast(toast)
             else:
                 print(result['message'])
-            
+
             if result['success']:
                 # Reload the packages list
                 # Clear existing rows
@@ -1107,19 +1108,19 @@ class ChairLiftUserHome:
                     for row in expander.package_rows:
                         expander.remove(row)
                     expander.package_rows = []
-                
+
                 # Get parent to find both expanders
                 # For now just re-enable button on success
                 # TODO: Reload the full list properly
-            
+
             button.set_sensitive(True)
-        
+
         # Run remove in background thread
         import threading
         def run():
             result = remove_in_thread()
             GLib.idle_add(lambda: on_remove_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -1128,9 +1129,9 @@ class ChairLiftUserHome:
         query = entry.get_text().strip()
         if not query:
             return
-        
+
         expander = self.__search_results_expander
-        
+
         # Clear previous results
         if hasattr(expander, 'search_rows'):
             for row in expander.search_rows:
@@ -1138,7 +1139,7 @@ class ChairLiftUserHome:
             expander.search_rows = []
         else:
             expander.search_rows = []
-        
+
         # Show loading state
         expander.set_subtitle(_("Searching..."))
         expander.set_enable_expansion(True)
@@ -1151,7 +1152,7 @@ class ChairLiftUserHome:
         loading_row.add_prefix(loading_spinner)
         expander.add_row(loading_row)
         expander.search_rows.append(loading_row)
-        
+
         def search_in_thread():
             """Search in background thread"""
             try:
@@ -1160,14 +1161,14 @@ class ChairLiftUserHome:
                         'error': True,
                         'message': _("Homebrew is not installed")
                     }
-                
+
                 # Get search results
                 results = homebrew.search_formula(query, limit=20)
-                
+
                 # Get installed packages to check against search results
                 installed = homebrew.list_installed_packages(formula_only=False)
                 installed_names = {pkg['name'] for pkg in installed}
-                
+
                 return {
                     'error': False,
                     'results': results,
@@ -1184,7 +1185,7 @@ class ChairLiftUserHome:
                     'error': True,
                     'message': _("Search failed: {}").format(str(e))
                 }
-        
+
         def on_search_complete(result):
             """Handle search completion on main thread"""
             # Clear loading row
@@ -1192,7 +1193,7 @@ class ChairLiftUserHome:
                 for row in expander.search_rows:
                     expander.remove(row)
                 expander.search_rows = []
-            
+
             if result['error']:
                 error_row = Adw.ActionRow(
                     title=_("Error"),
@@ -1203,14 +1204,14 @@ class ChairLiftUserHome:
                 expander.search_rows.append(error_row)
                 expander.set_subtitle(_("Search failed"))
                 return
-            
+
             results = result['results']
             query = result['query']
             installed_names = result.get('installed_names', set())
-            
+
             if results:
                 expander.set_subtitle(_("{} results for '{}'").format(len(results), query))
-                
+
                 for pkg in results:
                     # Sanitize description to handle HTML entities
                     desc = pkg.get('description', _("No description available"))
@@ -1220,14 +1221,14 @@ class ChairLiftUserHome:
                         title=pkg['name'],
                         subtitle=desc
                     )
-                    
+
                     # Check if package is already installed
                     is_installed = pkg['name'] in installed_names
-                    
+
                     # Add install button
                     install_button = Gtk.Button()
                     install_button.set_valign(Gtk.Align.CENTER)
-                    
+
                     if is_installed:
                         install_button.set_label(_("Installed"))
                         install_button.set_sensitive(False)
@@ -1236,7 +1237,7 @@ class ChairLiftUserHome:
                         install_button.set_label(_("Install"))
                         install_button.add_css_class("suggested-action")
                         install_button.connect("clicked", self.__on_install_package_clicked, pkg['name'])
-                    
+
                     pkg_row.add_suffix(install_button)
                     expander.add_row(pkg_row)
                     expander.search_rows.append(pkg_row)
@@ -1248,13 +1249,13 @@ class ChairLiftUserHome:
                 expander.add_row(empty_row)
                 expander.search_rows.append(empty_row)
                 expander.set_subtitle(_("No results for '{}'").format(query))
-        
+
         # Run search in background thread
         import threading
         def run():
             result = search_in_thread()
             GLib.idle_add(lambda: on_search_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -1263,7 +1264,7 @@ class ChairLiftUserHome:
         # Disable button and show loading state
         button.set_sensitive(False)
         button.set_label(_("Installing..."))
-        
+
         def install_in_thread():
             """Install package in a background thread"""
             try:
@@ -1272,7 +1273,7 @@ class ChairLiftUserHome:
                         'success': False,
                         'message': _("Homebrew is not installed")
                     }
-                
+
                 # Use brew install command
                 homebrew._run_brew_command(['install', package_name], timeout=600)
                 return {
@@ -1289,7 +1290,7 @@ class ChairLiftUserHome:
                     'success': False,
                     'message': _("Failed to install {}: {}").format(package_name, str(e))
                 }
-        
+
         def on_install_complete(result):
             """Handle install completion on main thread"""
             # Show toast notification
@@ -1299,7 +1300,7 @@ class ChairLiftUserHome:
                 self.__window.add_toast(toast)
             else:
                 print(result['message'])
-            
+
             if result['success']:
                 # Change button to show installed state
                 button.set_label(_("Installed"))
@@ -1310,13 +1311,13 @@ class ChairLiftUserHome:
                 # Re-enable button on error
                 button.set_sensitive(True)
                 button.set_label(_("Install"))
-        
+
         # Run install in background thread
         import threading
         def run():
             result = install_in_thread()
             GLib.idle_add(lambda: on_install_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
@@ -1326,7 +1327,7 @@ class ChairLiftUserHome:
             # Get bundle paths from config, default to Snow Linux path
             bundles_config = self.__config.get('applications_page', {}).get('brew_bundles_group', {})
             bundles_paths = bundles_config.get('bundles_paths', ['/usr/share/snow/bundles'])
-            
+
             # Collect all bundles from all paths
             all_bundles = []
             for path in bundles_paths:
@@ -1335,7 +1336,7 @@ class ChairLiftUserHome:
                     all_bundles.extend(bundles)
                 except Exception as e:
                     print(f"Error loading bundles from {path}: {e}")
-            
+
             if not all_bundles:
                 empty_row = Adw.ActionRow(
                     title=_("No bundles available"),
@@ -1343,23 +1344,23 @@ class ChairLiftUserHome:
                 )
                 group.add(empty_row)
                 return
-            
+
             for bundle in bundles:
                 bundle_row = Adw.ActionRow(
                     title=bundle['filename'].replace('.Brewfile', ''),
                     subtitle=bundle['description']
                 )
-                
+
                 # Add install button
                 install_button = Gtk.Button()
                 install_button.set_label(_("Install"))
                 install_button.set_valign(Gtk.Align.CENTER)
                 install_button.add_css_class("suggested-action")
                 install_button.connect("clicked", self.__on_install_bundle_clicked, bundle['path'], bundle['filename'])
-                
+
                 bundle_row.add_suffix(install_button)
                 group.add(bundle_row)
-                
+
         except homebrew.HomebrewError as e:
             error_row = Adw.ActionRow(
                 title=_("Error loading bundles"),
@@ -1380,7 +1381,7 @@ class ChairLiftUserHome:
         # Disable button and show loading state
         button.set_sensitive(False)
         button.set_label(_("Installing..."))
-        
+
         def install_in_thread():
             """Install bundle in a background thread"""
             try:
@@ -1389,7 +1390,7 @@ class ChairLiftUserHome:
                         'success': False,
                         'message': _("Homebrew is not installed")
                     }
-                
+
                 homebrew.install_bundle(bundle_path)
                 return {
                     'success': True,
@@ -1405,7 +1406,7 @@ class ChairLiftUserHome:
                     'success': False,
                     'message': _("Failed to install bundle: {}").format(str(e))
                 }
-        
+
         def on_install_complete(result):
             """Handle install completion on main thread"""
             # Show toast notification
@@ -1415,7 +1416,7 @@ class ChairLiftUserHome:
                 self.__window.add_toast(toast)
             else:
                 print(result['message'])
-            
+
             if result['success']:
                 # Change button to show installed state
                 button.set_label(_("Installed"))
@@ -1426,13 +1427,13 @@ class ChairLiftUserHome:
                 # Re-enable button on error
                 button.set_sensitive(True)
                 button.set_label(_("Install"))
-        
+
         # Run install in background thread
         import threading
         def run():
             result = install_in_thread()
             GLib.idle_add(lambda: on_install_complete(result))
-        
+
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
