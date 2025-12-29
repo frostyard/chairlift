@@ -11,7 +11,35 @@ import json
 import urllib.request
 import urllib.error
 import os
+import logging
 from typing import List, Dict, Optional, Any
+
+logger = logging.getLogger("ChairLift::Homebrew")
+
+# Dry-run mode: when True, commands that modify state will be logged but not executed
+_dry_run = False
+
+
+def set_dry_run(dry_run: bool) -> None:
+    """
+    Set dry-run mode for all Homebrew operations.
+    
+    Args:
+        dry_run: If True, state-changing operations will be logged but not executed
+    """
+    global _dry_run
+    _dry_run = dry_run
+    logger.info(f"Homebrew dry-run mode: {dry_run}")
+
+
+def get_dry_run() -> bool:
+    """
+    Get the current dry-run mode status.
+    
+    Returns:
+        True if dry-run mode is enabled, False otherwise
+    """
+    return _dry_run
 
 
 class HomebrewError(Exception):
@@ -24,13 +52,14 @@ class HomebrewNotFoundError(HomebrewError):
     pass
 
 
-def _run_brew_command(args: List[str], timeout: int = 30) -> str:
+def _run_brew_command(args: List[str], timeout: int = 30, allow_dry_run: bool = True) -> str:
     """
     Run a brew command and return the output.
     
     Args:
         args: List of command arguments (e.g., ['list', '--formula'])
         timeout: Command timeout in seconds
+        allow_dry_run: If True, state-changing commands respect dry-run mode
         
     Returns:
         Command output as string
@@ -39,6 +68,15 @@ def _run_brew_command(args: List[str], timeout: int = 30) -> str:
         HomebrewNotFoundError: If brew is not found
         HomebrewError: If command fails
     """
+    # Commands that change system state
+    state_changing_commands = ['install', 'uninstall', 'remove', 'upgrade', 'update', 
+                               'pin', 'unpin', 'bundle']
+    
+    # Check if this is a state-changing command and dry-run is enabled
+    if allow_dry_run and _dry_run and args and args[0] in state_changing_commands:
+        logger.info(f"[DRY-RUN] Would execute: brew {' '.join(args)}")
+        return f"[DRY-RUN] Would execute: brew {' '.join(args)}"
+    
     try:
         result = subprocess.run(
             ['brew'] + args,
@@ -394,6 +432,60 @@ def uninstall_package(package_name: str, force: bool = False) -> bool:
     
     _run_brew_command(args, timeout=120)
     return True
+
+
+def dump_bundle(output_dir: str = None) -> str:
+    """
+    Dump currently installed packages to a Brewfile.
+    
+    Args:
+        output_dir: Directory where Brewfile should be created. Defaults to user's home directory.
+        
+    Returns:
+        Path to the created Brewfile
+        
+    Raises:
+        HomebrewNotFoundError: If Homebrew is not installed
+        HomebrewError: If the command fails
+    """
+    if output_dir is None:
+        output_dir = os.path.expanduser('~')
+    
+    brewfile_path = os.path.join(output_dir, 'Brewfile')
+    
+    # In dry-run mode, just log what would happen
+    if _dry_run:
+        logger.info(f"[DRY-RUN] Would backup existing Brewfile if it exists")
+        logger.info(f"[DRY-RUN] Would dump bundle to: {brewfile_path}")
+        return brewfile_path
+    
+    # Backup existing Brewfile if it exists
+    if os.path.exists(brewfile_path):
+        backup_path = brewfile_path + '.old'
+        try:
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+            os.rename(brewfile_path, backup_path)
+            logger.info(f"Backed up existing Brewfile to {backup_path}")
+        except OSError as e:
+            raise HomebrewError(f"Failed to backup existing Brewfile: {e}")
+    
+    # Run brew bundle dump
+    try:
+        _run_brew_command(['bundle', 'dump', '--file', brewfile_path], timeout=60)
+        logger.info(f"Successfully dumped bundle to {brewfile_path}")
+    except HomebrewError as e:
+        # Restore backup if dump failed
+        backup_path = brewfile_path + '.old'
+        if os.path.exists(backup_path):
+            try:
+                os.rename(backup_path, brewfile_path)
+                logger.info(f"Restored backup after failed dump")
+            except OSError:
+                pass
+        raise e
+    
+    return brewfile_path
 
 
 def install_bundle(bundle_path: str) -> bool:

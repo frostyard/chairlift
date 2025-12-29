@@ -28,6 +28,7 @@ import logging
 _ = __builtins__["_"]
 from chairlift.window import ChairLiftWindow
 import chairlift.core.backend as backend
+import chairlift.core.homebrew as homebrew
 
 logger = logging.getLogger("ChairLift::Main")
 
@@ -61,7 +62,7 @@ class ChairLiftApplication(Adw.Application):
             flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
             **kwargs
         )
-        self.dry_run = True
+        self.dry_run = False
 
         self.__register_arguments()
         self.__setup_keyboard_shortcuts()
@@ -103,6 +104,7 @@ class ChairLiftApplication(Adw.Application):
             self.dry_run = False
 
         backend.set_dry_run(self.dry_run)
+        homebrew.set_dry_run(self.dry_run)
 
         self.activate()
         return 0

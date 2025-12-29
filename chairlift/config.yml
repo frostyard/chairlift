@@ -5,6 +5,8 @@
 system_page:
   system_info_group:
     enabled: true
+  nbc_status_group:
+    enabled: true
   health_group:
     enabled: true
     app_id: io.missioncenter.MissionCenter
@@ -36,7 +38,7 @@ applications_page:
 
 maintenance_page:
   maintenance_cleanup_group:
-    enabled: true
+    enabled: false
     actions:
       - title: Clean Up Boot Old Entries
         script: /usr/libexec/bls-gc

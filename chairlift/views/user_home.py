@@ -18,6 +18,8 @@ from gi.repository import Gtk, Adw, Gio, GLib
 from chairlift.core import homebrew
 import yaml
 import os
+import json
+import subprocess
 
 _ = __builtins__["_"]
 
@@ -160,6 +162,24 @@ class ChairLiftUserHome:
         if self.__is_group_enabled('system_page', 'system_info_group'):
             self.system_page.add(system_info_group)
 
+        # NBC Status group - only show if NBC is booted
+        if os.path.exists('/run/nbc-booted'):
+            nbc_status_group = Adw.PreferencesGroup()
+            nbc_status_group.set_title(_("NBC Status"))
+            nbc_status_group.set_description(_("View NBC system status information"))
+
+            # Create an expander row for NBC status
+            nbc_expander = Adw.ExpanderRow()
+            nbc_expander.set_title(_("NBC Status Details"))
+            nbc_expander.set_subtitle(_("Loading..."))
+
+            nbc_status_group.add(nbc_expander)
+            if self.__is_group_enabled('system_page', 'nbc_status_group'):
+                self.system_page.add(nbc_status_group)
+
+            # Load NBC status data asynchronously
+            self.__load_nbc_status(nbc_expander)
+
         health_group = Adw.PreferencesGroup()
         health_group.set_title(_("System Health"))
         health_group.set_description(_("Overview of system health and diagnostics"))
@@ -287,6 +307,21 @@ class ChairLiftUserHome:
         brew_group = Adw.PreferencesGroup()
         brew_group.set_title(_("Homebrew"))
         brew_group.set_description(_("Manage Homebrew packages installed on your system"))
+
+        # Add Brew Bundle Dump button
+        bundle_dump_row = Adw.ActionRow()
+        bundle_dump_row.set_title(_("Brew Bundle Dump"))
+        bundle_dump_row.set_subtitle(_("Export currently installed packages to ~/Brewfile"))
+
+        dump_button = Gtk.Button()
+        dump_button.set_label(_("Dump"))
+        dump_button.set_valign(Gtk.Align.CENTER)
+        dump_button.add_css_class("suggested-action")
+        dump_button.connect("clicked", self.__on_brew_bundle_dump_clicked)
+
+        bundle_dump_row.add_suffix(dump_button)
+        bundle_dump_row.set_activatable_widget(dump_button)
+        brew_group.add(bundle_dump_row)
 
         # Create expander row for Homebrew formulae
         formulae_expander = Adw.ExpanderRow()
@@ -565,6 +600,58 @@ class ChairLiftUserHome:
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
 
+    def __on_brew_bundle_dump_clicked(self, button):
+        """Handle brew bundle dump button click"""
+        # Disable button and show loading state
+        button.set_sensitive(False)
+        button.set_label(_("Dumping..."))
+
+        def dump_in_thread():
+            """Dump bundle in a background thread"""
+            try:
+                if not homebrew.is_homebrew_installed():
+                    return {
+                        'success': False,
+                        'message': _("Homebrew is not installed")
+                    }
+
+                brewfile_path = homebrew.dump_bundle()
+                return {
+                    'success': True,
+                    'message': _("Brewfile dumped to {}").format(brewfile_path)
+                }
+            except homebrew.HomebrewError as e:
+                return {
+                    'success': False,
+                    'message': str(e)
+                }
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': _("Unexpected error: {}").format(str(e))
+                }
+
+        def on_dump_complete(result):
+            """Handle completion of dump operation"""
+            # Re-enable button
+            button.set_sensitive(True)
+            button.set_label(_("Dump"))
+
+            # Show toast notification
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(result['message'])
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
+
+        # Run in thread
+        import threading
+        def run():
+            result = dump_in_thread()
+            GLib.idle_add(lambda: on_dump_complete(result))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
     def __on_update_homebrew_clicked(self, button):
         """Handle Homebrew update button click"""
         # Disable button and show loading state
@@ -715,6 +802,138 @@ class ChairLiftUserHome:
             GLib.idle_add(lambda: (
                 expander.remove(loading_row),
                 on_packages_loaded(result)
+            ))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+    def __load_nbc_status(self, expander):
+        """Load NBC status information and populate the expander row"""
+        def load_in_thread():
+            """Load NBC status in a background thread"""
+            try:
+                # Execute nbc status --json
+                result = subprocess.run(
+                    ['nbc', 'status', '--json'],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode != 0:
+                    return {
+                        'error': True,
+                        'message': _("Failed to get NBC status: {}").format(result.stderr.strip() or result.stdout.strip())
+                    }
+                
+                # Parse JSON output
+                try:
+                    status_data = json.loads(result.stdout)
+                    return {
+                        'error': False,
+                        'data': status_data
+                    }
+                except json.JSONDecodeError as e:
+                    return {
+                        'error': True,
+                        'message': _("Failed to parse NBC status output: {}").format(str(e))
+                    }
+                    
+            except FileNotFoundError:
+                return {
+                    'error': True,
+                    'message': _("NBC command not found")
+                }
+            except subprocess.TimeoutExpired:
+                return {
+                    'error': True,
+                    'message': _("NBC status command timed out")
+                }
+            except Exception as e:
+                return {
+                    'error': True,
+                    'message': _("Failed to load NBC status: {}").format(str(e))
+                }
+
+        def on_status_loaded(result):
+            """Update UI with loaded NBC status on the main thread"""
+            if result['error']:
+                error_row = Adw.ActionRow(
+                    title=_("Error"),
+                    subtitle=result['message']
+                )
+                error_row.add_prefix(Gtk.Image.new_from_icon_name("dialog-error-symbolic"))
+                expander.add_row(error_row)
+                expander.set_subtitle(_("Failed to load"))
+                return
+
+            status_data = result['data']
+            
+            # Parse the status data and add rows
+            if isinstance(status_data, dict):
+                # Count items for subtitle
+                expander.set_subtitle(_("{} status items").format(len(status_data)))
+                
+                # Add each key-value pair as a row
+                for key, value in sorted(status_data.items()):
+                    # Convert key to readable format
+                    readable_key = key.replace('_', ' ').title()
+                    
+                    # Convert value to string for display
+                    if isinstance(value, (dict, list)):
+                        value_str = json.dumps(value, indent=2)
+                    else:
+                        value_str = str(value)
+                    
+                    row = Adw.ActionRow(
+                        title=readable_key,
+                        subtitle=value_str
+                    )
+                    expander.add_row(row)
+            elif isinstance(status_data, list):
+                # If it's a list, add each item
+                expander.set_subtitle(_("{} status items").format(len(status_data)))
+                
+                for idx, item in enumerate(status_data):
+                    if isinstance(item, dict):
+                        # If item is a dict, show first key-value or a summary
+                        title = item.get('name') or item.get('title') or _("Item {}").format(idx + 1)
+                        subtitle = item.get('status') or item.get('description') or json.dumps(item, indent=2)
+                    else:
+                        title = _("Item {}").format(idx + 1)
+                        subtitle = str(item)
+                    
+                    row = Adw.ActionRow(
+                        title=title,
+                        subtitle=subtitle
+                    )
+                    expander.add_row(row)
+            else:
+                # Single value
+                expander.set_subtitle(str(status_data))
+                row = Adw.ActionRow(
+                    title=_("Status"),
+                    subtitle=str(status_data)
+                )
+                expander.add_row(row)
+
+        # Show loading state
+        loading_row = Adw.ActionRow(
+            title=_("Loading..."),
+            subtitle=_("Fetching NBC status")
+        )
+        loading_spinner = Gtk.Spinner()
+        loading_spinner.start()
+        loading_row.add_prefix(loading_spinner)
+        expander.add_row(loading_row)
+
+        # Load status in a thread
+        import threading
+        def run():
+            result = load_in_thread()
+            GLib.idle_add(lambda: (
+                expander.remove(loading_row),
+                on_status_loaded(result)
             ))
 
         thread = threading.Thread(target=run, daemon=True)
