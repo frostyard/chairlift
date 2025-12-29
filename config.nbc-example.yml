@@ -1,0 +1,57 @@
+# Example ChairLift Configuration for Non-Snow Linux Distributions
+# This configuration disables Snow Linux-specific features like Homebrew
+# while keeping universal features enabled.
+#
+# To use this configuration:
+# 1. Copy this file to /etc/chairlift/config.yml
+# 2. Modify as needed for your distribution
+# 3. Restart ChairLift
+
+system_page:
+  system_info_group:
+    enabled: true  # Show OS information
+  health_group:
+    enabled: true  # Show system health monitoring
+    app_id: io.missioncenter.MissionCenter  # App to launch for system monitoring
+
+updates_page:
+  updates_status_group:
+    enabled: true  # Show system updates
+    actions:
+      - title: Check for Updates  # Display title for the action
+        script: /usr/bin/bootc upgrade  # Path to the script to execute
+        sudo: true  # Whether the script requires administrator privileges
+  brew_updates_group:
+    enabled: false  # Hide Homebrew updates (not typically used on other distros)
+  updates_settings_group:
+    enabled: true  # Show update settings
+
+applications_page:
+  applications_installed_group:
+    enabled: true  # Show Flatpak management
+    app_id: io.github.kolunmi.Bazaar  # App to launch for Flatpak management (e.g., org.gnome.Software)
+  brew_group:
+    enabled: false  # Hide Homebrew package list
+  brew_search_group:
+    enabled: false  # Hide Homebrew search
+  brew_bundles_group:
+    enabled: false  # Hide Homebrew bundles
+    bundles_paths:
+      - /usr/share/snow/bundles  # List of directories containing Brewfile bundles
+
+maintenance_page:
+  maintenance_cleanup_group:
+    enabled: true  # Show cleanup tools
+    actions:
+      - title: Clean Up Boot Entries  # Display title for the action
+        script: /usr/libexec/bls-gc  # Path to the script to execute
+        sudo: true  # Whether the script requires administrator privileges
+  maintenance_optimization_group:
+    enabled: true  # Show optimization tools
+
+help_page:
+  help_resources_group:
+    enabled: true  # Show help resources
+    website: https://github.com/frostyard/chairlift
+    issues: https://github.com/frostyard/chairlift/issues
+    chat: https://github.com/frostyard/chairlift/discussions
