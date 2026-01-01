@@ -188,3 +188,77 @@ def set_dry_run(dry: bool):
 def subscribe_errors(callback):
     global _error_subscribers
     _error_subscribers.append(callback)
+
+
+def run_script_streaming(name: str, args: list[str], root: bool = False, line_callback=None) -> bool:
+    """Execute a script and stream its output line-by-line to a callback.
+
+    This is designed for scripts that output JSON Lines (one JSON object per line)
+    for real-time progress monitoring.
+
+    Args:
+        name: Script name to execute
+        args: Arguments to pass to the script
+        root: Whether to run with pkexec for root privileges
+        line_callback: Function called with each line of output (str)
+
+    Returns:
+        bool: True if script succeeded, False otherwise
+    """
+    if dry_run:
+        print("dry-run (streaming)", name, args)
+        # Simulate some progress events for dry-run testing
+        import json
+        import time
+        fake_events = [
+            {"type": "message", "message": "Dry run: Downloading update..."},
+            {"type": "step", "step": 1, "total_steps": 4, "step_name": "Clearing target partition"},
+            {"type": "step", "step": 2, "total_steps": 4, "step_name": "Pulling container image"},
+            {"type": "step", "step": 3, "total_steps": 4, "step_name": "Extracting container"},
+            {"type": "progress", "percent": 25, "message": "Layer 1/4"},
+            {"type": "progress", "percent": 50, "message": "Layer 2/4"},
+            {"type": "progress", "percent": 75, "message": "Layer 3/4"},
+            {"type": "progress", "percent": 100, "message": "Layer 4/4"},
+            {"type": "step", "step": 4, "total_steps": 4, "step_name": "Updating bootloader"},
+            {"type": "complete", "message": "Update complete (dry run)"},
+        ]
+        for event in fake_events:
+            if line_callback:
+                line_callback(json.dumps(event))
+            time.sleep(0.3)
+        return True
+
+    if script_base_path is None:
+        print("Could not run operation", name, args, "due to missing script base path")
+        return False
+
+    script_path = os.path.join(script_base_path, name)
+    command = [script_path] + args
+    if root:
+        command = ["pkexec"] + command
+
+    logger.info(f"Executing streaming command: {command}")
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1  # Line buffered
+    )
+
+    # Read output line by line and pass to callback
+    for line in process.stdout:
+        line = line.strip()
+        if line and line_callback:
+            line_callback(line)
+        logger.debug(f"Stream line from {name}: {line}")
+
+    process.wait()
+
+    if process.returncode != 0:
+        report_error(name, command, f"Script exited with code {process.returncode}")
+        print(name, args, "returned an error (exit code", process.returncode, ")")
+        return False
+
+    return True

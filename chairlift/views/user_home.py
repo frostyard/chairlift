@@ -16,6 +16,7 @@
 
 from gi.repository import Gtk, Adw, Gio, GLib
 from chairlift.core import homebrew
+import chairlift.core.backend as backend
 import yaml
 import os
 import json
@@ -812,6 +813,21 @@ class ChairLiftUserHome:
         def load_in_thread():
             """Load NBC status in a background thread"""
             try:
+                # In dry-run mode, return mock data with update available
+                if backend.dry_run:
+                    import time
+                    time.sleep(0.5)  # Simulate network delay
+                    return {
+                        'error': False,
+                        'data': {
+                            'update_check': {
+                                'available': True
+                            },
+                            'system': 'Dry Run Mode',
+                            'version': '1.0.0'
+                        }
+                    }
+
                 # Execute nbc status --json
                 result = subprocess.run(
                     ['nbc', 'status', '--json'],
@@ -819,13 +835,13 @@ class ChairLiftUserHome:
                     text=True,
                     timeout=10
                 )
-                
+
                 if result.returncode != 0:
                     return {
                         'error': True,
                         'message': _("Failed to get NBC status: {}").format(result.stderr.strip() or result.stdout.strip())
                     }
-                
+
                 # Parse JSON output
                 try:
                     status_data = json.loads(result.stdout)
@@ -838,7 +854,7 @@ class ChairLiftUserHome:
                         'error': True,
                         'message': _("Failed to parse NBC status output: {}").format(str(e))
                     }
-                    
+
             except FileNotFoundError:
                 return {
                     'error': True,
@@ -868,23 +884,45 @@ class ChairLiftUserHome:
                 return
 
             status_data = result['data']
-            
+
             # Parse the status data and add rows
             if isinstance(status_data, dict):
                 # Count items for subtitle
                 expander.set_subtitle(_("{} status items").format(len(status_data)))
-                
+
                 # Add each key-value pair as a row
                 for key, value in sorted(status_data.items()):
                     # Convert key to readable format
                     readable_key = key.replace('_', ' ').title()
-                    
+
+                    # Special handling for update_check nested object
+                    if key == 'update_check' and isinstance(value, dict):
+                        available = value.get('available', False)
+                        if available == 'true' or available is True:
+                            row = Adw.ActionRow(
+                                title=readable_key,
+                                subtitle=_("Update Available")
+                            )
+                            update_button = Gtk.Button()
+                            update_button.set_label(_("Update"))
+                            update_button.set_valign(Gtk.Align.CENTER)
+                            update_button.add_css_class("suggested-action")
+                            update_button.connect("clicked", self.__on_system_update_clicked)
+                            row.add_suffix(update_button)
+                        else:
+                            row = Adw.ActionRow(
+                                title=readable_key,
+                                subtitle=_("No Updates Available")
+                            )
+                        expander.add_row(row)
+                        continue
+
                     # Convert value to string for display
                     if isinstance(value, (dict, list)):
                         value_str = json.dumps(value, indent=2)
                     else:
                         value_str = str(value)
-                    
+
                     row = Adw.ActionRow(
                         title=readable_key,
                         subtitle=value_str
@@ -893,7 +931,7 @@ class ChairLiftUserHome:
             elif isinstance(status_data, list):
                 # If it's a list, add each item
                 expander.set_subtitle(_("{} status items").format(len(status_data)))
-                
+
                 for idx, item in enumerate(status_data):
                     if isinstance(item, dict):
                         # If item is a dict, show first key-value or a summary
@@ -902,7 +940,7 @@ class ChairLiftUserHome:
                     else:
                         title = _("Item {}").format(idx + 1)
                         subtitle = str(item)
-                    
+
                     row = Adw.ActionRow(
                         title=title,
                         subtitle=subtitle
@@ -938,6 +976,121 @@ class ChairLiftUserHome:
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
+
+    def __on_system_update_clicked(self, button):
+        """Handle system update button click"""
+        # Disable button and show loading state
+        button.set_sensitive(False)
+        original_label = button.get_label()
+        button.set_label(_("Updating..."))
+
+        # Change button style to indicate activity (remove suggested-action, add a running style)
+        button.remove_css_class("suggested-action")
+        button.add_css_class("accent")
+
+        # Track the last status message for the final toast
+        last_message = {'value': _("System update completed successfully")}
+
+        def on_progress_line(line):
+            """Handle each line of JSON output from the update script"""
+            try:
+                data = json.loads(line)
+                msg_type = data.get('type', '')
+                message = data.get('message', '')
+
+                if msg_type == 'progress':
+                    percent = data.get('percent', 0)
+                    GLib.idle_add(lambda: button.set_label(_("Updating... {}%").format(percent)))
+                elif msg_type == 'step':
+                    step_name = data.get('step_name', '')
+                    GLib.idle_add(lambda: button.set_label(_("{}...").format(step_name)))
+                elif msg_type == 'message' and message:
+                    last_message['value'] = message
+                elif msg_type == 'complete' and message:
+                    last_message['value'] = message
+                elif msg_type == 'error' and message:
+                    last_message['value'] = message
+            except json.JSONDecodeError:
+                # Non-JSON output, ignore or log
+                pass
+
+        def update_in_thread():
+            """Run system update in a background thread"""
+            try:
+                success = backend.run_script_streaming(
+                    'nbc',
+                    ['update', '--auto', '--json'],
+                    root=False,
+                    line_callback=on_progress_line
+                )
+
+                if success:
+                    return {
+                        'success': True,
+                        'message': last_message['value']
+                    }
+                else:
+                    return {
+                        'success': False,
+                        'message': last_message['value'] if 'error' in last_message['value'].lower() else _("Update failed")
+                    }
+
+            except Exception as e:
+                return {
+                    'success': False,
+                    'message': _("Failed to update system: {}").format(str(e))
+                }
+
+        def on_update_complete(result):
+            """Handle update completion on main thread"""
+            button.set_sensitive(True)
+            button.remove_css_class("accent")
+
+            if result['success']:
+                # Update successful - show reboot button
+                button.set_label(_("Reboot to Apply"))
+                button.add_css_class("destructive-action")
+                # Disconnect old handler and connect reboot handler
+                button.disconnect_by_func(self.__on_system_update_clicked)
+                button.connect("clicked", self.__on_reboot_clicked)
+            else:
+                # Update failed - restore original state
+                button.set_label(original_label)
+                button.add_css_class("suggested-action")
+
+            # Show a toast notification
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(result['message'])
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
+
+        # Run update in background thread
+        import threading
+        def run():
+            result = update_in_thread()
+            GLib.idle_add(lambda: on_update_complete(result))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+    def __on_reboot_clicked(self, button):
+        """Handle reboot button click to apply system updates"""
+        try:
+            if backend.dry_run:
+                # In dry-run mode, just show a toast instead of rebooting
+                if hasattr(self.__window, 'add_toast'):
+                    toast = Adw.Toast.new(_("[Dry Run] System would reboot now"))
+                    toast.set_timeout(3)
+                    self.__window.add_toast(toast)
+                return
+
+            # Use systemctl to reboot the system
+            subprocess.run(['systemctl', 'reboot'], check=True)
+        except Exception as e:
+            if hasattr(self.__window, 'add_toast'):
+                toast = Adw.Toast.new(_("Failed to reboot: {}").format(str(e)))
+                toast.set_timeout(3)
+                self.__window.add_toast(toast)
 
     def __on_upgrade_package_clicked(self, button, package_name, expander):
         """Handle package upgrade button click"""
