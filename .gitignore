@@ -1,13 +1,38 @@
 .vscode/
-mesonbuild/
 build/
-debian/files
-debian/chairlift.debhelper.log
-debian/chairlift
-debian/.debhelper
-*/__pycache__
-*.pyc
-chairlift/chairlift.gresource
-.buildconfig
-install/
-localegen/
+
+# Logs
+*.log
+
+
+# direnv
+.envrc
+# Added by goreleaser init:
+dist/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go coverage
+*.cover
+*.coverprofile
+
+# Dependency directories
+vendor/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

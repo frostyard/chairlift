@@ -37,13 +37,16 @@ page_name:
     - `title`: Display name for the action
     - `script`: Absolute path to the script to execute
     - `sudo`: Boolean indicating if the script requires administrator privileges (uses pkexec)
+- `flatpak_updates_group`: Available Flatpak application updates (user and system)
 - `brew_updates_group`: Homebrew package updates and outdated packages
 - `updates_settings_group`: Update preferences and settings
 
 ### Applications Page (`applications_page`)
 
-- `applications_installed_group`: Flatpak application management
+- `applications_installed_group`: Flatpak application management link
   - `app_id`: Application ID for the Flatpak manager (default: `io.github.kolunmi.Bazaar`)
+- `flatpak_user_group`: User-installed Flatpak applications
+- `flatpak_system_group`: System-wide Flatpak applications
 - `brew_group`: Installed Homebrew formulae and casks
 - `brew_search_group`: Search and install Homebrew packages
 - `brew_bundles_group`: Curated Homebrew package bundles
@@ -73,6 +76,8 @@ To create a distribution-specific configuration that disables all Homebrew featu
 updates_page:
   updates_status_group:
     enabled: true
+  flatpak_updates_group:
+    enabled: true # Keep Flatpak updates
   brew_updates_group:
     enabled: false # Hide Homebrew updates
   updates_settings_group:
@@ -80,6 +85,10 @@ updates_page:
 
 applications_page:
   applications_installed_group:
+    enabled: true
+  flatpak_user_group:
+    enabled: true
+  flatpak_system_group:
     enabled: true
   brew_group:
     enabled: false # Hide Homebrew packages

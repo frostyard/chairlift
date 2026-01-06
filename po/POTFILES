@@ -1,6 +1,0 @@
-# List of source files containing translatable strings
-chairlift/application.py
-chairlift/window.py
-chairlift/dialog.py
-chairlift/views/user_home.py
-data/org.frostyard.ChairLift.desktop.in

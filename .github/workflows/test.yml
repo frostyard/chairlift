@@ -1,0 +1,140 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  unit-test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run unit tests with coverage
+        run: go test -v ./internal/... -coverprofile=coverage.out -covermode=atomic -run "^Test[^I]" -skip "Integration"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out
+          fail_ci_if_error: false
+          verbose: true
+        continue-on-error: true
+
+  race-test:
+    name: Race Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests with race detector
+        run: go test -race -short ./internal/... -run "^Test[^I]" -skip "Integration"
+
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Check formatting
+        run: |
+          gofmt -l .
+          test -z "$(gofmt -l .)"
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Build binary
+        run: |
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} make build
+          ls -lh build/chairlift
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: chairlift-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: build/chairlift
+          retention-days: 7
