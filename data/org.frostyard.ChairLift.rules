@@ -1,7 +1,0 @@
-polkit.addRule(function(action, subject) {
-    if (action.id.startsWith("org.frostyard.ChairLift.scripts") && subject.isInGroup("chairlift")) {
-        polkit.log("action=" + action);
-        polkit.log("subject=" + subject);
-        return polkit.Result.YES;
-    }
-});

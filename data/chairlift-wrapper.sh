@@ -8,4 +8,4 @@ if [ -f "$BREW_PATH" ]; then
 fi
 
 # Launch the application
-exec @bindir@/chairlift "$@"
+exec chairlift "$@"
