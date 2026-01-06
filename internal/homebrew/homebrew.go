@@ -73,6 +73,7 @@ var stateChangingCommands = map[string]bool{
 	"pin":       true,
 	"unpin":     true,
 	"bundle":    true,
+	"cleanup":   true,
 }
 
 // runBrewCommand executes a brew command and returns the output
@@ -333,4 +334,9 @@ func BundleInstall(path string) error {
 
 	_, err := runBrewCommand(args...)
 	return err
+}
+
+// Cleanup removes old versions, outdated downloads, and clears cache
+func Cleanup() (string, error) {
+	return runBrewCommand("cleanup")
 }

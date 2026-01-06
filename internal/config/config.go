@@ -130,6 +130,8 @@ func defaultConfig() *Config {
 					},
 				},
 			},
+			"maintenance_brew_group":         GroupConfig{Enabled: true},
+			"maintenance_flatpak_group":      GroupConfig{Enabled: true},
 			"maintenance_optimization_group": GroupConfig{Enabled: true},
 		},
 		HelpPage: PageConfig{
