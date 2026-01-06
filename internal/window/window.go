@@ -3,7 +3,6 @@ package window
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/views"
@@ -20,6 +19,7 @@ type Window struct {
 	splitView    *adw.NavigationSplitView
 	sidebarList  *gtk.ListBox
 	contentStack *gtk.Stack
+	contentPage  *adw.NavigationPage // Content navigation page for dynamic title
 	toasts       *adw.ToastOverlay
 
 	pages       map[string]*adw.ToolbarView
@@ -92,9 +92,14 @@ func (w *Window) buildSidebar() *adw.NavigationPage {
 	// Create toolbar view for sidebar
 	toolbarView := adw.NewToolbarView()
 
-	// Add header bar
+	// Add header bar with menu button
 	headerBar := adw.NewHeaderBar()
 	headerBar.SetShowEndTitleButtons(false)
+
+	// Create hamburger menu button
+	menuButton := w.buildMenuButton()
+	headerBar.PackEnd(&menuButton.Widget)
+
 	toolbarView.AddTopBar(&headerBar.Widget)
 
 	// Create scrolled window for the list
@@ -173,8 +178,12 @@ func (w *Window) buildContentArea() *adw.NavigationPage {
 		}
 	}
 
-	// Create navigation page
-	navPage := adw.NewNavigationPage(&w.contentStack.Widget, "Content")
+	// Create navigation page with initial title from first nav item
+	initialTitle := "Content"
+	if len(navItems) > 0 {
+		initialTitle = navItems[0].Title
+	}
+	w.contentPage = adw.NewNavigationPage(&w.contentStack.Widget, initialTitle)
 
 	// Select first item by default
 	if len(navItems) > 0 {
@@ -185,7 +194,7 @@ func (w *Window) buildContentArea() *adw.NavigationPage {
 		}
 	}
 
-	return navPage
+	return w.contentPage
 }
 
 // onSidebarRowActivated handles sidebar row activation
@@ -206,7 +215,33 @@ func (w *Window) onSidebarRowActivated(row gtk.ListBoxRow) {
 	if _, ok := w.pages[name]; ok {
 		w.contentStack.SetVisibleChildName(name)
 		w.splitView.SetShowContent(true)
+
+		// Update the content page title
+		for _, item := range navItems {
+			if item.Name == name {
+				w.contentPage.SetTitle(item.Title)
+				break
+			}
+		}
 	}
+}
+
+// buildMenuButton creates the hamburger menu button
+func (w *Window) buildMenuButton() *gtk.MenuButton {
+	// Create menu model
+	menu := gio.NewMenu()
+
+	// Add menu items
+	menu.Append("Keyboard Shortcuts", "win.show-shortcuts")
+	menu.Append("About ChairLift", "win.show-about")
+
+	// Create menu button
+	menuButton := gtk.NewMenuButton()
+	menuButton.SetIconName("open-menu-symbolic")
+	menuButton.SetMenuModel(&menu.MenuModel)
+	menuButton.SetTooltipText("Main Menu")
+
+	return menuButton
 }
 
 // setupActions sets up window actions
@@ -244,13 +279,14 @@ func (w *Window) navigateToPage(pageName string) {
 	if _, ok := w.pages[pageName]; ok {
 		w.contentStack.SetVisibleChildName(pageName)
 
-		// Select the corresponding row
+		// Select the corresponding row and update title
 		for i, item := range navItems {
 			if item.Name == pageName {
 				row := w.sidebarList.GetRowAtIndex(i)
 				if row != nil {
 					w.sidebarList.SelectRow(row)
 				}
+				w.contentPage.SetTitle(item.Title)
 				break
 			}
 		}
@@ -259,8 +295,96 @@ func (w *Window) navigateToPage(pageName string) {
 
 // onShowShortcuts shows the keyboard shortcuts window
 func (w *Window) onShowShortcuts() {
-	log.Println("Show shortcuts requested")
-	// TODO: Implement shortcuts window
+	// Create a dialog to show shortcuts since GtkShortcutsWindow isn't available in puregotk
+	dialog := adw.NewWindow()
+	dialog.SetTransientFor(&w.Window)
+	dialog.SetModal(true)
+	dialog.SetTitle("Keyboard Shortcuts")
+	dialog.SetDefaultSize(400, 450)
+
+	// Create toolbar view
+	toolbarView := adw.NewToolbarView()
+
+	// Add header bar
+	headerBar := adw.NewHeaderBar()
+	toolbarView.AddTopBar(&headerBar.Widget)
+
+	// Create scrolled window
+	scrolled := gtk.NewScrolledWindow()
+	scrolled.SetPolicy(gtk.PolicyNeverValue, gtk.PolicyAutomaticValue)
+	scrolled.SetVexpand(true)
+
+	// Create main box
+	mainBox := gtk.NewBox(gtk.OrientationVerticalValue, 0)
+	mainBox.SetMarginTop(12)
+	mainBox.SetMarginBottom(12)
+	mainBox.SetMarginStart(12)
+	mainBox.SetMarginEnd(12)
+
+	// Create clamp for content width
+	clamp := adw.NewClamp()
+	clamp.SetMaximumSize(400)
+
+	// Navigation shortcuts group
+	navGroup := adw.NewPreferencesGroup()
+	navGroup.SetTitle("Navigation")
+
+	navShortcuts := []struct {
+		accel string
+		title string
+	}{
+		{"Alt+1", "Go to Applications"},
+		{"Alt+2", "Go to Maintenance"},
+		{"Alt+3", "Go to Updates"},
+		{"Alt+4", "Go to System"},
+		{"Alt+5", "Go to Help"},
+	}
+
+	for _, s := range navShortcuts {
+		row := adw.NewActionRow()
+		row.SetTitle(s.title)
+
+		label := gtk.NewLabel(s.accel)
+		label.AddCssClass("dim-label")
+		row.AddSuffix(&label.Widget)
+
+		navGroup.Add(&row.Widget)
+	}
+
+	mainBox.Append(&navGroup.Widget)
+
+	// General shortcuts group
+	generalGroup := adw.NewPreferencesGroup()
+	generalGroup.SetTitle("General")
+
+	generalShortcuts := []struct {
+		accel string
+		title string
+	}{
+		{"Ctrl+?", "Keyboard Shortcuts"},
+		{"Ctrl+Q", "Quit"},
+		{"F1", "Help"},
+	}
+
+	for _, s := range generalShortcuts {
+		row := adw.NewActionRow()
+		row.SetTitle(s.title)
+
+		label := gtk.NewLabel(s.accel)
+		label.AddCssClass("dim-label")
+		row.AddSuffix(&label.Widget)
+
+		generalGroup.Add(&row.Widget)
+	}
+
+	mainBox.Append(&generalGroup.Widget)
+
+	clamp.SetChild(&mainBox.Widget)
+	scrolled.SetChild(&clamp.Widget)
+	toolbarView.SetContent(&scrolled.Widget)
+
+	dialog.SetContent(&toolbarView.Widget)
+	dialog.Present()
 }
 
 // onShowAbout shows the about dialog
@@ -275,7 +399,7 @@ func (w *Window) onShowAbout() {
 	about.SetIssueUrl("https://github.com/frostyard/chairlift/issues")
 	about.SetLicenseType(gtk.LicenseGpl30Value)
 	about.SetCopyright("© 2024-2026 Frostyard")
-	about.SetDevelopers([]string{"mirkobrombin", "Frostyard Contributors"})
+	about.SetDevelopers([]string{"Brian Ketelsen", "ChairLift Contributors"})
 	about.Present()
 }
 
