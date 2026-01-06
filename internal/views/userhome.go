@@ -760,6 +760,62 @@ func (uh *UserHome) buildMaintenancePage() {
 		page.Add(group)
 	}
 
+	// Homebrew Cleanup group
+	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_brew_group") && homebrew.IsInstalled() {
+		group := adw.NewPreferencesGroup()
+		group.SetTitle("Homebrew Cleanup")
+		group.SetDescription("Remove old versions and clear Homebrew cache")
+
+		row := adw.NewActionRow()
+		row.SetTitle("Clean Up Homebrew")
+		row.SetSubtitle("Remove outdated downloads and old package versions")
+
+		icon := gtk.NewImageFromIconName("user-trash-symbolic")
+		row.AddPrefix(&icon.Widget)
+
+		button := gtk.NewButtonWithLabel("Clean Up")
+		button.SetValign(gtk.AlignCenterValue)
+		button.AddCssClass("suggested-action")
+
+		clickedCb := func(btn gtk.Button) {
+			uh.onBrewCleanupClicked(button)
+		}
+		button.ConnectClicked(&clickedCb)
+
+		row.AddSuffix(&button.Widget)
+		group.Add(&row.Widget)
+
+		page.Add(group)
+	}
+
+	// Flatpak Cleanup group
+	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_flatpak_group") && flatpak.IsInstalled() {
+		group := adw.NewPreferencesGroup()
+		group.SetTitle("Flatpak Cleanup")
+		group.SetDescription("Remove unused Flatpak runtimes and extensions")
+
+		row := adw.NewActionRow()
+		row.SetTitle("Remove Unused Runtimes")
+		row.SetSubtitle("Uninstall unused Flatpak runtimes and extensions")
+
+		icon := gtk.NewImageFromIconName("user-trash-symbolic")
+		row.AddPrefix(&icon.Widget)
+
+		button := gtk.NewButtonWithLabel("Clean Up")
+		button.SetValign(gtk.AlignCenterValue)
+		button.AddCssClass("suggested-action")
+
+		clickedCb := func(btn gtk.Button) {
+			uh.onFlatpakCleanupClicked(button)
+		}
+		button.ConnectClicked(&clickedCb)
+
+		row.AddSuffix(&button.Widget)
+		group.Add(&row.Widget)
+
+		page.Add(group)
+	}
+
 	// Optimization group
 	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_optimization_group") {
 		group := adw.NewPreferencesGroup()
@@ -867,6 +923,58 @@ func (uh *UserHome) openURL(url string) {
 func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool) {
 	log.Printf("Running action: %s (script: %s, sudo: %v)", title, script, sudo)
 	// TODO: Execute the script
+}
+
+// onBrewCleanupClicked handles the Homebrew cleanup button click
+func (uh *UserHome) onBrewCleanupClicked(button *gtk.Button) {
+	button.SetSensitive(false)
+	button.SetLabel("Cleaning...")
+
+	go func() {
+		output, err := homebrew.Cleanup()
+
+		runOnMainThread(func() {
+			button.SetSensitive(true)
+			button.SetLabel("Clean Up")
+
+			if err != nil {
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Homebrew cleanup failed: %v", err))
+				return
+			}
+
+			if homebrew.IsDryRun() {
+				uh.toastAdder.ShowToast(output)
+			} else {
+				uh.toastAdder.ShowToast("Homebrew cleanup completed")
+			}
+		})
+	}()
+}
+
+// onFlatpakCleanupClicked handles the Flatpak cleanup button click
+func (uh *UserHome) onFlatpakCleanupClicked(button *gtk.Button) {
+	button.SetSensitive(false)
+	button.SetLabel("Cleaning...")
+
+	go func() {
+		output, err := flatpak.UninstallUnused()
+
+		runOnMainThread(func() {
+			button.SetSensitive(true)
+			button.SetLabel("Clean Up")
+
+			if err != nil {
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Flatpak cleanup failed: %v", err))
+				return
+			}
+
+			if flatpak.IsDryRun() {
+				uh.toastAdder.ShowToast(output)
+			} else {
+				uh.toastAdder.ShowToast("Flatpak cleanup completed")
+			}
+		})
+	}()
 }
 
 // onNBCCheckUpdateClicked checks if an NBC system update is available

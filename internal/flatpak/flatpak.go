@@ -417,3 +417,8 @@ func (a Application) MarshalJSON() ([]byte, error) {
 		Alias: (Alias)(a),
 	})
 }
+
+// UninstallUnused removes unused Flatpak runtimes and extensions
+func UninstallUnused() (string, error) {
+	return runFlatpakCommand("uninstall", "--unused", "-y")
+}

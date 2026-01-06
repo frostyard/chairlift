@@ -49,6 +49,10 @@ maintenance_page:
       - title: Clean Up Boot Old Entries
         script: /usr/libexec/bls-gc
         sudo: true
+  maintenance_brew_group:
+    enabled: true
+  maintenance_flatpak_group:
+    enabled: true
   maintenance_optimization_group:
     enabled: true
 

@@ -59,6 +59,8 @@ page_name:
     - `title`: Display name for the action
     - `script`: Absolute path to the script to execute
     - `sudo`: Boolean indicating if the script requires administrator privileges (uses pkexec)
+- `maintenance_brew_group`: Homebrew cleanup (runs `brew cleanup` to remove old versions and cache)
+- `maintenance_flatpak_group`: Flatpak cleanup (runs `flatpak uninstall --unused` to remove unused runtimes)
 - `maintenance_optimization_group`: System optimization tools
 
 ### Help Page (`help_page`)
@@ -106,6 +108,10 @@ system_page:
 
 maintenance_page:
   maintenance_cleanup_group:
+    enabled: true
+  maintenance_brew_group:
+    enabled: true
+  maintenance_flatpak_group:
     enabled: true
   maintenance_optimization_group:
     enabled: true
