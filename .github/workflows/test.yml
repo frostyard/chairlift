@@ -58,7 +58,7 @@ jobs:
         run: go mod download
 
       - name: Run unit tests with coverage
-        run: go test -v ./pkg/... -coverprofile=coverage.out -covermode=atomic -run "^Test[^I]" -skip "Integration"
+        run: go test -v ./internal/... -coverprofile=coverage.out -covermode=atomic -run "^Test[^I]" -skip "Integration"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
@@ -84,7 +84,7 @@ jobs:
         run: go mod download
 
       - name: Run tests with race detector
-        run: go test -race -short ./pkg/... -run "^Test[^I]" -skip "Integration"
+        run: go test -race -short ./internal/... -run "^Test[^I]" -skip "Integration"
 
   verify:
     name: Verify
