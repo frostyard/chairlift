@@ -91,6 +91,8 @@ nfpms:
     package_name: frostyard-chairlift
     description: |-
       System management tool for nbc/bootc installations.
+      Manage flatpaks, homebrew and system updates with a modern GTK4/Libadwaita interface.
+    license: MIT
     contents:
       # Wrapper script
       - src: ./data/chairlift-wrapper.sh
