@@ -88,6 +88,7 @@ changelog:
 
 nfpms:
   - file_name_template: "{{ .ConventionalFileName }}"
+    package_name: frostyard-chairlift
     contents:
       # Wrapper script
       - src: ./data/chairlift-wrapper.sh
