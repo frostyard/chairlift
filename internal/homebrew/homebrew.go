@@ -203,15 +203,15 @@ func ListOutdated() ([]Package, error) {
 
 	var data struct {
 		Formulae []struct {
-			Name             string `json:"name"`
-			InstalledVersion string `json:"installed_versions"`
-			CurrentVersion   string `json:"current_version"`
-			Pinned           bool   `json:"pinned"`
+			Name              string   `json:"name"`
+			InstalledVersions []string `json:"installed_versions"`
+			CurrentVersion    string   `json:"current_version"`
+			Pinned            bool     `json:"pinned"`
 		} `json:"formulae"`
 		Casks []struct {
-			Name             string `json:"name"`
-			InstalledVersion string `json:"installed_versions"`
-			CurrentVersion   string `json:"current_version"`
+			Name              string   `json:"name"`
+			InstalledVersions []string `json:"installed_versions"`
+			CurrentVersion    string   `json:"current_version"`
 		} `json:"casks"`
 	}
 
@@ -223,7 +223,7 @@ func ListOutdated() ([]Package, error) {
 	for _, f := range data.Formulae {
 		packages = append(packages, Package{
 			Name:     f.Name,
-			Version:  f.InstalledVersion,
+			Version:  strings.Join(f.InstalledVersions, ", "),
 			Outdated: true,
 			Pinned:   f.Pinned,
 		})
@@ -231,7 +231,7 @@ func ListOutdated() ([]Package, error) {
 	for _, c := range data.Casks {
 		packages = append(packages, Package{
 			Name:     c.Name,
-			Version:  c.InstalledVersion,
+			Version:  strings.Join(c.InstalledVersions, ", "),
 			Outdated: true,
 		})
 	}
