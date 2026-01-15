@@ -7,7 +7,9 @@ import (
 
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
+	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/window"
 
 	"github.com/jwijenbergh/puregotk/v4/adw"
@@ -42,7 +44,9 @@ func New() *Application {
 			app.dryRun = true
 			flatpak.SetDryRun(true)
 			homebrew.SetDryRun(true)
+			instex.SetDryRun(true)
 			nbc.SetDryRun(true)
+			updex.SetDryRun(true)
 			break
 		}
 	}
@@ -79,7 +83,8 @@ func (a *Application) setupKeyboardShortcuts() {
 	a.SetAccelsForAction("win.navigate-maintenance", []string{"<Alt>2"})
 	a.SetAccelsForAction("win.navigate-updates", []string{"<Alt>3"})
 	a.SetAccelsForAction("win.navigate-system", []string{"<Alt>4"})
-	a.SetAccelsForAction("win.navigate-help", []string{"<Alt>5"})
+	a.SetAccelsForAction("win.navigate-extensions", []string{"<Alt>5"})
+	a.SetAccelsForAction("win.navigate-help", []string{"<Alt>6"})
 }
 
 // registerOptions registers command line options

@@ -42,6 +42,7 @@ var navItems = []NavItem{
 	{Name: "maintenance", Title: "Maintenance", Icon: "emblem-system-symbolic"},
 	{Name: "updates", Title: "Updates", Icon: "software-update-available-symbolic"},
 	{Name: "system", Title: "System", Icon: "computer-symbolic"},
+	{Name: "extensions", Title: "Extensions", Icon: "application-x-addon-symbolic"},
 	{Name: "help", Title: "Help", Icon: "help-browser-symbolic"},
 }
 

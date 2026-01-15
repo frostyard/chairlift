@@ -15,6 +15,7 @@ type Config struct {
 	UpdatesPage      PageConfig `yaml:"updates_page"`
 	ApplicationsPage PageConfig `yaml:"applications_page"`
 	MaintenancePage  PageConfig `yaml:"maintenance_page"`
+	ExtensionsPage   PageConfig `yaml:"extensions_page"`
 	HelpPage         PageConfig `yaml:"help_page"`
 }
 
@@ -134,6 +135,10 @@ func defaultConfig() *Config {
 			"maintenance_flatpak_group":      GroupConfig{Enabled: true},
 			"maintenance_optimization_group": GroupConfig{Enabled: true},
 		},
+		ExtensionsPage: PageConfig{
+			"installed_group": GroupConfig{Enabled: true},
+			"discover_group":  GroupConfig{Enabled: true},
+		},
 		HelpPage: PageConfig{
 			"help_resources_group": GroupConfig{
 				Enabled: true,
@@ -157,6 +162,8 @@ func (c *Config) IsGroupEnabled(pageName, groupName string) bool {
 		page = c.ApplicationsPage
 	case "maintenance_page":
 		page = c.MaintenancePage
+	case "extensions_page":
+		page = c.ExtensionsPage
 	case "help_page":
 		page = c.HelpPage
 	default:
@@ -182,6 +189,8 @@ func (c *Config) GetGroupConfig(pageName, groupName string) *GroupConfig {
 		page = c.ApplicationsPage
 	case "maintenance_page":
 		page = c.MaintenancePage
+	case "extensions_page":
+		page = c.ExtensionsPage
 	case "help_page":
 		page = c.HelpPage
 	default:

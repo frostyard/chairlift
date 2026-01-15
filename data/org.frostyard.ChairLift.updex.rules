@@ -1,0 +1,10 @@
+// Allow users in the sudo group to run updex commands via ChairLift without authentication
+polkit.addRule(function(action, subject) {
+    if (action.id.startsWith("org.frostyard.ChairLift.updex.") &&
+        subject.active == true &&
+        subject.local == true &&
+        subject.isInGroup("sudo")) {
+            return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

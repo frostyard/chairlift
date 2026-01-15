@@ -56,6 +56,12 @@ maintenance_page:
   maintenance_optimization_group:
     enabled: true
 
+extensions_page:
+  installed_group:
+    enabled: true
+  discover_group:
+    enabled: true
+
 help_page:
   help_resources_group:
     enabled: true
