@@ -114,6 +114,16 @@ nfpms:
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.nbc.policy
       - src: ./data/org.frostyard.ChairLift.nbc.rules
         dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.nbc.rules
+      # PolicyKit policy and rules for updex
+      - src: ./data/org.frostyard.ChairLift.updex.policy
+        dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy
+      - src: ./data/org.frostyard.ChairLift.updex.rules
+        dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.updex.rules
+      # PolicyKit policy and rules for instex
+      - src: ./data/org.frostyard.ChairLift.instex.policy
+        dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.instex.policy
+      - src: ./data/org.frostyard.ChairLift.instex.rules
+        dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.instex.rules
     formats:
       - deb
       - rpm
