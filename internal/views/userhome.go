@@ -102,7 +102,8 @@ type UserHome struct {
 	extensionsGroup        *adw.PreferencesGroup
 	discoverEntry          *gtk.Entry
 	discoverResultsGroup   *adw.PreferencesGroup
-	installedComponentsMap map[string]bool // Cache of installed component names
+	discoverResultRows     []*adw.ActionRow // Track rows to clear on new discovery
+	installedComponentsMap map[string]bool  // Cache of installed component names
 
 	// Update badge tracking
 	nbcUpdateCount     int
@@ -890,7 +891,8 @@ func (uh *UserHome) buildExtensionsPage() {
 		entryRow.SetTitle("Repository URL")
 
 		uh.discoverEntry = gtk.NewEntry()
-		uh.discoverEntry.SetPlaceholderText("https://repository.example.org")
+		//uh.discoverEntry.SetPlaceholderText("https://repository.example.org")
+		uh.discoverEntry.SetText("https://repository.frostyard.org")
 		uh.discoverEntry.SetHexpand(true)
 		uh.discoverEntry.SetValign(gtk.AlignCenterValue)
 		entryRow.AddSuffix(&uh.discoverEntry.Widget)
@@ -972,7 +974,7 @@ func (uh *UserHome) loadExtensions() {
 
 				// Add checkmark icon if this is the current (active) version
 				if ext.Current {
-					icon := gtk.NewImageFromIconName("emblem-ok-symbolic")
+					icon := gtk.NewImageFromIconName("object-select-symbolic")
 					row.AddSuffix(&icon.Widget)
 				}
 
@@ -1025,8 +1027,12 @@ func (uh *UserHome) displayDiscoveryResults(repoURL string, result *instex.Disco
 		return
 	}
 
-	// Clear existing results by hiding and recreating content
-	// Unfortunately GTK doesn't have a simple "remove all children" so we work around it
+	// Clear existing result rows
+	for _, row := range uh.discoverResultRows {
+		uh.discoverResultsGroup.Remove(&row.Widget)
+	}
+	uh.discoverResultRows = nil
+
 	uh.discoverResultsGroup.SetVisible(true)
 
 	if len(result.Extensions) == 0 {
@@ -1073,6 +1079,7 @@ func (uh *UserHome) displayDiscoveryResults(repoURL string, result *instex.Disco
 		}
 
 		uh.discoverResultsGroup.Add(&row.Widget)
+		uh.discoverResultRows = append(uh.discoverResultRows, row)
 	}
 }
 
@@ -1448,7 +1455,7 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 					completeRow := adw.NewActionRow()
 					completeRow.SetTitle(evt.Message)
 					completeRow.SetSubtitle("Complete")
-					completeIcon := gtk.NewImageFromIconName("emblem-ok-symbolic")
+					completeIcon := gtk.NewImageFromIconName("object-select-symbolic")
 					completeRow.AddPrefix(&completeIcon.Widget)
 					logExpander.AddRow(&completeRow.Widget)
 				}
@@ -1573,7 +1580,7 @@ func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.
 					completeRow := adw.NewActionRow()
 					completeRow.SetTitle(evt.Message)
 					completeRow.SetSubtitle("Complete")
-					completeIcon := gtk.NewImageFromIconName("emblem-ok-symbolic")
+					completeIcon := gtk.NewImageFromIconName("object-select-symbolic")
 					completeRow.AddPrefix(&completeIcon.Widget)
 					logExpander.AddRow(&completeRow.Widget)
 				}
