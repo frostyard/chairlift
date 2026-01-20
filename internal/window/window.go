@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/frostyard/chairlift/internal/config"
+	"github.com/frostyard/chairlift/internal/version"
 	"github.com/frostyard/chairlift/internal/views"
 
 	"github.com/jwijenbergh/puregotk/v4/adw"
@@ -394,7 +395,7 @@ func (w *Window) onShowAbout() {
 	about.SetTransientFor(&w.Window)
 	about.SetApplicationName("ChairLift")
 	about.SetApplicationIcon("org.frostyard.ChairLift")
-	about.SetVersion("1.0.0")
+	about.SetVersion(version.Version)
 	about.SetDeveloperName("Frostyard")
 	about.SetWebsite("https://github.com/frostyard/chairlift")
 	about.SetIssueUrl("https://github.com/frostyard/chairlift/issues")

@@ -46,7 +46,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .CommitDate }} -X main.builtBy=goreleaser
+      - -s -w -X main.buildVersion={{ .Version }} -X main.buildCommit={{ .Commit }} -X main.buildDate={{ .CommitDate }} -X main.buildBy=goreleaser
     main: ./cmd/chairlift/main.go
 
 archives:

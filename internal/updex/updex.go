@@ -2,7 +2,6 @@
 package updex
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -113,25 +112,10 @@ func List(ctx context.Context) ([]Extension, error) {
 		return nil, err
 	}
 
-	// Parse JSONL output (one JSON object per line)
+	// Parse JSON array output
 	var extensions []Extension
-	scanner := bufio.NewScanner(bytes.NewReader([]byte(output)))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
-			continue
-		}
-
-		var ext Extension
-		if err := json.Unmarshal([]byte(line), &ext); err != nil {
-			log.Printf("Failed to parse extension JSON: %v (line: %s)", err, line)
-			continue
-		}
-		extensions = append(extensions, ext)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, &Error{Message: fmt.Sprintf("failed to read output: %v", err)}
+	if err := json.Unmarshal([]byte(output), &extensions); err != nil {
+		return nil, &Error{Message: fmt.Sprintf("failed to parse JSON output: %v", err)}
 	}
 
 	return extensions, nil
