@@ -1,10 +1,10 @@
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/frostyard/nbc v0.13.7 h1:DNUnDp4vkor4OsEDb1ChdXcL9Csvb1QMBkBXBTQ6aJs=
-github.com/frostyard/nbc v0.13.7/go.mod h1:UTS1cj8sl6mdJFk9JE0gimoeH5rSHjLdfaesPYboZXY=
+github.com/frostyard/nbc v0.14.0 h1:LsLuMEXDDfjbCvI0SUnqTZ4x53elKlgf7t0p1Aefhlc=
+github.com/frostyard/nbc v0.14.0/go.mod h1:10VB3hCCdq0iWclievPXRS2YJ8wgs0cEwktJNEP8nj4=
 github.com/jwijenbergh/purego v0.0.0-20251017112123-b71757b9ba42 h1:kQ0LX4ffJvtONhymro3HzrB8XUa6dIGgrbnkl38Rgl0=
 github.com/jwijenbergh/purego v0.0.0-20251017112123-b71757b9ba42/go.mod h1:amE5lVGstyh2GTEIHFEbgJHmoMD0llIuapnzIlZx7Fc=
-github.com/jwijenbergh/puregotk v0.0.0-20251201161753-28ec1479c381 h1:Cy6in3ph8eGnl0w71S0NnH8ZCj0YhZZHzrwYEgtbtII=
-github.com/jwijenbergh/puregotk v0.0.0-20251201161753-28ec1479c381/go.mod h1:mZu8qSvCSqtVL+xoiebZuicnJijwrLfGRs6/eTVgFlc=
+github.com/jwijenbergh/puregotk v0.0.0-20260115100645-c78e1521129b h1:V1Fap0BIdI1DbO4Q1cgLcDJm/wBSgkX0S73wZLwPXyI=
+github.com/jwijenbergh/puregotk v0.0.0-20260115100645-c78e1521129b/go.mod h1:mZu8qSvCSqtVL+xoiebZuicnJijwrLfGRs6/eTVgFlc=
 github.com/kr/pretty v0.2.1/go.mod h1:ipq/a2n7PKx3OHsz4KJII5eveXtPO4qwEXGdVfWzfnI=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=

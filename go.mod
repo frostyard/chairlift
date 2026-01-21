@@ -3,8 +3,8 @@ module github.com/frostyard/chairlift
 go 1.24.2
 
 require (
-	github.com/frostyard/nbc v0.13.7
-	github.com/jwijenbergh/puregotk v0.0.0-20251201161753-28ec1479c381
+	github.com/frostyard/nbc v0.14.0
+	github.com/jwijenbergh/puregotk v0.0.0-20260115100645-c78e1521129b
 	golang.org/x/text v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
