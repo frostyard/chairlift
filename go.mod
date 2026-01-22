@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/frostyard/nbc v0.14.0
 	github.com/jwijenbergh/puregotk v0.0.0-20260115100645-c78e1521129b
+	github.com/snapcore/snapd v0.0.0-20260121163940-7314b8b629e5
 	golang.org/x/text v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -25,7 +26,6 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/snapcore/go-gettext v0.0.0-20191107141714-82bbea49e785 // indirect
 	github.com/snapcore/secboot v0.0.0-20260116095945-507475da2340 // indirect
-	github.com/snapcore/snapd v0.0.0-20260121163940-7314b8b629e5 // indirect
 	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f // indirect
 	golang.org/x/net v0.48.0 // indirect
