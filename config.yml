@@ -33,6 +33,8 @@ applications_page:
     enabled: true
   flatpak_system_group:
     enabled: true
+  snap_group:
+    enabled: true
   brew_group:
     enabled: true
   brew_search_group:

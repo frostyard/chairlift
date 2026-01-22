@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
+	"github.com/frostyard/chairlift/internal/snap"
 	"github.com/frostyard/chairlift/internal/updex"
 
 	"github.com/jwijenbergh/puregotk/v4/adw"
@@ -91,6 +93,10 @@ type UserHome struct {
 	flatpakSystemExpander  *adw.ExpanderRow
 	flatpakUpdatesExpander *adw.ExpanderRow
 	flatpakUpdateRows      []*adw.ActionRow // Store references for cleanup
+	snapExpander           *adw.ExpanderRow
+	snapStoreLinkRow       *adw.ActionRow
+	snapStoreInstallRow    *adw.ActionRow
+	snapRows               []*adw.ActionRow // Store references for cleanup
 
 	// NBC update references
 	nbcUpdateBtn      *gtk.Button
@@ -658,6 +664,58 @@ func (uh *UserHome) buildApplicationsPage() {
 		go uh.loadFlatpakApplications()
 	}
 
+	// Snap Applications group
+	if uh.config.IsGroupEnabled("applications_page", "snap_group") && snap.IsInstalled() {
+		group := adw.NewPreferencesGroup()
+		group.SetTitle("Snap Applications")
+		group.SetDescription("Manage Snap packages installed on your system")
+
+		// Snap Store link row - shown when snap-store is installed
+		uh.snapStoreLinkRow = adw.NewActionRow()
+		uh.snapStoreLinkRow.SetTitle("Manage Snaps")
+		uh.snapStoreLinkRow.SetSubtitle("Open the Snap Store to install and manage applications")
+		uh.snapStoreLinkRow.SetActivatable(true)
+		uh.snapStoreLinkRow.SetVisible(false) // Hidden by default, shown if snap-store is installed
+
+		linkIcon := gtk.NewImageFromIconName("adw-external-link-symbolic")
+		uh.snapStoreLinkRow.AddSuffix(&linkIcon.Widget)
+
+		linkActivatedCb := func(row adw.ActionRow) {
+			uh.launchApp("snap-store_snap-store")
+		}
+		uh.snapStoreLinkRow.ConnectActivated(&linkActivatedCb)
+		group.Add(&uh.snapStoreLinkRow.Widget)
+
+		// Snap Store install row - shown when snap-store is NOT installed
+		uh.snapStoreInstallRow = adw.NewActionRow()
+		uh.snapStoreInstallRow.SetTitle("Snap Store")
+		uh.snapStoreInstallRow.SetSubtitle("Install the Snap Store for a graphical package manager")
+		uh.snapStoreInstallRow.SetVisible(false) // Hidden by default, shown if snap-store not installed
+
+		storeIcon := gtk.NewImageFromIconName("system-software-install-symbolic")
+		uh.snapStoreInstallRow.AddPrefix(&storeIcon.Widget)
+
+		installBtn := gtk.NewButtonWithLabel("Install")
+		installBtn.SetValign(gtk.AlignCenterValue)
+		installBtn.AddCssClass("suggested-action")
+		installClickedCb := func(btn gtk.Button) {
+			uh.onInstallSnapStoreClicked(installBtn)
+		}
+		installBtn.ConnectClicked(&installClickedCb)
+		uh.snapStoreInstallRow.AddSuffix(&installBtn.Widget)
+		group.Add(&uh.snapStoreInstallRow.Widget)
+
+		uh.snapExpander = adw.NewExpanderRow()
+		uh.snapExpander.SetTitle("Installed Snaps")
+		uh.snapExpander.SetSubtitle("Loading...")
+		group.Add(&uh.snapExpander.Widget)
+
+		page.Add(group)
+
+		// Load snap applications asynchronously
+		go uh.loadSnapApplications()
+	}
+
 	// Homebrew group
 	if uh.config.IsGroupEnabled("applications_page", "brew_group") {
 		group := adw.NewPreferencesGroup()
@@ -1198,7 +1256,22 @@ func (uh *UserHome) buildHelpPage() {
 
 func (uh *UserHome) launchApp(appID string) {
 	log.Printf("Launching app: %s", appID)
-	// TODO: Use D-Bus to launch the application
+
+	// Use gtk-launch to launch the application by its desktop file ID
+	// gtk-launch handles looking up the desktop file and launching it correctly
+	cmd := exec.Command("gtk-launch", appID)
+	cmd.Env = os.Environ()
+
+	if err := cmd.Start(); err != nil {
+		log.Printf("Failed to launch app %s: %v", appID, err)
+		uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to launch %s", appID))
+		return
+	}
+
+	// Don't wait for the command to finish - it's a GUI app
+	go func() {
+		_ = cmd.Wait()
+	}()
 }
 
 func (uh *UserHome) openURL(url string) {
@@ -1867,6 +1940,118 @@ func (uh *UserHome) loadFlatpakApplications() {
 			})
 		}
 	}
+}
+
+// loadSnapApplications loads installed snap packages asynchronously
+func (uh *UserHome) loadSnapApplications() {
+	if !snap.IsInstalled() {
+		runOnMainThread(func() {
+			if uh.snapExpander != nil {
+				uh.snapExpander.SetSubtitle("Snap not installed")
+			}
+		})
+		return
+	}
+
+	// Check if snap-store is installed
+	snapStoreInstalled, err := snap.IsSnapInstalled("snap-store")
+	if err != nil {
+		log.Printf("Error checking snap-store: %v", err)
+	}
+
+	// Load installed snaps
+	snaps, err := snap.ListInstalledSnaps()
+	if err != nil {
+		runOnMainThread(func() {
+			if uh.snapExpander != nil {
+				uh.snapExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
+			}
+		})
+		return
+	}
+
+	runOnMainThread(func() {
+		if uh.snapExpander != nil {
+			// Clear existing rows
+			for _, row := range uh.snapRows {
+				uh.snapExpander.Remove(&row.Widget)
+			}
+			uh.snapRows = nil
+
+			uh.snapExpander.SetSubtitle(fmt.Sprintf("%d installed", len(snaps)))
+
+			for _, s := range snaps {
+				row := adw.NewActionRow()
+				row.SetTitle(s.Name)
+
+				subtitle := s.Version
+				if s.Channel != "" {
+					subtitle = fmt.Sprintf("%s (%s)", s.Version, s.Channel)
+				}
+				row.SetSubtitle(subtitle)
+
+				// Add confinement indicator
+				if s.Confinement == "classic" {
+					classicLabel := gtk.NewLabel("classic")
+					classicLabel.AddCssClass("dim-label")
+					classicLabel.SetValign(gtk.AlignCenterValue)
+					row.AddSuffix(&classicLabel.Widget)
+				}
+
+				uh.snapExpander.AddRow(&row.Widget)
+				uh.snapRows = append(uh.snapRows, row)
+			}
+		}
+
+		// Show snap-store link row if installed, otherwise show install row
+		if uh.snapStoreLinkRow != nil {
+			uh.snapStoreLinkRow.SetVisible(snapStoreInstalled)
+		}
+		if uh.snapStoreInstallRow != nil {
+			uh.snapStoreInstallRow.SetVisible(!snapStoreInstalled)
+		}
+	})
+}
+
+// onInstallSnapStoreClicked handles installing the snap-store snap
+func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
+	button.SetSensitive(false)
+	button.SetLabel("Installing...")
+
+	go func() {
+		ctx, cancel := snap.DefaultContext()
+		defer cancel()
+
+		changeID, err := snap.Install(ctx, "snap-store")
+		if err != nil {
+			runOnMainThread(func() {
+				button.SetSensitive(true)
+				button.SetLabel("Install")
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to install snap-store: %v", err))
+			})
+			return
+		}
+
+		// Wait for the installation to complete
+		err = snap.WaitForChange(ctx, changeID)
+		if err != nil {
+			runOnMainThread(func() {
+				button.SetSensitive(true)
+				button.SetLabel("Install")
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Installation failed: %v", err))
+			})
+			return
+		}
+
+		runOnMainThread(func() {
+			button.SetSensitive(true)
+			button.SetLabel("Install")
+			uh.toastAdder.ShowToast("Snap Store installed successfully!")
+		})
+
+		// Reload the snap list to update the UI
+		uh.loadSnapApplications()
+	}()
 }
 
 func (uh *UserHome) loadFlatpakUpdates() {
