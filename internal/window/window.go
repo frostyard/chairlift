@@ -6,6 +6,7 @@ import (
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/operations"
+	"github.com/frostyard/chairlift/internal/pm"
 	"github.com/frostyard/chairlift/internal/version"
 	"github.com/frostyard/chairlift/internal/views"
 
@@ -25,11 +26,12 @@ type Window struct {
 	toasts        *adw.ToastOverlay
 	operationsBtn *operations.OperationsButton
 
-	pages       map[string]*adw.ToolbarView
-	navRows     map[string]*adw.ActionRow // Store references to nav rows for badges
-	config      *config.Config
-	views       *views.UserHome
-	updateBadge *gtk.Button // Badge for updates count
+	pages        map[string]*adw.ToolbarView
+	navRows      map[string]*adw.ActionRow // Store references to nav rows for badges
+	config       *config.Config
+	views        *views.UserHome
+	updateBadge  *gtk.Button // Badge for updates count
+	dryRunBanner *adw.Banner
 }
 
 // NavItem represents a navigation item in the sidebar
@@ -87,9 +89,23 @@ func (w *Window) buildUI() {
 	progressSheet := w.views.BuildProgressBottomSheet()
 	progressSheet.SetContent(&w.splitView.Widget)
 
+	// Create dry-run banner (dismissible with "Understood" button)
+	w.dryRunBanner = adw.NewBanner("Dry-Run Mode: Changes will be simulated only")
+	w.dryRunBanner.SetButtonLabel("Understood")
+	w.dryRunBanner.SetRevealed(pm.IsDryRun())
+	bannerClickedCb := func(banner adw.Banner) {
+		w.dryRunBanner.SetRevealed(false)
+	}
+	w.dryRunBanner.ConnectButtonClicked(&bannerClickedCb)
+
+	// Create content box for banner + main content
+	contentBox := gtk.NewBox(gtk.OrientationVerticalValue, 0)
+	contentBox.Append(&w.dryRunBanner.Widget)
+	contentBox.Append(&progressSheet.Widget)
+
 	// Create toast overlay for notifications
 	w.toasts = adw.NewToastOverlay()
-	w.toasts.SetChild(&progressSheet.Widget)
+	w.toasts.SetChild(&contentBox.Widget)
 
 	// Set window content
 	w.SetContent(&w.toasts.Widget)
