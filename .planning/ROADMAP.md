@@ -118,10 +118,12 @@ Plans:
   2. Extensions page exists in its own package following established pattern
   3. Extensions page calls updex Go library directly (no subprocess/CLI)
   4. sysext operations have proper progress and error handling via library API
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 06-01: TBD
+- [ ] 06-01-PLAN.md — Extract Maintenance page with logic/UI separation
+- [ ] 06-02-PLAN.md — Create Extensions logic layer with updex library
+- [ ] 06-03-PLAN.md — Create Extensions UI layer and integrate pages
 
 ### Phase 7: Complex Pages
 **Goal**: Applications and Updates pages are extracted, completing the monolith split
