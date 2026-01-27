@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 1 of 9 (Async Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-01-26 — Roadmap created
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-27 — Completed 01-01-PLAN.md
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] ~3%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: 2 min
+- Total execution time: 0.03 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 1. Async Foundation | 1/3 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: —
+- Last 5 plans: 2 min
 - Trend: —
 
 *Updated after each plan completion*
@@ -45,6 +45,8 @@ Recent decisions affecting current work:
 - Extract reusable GTK4/Go library during refactor (Pending)
 - Library location TBD until patterns emerge (Pending)
 - Progress/async as core infrastructure (Pending)
+- RunOnMain uses exact pattern from userhome.go (01-01)
+- UserError uses 'Couldn't' tone per CONTEXT.md (01-01)
 
 ### Pending Todos
 
@@ -56,9 +58,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-26
-Stopped at: Roadmap created, ready to plan Phase 1
+Last session: 2026-01-27
+Stopped at: Completed 01-01-PLAN.md
 Resume file: None
 
 ---
 *State initialized: 2026-01-26*
+*Last updated: 2026-01-27*

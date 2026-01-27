@@ -36,7 +36,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Create async package with RunOnMain and UserError
+- [x] 01-01-PLAN.md — Create async package with RunOnMain and UserError
 - [ ] 01-02-PLAN.md — Migrate userhome.go to async.RunOnMain
 - [ ] 01-03-PLAN.md — Migrate pm/wrapper.go to async.RunOnMain
 
@@ -165,7 +165,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Async Foundation | 0/3 | Planned | - |
+| 1. Async Foundation | 1/3 | In progress | - |
 | 2. Widget Extraction | 0/TBD | Not started | - |
 | 3. Operations & Progress | 0/TBD | Not started | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
@@ -177,4 +177,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-26 — Phase 1 planned*
+*Last updated: 2026-01-27 — Plan 01-01 complete*
