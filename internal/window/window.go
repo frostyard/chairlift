@@ -81,9 +81,13 @@ func (w *Window) buildUI() {
 	contentPage := w.buildContentArea()
 	w.splitView.SetContent(contentPage)
 
+	// Create progress bottom sheet
+	progressSheet := w.views.BuildProgressBottomSheet()
+	progressSheet.SetContent(&w.splitView.Widget)
+
 	// Create toast overlay for notifications
 	w.toasts = adw.NewToastOverlay()
-	w.toasts.SetChild(&w.splitView.Widget)
+	w.toasts.SetChild(&progressSheet.Widget)
 
 	// Set window content
 	w.SetContent(&w.toasts.Widget)
