@@ -138,7 +138,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [x] 06.1-01-PLAN.md — Migrate page.go to use Client, delete instex package
+- [x] 06.1-01-PLAN.md — Migrate page.go to use Client, delete instex package ✓
 
 ### Phase 7: Complex Pages
 **Goal**: Applications and Updates pages are extracted, completing the monolith split
@@ -204,4 +204,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Phase 6 complete*
+*Last updated: 2026-01-27 — Phase 6.1 complete*
