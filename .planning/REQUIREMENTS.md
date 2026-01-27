@@ -13,9 +13,9 @@ Requirements for this refactoring milestone. Each maps to roadmap phases.
 - [x] **INFR-02**: Error messages are human-readable and explain what the user can do next
 - [x] **INFR-03**: runOnMainThread is consolidated into a shared async package
 - [x] **INFR-04**: Callback registry prevents GC collection of goroutine references
-- [ ] **INFR-05**: Operation tracker shows all ongoing operations in one place
-- [ ] **INFR-06**: All long-running operations are cancellable by the user
-- [ ] **INFR-07**: Recently completed operations are visible in operation history
+- [x] **INFR-05**: Operation tracker shows all ongoing operations in one place
+- [x] **INFR-06**: All long-running operations are cancellable by the user
+- [x] **INFR-07**: Recently completed operations are visible in operation history
 
 ### Component Architecture
 
