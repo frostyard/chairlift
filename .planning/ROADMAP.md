@@ -62,16 +62,20 @@ Plans:
 **Depends on**: Phase 1 (async patterns), Phase 2 (widgets for display)
 **Requirements**: INFR-05, INFR-06, INFR-07, FDBK-01, FDBK-02, FDBK-03
 **Success Criteria** (what must be TRUE):
-  1. User can see all ongoing operations in a central location (bottom sheet or sidebar)
+  1. User can see all ongoing operations in a central location (header popover)
   2. User can cancel any operation that takes more than a few seconds
   3. User can see recently completed operations with their outcomes
   4. All async data loads show a spinner while loading
   5. Operations longer than 30 seconds show a progress bar with percentage
   6. Buttons and controls are disabled while their associated operations run
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md — Create operations package with registry and operation types
+- [ ] 03-02-PLAN.md — Create ProgressRow widget with spinner/progress bar transition
+- [ ] 03-03-PLAN.md — Create operations popover UI and cancellation dialogs
+- [ ] 03-04-PLAN.md — Wire operations button to header and integrate ActionButton
+- [ ] 03-05-PLAN.md — Validate with migration of one userhome.go operation
 
 ### Phase 4: Simple Pages
 **Goal**: System and Help pages are extracted as separate packages, establishing the page interface pattern
@@ -169,7 +173,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Async Foundation | 3/3 | Complete | 2026-01-27 |
 | 2. Widget Extraction | 3/3 | Complete | 2026-01-27 |
-| 3. Operations & Progress | 0/TBD | Not started | - |
+| 3. Operations & Progress | 0/5 | Not started | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
 | 5. Feedback Polish | 0/TBD | Not started | - |
 | 6. Medium Pages | 0/TBD | Not started | - |
@@ -179,4 +183,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Phase 2 complete (02-03-PLAN.md)*
+*Last updated: 2026-01-27 — Phase 3 planned (5 plans)*
