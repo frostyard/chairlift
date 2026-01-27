@@ -87,10 +87,12 @@ Plans:
   3. Page packages expose a constructor that receives dependencies (toaster, config)
   4. Business logic (config reading, command building) is testable without GTK runtime
   5. Goroutines started by pages are cleaned up when pages are destroyed
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md — Create page interface and Help page package
+- [ ] 04-02-PLAN.md — Create System page package with goroutine lifecycle
+- [ ] 04-03-PLAN.md — Integrate page packages into userhome.go and add tests
 
 ### Phase 5: Feedback Polish
 **Goal**: Users get clear guidance in empty states, see persistent mode indicators, and can retry failed operations
