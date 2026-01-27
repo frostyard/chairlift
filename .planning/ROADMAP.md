@@ -71,7 +71,7 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Create operations package with registry and operation types
+- [x] 03-01-PLAN.md — Create operations package with registry and operation types
 - [ ] 03-02-PLAN.md — Create ProgressRow widget with spinner/progress bar transition
 - [ ] 03-03-PLAN.md — Create operations popover UI and cancellation dialogs
 - [ ] 03-04-PLAN.md — Wire operations button to header and integrate ActionButton
@@ -173,7 +173,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Async Foundation | 3/3 | Complete | 2026-01-27 |
 | 2. Widget Extraction | 3/3 | Complete | 2026-01-27 |
-| 3. Operations & Progress | 0/5 | Not started | - |
+| 3. Operations & Progress | 1/5 | In progress | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
 | 5. Feedback Polish | 0/TBD | Not started | - |
 | 6. Medium Pages | 0/TBD | Not started | - |
@@ -183,4 +183,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Phase 3 planned (5 plans)*
+*Last updated: 2026-01-27 — Completed 03-01*
