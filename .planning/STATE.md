@@ -47,6 +47,8 @@ Recent decisions affecting current work:
 - Progress/async as core infrastructure (Pending)
 - RunOnMain uses exact pattern from userhome.go (01-01)
 - UserError uses 'Couldn't' tone per CONTEXT.md (01-01)
+- Combined Task 1+2 commit for userhome.go migration (01-02)
+- 4 key user-facing errors converted to UserError in userhome.go (01-02)
 - 5 key package manager errors converted to UserError (01-03)
 
 ### Pending Todos
