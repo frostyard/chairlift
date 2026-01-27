@@ -20,10 +20,10 @@ Requirements for this refactoring milestone. Each maps to roadmap phases.
 ### Component Architecture
 
 - [ ] **ARCH-01**: userhome.go monolith is split into separate packages per feature area (system, updates, applications, maintenance, extensions, help)
-- [ ] **ARCH-02**: AsyncExpanderRow pattern is extracted as reusable widget
-- [ ] **ARCH-03**: ActionButton pattern is extracted as reusable widget
-- [ ] **ARCH-04**: LoadingRow pattern is extracted as reusable widget
-- [ ] **ARCH-05**: Widget builder functions exist for common ActionRow creation patterns
+- [x] **ARCH-02**: AsyncExpanderRow pattern is extracted as reusable widget
+- [x] **ARCH-03**: ActionButton pattern is extracted as reusable widget
+- [x] **ARCH-04**: LoadingRow pattern is extracted as reusable widget
+- [x] **ARCH-05**: Widget builder functions exist for common ActionRow creation patterns
 - [ ] **ARCH-06**: Business logic is separated from UI code for testability
 - [ ] **ARCH-07**: Component lifecycle is properly managed (goroutine cleanup, callback cleanup)
 
@@ -96,10 +96,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFR-06 | Phase 3: Operations & Progress | Pending |
 | INFR-07 | Phase 3: Operations & Progress | Pending |
 | ARCH-01 | Phase 7: Complex Pages | Pending |
-| ARCH-02 | Phase 2: Widget Extraction | Pending |
-| ARCH-03 | Phase 2: Widget Extraction | Pending |
-| ARCH-04 | Phase 2: Widget Extraction | Pending |
-| ARCH-05 | Phase 2: Widget Extraction | Pending |
+| ARCH-02 | Phase 2: Widget Extraction | Complete |
+| ARCH-03 | Phase 2: Widget Extraction | Complete |
+| ARCH-04 | Phase 2: Widget Extraction | Complete |
+| ARCH-05 | Phase 2: Widget Extraction | Complete |
 | ARCH-06 | Phase 4: Simple Pages | Pending |
 | ARCH-07 | Phase 4: Simple Pages | Pending |
 | FDBK-01 | Phase 3: Operations & Progress | Pending |
@@ -124,4 +124,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-27 after Phase 1 completion*
+*Last updated: 2026-01-27 after Phase 2 completion*
