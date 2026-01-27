@@ -9,10 +9,10 @@ Requirements for this refactoring milestone. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFR-01**: All async operations use a unified pattern with consistent progress, cancellation, and error handling
-- [ ] **INFR-02**: Error messages are human-readable and explain what the user can do next
-- [ ] **INFR-03**: runOnMainThread is consolidated into a shared async package
-- [ ] **INFR-04**: Callback registry prevents GC collection of goroutine references
+- [x] **INFR-01**: All async operations use a unified pattern with consistent progress, cancellation, and error handling
+- [x] **INFR-02**: Error messages are human-readable and explain what the user can do next
+- [x] **INFR-03**: runOnMainThread is consolidated into a shared async package
+- [x] **INFR-04**: Callback registry prevents GC collection of goroutine references
 - [ ] **INFR-05**: Operation tracker shows all ongoing operations in one place
 - [ ] **INFR-06**: All long-running operations are cancellable by the user
 - [ ] **INFR-07**: Recently completed operations are visible in operation history
@@ -88,10 +88,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFR-01 | Phase 1: Async Foundation | Pending |
-| INFR-02 | Phase 1: Async Foundation | Pending |
-| INFR-03 | Phase 1: Async Foundation | Pending |
-| INFR-04 | Phase 1: Async Foundation | Pending |
+| INFR-01 | Phase 1: Async Foundation | Complete |
+| INFR-02 | Phase 1: Async Foundation | Complete |
+| INFR-03 | Phase 1: Async Foundation | Complete |
+| INFR-04 | Phase 1: Async Foundation | Complete |
 | INFR-05 | Phase 3: Operations & Progress | Pending |
 | INFR-06 | Phase 3: Operations & Progress | Pending |
 | INFR-07 | Phase 3: Operations & Progress | Pending |
@@ -124,4 +124,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 after roadmap creation*
+*Last updated: 2026-01-27 after Phase 1 completion*
