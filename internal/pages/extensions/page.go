@@ -7,7 +7,6 @@ import (
 
 	"github.com/frostyard/chairlift/internal/async"
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/operations"
 	"github.com/frostyard/chairlift/internal/pages"
 	"github.com/jwijenbergh/puregotk/v4/adw"
@@ -194,8 +193,8 @@ func (p *Page) loadExtensions() {
 }
 
 func (p *Page) buildDiscoverGroup() {
-	// Only show if instex is available (still using CLI for discovery/install)
-	if !instex.IsInstalled() {
+	// Only show if discover is available (via updex SDK which needs systemd-sysext)
+	if !p.client.IsDiscoverAvailable() {
 		return
 	}
 
@@ -252,10 +251,7 @@ func (p *Page) onDiscoverClicked(button *gtk.Button) {
 	button.SetLabel("Discovering...")
 
 	go func() {
-		ctx, cancel := instex.DefaultContext()
-		defer cancel()
-
-		result, err := instex.Discover(ctx, url)
+		result, err := p.client.Discover(p.ctx, url)
 
 		// Check if page was destroyed
 		select {
@@ -282,7 +278,7 @@ func (p *Page) onDiscoverClicked(button *gtk.Button) {
 	}()
 }
 
-func (p *Page) displayDiscoveryResults(repoURL string, result *instex.DiscoverOutput) {
+func (p *Page) displayDiscoveryResults(repoURL string, result []DiscoveredExtension) {
 	if p.discoverResultsGroup == nil {
 		return
 	}
@@ -295,14 +291,14 @@ func (p *Page) displayDiscoveryResults(repoURL string, result *instex.DiscoverOu
 
 	p.discoverResultsGroup.SetVisible(true)
 
-	if len(result.Extensions) == 0 {
+	if len(result) == 0 {
 		p.discoverResultsGroup.SetDescription("No extensions found in repository")
 		return
 	}
 
-	p.discoverResultsGroup.SetDescription(fmt.Sprintf("%d extensions available", len(result.Extensions)))
+	p.discoverResultsGroup.SetDescription(fmt.Sprintf("%d extensions available", len(result)))
 
-	for _, ext := range result.Extensions {
+	for _, ext := range result {
 		row := adw.NewActionRow()
 		row.SetTitle(ext.Name)
 
@@ -354,10 +350,7 @@ func (p *Page) onInstallExtensionClicked(button *gtk.Button, repoURL, component 
 	}
 
 	go func() {
-		ctx, cancel := instex.DefaultContext()
-		defer cancel()
-
-		err := instex.Install(ctx, repoURL, component)
+		err := p.client.Install(p.ctx, repoURL, component)
 
 		// Check if page was destroyed
 		select {

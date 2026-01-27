@@ -95,3 +95,9 @@ func (c *Client) Install(ctx context.Context, repoURL, component string) error {
 	})
 	return err
 }
+
+// IsDiscoverAvailable returns true if discover functionality is available.
+// This requires systemd-sysext to be installed.
+func (c *Client) IsDiscoverAvailable() bool {
+	return IsAvailable()
+}
