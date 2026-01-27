@@ -126,18 +126,19 @@ Plans:
 - [x] 06-03-PLAN.md — Create Extensions UI layer and integrate pages
 
 ### Phase 6.1: Remove instex (INSERTED)
-**Goal:** Remove the instex CLI dependency entirely - delete package, PolicyKit files, and all references
+**Goal:** Migrate extensions page from instex CLI wrapper to updex SDK — functionality preserved, implementation changed
 **Depends on:** Phase 6
 **Success Criteria** (what must be TRUE):
   1. Application compiles without instex package
-  2. Extensions page loads without discover group UI
-  3. No references to "instex" remain in Go source files
-  4. PolicyKit files for instex are deleted
-  5. goreleaser doesn't install instex policies
+  2. Extensions page discover UI works using updex SDK via Client
+  3. Extensions page install functionality works using updex SDK via Client
+  4. No references to "instex" remain in Go source files
+  5. PolicyKit files for instex are deleted
+  6. goreleaser doesn't install instex policies
 **Plans:** 1 plan
 
 Plans:
-- [ ] 06.1-01-PLAN.md — Delete instex package and remove all references
+- [ ] 06.1-01-PLAN.md — Migrate page.go to use Client, delete instex package
 
 ### Phase 7: Complex Pages
 **Goal**: Applications and Updates pages are extracted, completing the monolith split
