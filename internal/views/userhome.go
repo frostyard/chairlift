@@ -17,6 +17,7 @@ import (
 	"github.com/frostyard/chairlift/internal/operations"
 	"github.com/frostyard/chairlift/internal/pages"
 	"github.com/frostyard/chairlift/internal/pages/help"
+	"github.com/frostyard/chairlift/internal/pages/maintenance"
 	"github.com/frostyard/chairlift/internal/pages/system"
 	"github.com/frostyard/chairlift/internal/pm"
 	"github.com/frostyard/chairlift/internal/updex"
@@ -39,22 +40,21 @@ type UserHome struct {
 	toastAdder ToastAdder
 
 	// Page packages (extracted pages with lifecycle management)
-	systemPagePkg *system.Page
-	helpPagePkg   *help.Page
+	systemPagePkg      *system.Page
+	helpPagePkg        *help.Page
+	maintenancePagePkg *maintenance.Page
 
 	// Pages (ToolbarViews) - widgets returned by page packages or createPage()
 	systemPage       *adw.ToolbarView
 	updatesPage      *adw.ToolbarView
 	applicationsPage *adw.ToolbarView
-	maintenancePage  *adw.ToolbarView
 	extensionsPage   *adw.ToolbarView
 	helpPage         *adw.ToolbarView
 
 	// PreferencesPages inside each ToolbarView - keep references to prevent GC
-	// (System and Help no longer need these - managed by their page packages)
+	// (System, Help, and Maintenance no longer need these - managed by their page packages)
 	updatesPrefsPage      *adw.PreferencesPage
 	applicationsPrefsPage *adw.PreferencesPage
-	maintenancePrefsPage  *adw.PreferencesPage
 	extensionsPrefsPage   *adw.PreferencesPage
 
 	// References for dynamic updates
@@ -109,9 +109,11 @@ type UserHome struct {
 // TODO: Call page Destroy() methods when view lifecycle is added
 // System page's Destroy() cancels NBC status fetch goroutine
 // Help page's Destroy() is a no-op (no goroutines)
+// Maintenance page's Destroy() cancels action goroutines
 // Example: func (uh *UserHome) Destroy() {
 //     if uh.systemPagePkg != nil { uh.systemPagePkg.Destroy() }
 //     if uh.helpPagePkg != nil { uh.helpPagePkg.Destroy() }
+//     if uh.maintenancePagePkg != nil { uh.maintenancePagePkg.Destroy() }
 // }
 
 // New creates a new UserHome views manager
@@ -141,10 +143,12 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.helpPagePkg = help.New(deps, uh.openURL)
 	uh.helpPage = uh.helpPagePkg.Widget()
 
+	// Create Maintenance page using extracted package
+	uh.maintenancePagePkg = maintenance.New(deps)
+
 	// Create remaining pages using createPage (not yet extracted)
 	uh.updatesPage, uh.updatesPrefsPage = uh.createPage()
 	uh.applicationsPage, uh.applicationsPrefsPage = uh.createPage()
-	uh.maintenancePage, uh.maintenancePrefsPage = uh.createPage()
 	uh.extensionsPage, uh.extensionsPrefsPage = uh.createPage()
 
 	// Re-initialize Flatpak and Homebrew managers with progress callback
@@ -164,10 +168,9 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 		time.Sleep(200 * time.Millisecond)
 
 		// Build page content now that PM managers are initialized with progress callbacks
-		// NOTE: System and Help pages build their UI in their constructors, so no calls here
+		// NOTE: System, Help, and Maintenance pages build their UI in their constructors, so no calls here
 		uh.buildUpdatesPage()
 		uh.buildApplicationsPage()
-		uh.buildMaintenancePage()
 		uh.buildExtensionsPage()
 	}()
 
@@ -195,7 +198,7 @@ func (uh *UserHome) GetPage(name string) *adw.ToolbarView {
 	case "applications":
 		return uh.applicationsPage
 	case "maintenance":
-		return uh.maintenancePage
+		return uh.maintenancePagePkg.Widget()
 	case "extensions":
 		return uh.extensionsPage
 	case "help":
@@ -625,123 +628,6 @@ func (uh *UserHome) buildApplicationsPage() {
 	}
 }
 
-// buildMaintenancePage builds the Maintenance page content
-func (uh *UserHome) buildMaintenancePage() {
-	page := uh.maintenancePrefsPage
-	if page == nil {
-		return
-	}
-
-	// Cleanup group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_cleanup_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("System Cleanup")
-		group.SetDescription("Clean up system files and free disk space")
-
-		groupCfg := uh.config.GetGroupConfig("maintenance_page", "maintenance_cleanup_group")
-		if groupCfg != nil {
-			for _, action := range groupCfg.Actions {
-				row := adw.NewActionRow()
-				row.SetTitle(action.Title)
-				row.SetSubtitle(action.Script)
-
-				if action.Sudo {
-					sudoIcon := gtk.NewImageFromIconName("dialog-password-symbolic")
-					row.AddPrefix(&sudoIcon.Widget)
-				}
-
-				button := gtk.NewButtonWithLabel("Run")
-				button.SetValign(gtk.AlignCenterValue)
-				button.AddCssClass("suggested-action")
-
-				script := action.Script
-				sudo := action.Sudo
-				title := action.Title
-				clickedCb := func(btn gtk.Button) {
-					uh.runMaintenanceAction(title, script, sudo)
-				}
-				button.ConnectClicked(&clickedCb)
-
-				row.AddSuffix(&button.Widget)
-				group.Add(&row.Widget)
-			}
-		}
-
-		page.Add(group)
-	}
-
-	// Homebrew Cleanup group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_brew_group") && pm.HomebrewIsInstalled() {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Homebrew Cleanup")
-		group.SetDescription("Remove old versions and clear Homebrew cache")
-
-		row := adw.NewActionRow()
-		row.SetTitle("Clean Up Homebrew")
-		row.SetSubtitle("Remove outdated downloads and old package versions")
-
-		icon := gtk.NewImageFromIconName("user-trash-symbolic")
-		row.AddPrefix(&icon.Widget)
-
-		button := gtk.NewButtonWithLabel("Clean Up")
-		button.SetValign(gtk.AlignCenterValue)
-		button.AddCssClass("suggested-action")
-
-		clickedCb := func(btn gtk.Button) {
-			uh.onBrewCleanupClicked(button)
-		}
-		button.ConnectClicked(&clickedCb)
-
-		row.AddSuffix(&button.Widget)
-		group.Add(&row.Widget)
-
-		page.Add(group)
-	}
-
-	// Flatpak Cleanup group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_flatpak_group") && pm.FlatpakIsInstalled() {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Flatpak Cleanup")
-		group.SetDescription("Remove unused Flatpak runtimes and extensions")
-
-		row := adw.NewActionRow()
-		row.SetTitle("Remove Unused Runtimes")
-		row.SetSubtitle("Uninstall unused Flatpak runtimes and extensions")
-
-		icon := gtk.NewImageFromIconName("user-trash-symbolic")
-		row.AddPrefix(&icon.Widget)
-
-		button := gtk.NewButtonWithLabel("Clean Up")
-		button.SetValign(gtk.AlignCenterValue)
-		button.AddCssClass("suggested-action")
-
-		clickedCb := func(btn gtk.Button) {
-			uh.onFlatpakCleanupClicked(button)
-		}
-		button.ConnectClicked(&clickedCb)
-
-		row.AddSuffix(&button.Widget)
-		group.Add(&row.Widget)
-
-		page.Add(group)
-	}
-
-	// Optimization group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_optimization_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("System Optimization")
-		group.SetDescription("Optimize system performance")
-
-		// Placeholder for optimization features
-		row := adw.NewActionRow()
-		row.SetTitle("Optimization tools")
-		row.SetSubtitle("Coming soon")
-		group.Add(&row.Widget)
-
-		page.Add(group)
-	}
-}
-
 // buildExtensionsPage builds the Extensions page content
 func (uh *UserHome) buildExtensionsPage() {
 	page := uh.extensionsPrefsPage
@@ -1079,71 +965,6 @@ func (uh *UserHome) openURL(url string) {
 	// Don't wait for xdg-open to finish
 	go func() {
 		_ = cmd.Wait()
-	}()
-}
-
-func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool) {
-	log.Printf("Running action: %s (script: %s, sudo: %v)", title, script, sudo)
-	// TODO: Execute the script
-}
-
-// onBrewCleanupClicked handles the Homebrew cleanup button click
-func (uh *UserHome) onBrewCleanupClicked(button *gtk.Button) {
-	button.SetSensitive(false)
-	button.SetLabel("Cleaning...")
-
-	// Start tracked operation
-	op := operations.Start("Homebrew Cleanup", operations.CategoryMaintenance, false)
-
-	go func() {
-		output, err := pm.HomebrewCleanup()
-
-		async.RunOnMain(func() {
-			button.SetSensitive(true)
-			button.SetLabel("Clean Up")
-
-			// Complete the tracked operation
-			op.Complete(err)
-
-			if err != nil {
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Homebrew cleanup failed: %v", err))
-				return
-			}
-
-			if pm.HomebrewIsDryRun() {
-				uh.toastAdder.ShowToast(output)
-			} else {
-				uh.toastAdder.ShowToast("Homebrew cleanup completed")
-			}
-		})
-	}()
-}
-
-// onFlatpakCleanupClicked handles the Flatpak cleanup button click
-func (uh *UserHome) onFlatpakCleanupClicked(button *gtk.Button) {
-	button.SetSensitive(false)
-	button.SetLabel("Cleaning...")
-
-	go func() {
-		output, err := pm.FlatpakUninstallUnused()
-
-		async.RunOnMain(func() {
-			button.SetSensitive(true)
-			button.SetLabel("Clean Up")
-
-			if err != nil {
-				userErr := async.NewUserError("Couldn't remove unused Flatpak runtimes", err)
-				uh.toastAdder.ShowErrorToast(userErr.FormatForUser())
-				log.Printf("Flatpak cleanup error details: %v", err)
-				return
-			}
-
-			if pm.IsDryRun() {
-				uh.toastAdder.ShowToast(output)
-			} else {
-				uh.toastAdder.ShowToast("Flatpak cleanup completed")
-			}
-		})
 	}()
 }
 
