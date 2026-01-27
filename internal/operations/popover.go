@@ -17,7 +17,7 @@ type OperationsButton struct {
 	popover     *gtk.Popover
 	activeList  *gtk.ListBox
 	historyList *gtk.ListBox
-	emptyLabel  *gtk.Label // "No active operations"
+	emptyState  *adw.StatusPage // "No active operations" empty state
 	viewStack   *adw.ViewStack
 }
 
@@ -93,12 +93,13 @@ func (ob *OperationsButton) buildPopoverContent() *gtk.Widget {
 
 	activeContent := gtk.NewBox(gtk.OrientationVerticalValue, 0)
 
-	// Empty state label
-	ob.emptyLabel = gtk.NewLabel("No active operations")
-	ob.emptyLabel.AddCssClass("dim-label")
-	ob.emptyLabel.SetMarginTop(24)
-	ob.emptyLabel.SetMarginBottom(24)
-	activeContent.Append(&ob.emptyLabel.Widget)
+	// Empty state with StatusPage for GNOME HIG compliance
+	ob.emptyState = adw.NewStatusPage()
+	ob.emptyState.SetTitle("No Active Operations")
+	ob.emptyState.SetDescription("Operations will appear here when running")
+	ob.emptyState.SetIconName("emblem-synchronizing-symbolic")
+	ob.emptyState.AddCssClass("compact")
+	activeContent.Append(&ob.emptyState.Widget)
 
 	// Active operations list
 	ob.activeList = gtk.NewListBox()
@@ -184,12 +185,12 @@ func (ob *OperationsButton) refreshActiveList() {
 
 	// Show/hide empty state
 	if len(ops) == 0 {
-		ob.emptyLabel.SetVisible(true)
+		ob.emptyState.SetVisible(true)
 		ob.activeList.SetVisible(false)
 		return
 	}
 
-	ob.emptyLabel.SetVisible(false)
+	ob.emptyState.SetVisible(false)
 	ob.activeList.SetVisible(true)
 
 	// Group operations by category
@@ -312,11 +313,12 @@ func (ob *OperationsButton) refreshHistoryList() {
 
 	history := History()
 	if len(history) == 0 {
-		emptyLabel := gtk.NewLabel("No completed operations")
-		emptyLabel.AddCssClass("dim-label")
-		emptyLabel.SetMarginTop(24)
-		emptyLabel.SetMarginBottom(24)
-		ob.historyList.Append(&emptyLabel.Widget)
+		emptyState := adw.NewStatusPage()
+		emptyState.SetTitle("No Completed Operations")
+		emptyState.SetDescription("Completed operations will appear here")
+		emptyState.SetIconName("document-open-recent-symbolic")
+		emptyState.AddCssClass("compact")
+		ob.historyList.Append(&emptyState.Widget)
 		return
 	}
 
