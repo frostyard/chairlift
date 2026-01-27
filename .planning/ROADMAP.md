@@ -168,7 +168,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Async Foundation | 3/3 | Complete | 2026-01-27 |
-| 2. Widget Extraction | 0/3 | Not started | - |
+| 2. Widget Extraction | 1/3 | In progress | - |
 | 3. Operations & Progress | 0/TBD | Not started | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
 | 5. Feedback Polish | 0/TBD | Not started | - |
@@ -179,4 +179,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Phase 1 complete*
+*Last updated: 2026-01-27 — 02-01-PLAN.md complete*

@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Less technical users can confidently manage their immutable Linux desktop without needing to understand the underlying CLI tools or immutable filesystem concepts.
-**Current focus:** Phase 1 - Async Foundation (Complete)
+**Current focus:** Phase 2 - Widget Extraction (In progress)
 
 ## Current Position
 
-Phase: 1 of 9 (Async Foundation)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-01-27 — Completed 01-03-PLAN.md
+Phase: 2 of 9 (Widget Extraction)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-27 — Completed 02-01-PLAN.md
 
-Progress: [███░░░░░░░] ~10%
+Progress: [████░░░░░░] ~13%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: 2 min
-- Total execution time: 0.10 hours
+- Total execution time: 0.12 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Async Foundation | 3/3 | 6 min | 2 min |
+| 2. Widget Extraction | 1/3 | 1 min | 1 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 2 min, 2 min
+- Last 5 plans: 2 min, 2 min, 2 min, 1 min
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -50,6 +51,8 @@ Recent decisions affecting current work:
 - Combined Task 1+2 commit for userhome.go migration (01-02)
 - 4 key user-facing errors converted to UserError in userhome.go (01-02)
 - 5 key package manager errors converted to UserError (01-03)
+- AsyncExpanderRow uses composition (puregotk no inheritance) (02-01)
+- StopLoading idempotent for simpler cleanup code (02-01)
 
 ### Pending Todos
 
@@ -62,7 +65,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 01-03-PLAN.md (Phase 1 complete)
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
 
 ---
