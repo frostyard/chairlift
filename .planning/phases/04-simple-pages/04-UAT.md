@@ -50,36 +50,33 @@ result: pass
 ## Summary
 
 total: 6
-passed: 3
-issues: 3
+passed: 6
+issues: 0
 pending: 0
 skipped: 0
 
 ## Gaps
 
 - truth: "Clicking a link on Help page opens it in browser"
-  status: diagnosed
+  status: fixed
   reason: "User reported: they're clickable, a log message appears. No browser opens."
   severity: major
   test: 1
   root_cause: "openURL() in userhome.go is a stub - only logs, no implementation"
-  artifacts: [internal/views/userhome.go]
-  missing: ["Implement openURL using xdg-open or exec.Command"]
+  fix: "Implemented openURL using xdg-open (commit 6d631b4)"
 
 - truth: "URL entries on System page open in browser when clicked"
-  status: diagnosed
+  status: fixed
   reason: "User reported: clickable, but no web page opens"
   severity: major
   test: 2
   root_cause: "openURL() in userhome.go is a stub - only logs, no implementation"
-  artifacts: [internal/views/userhome.go]
-  missing: ["Implement openURL using xdg-open or exec.Command"]
+  fix: "Implemented openURL using xdg-open (commit 6d631b4)"
 
 - truth: "System Health link launches Mission Center app"
-  status: diagnosed
+  status: fixed
   reason: "User reported: click, logs say launching, no launch"
   severity: major
   test: 4
-  root_cause: "launchApp() uses gtk-launch but app ID may be incorrect or app not installed"
-  artifacts: [internal/views/userhome.go, internal/pages/system/page.go]
-  missing: ["Verify Mission Center app ID", "Add error feedback if app not found"]
+  root_cause: "gtk-launch exit 127 - desktop file lookup failed for flatpak apps"
+  fix: "Use 'flatpak run' for flatpak apps instead of gtk-launch (commit 6196e24)"
