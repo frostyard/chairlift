@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 2 of 9 (Widget Extraction)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-27 — Completed 02-01-PLAN.md
+Last activity: 2026-01-27 — Completed 02-02-PLAN.md
 
-Progress: [████░░░░░░] ~13%
+Progress: [█████░░░░░] ~17%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 2 min
-- Total execution time: 0.12 hours
+- Total execution time: 0.15 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Async Foundation | 3/3 | 6 min | 2 min |
-| 2. Widget Extraction | 1/3 | 1 min | 1 min |
+| 2. Widget Extraction | 2/3 | 3 min | 1.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 2 min, 2 min, 1 min
+- Last 5 plans: 2 min, 2 min, 1 min, 2 min
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -53,6 +53,9 @@ Recent decisions affecting current work:
 - 5 key package manager errors converted to UserError (01-03)
 - AsyncExpanderRow uses composition (puregotk no inheritance) (02-01)
 - StopLoading idempotent for simpler cleanup code (02-01)
+- ActionButton stores originalLabel for restoration (02-02)
+- LoadingRow.Stop() doesn't remove row, caller controls lifecycle (02-02)
+- NewButtonRow defaults to suggested-action CSS class (02-02)
 
 ### Pending Todos
 
@@ -65,7 +68,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 02-01-PLAN.md
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
 
 ---

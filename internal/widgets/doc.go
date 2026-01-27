@@ -50,13 +50,30 @@
 //	}()
 //
 // ActionButton: A [gtk.Button] wrapper that self-disables during operations.
-// (Coming in 02-02-PLAN.md)
+// Prevents double-clicks and shows visual feedback while work is in progress.
+//
+//	btn := widgets.NewActionButtonWithClass("Install", "suggested-action")
+//	btn.OnClicked(func(done func()) {
+//	    go func() {
+//	        err := installPackage()
+//	        async.RunOnMain(func() {
+//	            done()
+//	            if err != nil { showError(err) }
+//	        })
+//	    }()
+//	})
 //
 // LoadingRow: A pre-configured [adw.ActionRow] with spinner for loading states.
-// (Coming in 02-02-PLAN.md)
+// Use as a placeholder while fetching async data.
 //
-// Row builders: Factory functions for common ActionRow configurations.
-// (Coming in 02-02-PLAN.md)
+//	loading := widgets.NewLoadingRow("Loading...", "Please wait")
+//	expander.AddRow(&loading.Row.Widget)
+//
+// Row builders: Factory functions for common ActionRow configurations:
+//   - [NewLinkRow]: Activatable row with external link icon
+//   - [NewInfoRow]: Simple title/subtitle display
+//   - [NewButtonRow]: Row with action button suffix
+//   - [NewIconRow]: Row with prefix icon
 //
 // # References
 //

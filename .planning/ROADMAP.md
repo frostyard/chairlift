@@ -53,8 +53,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Create widgets package with AsyncExpanderRow
-- [ ] 02-02-PLAN.md — Create ActionButton, LoadingRow, and row builders
+- [x] 02-01-PLAN.md — Create widgets package with AsyncExpanderRow
+- [x] 02-02-PLAN.md — Create ActionButton, LoadingRow, and row builders
 - [ ] 02-03-PLAN.md — Validate widgets with userhome.go migration
 
 ### Phase 3: Operations & Progress
@@ -168,7 +168,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Async Foundation | 3/3 | Complete | 2026-01-27 |
-| 2. Widget Extraction | 1/3 | In progress | - |
+| 2. Widget Extraction | 2/3 | In progress | - |
 | 3. Operations & Progress | 0/TBD | Not started | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
 | 5. Feedback Polish | 0/TBD | Not started | - |
@@ -179,4 +179,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — 02-01-PLAN.md complete*
+*Last updated: 2026-01-27 — 02-02-PLAN.md complete*
