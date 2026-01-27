@@ -72,7 +72,7 @@ Plans:
 
 Plans:
 - [x] 03-01-PLAN.md — Create operations package with registry and operation types
-- [ ] 03-02-PLAN.md — Create ProgressRow widget with spinner/progress bar transition
+- [x] 03-02-PLAN.md — Create ProgressRow widget with spinner/progress bar transition
 - [ ] 03-03-PLAN.md — Create operations popover UI and cancellation dialogs
 - [ ] 03-04-PLAN.md — Wire operations button to header and integrate ActionButton
 - [ ] 03-05-PLAN.md — Validate with migration of one userhome.go operation
