@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Less technical users can confidently manage their immutable Linux desktop without needing to understand the underlying CLI tools or immutable filesystem concepts.
-**Current focus:** Phase 6 - Medium Pages (Next)
+**Current focus:** Phase 7 - Complex Pages
 
 ## Current Position
 
-Phase: 6 of 9 (Medium Pages)
-Plan: 3 of 3 in current phase (COMPLETE)
+Phase: 6.1 of 9 (Remove instex - INSERTED)
+Plan: 1 of 1 in current phase (COMPLETE)
 Status: Phase complete
-Last activity: 2026-01-27 — Completed 06-03-PLAN.md
+Last activity: 2026-01-27 — Completed 06.1-01-PLAN.md
 
-Progress: [████████████░] ~80%
+Progress: [█████████████░] ~82%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 21
+- Total plans completed: 22
 - Average duration: 2.2 min
-- Total execution time: 0.77 hours
+- Total execution time: 0.80 hours
 
 **By Phase:**
 
@@ -33,10 +33,11 @@ Progress: [████████████░] ~80%
 | 4. Simple Pages | 3/3 | 7 min | 2.3 min |
 | 5. Feedback Polish | 2/2 | 4 min | 2 min |
 | 6. Medium Pages | 3/3 | 12 min | 4 min |
+| 6.1 Remove instex | 1/1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 1 min, 4 min, 2 min, 3 min, 6 min
-- Trend: Slight increase (larger plans)
+- Last 5 plans: 4 min, 2 min, 3 min, 6 min, 2 min
+- Trend: Variable (mix of sizes)
 
 *Updated after each plan completion*
 
@@ -87,8 +88,10 @@ Recent decisions affecting current work:
 - Maintenance page uses context-based goroutine lifecycle (06-01)
 - All maintenance actions tracked via operations.Start with RetryFunc (06-01)
 - IsAvailable uses exec.LookPath for systemd-sysext (06-02)
-- Keep instex CLI for discovery (no library equivalent) (06-03)
+- Keep instex CLI for discovery (no library equivalent) (06-03) [SUPERSEDED by 06.1-01]
 - Extensions page follows established page package pattern (06-03)
+- Use p.ctx for Discover/Install calls to maintain goroutine lifecycle (06.1-01)
+- IsDiscoverAvailable checks IsAvailable since updex SDK needs systemd-sysext (06.1-01)
 
 ### Pending Todos
 
@@ -98,11 +101,15 @@ None yet.
 
 None yet.
 
+### Roadmap Evolution
+
+- Phase 6.1 inserted after Phase 6: Remove instex (COMPLETE)
+
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed Phase 6 (06-03-PLAN.md)
-Resume with: `/gsd-execute-phase 7` for Updates/Applications pages
+Stopped at: Completed Phase 6.1 (06.1-01-PLAN.md)
+Resume with: `/gsd-plan-phase 7` for Complex Pages
 
 ---
 *State initialized: 2026-01-26*

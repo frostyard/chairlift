@@ -138,7 +138,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 06.1-01-PLAN.md — Migrate page.go to use Client, delete instex package
+- [x] 06.1-01-PLAN.md — Migrate page.go to use Client, delete instex package
 
 ### Phase 7: Complex Pages
 **Goal**: Applications and Updates pages are extracted, completing the monolith split
@@ -197,7 +197,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. Simple Pages | 3/3 | Complete | 2026-01-27 |
 | 5. Feedback Polish | 2/2 | Complete | 2026-01-27 |
 | 6. Medium Pages | 3/3 | Complete | 2026-01-27 |
-| 6.1 Remove instex | 0/1 | Not started (INSERTED) | - |
+| 6.1 Remove instex | 1/1 | Complete | 2026-01-27 |
 | 7. Complex Pages | 0/TBD | Not started | - |
 | 8. Accessibility | 0/TBD | Not started | - |
 | 9. Testing & Library | 0/TBD | Not started | - |
