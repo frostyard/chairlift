@@ -121,8 +121,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Extract Maintenance page with logic/UI separation
-- [ ] 06-02-PLAN.md — Create Extensions logic layer with updex library
+- [x] 06-01-PLAN.md — Extract Maintenance page with logic/UI separation
+- [x] 06-02-PLAN.md — Create Extensions logic layer with updex library
 - [ ] 06-03-PLAN.md — Create Extensions UI layer and integrate pages
 
 ### Phase 7: Complex Pages
@@ -181,11 +181,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Operations & Progress | 5/5 | Complete | 2026-01-27 |
 | 4. Simple Pages | 3/3 | Complete | 2026-01-27 |
 | 5. Feedback Polish | 2/2 | Complete | 2026-01-27 |
-| 6. Medium Pages | 0/TBD | Not started | - |
+| 6. Medium Pages | 2/3 | In progress | - |
 | 7. Complex Pages | 0/TBD | Not started | - |
 | 8. Accessibility | 0/TBD | Not started | - |
 | 9. Testing & Library | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Phase 5 complete*
+*Last updated: 2026-01-27 — Phase 6 plan 2 complete*
