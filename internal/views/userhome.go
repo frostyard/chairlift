@@ -508,7 +508,13 @@ func (uh *UserHome) onSystemUpdateClicked(button *gtk.Button) {
 			}
 
 			if updateErr != nil {
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", updateErr))
+				userErr := async.NewUserErrorWithHint(
+					"Couldn't update the system",
+					"Try again later or check your internet connection",
+					updateErr,
+				)
+				uh.toastAdder.ShowErrorToast(userErr.FormatForUser())
+				log.Printf("System update error details: %v", updateErr)
 			} else {
 				uh.toastAdder.ShowToast("Update complete! Reboot now to apply changes.")
 			}
@@ -1192,7 +1198,13 @@ func (uh *UserHome) onInstallExtensionClicked(button *gtk.Button, repoURL, compo
 			if err != nil {
 				button.SetSensitive(true)
 				button.SetLabel("Install")
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Installation failed: %v", err))
+				userErr := async.NewUserErrorWithHint(
+					fmt.Sprintf("Couldn't install %s", component),
+					"Check the repository URL and try again",
+					err,
+				)
+				uh.toastAdder.ShowErrorToast(userErr.FormatForUser())
+				log.Printf("Extension install error details: %v", err)
 				return
 			}
 
@@ -1359,7 +1371,9 @@ func (uh *UserHome) onFlatpakCleanupClicked(button *gtk.Button) {
 			button.SetLabel("Clean Up")
 
 			if err != nil {
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Flatpak cleanup failed: %v", err))
+				userErr := async.NewUserError("Couldn't remove unused Flatpak runtimes", err)
+				uh.toastAdder.ShowErrorToast(userErr.FormatForUser())
+				log.Printf("Flatpak cleanup error details: %v", err)
 				return
 			}
 
@@ -2249,7 +2263,12 @@ func (uh *UserHome) onHomebrewSearch() {
 							async.RunOnMain(func() {
 								btn.SetSensitive(true)
 								btn.SetLabel("Install")
-								uh.toastAdder.ShowErrorToast(fmt.Sprintf("Install failed: %v", err))
+								userErr := async.NewUserErrorWithHint(
+									fmt.Sprintf("Couldn't install %s", pkgName),
+									"Check your internet connection and try again",
+									err,
+								)
+								uh.toastAdder.ShowErrorToast(userErr.FormatForUser())
 							})
 							return
 						}
