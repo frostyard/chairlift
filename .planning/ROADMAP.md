@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Async Foundation** - Centralized async utilities, threading safety, error handling
 - [x] **Phase 2: Widget Extraction** - Reusable UI components (AsyncExpanderRow, ActionButton, LoadingRow)
-- [ ] **Phase 3: Operations & Progress** - Unified operation tracking, cancellation, progress display
+- [x] **Phase 3: Operations & Progress** - Unified operation tracking, cancellation, progress display
 - [ ] **Phase 4: Simple Pages** - Extract System & Help pages, establish page interface pattern
 - [ ] **Phase 5: Feedback Polish** - Empty states, status banners, retry capability
 - [ ] **Phase 6: Medium Pages** - Extract Maintenance & Extensions pages, updex library integration
@@ -73,9 +73,9 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Create operations package with registry and operation types
 - [x] 03-02-PLAN.md — Create ProgressRow widget with spinner/progress bar transition
-- [ ] 03-03-PLAN.md — Create operations popover UI and cancellation dialogs
-- [ ] 03-04-PLAN.md — Wire operations button to header and integrate ActionButton
-- [ ] 03-05-PLAN.md — Validate with migration of one userhome.go operation
+- [x] 03-03-PLAN.md — Create operations popover UI and cancellation dialogs
+- [x] 03-04-PLAN.md — Wire operations button to header and integrate ActionButton
+- [x] 03-05-PLAN.md — Validate with migration of one userhome.go operation
 
 ### Phase 4: Simple Pages
 **Goal**: System and Help pages are extracted as separate packages, establishing the page interface pattern
@@ -173,7 +173,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Async Foundation | 3/3 | Complete | 2026-01-27 |
 | 2. Widget Extraction | 3/3 | Complete | 2026-01-27 |
-| 3. Operations & Progress | 1/5 | In progress | - |
+| 3. Operations & Progress | 5/5 | Complete | 2026-01-27 |
 | 4. Simple Pages | 0/TBD | Not started | - |
 | 5. Feedback Polish | 0/TBD | Not started | - |
 | 6. Medium Pages | 0/TBD | Not started | - |
@@ -183,4 +183,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Completed 03-01*
+*Last updated: 2026-01-27 — Phase 3 complete*
