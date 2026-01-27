@@ -69,6 +69,27 @@
 //	loading := widgets.NewLoadingRow("Loading...", "Please wait")
 //	expander.AddRow(&loading.Row.Widget)
 //
+// ProgressRow: An [adw.ActionRow] with spinner/progress bar for inline operation
+// progress. Shows a spinner for short operations and transitions to a progress bar
+// after 30 seconds. Includes an optional cancel button.
+//
+//	row := widgets.NewProgressRow("Installing packages", true, func() {
+//	    showConfirmDialog("Cancel?", op.Cancel)
+//	})
+//	group.Add(&row.Row.Widget)
+//
+//	go func() {
+//	    for progress := range progressChan {
+//	        async.RunOnMain(func() {
+//	            row.UpdateProgress(progress.Fraction, progress.Message)
+//	        })
+//	    }
+//	    async.RunOnMain(func() {
+//	        row.Stop()
+//	        group.Remove(&row.Row.Widget)
+//	    })
+//	}()
+//
 // Row builders: Factory functions for common ActionRow configurations:
 //   - [NewLinkRow]: Activatable row with external link icon
 //   - [NewInfoRow]: Simple title/subtitle display
