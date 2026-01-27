@@ -11,49 +11,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/frostyard/chairlift/internal/async"
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/flatpak"
-	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
-	"github.com/frostyard/chairlift/internal/snap"
+	"github.com/frostyard/chairlift/internal/pm"
 	"github.com/frostyard/chairlift/internal/updex"
 
+	pmlib "github.com/frostyard/pm"
 	"github.com/jwijenbergh/puregotk/v4/adw"
-	"github.com/jwijenbergh/puregotk/v4/glib"
 	"github.com/jwijenbergh/puregotk/v4/gtk"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
-
-// idleCallbackRegistry stores callbacks to prevent GC collection
-var (
-	idleCallbackMu sync.Mutex
-	idleCallbacks  = make(map[uintptr]func())
-	idleCallbackID uintptr
-)
-
-// runOnMainThread schedules a function to run on the GTK main thread
-func runOnMainThread(fn func()) {
-	idleCallbackMu.Lock()
-	idleCallbackID++
-	id := idleCallbackID
-	idleCallbacks[id] = fn
-	idleCallbackMu.Unlock()
-
-	cb := glib.SourceFunc(func(data uintptr) bool {
-		idleCallbackMu.Lock()
-		callback, ok := idleCallbacks[data]
-		delete(idleCallbacks, data)
-		idleCallbackMu.Unlock()
-
-		if ok {
-			callback()
-		}
-		return false // Remove source after execution
-	})
-	glib.IdleAdd(&cb, id)
-}
 
 // ToastAdder is an interface for adding toasts and notifying about updates
 type ToastAdder interface {
@@ -111,18 +81,38 @@ type UserHome struct {
 	discoverResultRows     []*adw.ActionRow // Track rows to clear on new discovery
 	installedComponentsMap map[string]bool  // Cache of installed component names
 
+	// Progress tracking UI
+	progressBottomSheet *adw.BottomSheet     // BottomSheet for displaying active operations
+	progressPage        *adw.PreferencesPage // Preferences page inside the bottom sheet
+	progressScrolled    *gtk.ScrolledWindow  // Scrolled window for progress content
+
 	// Update badge tracking
 	nbcUpdateCount     int
 	flatpakUpdateCount int
 	brewUpdateCount    int
 	updateCountMu      sync.Mutex
+
+	// Progress UI tracking
+	progressExpanders map[string]*adw.ExpanderRow      // Map of action names to expander rows
+	progressGroups    map[string]*adw.PreferencesGroup // Map of action names to preference groups
+	progressRows      map[string]*adw.ActionRow        // Map of action:task keys to progress rows
+	progressSpinners  map[string]*gtk.Spinner          // Map of action:task keys to spinner widgets
+	progressActions   map[string]string                // Map of action IDs to action names
+	progressTasks     map[string]string                // Map of task IDs to "actionName:taskName" keys
+	currentProgressMu sync.Mutex
 }
 
 // New creates a new UserHome views manager
 func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh := &UserHome{
-		config:     cfg,
-		toastAdder: toastAdder,
+		config:            cfg,
+		toastAdder:        toastAdder,
+		progressExpanders: make(map[string]*adw.ExpanderRow),
+		progressGroups:    make(map[string]*adw.PreferencesGroup),
+		progressRows:      make(map[string]*adw.ActionRow),
+		progressSpinners:  make(map[string]*gtk.Spinner),
+		progressActions:   make(map[string]string),
+		progressTasks:     make(map[string]string),
 	}
 
 	// Create pages - createPage returns both ToolbarView and PreferencesPage
@@ -133,13 +123,30 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.extensionsPage, uh.extensionsPrefsPage = uh.createPage()
 	uh.helpPage, uh.helpPrefsPage = uh.createPage()
 
-	// Build page content
-	uh.buildSystemPage()
-	uh.buildUpdatesPage()
-	uh.buildApplicationsPage()
-	uh.buildMaintenancePage()
-	uh.buildExtensionsPage()
-	uh.buildHelpPage()
+	// Re-initialize Flatpak and Homebrew managers with progress callback
+	// This allows us to receive progress updates from long-running operations
+	// Do this asynchronously after page creation to avoid blocking the UI
+	go func() {
+		// Initialize PM with progress callback
+		if err := pm.InitializeFlatpak(uh.onPMProgressUpdate); err != nil {
+			log.Printf("Warning: Failed to re-initialize Flatpak with progress callback: %v", err)
+		}
+
+		if err := pm.InitializeHomebrew(uh.onPMProgressUpdate); err != nil {
+			log.Printf("Warning: Failed to re-initialize Homebrew with progress callback: %v", err)
+		}
+
+		// Give async availability checks time to complete after re-initialization
+		time.Sleep(200 * time.Millisecond)
+
+		// Build page content now that PM managers are initialized with progress callbacks
+		uh.buildSystemPage()
+		uh.buildUpdatesPage()
+		uh.buildApplicationsPage()
+		uh.buildMaintenancePage()
+		uh.buildExtensionsPage()
+		uh.buildHelpPage()
+	}()
 
 	return uh
 }
@@ -150,7 +157,7 @@ func (uh *UserHome) updateBadgeCount() {
 	total := uh.nbcUpdateCount + uh.flatpakUpdateCount + uh.brewUpdateCount
 	uh.updateCountMu.Unlock()
 
-	runOnMainThread(func() {
+	async.RunOnMain(func() {
 		uh.toastAdder.SetUpdateBadge(total)
 	})
 }
@@ -173,6 +180,33 @@ func (uh *UserHome) GetPage(name string) *adw.ToolbarView {
 	default:
 		return nil
 	}
+}
+
+// BuildProgressBottomSheet creates and returns the progress BottomSheet
+func (uh *UserHome) BuildProgressBottomSheet() *adw.BottomSheet {
+	// Create the bottom sheet
+	uh.progressBottomSheet = adw.NewBottomSheet()
+	uh.progressBottomSheet.SetModal(true)
+	uh.progressBottomSheet.SetShowDragHandle(true)
+	uh.progressBottomSheet.SetFullWidth(true)
+
+	// Create scrolled window for the sheet content
+	uh.progressScrolled = gtk.NewScrolledWindow()
+	uh.progressScrolled.SetPolicy(gtk.PolicyNeverValue, gtk.PolicyAutomaticValue)
+	uh.progressScrolled.SetVexpand(true)
+	uh.progressScrolled.SetMinContentHeight(400)
+	uh.progressScrolled.SetMaxContentHeight(600)
+
+	// Create preferences page for progress items
+	uh.progressPage = adw.NewPreferencesPage()
+	uh.progressPage.SetTitle("Activity Monitor")
+	uh.progressPage.SetDescription("Active operations and progress")
+	uh.progressScrolled.SetChild(&uh.progressPage.Widget)
+
+	// Set the sheet widget
+	uh.progressBottomSheet.SetSheet(&uh.progressScrolled.Widget)
+
+	return uh.progressBottomSheet
 }
 
 // createPage creates a page with toolbar view and scrolled content
@@ -333,7 +367,7 @@ func (uh *UserHome) loadNBCStatus(expander *adw.ExpanderRow) {
 
 		status, err := nbc.GetStatus(ctx)
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			// Remove loading row
 			expander.Remove(&loadingRow.Widget)
 
@@ -454,11 +488,11 @@ func (uh *UserHome) onSystemUpdateClicked(button *gtk.Button) {
 			evt := event
 			if evt.Type == nbc.EventTypeStep && evt.StepName != lastStep {
 				lastStep = evt.StepName
-				runOnMainThread(func() {
+				async.RunOnMain(func() {
 					uh.toastAdder.ShowToast(fmt.Sprintf("[%d/%d] %s", evt.Step, evt.TotalSteps, evt.StepName))
 				})
 			} else if evt.Type == nbc.EventTypeError {
-				runOnMainThread(func() {
+				async.RunOnMain(func() {
 					uh.toastAdder.ShowErrorToast(evt.Message)
 				})
 			}
@@ -466,7 +500,7 @@ func (uh *UserHome) onSystemUpdateClicked(button *gtk.Button) {
 
 		wg.Wait()
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			// Re-enable the button
 			if button != nil {
 				button.SetSensitive(true)
@@ -665,7 +699,7 @@ func (uh *UserHome) buildApplicationsPage() {
 	}
 
 	// Snap Applications group
-	if uh.config.IsGroupEnabled("applications_page", "snap_group") && snap.IsInstalled() {
+	if uh.config.IsGroupEnabled("applications_page", "snap_group") && pm.SnapIsInstalled() {
 		group := adw.NewPreferencesGroup()
 		group.SetTitle("Snap Applications")
 		group.SetDescription("Manage Snap packages installed on your system")
@@ -723,6 +757,8 @@ func (uh *UserHome) buildApplicationsPage() {
 		group.SetDescription("Manage Homebrew packages installed on your system")
 
 		// Bundle dump row
+		// NOTE: Brewfile operations (dump/install-from) are not supported by the pm library.
+		// These remain implemented using internal/homebrew package for now.
 		dumpRow := adw.NewActionRow()
 		dumpRow.SetTitle("Brew Bundle Dump")
 		dumpRow.SetSubtitle("Export currently installed packages to ~/Brewfile")
@@ -834,7 +870,7 @@ func (uh *UserHome) buildMaintenancePage() {
 	}
 
 	// Homebrew Cleanup group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_brew_group") && homebrew.IsInstalled() {
+	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_brew_group") && pm.HomebrewIsInstalled() {
 		group := adw.NewPreferencesGroup()
 		group.SetTitle("Homebrew Cleanup")
 		group.SetDescription("Remove old versions and clear Homebrew cache")
@@ -862,7 +898,7 @@ func (uh *UserHome) buildMaintenancePage() {
 	}
 
 	// Flatpak Cleanup group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_flatpak_group") && flatpak.IsInstalled() {
+	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_flatpak_group") && pm.FlatpakIsInstalled() {
 		group := adw.NewPreferencesGroup()
 		group.SetTitle("Flatpak Cleanup")
 		group.SetDescription("Remove unused Flatpak runtimes and extensions")
@@ -982,7 +1018,7 @@ func (uh *UserHome) loadExtensions() {
 
 	extensions, err := updex.ListInstalled(ctx)
 
-	runOnMainThread(func() {
+	async.RunOnMain(func() {
 		if uh.extensionsGroup == nil {
 			return
 		}
@@ -1065,7 +1101,7 @@ func (uh *UserHome) onDiscoverClicked(button *gtk.Button) {
 
 		result, err := instex.Discover(ctx, url)
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Discover")
 
@@ -1152,7 +1188,7 @@ func (uh *UserHome) onInstallExtensionClicked(button *gtk.Button, repoURL, compo
 
 		err := instex.Install(ctx, repoURL, component)
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			if err != nil {
 				button.SetSensitive(true)
 				button.SetLabel("Install")
@@ -1290,9 +1326,9 @@ func (uh *UserHome) onBrewCleanupClicked(button *gtk.Button) {
 	button.SetLabel("Cleaning...")
 
 	go func() {
-		output, err := homebrew.Cleanup()
+		output, err := pm.HomebrewCleanup()
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Clean Up")
 
@@ -1301,7 +1337,7 @@ func (uh *UserHome) onBrewCleanupClicked(button *gtk.Button) {
 				return
 			}
 
-			if homebrew.IsDryRun() {
+			if pm.HomebrewIsDryRun() {
 				uh.toastAdder.ShowToast(output)
 			} else {
 				uh.toastAdder.ShowToast("Homebrew cleanup completed")
@@ -1316,9 +1352,9 @@ func (uh *UserHome) onFlatpakCleanupClicked(button *gtk.Button) {
 	button.SetLabel("Cleaning...")
 
 	go func() {
-		output, err := flatpak.UninstallUnused()
+		output, err := pm.FlatpakUninstallUnused()
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Clean Up")
 
@@ -1327,7 +1363,7 @@ func (uh *UserHome) onFlatpakCleanupClicked(button *gtk.Button) {
 				return
 			}
 
-			if flatpak.IsDryRun() {
+			if pm.IsDryRun() {
 				uh.toastAdder.ShowToast(output)
 			} else {
 				uh.toastAdder.ShowToast("Flatpak cleanup completed")
@@ -1363,7 +1399,7 @@ func (uh *UserHome) checkNBCUpdateAvailability() {
 		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			if uh.nbcCheckRow != nil {
 				uh.nbcCheckRow.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			}
@@ -1392,7 +1428,7 @@ func (uh *UserHome) checkNBCUpdateAvailability() {
 	}
 	uh.updateBadgeCount()
 
-	runOnMainThread(func() {
+	async.RunOnMain(func() {
 		if result.UpdateNeeded {
 			if uh.nbcCheckRow != nil {
 				digest := result.NewDigest
@@ -1476,7 +1512,7 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 		// Process progress events
 		for event := range progressCh {
 			evt := event // capture for closure
-			runOnMainThread(func() {
+			async.RunOnMain(func() {
 				switch evt.Type {
 				case nbc.EventTypeStep:
 					// Update main progress
@@ -1539,7 +1575,7 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 		wg.Wait()
 
 		// Handle final result
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Update")
 
@@ -1601,7 +1637,7 @@ func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.
 		// Process progress events
 		for event := range progressCh {
 			evt := event // capture for closure
-			runOnMainThread(func() {
+			async.RunOnMain(func() {
 				switch evt.Type {
 				case nbc.EventTypeStep:
 					// Update main progress
@@ -1664,7 +1700,7 @@ func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.
 		wg.Wait()
 
 		// Handle final result
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Download")
 
@@ -1687,13 +1723,13 @@ func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.
 
 func (uh *UserHome) onUpdateHomebrewClicked() {
 	go func() {
-		if err := homebrew.Update(); err != nil {
-			runOnMainThread(func() {
+		if err := pm.HomebrewUpdate(); err != nil {
+			async.RunOnMain(func() {
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
 			})
 			return
 		}
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.toastAdder.ShowToast("Homebrew updated successfully")
 		})
 	}()
@@ -1703,39 +1739,39 @@ func (uh *UserHome) onBrewBundleDumpClicked() {
 	go func() {
 		homeDir, _ := os.UserHomeDir()
 		path := homeDir + "/Brewfile"
-		if err := homebrew.BundleDump(path, true); err != nil {
-			runOnMainThread(func() {
+		if err := pm.HomebrewBundleDump(path, true); err != nil {
+			async.RunOnMain(func() {
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Bundle dump failed: %v", err))
 			})
 			return
 		}
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.toastAdder.ShowToast(fmt.Sprintf("Brewfile saved to %s", path))
 		})
 	}()
 }
 
 func (uh *UserHome) loadOutdatedPackages() {
-	if !homebrew.IsInstalled() {
+	if !pm.HomebrewIsInstalled() {
 		uh.updateCountMu.Lock()
 		uh.brewUpdateCount = 0
 		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.outdatedExpander.SetSubtitle("Homebrew not installed")
 		})
 		return
 	}
 
-	packages, err := homebrew.ListOutdated()
+	packages, err := pm.ListHomebrewOutdated()
 	if err != nil {
 		uh.updateCountMu.Lock()
 		uh.brewUpdateCount = 0
 		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.outdatedExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 		})
 		return
@@ -1747,7 +1783,7 @@ func (uh *UserHome) loadOutdatedPackages() {
 	uh.updateCountMu.Unlock()
 	uh.updateBadgeCount()
 
-	runOnMainThread(func() {
+	async.RunOnMain(func() {
 		uh.outdatedExpander.SetSubtitle(fmt.Sprintf("%d packages available", len(packages)))
 		for _, pkg := range packages {
 			row := adw.NewActionRow()
@@ -1759,13 +1795,13 @@ func (uh *UserHome) loadOutdatedPackages() {
 			pkgName := pkg.Name
 			clickedCb := func(btn gtk.Button) {
 				go func() {
-					if err := homebrew.Upgrade(pkgName); err != nil {
-						runOnMainThread(func() {
+					if err := pm.HomebrewUpgrade(pkgName); err != nil {
+						async.RunOnMain(func() {
 							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Upgrade failed: %v", err))
 						})
 						return
 					}
-					runOnMainThread(func() {
+					async.RunOnMain(func() {
 						uh.toastAdder.ShowToast(fmt.Sprintf("%s upgraded", pkgName))
 					})
 				}()
@@ -1779,8 +1815,8 @@ func (uh *UserHome) loadOutdatedPackages() {
 }
 
 func (uh *UserHome) loadHomebrewPackages() {
-	if !homebrew.IsInstalled() {
-		runOnMainThread(func() {
+	if !pm.HomebrewIsInstalled() {
+		async.RunOnMain(func() {
 			uh.formulaeExpander.SetSubtitle("Homebrew not installed")
 			uh.casksExpander.SetSubtitle("Homebrew not installed")
 		})
@@ -1788,13 +1824,13 @@ func (uh *UserHome) loadHomebrewPackages() {
 	}
 
 	// Load formulae
-	formulae, err := homebrew.ListInstalledFormulae()
+	formulae, err := pm.ListHomebrewFormulae()
 	if err != nil {
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.formulaeExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 		})
 	} else {
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.formulaeExpander.SetSubtitle(fmt.Sprintf("%d installed", len(formulae)))
 			for _, pkg := range formulae {
 				row := adw.NewActionRow()
@@ -1806,13 +1842,13 @@ func (uh *UserHome) loadHomebrewPackages() {
 	}
 
 	// Load casks
-	casks, err := homebrew.ListInstalledCasks()
+	casks, err := pm.ListHomebrewCasks()
 	if err != nil {
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.casksExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 		})
 	} else {
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.casksExpander.SetSubtitle(fmt.Sprintf("%d installed", len(casks)))
 			for _, pkg := range casks {
 				row := adw.NewActionRow()
@@ -1825,8 +1861,8 @@ func (uh *UserHome) loadHomebrewPackages() {
 }
 
 func (uh *UserHome) loadFlatpakApplications() {
-	if !flatpak.IsInstalled() {
-		runOnMainThread(func() {
+	if !pm.FlatpakIsInstalled() {
+		async.RunOnMain(func() {
 			if uh.flatpakUserExpander != nil {
 				uh.flatpakUserExpander.SetSubtitle("Flatpak not installed")
 			}
@@ -1837,115 +1873,126 @@ func (uh *UserHome) loadFlatpakApplications() {
 		return
 	}
 
+	// Load all applications (user and system combined via pm library)
+	apps, err := pm.ListFlatpakApplications()
+	if err != nil {
+		async.RunOnMain(func() {
+			if uh.flatpakUserExpander != nil {
+				uh.flatpakUserExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
+			}
+			if uh.flatpakSystemExpander != nil {
+				uh.flatpakSystemExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
+			}
+		})
+		return
+	}
+
+	// Separate into user and system apps
+	var userApps []pm.FlatpakApplication
+	var systemApps []pm.FlatpakApplication
+	for _, app := range apps {
+		if app.IsUser {
+			userApps = append(userApps, app)
+		} else {
+			systemApps = append(systemApps, app)
+		}
+	}
+
 	// Load user applications
 	if uh.flatpakUserExpander != nil {
-		userApps, err := flatpak.ListUserApplications()
-		if err != nil {
-			runOnMainThread(func() {
-				uh.flatpakUserExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
-			})
-		} else {
-			runOnMainThread(func() {
-				uh.flatpakUserExpander.SetSubtitle(fmt.Sprintf("%d installed", len(userApps)))
-				for _, app := range userApps {
-					row := adw.NewActionRow()
-					row.SetTitle(app.Name)
-					subtitle := app.ApplicationID
-					if app.Version != "" {
-						subtitle = fmt.Sprintf("%s (%s)", app.ApplicationID, app.Version)
-					}
-					row.SetSubtitle(subtitle)
-
-					// Add uninstall button
-					uninstallBtn := gtk.NewButtonFromIconName("user-trash-symbolic")
-					uninstallBtn.SetValign(gtk.AlignCenterValue)
-					uninstallBtn.AddCssClass("destructive-action")
-					uninstallBtn.SetTooltipText("Uninstall")
-
-					appID := app.ApplicationID
-					clickedCb := func(btn gtk.Button) {
-						btn.SetSensitive(false)
-						go func() {
-							if err := flatpak.Uninstall(appID, true); err != nil {
-								runOnMainThread(func() {
-									btn.SetSensitive(true)
-									uh.toastAdder.ShowErrorToast(fmt.Sprintf("Uninstall failed: %v", err))
-								})
-								return
-							}
-							runOnMainThread(func() {
-								uh.toastAdder.ShowToast(fmt.Sprintf("%s uninstalled", appID))
-								// Refresh the list
-								go uh.loadFlatpakApplications()
-							})
-						}()
-					}
-					uninstallBtn.ConnectClicked(&clickedCb)
-
-					row.AddSuffix(&uninstallBtn.Widget)
-					uh.flatpakUserExpander.AddRow(&row.Widget)
+		async.RunOnMain(func() {
+			uh.flatpakUserExpander.SetSubtitle(fmt.Sprintf("%d installed", len(userApps)))
+			for _, app := range userApps {
+				row := adw.NewActionRow()
+				row.SetTitle(app.Name)
+				subtitle := app.ID
+				if app.Version != "" {
+					subtitle = fmt.Sprintf("%s (%s)", app.ID, app.Version)
 				}
-			})
-		}
+				row.SetSubtitle(subtitle)
+
+				// Add uninstall button
+				uninstallBtn := gtk.NewButtonFromIconName("user-trash-symbolic")
+				uninstallBtn.SetValign(gtk.AlignCenterValue)
+				uninstallBtn.AddCssClass("destructive-action")
+				uninstallBtn.SetTooltipText("Uninstall")
+
+				appID := app.ID
+				clickedCb := func(btn gtk.Button) {
+					btn.SetSensitive(false)
+					go func() {
+						if err := pm.FlatpakUninstall(appID, true); err != nil {
+							async.RunOnMain(func() {
+								btn.SetSensitive(true)
+								uh.toastAdder.ShowErrorToast(fmt.Sprintf("Uninstall failed: %v", err))
+							})
+							return
+						}
+						async.RunOnMain(func() {
+							uh.toastAdder.ShowToast(fmt.Sprintf("%s uninstalled", appID))
+							// Refresh the list
+							go uh.loadFlatpakApplications()
+						})
+					}()
+				}
+				uninstallBtn.ConnectClicked(&clickedCb)
+
+				row.AddSuffix(&uninstallBtn.Widget)
+				uh.flatpakUserExpander.AddRow(&row.Widget)
+			}
+		})
 	}
 
 	// Load system applications
 	if uh.flatpakSystemExpander != nil {
-		systemApps, err := flatpak.ListSystemApplications()
-		if err != nil {
-			runOnMainThread(func() {
-				uh.flatpakSystemExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
-			})
-		} else {
-			runOnMainThread(func() {
-				uh.flatpakSystemExpander.SetSubtitle(fmt.Sprintf("%d installed", len(systemApps)))
-				for _, app := range systemApps {
-					row := adw.NewActionRow()
-					row.SetTitle(app.Name)
-					subtitle := app.ApplicationID
-					if app.Version != "" {
-						subtitle = fmt.Sprintf("%s (%s)", app.ApplicationID, app.Version)
-					}
-					row.SetSubtitle(subtitle)
-
-					// Add uninstall button (requires elevated privileges for system apps)
-					uninstallBtn := gtk.NewButtonFromIconName("user-trash-symbolic")
-					uninstallBtn.SetValign(gtk.AlignCenterValue)
-					uninstallBtn.AddCssClass("destructive-action")
-					uninstallBtn.SetTooltipText("Uninstall (requires admin)")
-
-					appID := app.ApplicationID
-					clickedCb := func(btn gtk.Button) {
-						btn.SetSensitive(false)
-						go func() {
-							if err := flatpak.Uninstall(appID, false); err != nil {
-								runOnMainThread(func() {
-									btn.SetSensitive(true)
-									uh.toastAdder.ShowErrorToast(fmt.Sprintf("Uninstall failed: %v", err))
-								})
-								return
-							}
-							runOnMainThread(func() {
-								uh.toastAdder.ShowToast(fmt.Sprintf("%s uninstalled", appID))
-								// Refresh the list
-								go uh.loadFlatpakApplications()
-							})
-						}()
-					}
-					uninstallBtn.ConnectClicked(&clickedCb)
-
-					row.AddSuffix(&uninstallBtn.Widget)
-					uh.flatpakSystemExpander.AddRow(&row.Widget)
+		async.RunOnMain(func() {
+			uh.flatpakSystemExpander.SetSubtitle(fmt.Sprintf("%d installed", len(systemApps)))
+			for _, app := range systemApps {
+				row := adw.NewActionRow()
+				row.SetTitle(app.Name)
+				subtitle := app.ID
+				if app.Version != "" {
+					subtitle = fmt.Sprintf("%s (%s)", app.ID, app.Version)
 				}
-			})
-		}
+				row.SetSubtitle(subtitle)
+
+				// Add uninstall button (requires elevated privileges for system apps)
+				uninstallBtn := gtk.NewButtonFromIconName("user-trash-symbolic")
+				uninstallBtn.SetValign(gtk.AlignCenterValue)
+				uninstallBtn.AddCssClass("destructive-action")
+				uninstallBtn.SetTooltipText("Uninstall (requires admin)")
+
+				appID := app.ID
+				clickedCb := func(btn gtk.Button) {
+					btn.SetSensitive(false)
+					go func() {
+						if err := pm.FlatpakUninstall(appID, false); err != nil {
+							async.RunOnMain(func() {
+								btn.SetSensitive(true)
+								uh.toastAdder.ShowErrorToast(fmt.Sprintf("Uninstall failed: %v", err))
+							})
+							return
+						}
+						async.RunOnMain(func() {
+							uh.toastAdder.ShowToast(fmt.Sprintf("%s uninstalled", appID))
+							// Refresh the list
+							go uh.loadFlatpakApplications()
+						})
+					}()
+				}
+				uninstallBtn.ConnectClicked(&clickedCb)
+
+				row.AddSuffix(&uninstallBtn.Widget)
+				uh.flatpakSystemExpander.AddRow(&row.Widget)
+			}
+		})
 	}
 }
 
 // loadSnapApplications loads installed snap packages asynchronously
 func (uh *UserHome) loadSnapApplications() {
-	if !snap.IsInstalled() {
-		runOnMainThread(func() {
+	if !pm.SnapIsInstalled() {
+		async.RunOnMain(func() {
 			if uh.snapExpander != nil {
 				uh.snapExpander.SetSubtitle("Snap not installed")
 			}
@@ -1954,15 +2001,15 @@ func (uh *UserHome) loadSnapApplications() {
 	}
 
 	// Check if snap-store is installed
-	snapStoreInstalled, err := snap.IsSnapInstalled("snap-store")
+	snapStoreInstalled, err := pm.IsSnapInstalled("snap-store")
 	if err != nil {
 		log.Printf("Error checking snap-store: %v", err)
 	}
 
 	// Load installed snaps
-	snaps, err := snap.ListInstalledSnaps()
+	snaps, err := pm.ListInstalledSnaps()
 	if err != nil {
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			if uh.snapExpander != nil {
 				uh.snapExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			}
@@ -1970,7 +2017,7 @@ func (uh *UserHome) loadSnapApplications() {
 		return
 	}
 
-	runOnMainThread(func() {
+	async.RunOnMain(func() {
 		if uh.snapExpander != nil {
 			// Clear existing rows
 			for _, row := range uh.snapRows {
@@ -2019,12 +2066,12 @@ func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
 	button.SetLabel("Installing...")
 
 	go func() {
-		ctx, cancel := snap.DefaultContext()
+		ctx, cancel := pm.SnapDefaultContext()
 		defer cancel()
 
-		changeID, err := snap.Install(ctx, "snap-store")
+		changeID, err := pm.SnapInstall(ctx, "snap-store")
 		if err != nil {
-			runOnMainThread(func() {
+			async.RunOnMain(func() {
 				button.SetSensitive(true)
 				button.SetLabel("Install")
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to install snap-store: %v", err))
@@ -2033,9 +2080,9 @@ func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
 		}
 
 		// Wait for the installation to complete
-		err = snap.WaitForChange(ctx, changeID)
+		err = pm.SnapWaitForChange(ctx, changeID)
 		if err != nil {
-			runOnMainThread(func() {
+			async.RunOnMain(func() {
 				button.SetSensitive(true)
 				button.SetLabel("Install")
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Installation failed: %v", err))
@@ -2043,7 +2090,7 @@ func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
 			return
 		}
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Install")
 			uh.toastAdder.ShowToast("Snap Store installed successfully!")
@@ -2055,13 +2102,13 @@ func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
 }
 
 func (uh *UserHome) loadFlatpakUpdates() {
-	if !flatpak.IsInstalled() {
+	if !pm.FlatpakIsInstalled() {
 		uh.updateCountMu.Lock()
 		uh.flatpakUpdateCount = 0
 		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			if uh.flatpakUpdatesExpander != nil {
 				uh.flatpakUpdatesExpander.SetSubtitle("Flatpak not installed")
 			}
@@ -2069,23 +2116,21 @@ func (uh *UserHome) loadFlatpakUpdates() {
 		return
 	}
 
-	// Collect updates from both user and system installations
-	var allUpdates []flatpak.UpdateInfo
-
-	// Load user updates
-	userUpdates, err := flatpak.ListUpdates(true)
+	// Get updates from pm library (automatically handles user/system distinction)
+	allUpdates, err := pm.ListFlatpakUpdates()
 	if err != nil {
-		log.Printf("Error loading user flatpak updates: %v", err)
-	} else {
-		allUpdates = append(allUpdates, userUpdates...)
-	}
+		log.Printf("Error loading flatpak updates: %v", err)
+		uh.updateCountMu.Lock()
+		uh.flatpakUpdateCount = 0
+		uh.updateCountMu.Unlock()
+		uh.updateBadgeCount()
 
-	// Load system updates
-	systemUpdates, err := flatpak.ListUpdates(false)
-	if err != nil {
-		log.Printf("Error loading system flatpak updates: %v", err)
-	} else {
-		allUpdates = append(allUpdates, systemUpdates...)
+		async.RunOnMain(func() {
+			if uh.flatpakUpdatesExpander != nil {
+				uh.flatpakUpdatesExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
+			}
+		})
+		return
 	}
 
 	// Update the badge count
@@ -2094,7 +2139,7 @@ func (uh *UserHome) loadFlatpakUpdates() {
 	uh.updateCountMu.Unlock()
 	uh.updateBadgeCount()
 
-	runOnMainThread(func() {
+	async.RunOnMain(func() {
 		if uh.flatpakUpdatesExpander == nil {
 			return
 		}
@@ -2116,13 +2161,13 @@ func (uh *UserHome) loadFlatpakUpdates() {
 
 		for _, update := range allUpdates {
 			row := adw.NewActionRow()
-			row.SetTitle(update.Name)
-			subtitle := update.ApplicationID
-			if update.NewVersion != "" {
-				subtitle = fmt.Sprintf("%s → %s", update.ApplicationID, update.NewVersion)
+			row.SetTitle(update.ID)
+			subtitle := update.ID
+			if update.AvailableVer != "" {
+				subtitle = fmt.Sprintf("%s → %s", update.CurrentVer, update.AvailableVer)
 			}
-			if update.Installation == "user" {
-				subtitle += " (user)"
+			if !update.IsUser {
+				subtitle += " (system)"
 			}
 			row.SetSubtitle(subtitle)
 
@@ -2131,21 +2176,21 @@ func (uh *UserHome) loadFlatpakUpdates() {
 			updateBtn.SetValign(gtk.AlignCenterValue)
 			updateBtn.AddCssClass("suggested-action")
 
-			appID := update.ApplicationID
-			isUser := update.Installation == "user"
+			appID := update.ID
+			isUser := update.IsUser
 			clickedCb := func(btn gtk.Button) {
 				btn.SetSensitive(false)
 				btn.SetLabel("Updating...")
 				go func() {
-					if err := flatpak.Update(appID, isUser); err != nil {
-						runOnMainThread(func() {
+					if err := pm.FlatpakUpdate(appID, isUser); err != nil {
+						async.RunOnMain(func() {
 							btn.SetSensitive(true)
 							btn.SetLabel("Update")
 							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
 						})
 						return
 					}
-					runOnMainThread(func() {
+					async.RunOnMain(func() {
 						uh.toastAdder.ShowToast(fmt.Sprintf("%s updated", appID))
 						// Refresh the updates list
 						go uh.loadFlatpakUpdates()
@@ -2171,15 +2216,15 @@ func (uh *UserHome) onHomebrewSearch() {
 	uh.searchResultsExpander.SetEnableExpansion(false)
 
 	go func() {
-		results, err := homebrew.Search(query)
+		results, err := pm.HomebrewSearch(query)
 		if err != nil {
-			runOnMainThread(func() {
+			async.RunOnMain(func() {
 				uh.searchResultsExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			})
 			return
 		}
 
-		runOnMainThread(func() {
+		async.RunOnMain(func() {
 			uh.searchResultsExpander.SetSubtitle(fmt.Sprintf("%d results", len(results)))
 			uh.searchResultsExpander.SetEnableExpansion(len(results) > 0)
 
@@ -2194,14 +2239,23 @@ func (uh *UserHome) onHomebrewSearch() {
 
 				pkgName := result.Name
 				clickedCb := func(btn gtk.Button) {
+					log.Printf("Install button clicked for package: %s", pkgName)
+					btn.SetSensitive(false)
+					btn.SetLabel("Installing...")
 					go func() {
-						if err := homebrew.Install(pkgName, false); err != nil {
-							runOnMainThread(func() {
+						log.Printf("Starting installation of %s", pkgName)
+						if err := pm.HomebrewInstall(pkgName, false); err != nil {
+							log.Printf("Installation failed for %s: %v", pkgName, err)
+							async.RunOnMain(func() {
+								btn.SetSensitive(true)
+								btn.SetLabel("Install")
 								uh.toastAdder.ShowErrorToast(fmt.Sprintf("Install failed: %v", err))
 							})
 							return
 						}
-						runOnMainThread(func() {
+						log.Printf("Successfully installed %s", pkgName)
+						async.RunOnMain(func() {
+							btn.SetLabel("Installed")
 							uh.toastAdder.ShowToast(fmt.Sprintf("%s installed", pkgName))
 						})
 					}()
@@ -2213,4 +2267,203 @@ func (uh *UserHome) onHomebrewSearch() {
 			}
 		})
 	}()
+}
+
+// onPMProgressUpdate handles progress updates from pm library operations
+// This creates a nested UI hierarchy: Action → Task → Step progress with messages
+func (uh *UserHome) onPMProgressUpdate(action *pmlib.ProgressAction, task *pmlib.ProgressTask, step *pmlib.ProgressStep, message *pmlib.ProgressMessage) {
+	uh.currentProgressMu.Lock()
+	defer uh.currentProgressMu.Unlock()
+
+	// Handle action-level progress
+	if action != nil {
+		log.Printf("[Progress] Action: %s (ID: %s, Started: %v, Ended: %v)", action.Name, action.ID, action.StartedAt, action.EndedAt)
+
+		// Store the action ID -> Name mapping
+		uh.progressActions[action.ID] = action.Name
+
+		async.RunOnMain(func() {
+			if expander, exists := uh.progressExpanders[action.Name]; exists {
+				// Update existing action
+				if !action.EndedAt.IsZero() {
+					// Action completed
+					expander.SetSubtitle("Completed")
+
+					// Remove the action after a delay
+					go func() {
+						time.Sleep(2 * time.Second)
+						async.RunOnMain(func() {
+							uh.currentProgressMu.Lock()
+							defer uh.currentProgressMu.Unlock()
+
+							// Remove the group from the page
+							if group, ok := uh.progressGroups[action.Name]; ok {
+								if uh.progressPage != nil {
+									uh.progressPage.Remove(group)
+								}
+								delete(uh.progressGroups, action.Name)
+							}
+							delete(uh.progressExpanders, action.Name)
+
+							// Close bottom sheet if no more active operations
+							if len(uh.progressExpanders) == 0 && uh.progressBottomSheet != nil {
+								uh.progressBottomSheet.SetOpen(false)
+							}
+						})
+					}()
+				} else {
+					expander.SetSubtitle("In progress...")
+				}
+			} else if !action.StartedAt.IsZero() && action.EndedAt.IsZero() {
+				// Create new action expander when it starts
+				expander := adw.NewExpanderRow()
+				expander.SetTitle(action.Name)
+				expander.SetSubtitle("Starting...")
+				uh.progressExpanders[action.Name] = expander
+
+				// Add to progress page and open bottom sheet
+				if uh.progressPage != nil {
+					group := adw.NewPreferencesGroup()
+					group.Add(&expander.Widget)
+					uh.progressPage.Add(group)
+					uh.progressGroups[action.Name] = group
+				}
+				if uh.progressBottomSheet != nil {
+					uh.progressBottomSheet.SetOpen(true)
+				}
+			}
+		})
+	}
+
+	// Handle task-level progress
+	if task != nil {
+		actionName := uh.progressActions[task.ActionID]
+		log.Printf("[Progress] Task: %s (Action: %s, ID: %s, ActionID: %s, Started: %v, Ended: %v)",
+			task.Name, actionName, task.ID, task.ActionID, task.StartedAt, task.EndedAt)
+
+		// Store task ID mapping
+		key := actionName + ":" + task.Name
+		uh.progressTasks[task.ID] = key
+
+		async.RunOnMain(func() {
+			if row, exists := uh.progressRows[key]; exists {
+				// Update existing task
+				if !task.EndedAt.IsZero() {
+					// Task completed - stop spinner and replace with checkmark
+					row.SetSubtitle("Completed")
+					if spinner, ok := uh.progressSpinners[key]; ok {
+						spinner.Stop()
+						row.Remove(&spinner.Widget)
+						delete(uh.progressSpinners, key)
+						// Add checkmark icon
+						checkmark := gtk.NewImageFromIconName("object-select-symbolic")
+						row.AddPrefix(&checkmark.Widget)
+					}
+				} else {
+					row.SetSubtitle("In progress...")
+				}
+			} else if !task.StartedAt.IsZero() && task.EndedAt.IsZero() {
+				// Create new task row when it starts
+				if expander, exists := uh.progressExpanders[actionName]; exists {
+					row := adw.NewActionRow()
+					row.SetTitle(task.Name)
+					row.SetSubtitle("Starting...")
+					spinner := gtk.NewSpinner()
+					spinner.Start()
+					row.AddPrefix(&spinner.Widget)
+					uh.progressRows[key] = row
+					uh.progressSpinners[key] = spinner
+					expander.AddRow(&row.Widget)
+				}
+			}
+		})
+	}
+
+	// Handle step-level progress
+	if step != nil {
+		log.Printf("[Progress] Step: %s (TaskID: %s, Started: %v, Ended: %v)",
+			step.Name, step.TaskID, step.StartedAt, step.EndedAt)
+
+		async.RunOnMain(func() {
+			// Find the task row using the task ID
+			if key, ok := uh.progressTasks[step.TaskID]; ok {
+				if row, exists := uh.progressRows[key]; exists {
+					if !step.EndedAt.IsZero() {
+						// Step completed
+						row.SetSubtitle(step.Name + " - Completed")
+					} else if !step.StartedAt.IsZero() {
+						// Step in progress
+						row.SetSubtitle(step.Name)
+					}
+				}
+			}
+		})
+	}
+
+	// Handle messages
+	if message != nil {
+		actionName := uh.progressActions[message.ActionID]
+		severity := "info"
+		switch message.Severity {
+		case pmlib.SeverityWarning:
+			severity = "warning"
+		case pmlib.SeverityError:
+			severity = "error"
+		}
+
+		log.Printf("[Progress] Message: %s (Action: %s, TaskID: %s, StepID: %s, ActionID: %s, Severity: %s)",
+			message.Text, actionName, message.TaskID, message.StepID, message.ActionID, severity)
+
+		async.RunOnMain(func() {
+			// Update the action or task row based on what IDs are present
+			if message.TaskID != "" {
+				// Find the task row by action name (we don't have task name from ID)
+				for key, row := range uh.progressRows {
+					if strings.HasPrefix(key, actionName+":") {
+						row.SetSubtitle(message.Text)
+						break
+					}
+				}
+			} else if actionName != "" {
+				// Update the action expander
+				if expander, exists := uh.progressExpanders[actionName]; exists {
+					expander.SetSubtitle(message.Text)
+				}
+			}
+
+			// Show toast notification based on severity
+			switch severity {
+			case "warning":
+				uh.toastAdder.ShowToast("⚠️ " + message.Text)
+			case "error":
+				uh.toastAdder.ShowErrorToast("❌ " + message.Text)
+			default:
+				// info level - log only, don't spam with toasts
+			}
+		})
+	}
+}
+
+// cleanupProgressUI clears all progress UI elements after operations complete
+// Can be called manually to clear progress indicators
+//
+//nolint:unused // Reserved for manual cleanup or batch operations
+func (uh *UserHome) cleanupProgressUI() {
+	uh.currentProgressMu.Lock()
+	defer uh.currentProgressMu.Unlock()
+
+	log.Printf("[Progress] Cleanup")
+
+	async.RunOnMain(func() {
+		// Clear all progress rows
+		for key := range uh.progressRows {
+			// Note: Spinners will be garbage collected when rows are removed
+			delete(uh.progressRows, key)
+		}
+
+		// Clear all progress expanders
+		for key := range uh.progressExpanders {
+			delete(uh.progressExpanders, key)
+		}
+	})
 }
