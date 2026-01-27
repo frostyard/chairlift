@@ -8,7 +8,6 @@ import (
 	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/pm"
-	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/window"
 
 	"github.com/jwijenbergh/puregotk/v4/adw"
@@ -43,7 +42,6 @@ func New() *Application {
 			app.dryRun = true
 			instex.SetDryRun(true)
 			nbc.SetDryRun(true)
-			updex.SetDryRun(true)
 			pm.SetDryRun(true)
 			break
 		}
