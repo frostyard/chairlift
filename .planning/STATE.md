@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Less technical users can confidently manage their immutable Linux desktop without needing to understand the underlying CLI tools or immutable filesystem concepts.
-**Current focus:** Phase 3 - Operations & Progress
+**Current focus:** Phase 4 - Simple Pages
 
 ## Current Position
 
-Phase: 3 of 9 (Operations & Progress)
-Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-01-27 — Completed 03-05-PLAN.md
+Phase: 4 of 9 (Simple Pages)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-27 — Completed 04-01-PLAN.md
 
-Progress: [████████░░] ~42%
+Progress: [████████░░] ~46%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
+- Total plans completed: 12
 - Average duration: 2 min
 - Total execution time: 0.4 hours
 
@@ -30,9 +30,10 @@ Progress: [████████░░] ~42%
 | 1. Async Foundation | 3/3 | 6 min | 2 min |
 | 2. Widget Extraction | 3/3 | 5 min | 1.7 min |
 | 3. Operations & Progress | 5/5 | 8 min | 1.6 min |
+| 4. Simple Pages | 1/3 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 1 min, 2 min, 2 min, 1 min, 3 min
+- Last 5 plans: 2 min, 2 min, 1 min, 3 min, 2 min
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -69,6 +70,8 @@ Recent decisions affecting current work:
 - Operations button packed left of hamburger menu in header (03-04)
 - StartTrackedOperation returns both operation and done function (03-04)
 - Migrated Update Homebrew as primary visible operation (03-05)
+- Help page uses logic/UI layer separation for testability (04-01)
+- BuildResourceLinks is pure Go with no GTK dependencies (04-01)
 
 ### Pending Todos
 
@@ -81,7 +84,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 03-05-PLAN.md (Phase 3 complete)
+Stopped at: Completed 04-01-PLAN.md
 Resume file: None
 
 ---
