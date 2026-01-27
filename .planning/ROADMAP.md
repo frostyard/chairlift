@@ -16,8 +16,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Widget Extraction** - Reusable UI components (AsyncExpanderRow, ActionButton, LoadingRow)
 - [x] **Phase 3: Operations & Progress** - Unified operation tracking, cancellation, progress display
 - [x] **Phase 4: Simple Pages** - Extract System & Help pages, establish page interface pattern
-- [ ] **Phase 5: Feedback Polish** - Empty states, status banners, retry capability
-- [ ] **Phase 6: Medium Pages** - Extract Maintenance & Extensions pages, updex library integration
+- [x] **Phase 5: Feedback Polish** - Empty states, status banners, retry capability
+- [x] **Phase 6: Medium Pages** - Extract Maintenance & Extensions pages, updex library integration
 - [ ] **Phase 7: Complex Pages** - Extract Applications & Updates pages, complete monolith split
 - [ ] **Phase 8: Accessibility** - Screen reader support, keyboard navigation, widget relationships
 - [ ] **Phase 9: Testing & Library** - Unit/integration tests, pattern documentation, library extraction
@@ -123,7 +123,7 @@ Plans:
 Plans:
 - [x] 06-01-PLAN.md — Extract Maintenance page with logic/UI separation
 - [x] 06-02-PLAN.md — Create Extensions logic layer with updex library
-- [ ] 06-03-PLAN.md — Create Extensions UI layer and integrate pages
+- [x] 06-03-PLAN.md — Create Extensions UI layer and integrate pages
 
 ### Phase 7: Complex Pages
 **Goal**: Applications and Updates pages are extracted, completing the monolith split
@@ -181,11 +181,11 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Operations & Progress | 5/5 | Complete | 2026-01-27 |
 | 4. Simple Pages | 3/3 | Complete | 2026-01-27 |
 | 5. Feedback Polish | 2/2 | Complete | 2026-01-27 |
-| 6. Medium Pages | 2/3 | In progress | - |
+| 6. Medium Pages | 3/3 | Complete | 2026-01-27 |
 | 7. Complex Pages | 0/TBD | Not started | - |
 | 8. Accessibility | 0/TBD | Not started | - |
 | 9. Testing & Library | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Phase 6 plan 2 complete*
+*Last updated: 2026-01-27 — Phase 6 complete*

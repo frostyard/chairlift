@@ -54,7 +54,7 @@ Requirements for this refactoring milestone. Each maps to roadmap phases.
 
 ### Integration
 
-- [ ] **INTG-01**: updex functionality uses the Go library directly instead of CLI wrapper
+- [x] **INTG-01**: updex functionality uses the Go library directly instead of CLI wrapper
 
 ## v2 Requirements
 
@@ -115,7 +115,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LIBR-02 | Phase 9: Testing & Library | Pending |
 | TEST-01 | Phase 9: Testing & Library | Pending |
 | TEST-02 | Phase 9: Testing & Library | Pending |
-| INTG-01 | Phase 6: Medium Pages | Pending |
+| INTG-01 | Phase 6: Medium Pages | Complete |
 
 **Coverage:**
 - v1 requirements: 28 total
@@ -124,4 +124,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-27 after Phase 5 completion*
+*Last updated: 2026-01-27 after Phase 6 completion*
