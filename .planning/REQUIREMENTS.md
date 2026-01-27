@@ -88,40 +88,40 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFR-01 | — | Pending |
-| INFR-02 | — | Pending |
-| INFR-03 | — | Pending |
-| INFR-04 | — | Pending |
-| INFR-05 | — | Pending |
-| INFR-06 | — | Pending |
-| INFR-07 | — | Pending |
-| ARCH-01 | — | Pending |
-| ARCH-02 | — | Pending |
-| ARCH-03 | — | Pending |
-| ARCH-04 | — | Pending |
-| ARCH-05 | — | Pending |
-| ARCH-06 | — | Pending |
-| ARCH-07 | — | Pending |
-| FDBK-01 | — | Pending |
-| FDBK-02 | — | Pending |
-| FDBK-03 | — | Pending |
-| FDBK-04 | — | Pending |
-| FDBK-05 | — | Pending |
-| FDBK-06 | — | Pending |
-| ACCS-01 | — | Pending |
-| ACCS-02 | — | Pending |
-| ACCS-03 | — | Pending |
-| LIBR-01 | — | Pending |
-| LIBR-02 | — | Pending |
-| TEST-01 | — | Pending |
-| TEST-02 | — | Pending |
-| INTG-01 | — | Pending |
+| INFR-01 | Phase 1: Async Foundation | Pending |
+| INFR-02 | Phase 1: Async Foundation | Pending |
+| INFR-03 | Phase 1: Async Foundation | Pending |
+| INFR-04 | Phase 1: Async Foundation | Pending |
+| INFR-05 | Phase 3: Operations & Progress | Pending |
+| INFR-06 | Phase 3: Operations & Progress | Pending |
+| INFR-07 | Phase 3: Operations & Progress | Pending |
+| ARCH-01 | Phase 7: Complex Pages | Pending |
+| ARCH-02 | Phase 2: Widget Extraction | Pending |
+| ARCH-03 | Phase 2: Widget Extraction | Pending |
+| ARCH-04 | Phase 2: Widget Extraction | Pending |
+| ARCH-05 | Phase 2: Widget Extraction | Pending |
+| ARCH-06 | Phase 4: Simple Pages | Pending |
+| ARCH-07 | Phase 4: Simple Pages | Pending |
+| FDBK-01 | Phase 3: Operations & Progress | Pending |
+| FDBK-02 | Phase 3: Operations & Progress | Pending |
+| FDBK-03 | Phase 3: Operations & Progress | Pending |
+| FDBK-04 | Phase 5: Feedback Polish | Pending |
+| FDBK-05 | Phase 5: Feedback Polish | Pending |
+| FDBK-06 | Phase 5: Feedback Polish | Pending |
+| ACCS-01 | Phase 8: Accessibility | Pending |
+| ACCS-02 | Phase 8: Accessibility | Pending |
+| ACCS-03 | Phase 8: Accessibility | Pending |
+| LIBR-01 | Phase 9: Testing & Library | Pending |
+| LIBR-02 | Phase 9: Testing & Library | Pending |
+| TEST-01 | Phase 9: Testing & Library | Pending |
+| TEST-02 | Phase 9: Testing & Library | Pending |
+| INTG-01 | Phase 6: Medium Pages | Pending |
 
 **Coverage:**
 - v1 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28 ⚠️
+- Mapped to phases: 28 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-26 after initial definition*
+*Last updated: 2026-01-26 after roadmap creation*
