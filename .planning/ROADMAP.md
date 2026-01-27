@@ -33,10 +33,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Error messages shown to users explain the problem and suggest what to do next
   3. Application runs without segfaults or random crashes from GC-related widget issues
   4. Callback references are held in a registry that prevents garbage collection
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md — Create async package with RunOnMain and UserError
+- [ ] 01-02-PLAN.md — Migrate userhome.go to async.RunOnMain
+- [ ] 01-03-PLAN.md — Migrate pm/wrapper.go to async.RunOnMain
 
 ### Phase 2: Widget Extraction
 **Goal**: Common UI patterns are extracted into reusable widget components
@@ -163,7 +165,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Async Foundation | 0/TBD | Not started | - |
+| 1. Async Foundation | 0/3 | Planned | - |
 | 2. Widget Extraction | 0/TBD | Not started | - |
 | 3. Operations & Progress | 0/TBD | Not started | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
@@ -175,4 +177,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-26*
+*Last updated: 2026-01-26 — Phase 1 planned*
