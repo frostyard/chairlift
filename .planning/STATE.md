@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Less technical users can confidently manage their immutable Linux desktop without needing to understand the underlying CLI tools or immutable filesystem concepts.
-**Current focus:** Phase 4 - Simple Pages
+**Current focus:** Phase 4 - Simple Pages (Complete)
 
 ## Current Position
 
 Phase: 4 of 9 (Simple Pages)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-01-27 — Completed 04-02-PLAN.md
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-01-27 — Completed 04-03-PLAN.md
 
-Progress: [████████░░] ~50%
+Progress: [████████░░] ~55%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
+- Total plans completed: 14
 - Average duration: 2 min
 - Total execution time: 0.4 hours
 
@@ -30,10 +30,10 @@ Progress: [████████░░] ~50%
 | 1. Async Foundation | 3/3 | 6 min | 2 min |
 | 2. Widget Extraction | 3/3 | 5 min | 1.7 min |
 | 3. Operations & Progress | 5/5 | 8 min | 1.6 min |
-| 4. Simple Pages | 2/3 | 3 min | 1.5 min |
+| 4. Simple Pages | 3/3 | 7 min | 2.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 1 min, 3 min, 2 min, 1 min
+- Last 5 plans: 1 min, 3 min, 2 min, 1 min, 4 min
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -75,6 +75,8 @@ Recent decisions affecting current work:
 - System page logic layer has no GTK dependencies for testability (04-02)
 - Page uses context.WithCancel for goroutine lifecycle management (04-02)
 - FetchNBCStatus wraps nbc.GetStatus for future mock injection (04-02)
+- Page packages integrated with dependency injection via pages.Deps (04-03)
+- TODO added for Destroy() lifecycle when view cleanup is added (04-03)
 
 ### Pending Todos
 
@@ -87,7 +89,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 04-02-PLAN.md
+Stopped at: Completed 04-03-PLAN.md (Phase 4 complete)
 Resume file: None
 
 ---
