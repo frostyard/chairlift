@@ -1,6 +1,7 @@
 package widgets
 
 import (
+	"github.com/frostyard/chairlift/internal/operations"
 	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
@@ -141,4 +142,51 @@ func (ab *ActionButton) OnClicked(handler func(done func())) {
 		handler(done)
 	}
 	ab.Button.ConnectClicked(&cb)
+}
+
+// StartTrackedOperation disables the button and registers the operation with the central registry.
+//
+// This is like StartOperation but also tracks the operation in the global registry,
+// making it visible in the operations popover and enabling cancellation.
+//
+// Parameters:
+//   - workingLabel: Label shown while operation runs (e.g., "Installing...")
+//   - name: Operation name for registry (e.g., "Install Firefox")
+//   - category: Operation category (operations.CategoryInstall, etc.)
+//   - cancellable: Whether operation can be cancelled
+//
+// Returns:
+//   - op: The registered operation (caller can call op.UpdateProgress, etc.)
+//   - done: Function to call when operation completes (restores button state)
+//
+// The caller should:
+//  1. Call op.UpdateProgress() to update progress
+//  2. Call done() when operation completes (always, even on error)
+//  3. Call op.Complete(err) to mark operation finished
+//
+// Must be called from the GTK main thread.
+//
+// Example:
+//
+//	op, done := btn.StartTrackedOperation("Installing...", "Install Firefox", operations.CategoryInstall, true)
+//	go func() {
+//	    err := performInstall(op) // op.UpdateProgress() can be called here
+//	    async.RunOnMain(func() {
+//	        op.Complete(err)
+//	        done()
+//	    })
+//	}()
+func (ab *ActionButton) StartTrackedOperation(workingLabel, name string, category operations.Category, cancellable bool) (op *operations.Operation, done func()) {
+	// Disable button and change label
+	ab.Button.SetSensitive(false)
+	ab.Button.SetLabel(workingLabel)
+
+	// Register with operations registry
+	op = operations.Start(name, category, cancellable)
+
+	// Create done function that restores button state
+	return op, func() {
+		ab.Button.SetSensitive(true)
+		ab.Button.SetLabel(ab.originalLabel)
+	}
 }

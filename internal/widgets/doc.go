@@ -51,6 +51,8 @@
 //
 // ActionButton: A [gtk.Button] wrapper that self-disables during operations.
 // Prevents double-clicks and shows visual feedback while work is in progress.
+// For long-running operations that should appear in the operations panel, use
+// [ActionButton.StartTrackedOperation] instead of [ActionButton.StartOperation].
 //
 //	btn := widgets.NewActionButtonWithClass("Install", "suggested-action")
 //	btn.OnClicked(func(done func()) {
