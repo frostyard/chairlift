@@ -50,10 +50,12 @@ Plans:
   3. LoadingRow exists and displays consistent loading state with spinner
   4. Common ActionRow patterns have builder functions reducing boilerplate
   5. Widgets are used in at least one place in existing code (validated by use)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — Create widgets package with AsyncExpanderRow
+- [ ] 02-02-PLAN.md — Create ActionButton, LoadingRow, and row builders
+- [ ] 02-03-PLAN.md — Validate widgets with userhome.go migration
 
 ### Phase 3: Operations & Progress
 **Goal**: Users can see, track, and cancel all ongoing operations with consistent progress feedback
@@ -166,7 +168,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Async Foundation | 3/3 | Complete | 2026-01-27 |
-| 2. Widget Extraction | 0/TBD | Not started | - |
+| 2. Widget Extraction | 0/3 | Not started | - |
 | 3. Operations & Progress | 0/TBD | Not started | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
 | 5. Feedback Polish | 0/TBD | Not started | - |
