@@ -58,31 +58,28 @@ skipped: 0
 ## Gaps
 
 - truth: "Clicking a link on Help page opens it in browser"
-  status: failed
+  status: diagnosed
   reason: "User reported: they're clickable, a log message appears. No browser opens."
   severity: major
   test: 1
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "openURL() in userhome.go is a stub - only logs, no implementation"
+  artifacts: [internal/views/userhome.go]
+  missing: ["Implement openURL using xdg-open or exec.Command"]
 
 - truth: "URL entries on System page open in browser when clicked"
-  status: failed
+  status: diagnosed
   reason: "User reported: clickable, but no web page opens"
   severity: major
   test: 2
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "openURL() in userhome.go is a stub - only logs, no implementation"
+  artifacts: [internal/views/userhome.go]
+  missing: ["Implement openURL using xdg-open or exec.Command"]
 
 - truth: "System Health link launches Mission Center app"
-  status: failed
+  status: diagnosed
   reason: "User reported: click, logs say launching, no launch"
   severity: major
   test: 4
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "launchApp() uses gtk-launch but app ID may be incorrect or app not installed"
+  artifacts: [internal/views/userhome.go, internal/pages/system/page.go]
+  missing: ["Verify Mission Center app ID", "Add error feedback if app not found"]
