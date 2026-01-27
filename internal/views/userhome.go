@@ -2,7 +2,6 @@
 package views
 
 import (
-	"bufio"
 	"fmt"
 	"log"
 	"os"
@@ -16,15 +15,15 @@ import (
 	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/operations"
+	"github.com/frostyard/chairlift/internal/pages"
+	"github.com/frostyard/chairlift/internal/pages/help"
+	"github.com/frostyard/chairlift/internal/pages/system"
 	"github.com/frostyard/chairlift/internal/pm"
 	"github.com/frostyard/chairlift/internal/updex"
-	"github.com/frostyard/chairlift/internal/widgets"
 
 	pmlib "github.com/frostyard/pm"
 	"github.com/jwijenbergh/puregotk/v4/adw"
 	"github.com/jwijenbergh/puregotk/v4/gtk"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 // ToastAdder is an interface for adding toasts and notifying about updates
@@ -39,7 +38,11 @@ type UserHome struct {
 	config     *config.Config
 	toastAdder ToastAdder
 
-	// Pages (ToolbarViews)
+	// Page packages (extracted pages with lifecycle management)
+	systemPagePkg *system.Page
+	helpPagePkg   *help.Page
+
+	// Pages (ToolbarViews) - widgets returned by page packages or createPage()
 	systemPage       *adw.ToolbarView
 	updatesPage      *adw.ToolbarView
 	applicationsPage *adw.ToolbarView
@@ -48,12 +51,11 @@ type UserHome struct {
 	helpPage         *adw.ToolbarView
 
 	// PreferencesPages inside each ToolbarView - keep references to prevent GC
-	systemPrefsPage       *adw.PreferencesPage
+	// (System and Help no longer need these - managed by their page packages)
 	updatesPrefsPage      *adw.PreferencesPage
 	applicationsPrefsPage *adw.PreferencesPage
 	maintenancePrefsPage  *adw.PreferencesPage
 	extensionsPrefsPage   *adw.PreferencesPage
-	helpPrefsPage         *adw.PreferencesPage
 
 	// References for dynamic updates
 	formulaeExpander       *adw.ExpanderRow
@@ -104,6 +106,14 @@ type UserHome struct {
 	currentProgressMu sync.Mutex
 }
 
+// TODO: Call page Destroy() methods when view lifecycle is added
+// System page's Destroy() cancels NBC status fetch goroutine
+// Help page's Destroy() is a no-op (no goroutines)
+// Example: func (uh *UserHome) Destroy() {
+//     if uh.systemPagePkg != nil { uh.systemPagePkg.Destroy() }
+//     if uh.helpPagePkg != nil { uh.helpPagePkg.Destroy() }
+// }
+
 // New creates a new UserHome views manager
 func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh := &UserHome{
@@ -117,13 +127,25 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 		progressTasks:     make(map[string]string),
 	}
 
-	// Create pages - createPage returns both ToolbarView and PreferencesPage
-	uh.systemPage, uh.systemPrefsPage = uh.createPage()
+	// Create page packages (System and Help) with dependency injection
+	deps := pages.Deps{
+		Config:  cfg,
+		Toaster: toastAdder,
+	}
+
+	// Create System page using extracted package
+	uh.systemPagePkg = system.New(deps, uh.launchApp, uh.openURL)
+	uh.systemPage = uh.systemPagePkg.Widget()
+
+	// Create Help page using extracted package
+	uh.helpPagePkg = help.New(deps, uh.openURL)
+	uh.helpPage = uh.helpPagePkg.Widget()
+
+	// Create remaining pages using createPage (not yet extracted)
 	uh.updatesPage, uh.updatesPrefsPage = uh.createPage()
 	uh.applicationsPage, uh.applicationsPrefsPage = uh.createPage()
 	uh.maintenancePage, uh.maintenancePrefsPage = uh.createPage()
 	uh.extensionsPage, uh.extensionsPrefsPage = uh.createPage()
-	uh.helpPage, uh.helpPrefsPage = uh.createPage()
 
 	// Re-initialize Flatpak and Homebrew managers with progress callback
 	// This allows us to receive progress updates from long-running operations
@@ -142,12 +164,11 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 		time.Sleep(200 * time.Millisecond)
 
 		// Build page content now that PM managers are initialized with progress callbacks
-		uh.buildSystemPage()
+		// NOTE: System and Help pages build their UI in their constructors, so no calls here
 		uh.buildUpdatesPage()
 		uh.buildApplicationsPage()
 		uh.buildMaintenancePage()
 		uh.buildExtensionsPage()
-		uh.buildHelpPage()
 	}()
 
 	return uh
@@ -230,196 +251,6 @@ func (uh *UserHome) createPage() (*adw.ToolbarView, *adw.PreferencesPage) {
 	toolbarView.SetContent(&scrolled.Widget)
 
 	return toolbarView, prefsPage
-}
-
-// buildSystemPage builds the System page content
-func (uh *UserHome) buildSystemPage() {
-	page := uh.systemPrefsPage
-	if page == nil {
-		return
-	}
-
-	// System Information group
-	if uh.config.IsGroupEnabled("system_page", "system_info_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("System Information")
-		group.SetDescription("View system details and hardware information")
-
-		// OS Release expander
-		osExpander := adw.NewExpanderRow()
-		osExpander.SetTitle("Operating System Details")
-
-		uh.loadOSRelease(osExpander)
-		group.Add(&osExpander.Widget)
-		page.Add(group)
-	}
-
-	// NBC Status group - only show if NBC is booted
-	if _, err := os.Stat("/run/nbc-booted"); err == nil {
-		if uh.config.IsGroupEnabled("system_page", "nbc_status_group") {
-			group := adw.NewPreferencesGroup()
-			group.SetTitle("NBC Status")
-			group.SetDescription("View NBC system status information")
-
-			nbcExpander := widgets.NewAsyncExpanderRow("NBC Status Details", "Loading...")
-
-			group.Add(&nbcExpander.Expander.Widget)
-			page.Add(group)
-
-			// Load NBC status asynchronously
-			uh.loadNBCStatus(nbcExpander)
-		}
-	}
-
-	// System Health group
-	if uh.config.IsGroupEnabled("system_page", "health_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("System Health")
-		group.SetDescription("Overview of system health and diagnostics")
-
-		groupCfg := uh.config.GetGroupConfig("system_page", "health_group")
-		appID := "io.missioncenter.MissionCenter"
-		if groupCfg != nil && groupCfg.AppID != "" {
-			appID = groupCfg.AppID
-		}
-
-		perfRow := widgets.NewLinkRow(
-			"System Performance",
-			"Monitor CPU, memory, and system resources",
-			func() { uh.launchApp(appID) },
-		)
-
-		group.Add(&perfRow.Widget)
-		page.Add(group)
-	}
-}
-
-// loadOSRelease loads /etc/os-release into the expander
-func (uh *UserHome) loadOSRelease(expander *adw.ExpanderRow) {
-	file, err := os.Open("/etc/os-release")
-	if err != nil {
-		row := adw.NewActionRow()
-		row.SetTitle("OS Information")
-		row.SetSubtitle("Not available")
-		expander.AddRow(&row.Widget)
-		return
-	}
-	defer func() { _ = file.Close() }()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
-			continue
-		}
-
-		parts := strings.SplitN(line, "=", 2)
-		key := parts[0]
-		value := strings.Trim(parts[1], "\"'")
-
-		// Convert key to readable format
-		readableKey := strings.ReplaceAll(key, "_", " ")
-		readableKey = cases.Title(language.English).String(strings.ToLower(readableKey))
-
-		row := adw.NewActionRow()
-		row.SetTitle(readableKey)
-		row.SetSubtitle(value)
-
-		// Make URL rows clickable
-		if strings.HasSuffix(key, "URL") {
-			row.SetActivatable(true)
-			icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-			row.AddSuffix(&icon.Widget)
-
-			url := value
-			activatedCb := func(row adw.ActionRow) {
-				uh.openURL(url)
-			}
-			row.ConnectActivated(&activatedCb)
-		}
-
-		expander.AddRow(&row.Widget)
-	}
-}
-
-// loadNBCStatus loads NBC status information asynchronously into the expander
-func (uh *UserHome) loadNBCStatus(expander *widgets.AsyncExpanderRow) {
-	expander.StartLoading("Fetching NBC status")
-
-	go func() {
-		ctx, cancel := nbc.DefaultContext()
-		defer cancel()
-
-		status, err := nbc.GetStatus(ctx)
-
-		async.RunOnMain(func() {
-			if err != nil {
-				expander.SetError(fmt.Sprintf("Failed to load NBC status: %v", err))
-				return
-			}
-
-			// Display status information
-			expander.SetContent("Loaded")
-
-			// Image
-			if status.Image != "" {
-				row := widgets.NewInfoRow("Image", status.Image)
-				expander.Expander.AddRow(&row.Widget)
-			}
-
-			// Digest
-			if status.Digest != "" {
-				// Show shortened digest
-				digest := status.Digest
-				if len(digest) > 19 {
-					digest = digest[:19] + "..."
-				}
-				row := widgets.NewInfoRow("Digest", digest)
-				expander.Expander.AddRow(&row.Widget)
-			}
-
-			// Device
-			if status.Device != "" {
-				row := widgets.NewInfoRow("Device", status.Device)
-				expander.Expander.AddRow(&row.Widget)
-			}
-
-			// Active Slot
-			if status.ActiveSlot != "" {
-				row := widgets.NewInfoRow("Active Slot", status.ActiveSlot)
-				expander.Expander.AddRow(&row.Widget)
-			}
-
-			// Filesystem Type
-			if status.FilesystemType != "" {
-				row := widgets.NewInfoRow("Filesystem", status.FilesystemType)
-				expander.Expander.AddRow(&row.Widget)
-			}
-
-			// Root Mount Mode
-			if status.RootMountMode != "" {
-				row := widgets.NewInfoRow("Root Mount", status.RootMountMode)
-				expander.Expander.AddRow(&row.Widget)
-			}
-
-			// Staged Update
-			if status.StagedUpdate != nil {
-				row := adw.NewActionRow()
-				row.SetTitle("Staged Update")
-				row.SetSubtitle(fmt.Sprintf("Ready: %s", status.StagedUpdate.ImageDigest[:19]+"..."))
-				applyButton := gtk.NewButtonWithLabel("Apply")
-				applyButton.SetValign(gtk.AlignCenterValue)
-				applyButton.AddCssClass("suggested-action")
-				btn := applyButton // capture for closure
-				applyClickedCb := func(_ gtk.Button) {
-					uh.onSystemUpdateClicked(btn)
-				}
-				applyButton.ConnectClicked(&applyClickedCb)
-				row.AddSuffix(&applyButton.Widget)
-				expander.Expander.AddRow(&row.Widget)
-			}
-		})
-	}()
 }
 
 // onSystemUpdateClicked handles the system update button click using the nbc package
@@ -1186,82 +1017,6 @@ func (uh *UserHome) onInstallExtensionClicked(button *gtk.Button, repoURL, compo
 			go uh.loadExtensions()
 		})
 	}()
-}
-
-// buildHelpPage builds the Help page content
-func (uh *UserHome) buildHelpPage() {
-	page := uh.helpPrefsPage
-	if page == nil {
-		return
-	}
-
-	// Help Resources group
-	if uh.config.IsGroupEnabled("help_page", "help_resources_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Help &amp; Resources")
-		group.SetDescription("Get help and learn more about ChairLift")
-
-		groupCfg := uh.config.GetGroupConfig("help_page", "help_resources_group")
-
-		// Website row
-		if groupCfg != nil && groupCfg.Website != "" {
-			row := adw.NewActionRow()
-			row.SetTitle("Website")
-			row.SetSubtitle(groupCfg.Website)
-			row.SetActivatable(true)
-
-			icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-			row.AddSuffix(&icon.Widget)
-
-			url := groupCfg.Website
-			activatedCb := func(row adw.ActionRow) {
-				uh.openURL(url)
-			}
-			row.ConnectActivated(&activatedCb)
-
-			group.Add(&row.Widget)
-		}
-
-		// Issues row
-		if groupCfg != nil && groupCfg.Issues != "" {
-			row := adw.NewActionRow()
-			row.SetTitle("Report Issues")
-			row.SetSubtitle(groupCfg.Issues)
-			row.SetActivatable(true)
-
-			icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-			row.AddSuffix(&icon.Widget)
-
-			url := groupCfg.Issues
-			activatedCb := func(row adw.ActionRow) {
-				uh.openURL(url)
-			}
-			row.ConnectActivated(&activatedCb)
-
-			group.Add(&row.Widget)
-		}
-
-		// Chat row
-		if groupCfg != nil && groupCfg.Chat != "" {
-			row := adw.NewActionRow()
-			row.SetTitle("Community Discussions")
-			row.SetSubtitle(groupCfg.Chat)
-			row.SetActivatable(true)
-
-			icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-			row.AddSuffix(&icon.Widget)
-
-			url := groupCfg.Chat
-			activatedCb := func(row adw.ActionRow) {
-				uh.openURL(url)
-			}
-			row.ConnectActivated(&activatedCb)
-
-			group.Add(&row.Widget)
-		}
-
-		page.Add(group)
-	}
 }
 
 // Helper methods
