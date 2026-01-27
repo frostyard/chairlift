@@ -1504,6 +1504,11 @@ func (uh *UserHome) onUpdateHomebrewClicked(button *gtk.Button) {
 	// Start tracked operation (visible in operations popover)
 	op := operations.Start("Update Homebrew", operations.CategoryUpdate, false)
 
+	// Wire retry capability - enables Retry button in operations popover
+	op.RetryFunc = func() {
+		uh.onUpdateHomebrewClicked(button)
+	}
+
 	go func() {
 		err := pm.HomebrewUpdate()
 
