@@ -15,6 +15,7 @@ import (
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
+	"github.com/frostyard/chairlift/internal/operations"
 	"github.com/frostyard/chairlift/internal/pm"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/widgets"
@@ -1300,12 +1301,18 @@ func (uh *UserHome) onBrewCleanupClicked(button *gtk.Button) {
 	button.SetSensitive(false)
 	button.SetLabel("Cleaning...")
 
+	// Start tracked operation
+	op := operations.Start("Homebrew Cleanup", operations.CategoryMaintenance, false)
+
 	go func() {
 		output, err := pm.HomebrewCleanup()
 
 		async.RunOnMain(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Clean Up")
+
+			// Complete the tracked operation
+			op.Complete(err)
 
 			if err != nil {
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Homebrew cleanup failed: %v", err))

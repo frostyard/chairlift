@@ -46,6 +46,8 @@ const (
 	CategoryUpdate Category = "update"
 	// CategoryLoading represents data loading operations.
 	CategoryLoading Category = "loading"
+	// CategoryMaintenance represents cleanup and maintenance operations.
+	CategoryMaintenance Category = "maintenance"
 )
 
 // Operation represents an async operation being tracked by the registry.
