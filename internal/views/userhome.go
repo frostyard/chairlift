@@ -1043,7 +1043,20 @@ func (uh *UserHome) launchApp(appID string) {
 
 func (uh *UserHome) openURL(url string) {
 	log.Printf("Opening URL: %s", url)
-	// Use gtk_show_uri or xdg-open
+
+	cmd := exec.Command("xdg-open", url)
+	cmd.Env = os.Environ()
+
+	if err := cmd.Start(); err != nil {
+		log.Printf("Failed to open URL %s: %v", url, err)
+		uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to open %s", url))
+		return
+	}
+
+	// Don't wait for xdg-open to finish
+	go func() {
+		_ = cmd.Wait()
+	}()
 }
 
 func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool) {
