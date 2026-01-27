@@ -29,12 +29,12 @@ Requirements for this refactoring milestone. Each maps to roadmap phases.
 
 ### User Feedback
 
-- [ ] **FDBK-01**: All async data loads show consistent spinner/loading state
-- [ ] **FDBK-02**: Operations longer than 30 seconds show progress bars
-- [ ] **FDBK-03**: Interactive controls are disabled during their associated operations
-- [ ] **FDBK-04**: Empty states use placeholder pages with guidance text
-- [ ] **FDBK-05**: Persistent state (like dry-run mode) is shown via status banners
-- [ ] **FDBK-06**: Failed operations show retry option
+- [x] **FDBK-01**: All async data loads show consistent spinner/loading state
+- [x] **FDBK-02**: Operations longer than 30 seconds show progress bars
+- [x] **FDBK-03**: Interactive controls are disabled during their associated operations
+- [x] **FDBK-04**: Empty states use placeholder pages with guidance text
+- [x] **FDBK-05**: Persistent state (like dry-run mode) is shown via status banners
+- [x] **FDBK-06**: Failed operations show retry option
 
 ### Accessibility
 
@@ -92,9 +92,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFR-02 | Phase 1: Async Foundation | Complete |
 | INFR-03 | Phase 1: Async Foundation | Complete |
 | INFR-04 | Phase 1: Async Foundation | Complete |
-| INFR-05 | Phase 3: Operations & Progress | Pending |
-| INFR-06 | Phase 3: Operations & Progress | Pending |
-| INFR-07 | Phase 3: Operations & Progress | Pending |
+| INFR-05 | Phase 3: Operations & Progress | Complete |
+| INFR-06 | Phase 3: Operations & Progress | Complete |
+| INFR-07 | Phase 3: Operations & Progress | Complete |
 | ARCH-01 | Phase 7: Complex Pages | Pending |
 | ARCH-02 | Phase 2: Widget Extraction | Complete |
 | ARCH-03 | Phase 2: Widget Extraction | Complete |
@@ -102,12 +102,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ARCH-05 | Phase 2: Widget Extraction | Complete |
 | ARCH-06 | Phase 4: Simple Pages | Complete |
 | ARCH-07 | Phase 4: Simple Pages | Complete |
-| FDBK-01 | Phase 3: Operations & Progress | Pending |
-| FDBK-02 | Phase 3: Operations & Progress | Pending |
-| FDBK-03 | Phase 3: Operations & Progress | Pending |
-| FDBK-04 | Phase 5: Feedback Polish | Pending |
-| FDBK-05 | Phase 5: Feedback Polish | Pending |
-| FDBK-06 | Phase 5: Feedback Polish | Pending |
+| FDBK-01 | Phase 3: Operations & Progress | Complete |
+| FDBK-02 | Phase 3: Operations & Progress | Complete |
+| FDBK-03 | Phase 3: Operations & Progress | Complete |
+| FDBK-04 | Phase 5: Feedback Polish | Complete |
+| FDBK-05 | Phase 5: Feedback Polish | Complete |
+| FDBK-06 | Phase 5: Feedback Polish | Complete |
 | ACCS-01 | Phase 8: Accessibility | Pending |
 | ACCS-02 | Phase 8: Accessibility | Pending |
 | ACCS-03 | Phase 8: Accessibility | Pending |
@@ -124,4 +124,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-01-26*
-*Last updated: 2026-01-27 after Phase 4 completion*
+*Last updated: 2026-01-27 after Phase 5 completion*
