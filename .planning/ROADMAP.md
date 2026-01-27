@@ -12,7 +12,7 @@ This refactoring transforms Chairlift from a 2500-line monolith into a well-stru
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Async Foundation** - Centralized async utilities, threading safety, error handling
+- [x] **Phase 1: Async Foundation** - Centralized async utilities, threading safety, error handling
 - [ ] **Phase 2: Widget Extraction** - Reusable UI components (AsyncExpanderRow, ActionButton, LoadingRow)
 - [ ] **Phase 3: Operations & Progress** - Unified operation tracking, cancellation, progress display
 - [ ] **Phase 4: Simple Pages** - Extract System & Help pages, establish page interface pattern
@@ -37,8 +37,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — Create async package with RunOnMain and UserError
-- [ ] 01-02-PLAN.md — Migrate userhome.go to async.RunOnMain
-- [ ] 01-03-PLAN.md — Migrate pm/wrapper.go to async.RunOnMain
+- [x] 01-02-PLAN.md — Migrate userhome.go to async.RunOnMain
+- [x] 01-03-PLAN.md — Migrate pm/wrapper.go to async.RunOnMain
 
 ### Phase 2: Widget Extraction
 **Goal**: Common UI patterns are extracted into reusable widget components
@@ -165,7 +165,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Async Foundation | 1/3 | In progress | - |
+| 1. Async Foundation | 3/3 | Complete | 2026-01-27 |
 | 2. Widget Extraction | 0/TBD | Not started | - |
 | 3. Operations & Progress | 0/TBD | Not started | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
@@ -177,4 +177,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Plan 01-01 complete*
+*Last updated: 2026-01-27 — Phase 1 complete*
