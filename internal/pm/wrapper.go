@@ -243,7 +243,11 @@ func FlatpakInstall(appID string, userScope bool) error {
 	opts := pm.InstallOptions{}
 	_, err := installer.Install(ctx, []pm.PackageRef{ref}, opts)
 	if err != nil {
-		return fmt.Errorf("failed to install Flatpak %s: %w", appID, err)
+		return async.NewUserErrorWithHint(
+			fmt.Sprintf("Couldn't install %s", appID),
+			"Check your internet connection or try again later",
+			err,
+		)
 	}
 
 	return nil
@@ -284,7 +288,11 @@ func FlatpakUninstall(appID string, userScope bool) error {
 	opts := pm.UninstallOptions{}
 	_, err := uninstaller.Uninstall(ctx, []pm.PackageRef{ref}, opts)
 	if err != nil {
-		return fmt.Errorf("failed to uninstall Flatpak %s: %w", appID, err)
+		return async.NewUserErrorWithHint(
+			fmt.Sprintf("Couldn't remove %s", appID),
+			"The app may be in use or protected",
+			err,
+		)
 	}
 
 	return nil
@@ -547,7 +555,11 @@ func SnapInstall(ctx context.Context, name string) (string, error) {
 	opts := pm.InstallOptions{}
 	result, err := installer.Install(ctx, []pm.PackageRef{ref}, opts)
 	if err != nil {
-		return "", fmt.Errorf("failed to install snap %s: %w", name, err)
+		return "", async.NewUserErrorWithHint(
+			fmt.Sprintf("Couldn't install %s", name),
+			"The Snap store may be unavailable",
+			err,
+		)
 	}
 
 	if result.Changed && len(result.PackagesInstalled) > 0 {
@@ -844,7 +856,11 @@ func HomebrewInstall(name string, isCask bool) error {
 	_, err := installer.Install(ctx, []pm.PackageRef{ref}, opts)
 	if err != nil {
 		log.Printf("HomebrewInstall error: failed to install %s: %v", name, err)
-		return fmt.Errorf("failed to install %s: %w", name, err)
+		return async.NewUserErrorWithHint(
+			fmt.Sprintf("Couldn't install %s", name),
+			"Check your internet connection or run 'brew update'",
+			err,
+		)
 	}
 
 	log.Printf("HomebrewInstall: Successfully installed %s", name)
@@ -887,7 +903,11 @@ func HomebrewUninstall(name string, isCask bool) error {
 	opts := pm.UninstallOptions{}
 	_, err := uninstaller.Uninstall(ctx, []pm.PackageRef{ref}, opts)
 	if err != nil {
-		return fmt.Errorf("failed to uninstall %s: %w", name, err)
+		return async.NewUserErrorWithHint(
+			fmt.Sprintf("Couldn't remove %s", name),
+			"The package may have dependents or be in use",
+			err,
+		)
 	}
 
 	return nil
