@@ -276,24 +276,17 @@ func (uh *UserHome) buildSystemPage() {
 		group.SetTitle("System Health")
 		group.SetDescription("Overview of system health and diagnostics")
 
-		perfRow := adw.NewActionRow()
-		perfRow.SetTitle("System Performance")
-		perfRow.SetSubtitle("Monitor CPU, memory, and system resources")
-		perfRow.SetActivatable(true)
-
-		icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-		perfRow.AddSuffix(&icon.Widget)
-
 		groupCfg := uh.config.GetGroupConfig("system_page", "health_group")
 		appID := "io.missioncenter.MissionCenter"
 		if groupCfg != nil && groupCfg.AppID != "" {
 			appID = groupCfg.AppID
 		}
 
-		activatedCb := func(row adw.ActionRow) {
-			uh.launchApp(appID)
-		}
-		perfRow.ConnectActivated(&activatedCb)
+		perfRow := widgets.NewLinkRow(
+			"System Performance",
+			"Monitor CPU, memory, and system resources",
+			func() { uh.launchApp(appID) },
+		)
 
 		group.Add(&perfRow.Widget)
 		page.Add(group)
