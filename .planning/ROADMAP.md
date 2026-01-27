@@ -106,8 +106,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — Create empty state widget and upgrade popover
-- [ ] 05-02-PLAN.md — Add dry-run banner and validate retry wiring
+- [x] 05-01-PLAN.md — Create empty state widget and upgrade popover
+- [x] 05-02-PLAN.md — Add dry-run banner and validate retry wiring
 
 ### Phase 6: Medium Pages
 **Goal**: Maintenance and Extensions pages are extracted, with updex using library instead of CLI
@@ -178,7 +178,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Widget Extraction | 3/3 | Complete | 2026-01-27 |
 | 3. Operations & Progress | 5/5 | Complete | 2026-01-27 |
 | 4. Simple Pages | 3/3 | Complete | 2026-01-27 |
-| 5. Feedback Polish | 0/2 | Ready | - |
+| 5. Feedback Polish | 2/2 | Complete | 2026-01-27 |
 | 6. Medium Pages | 0/TBD | Not started | - |
 | 7. Complex Pages | 0/TBD | Not started | - |
 | 8. Accessibility | 0/TBD | Not started | - |
@@ -186,4 +186,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Phase 4 complete*
+*Last updated: 2026-01-27 — Phase 5 complete*
