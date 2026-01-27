@@ -17,6 +17,7 @@ import (
 	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/pm"
 	"github.com/frostyard/chairlift/internal/updex"
+	"github.com/frostyard/chairlift/internal/widgets"
 
 	pmlib "github.com/frostyard/pm"
 	"github.com/jwijenbergh/puregotk/v4/adw"
@@ -259,11 +260,9 @@ func (uh *UserHome) buildSystemPage() {
 			group.SetTitle("NBC Status")
 			group.SetDescription("View NBC system status information")
 
-			nbcExpander := adw.NewExpanderRow()
-			nbcExpander.SetTitle("NBC Status Details")
-			nbcExpander.SetSubtitle("Loading...")
+			nbcExpander := widgets.NewAsyncExpanderRow("NBC Status Details", "Loading...")
 
-			group.Add(&nbcExpander.Widget)
+			group.Add(&nbcExpander.Expander.Widget)
 			page.Add(group)
 
 			// Load NBC status asynchronously
@@ -350,16 +349,8 @@ func (uh *UserHome) loadOSRelease(expander *adw.ExpanderRow) {
 }
 
 // loadNBCStatus loads NBC status information asynchronously into the expander
-func (uh *UserHome) loadNBCStatus(expander *adw.ExpanderRow) {
-	// Add loading row
-	loadingRow := adw.NewActionRow()
-	loadingRow.SetTitle("Loading...")
-	loadingRow.SetSubtitle("Fetching NBC status")
-
-	spinner := gtk.NewSpinner()
-	spinner.Start()
-	loadingRow.AddPrefix(&spinner.Widget)
-	expander.AddRow(&loadingRow.Widget)
+func (uh *UserHome) loadNBCStatus(expander *widgets.AsyncExpanderRow) {
+	expander.StartLoading("Fetching NBC status")
 
 	go func() {
 		ctx, cancel := nbc.DefaultContext()
@@ -368,74 +359,53 @@ func (uh *UserHome) loadNBCStatus(expander *adw.ExpanderRow) {
 		status, err := nbc.GetStatus(ctx)
 
 		async.RunOnMain(func() {
-			// Remove loading row
-			expander.Remove(&loadingRow.Widget)
-
 			if err != nil {
-				errorRow := adw.NewActionRow()
-				errorRow.SetTitle("Error")
-				errorRow.SetSubtitle(fmt.Sprintf("Failed to load NBC status: %v", err))
-				errorIcon := gtk.NewImageFromIconName("dialog-error-symbolic")
-				errorRow.AddPrefix(&errorIcon.Widget)
-				expander.AddRow(&errorRow.Widget)
-				expander.SetSubtitle("Failed to load")
+				expander.SetError(fmt.Sprintf("Failed to load NBC status: %v", err))
 				return
 			}
 
 			// Display status information
-			expander.SetSubtitle("Loaded")
+			expander.SetContent("Loaded")
 
 			// Image
 			if status.Image != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Image")
-				row.SetSubtitle(status.Image)
-				expander.AddRow(&row.Widget)
+				row := widgets.NewInfoRow("Image", status.Image)
+				expander.Expander.AddRow(&row.Widget)
 			}
 
 			// Digest
 			if status.Digest != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Digest")
 				// Show shortened digest
 				digest := status.Digest
 				if len(digest) > 19 {
 					digest = digest[:19] + "..."
 				}
-				row.SetSubtitle(digest)
-				expander.AddRow(&row.Widget)
+				row := widgets.NewInfoRow("Digest", digest)
+				expander.Expander.AddRow(&row.Widget)
 			}
 
 			// Device
 			if status.Device != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Device")
-				row.SetSubtitle(status.Device)
-				expander.AddRow(&row.Widget)
+				row := widgets.NewInfoRow("Device", status.Device)
+				expander.Expander.AddRow(&row.Widget)
 			}
 
 			// Active Slot
 			if status.ActiveSlot != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Active Slot")
-				row.SetSubtitle(status.ActiveSlot)
-				expander.AddRow(&row.Widget)
+				row := widgets.NewInfoRow("Active Slot", status.ActiveSlot)
+				expander.Expander.AddRow(&row.Widget)
 			}
 
 			// Filesystem Type
 			if status.FilesystemType != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Filesystem")
-				row.SetSubtitle(status.FilesystemType)
-				expander.AddRow(&row.Widget)
+				row := widgets.NewInfoRow("Filesystem", status.FilesystemType)
+				expander.Expander.AddRow(&row.Widget)
 			}
 
 			// Root Mount Mode
 			if status.RootMountMode != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Root Mount")
-				row.SetSubtitle(status.RootMountMode)
-				expander.AddRow(&row.Widget)
+				row := widgets.NewInfoRow("Root Mount", status.RootMountMode)
+				expander.Expander.AddRow(&row.Widget)
 			}
 
 			// Staged Update
@@ -452,7 +422,7 @@ func (uh *UserHome) loadNBCStatus(expander *adw.ExpanderRow) {
 				}
 				applyButton.ConnectClicked(&applyClickedCb)
 				row.AddSuffix(&applyButton.Widget)
-				expander.AddRow(&row.Widget)
+				expander.Expander.AddRow(&row.Widget)
 			}
 		})
 	}()
