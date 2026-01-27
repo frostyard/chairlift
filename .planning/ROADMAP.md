@@ -13,7 +13,7 @@ This refactoring transforms Chairlift from a 2500-line monolith into a well-stru
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Async Foundation** - Centralized async utilities, threading safety, error handling
-- [ ] **Phase 2: Widget Extraction** - Reusable UI components (AsyncExpanderRow, ActionButton, LoadingRow)
+- [x] **Phase 2: Widget Extraction** - Reusable UI components (AsyncExpanderRow, ActionButton, LoadingRow)
 - [ ] **Phase 3: Operations & Progress** - Unified operation tracking, cancellation, progress display
 - [ ] **Phase 4: Simple Pages** - Extract System & Help pages, establish page interface pattern
 - [ ] **Phase 5: Feedback Polish** - Empty states, status banners, retry capability
@@ -55,7 +55,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Create widgets package with AsyncExpanderRow
 - [x] 02-02-PLAN.md — Create ActionButton, LoadingRow, and row builders
-- [ ] 02-03-PLAN.md — Validate widgets with userhome.go migration
+- [x] 02-03-PLAN.md — Validate widgets with userhome.go migration
 
 ### Phase 3: Operations & Progress
 **Goal**: Users can see, track, and cancel all ongoing operations with consistent progress feedback
@@ -168,7 +168,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Async Foundation | 3/3 | Complete | 2026-01-27 |
-| 2. Widget Extraction | 2/3 | In progress | - |
+| 2. Widget Extraction | 3/3 | Complete | 2026-01-27 |
 | 3. Operations & Progress | 0/TBD | Not started | - |
 | 4. Simple Pages | 0/TBD | Not started | - |
 | 5. Feedback Polish | 0/TBD | Not started | - |
@@ -179,4 +179,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — 02-02-PLAN.md complete*
+*Last updated: 2026-01-27 — Phase 2 complete (02-03-PLAN.md)*

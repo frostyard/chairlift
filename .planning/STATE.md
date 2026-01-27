@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Less technical users can confidently manage their immutable Linux desktop without needing to understand the underlying CLI tools or immutable filesystem concepts.
-**Current focus:** Phase 2 - Widget Extraction (In progress)
+**Current focus:** Phase 3 - Operations & Progress (Next)
 
 ## Current Position
 
-Phase: 2 of 9 (Widget Extraction)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-01-27 — Completed 02-02-PLAN.md
+Phase: 2 of 9 (Widget Extraction) - COMPLETE
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-01-27 — Completed 02-03-PLAN.md
 
-Progress: [█████░░░░░] ~17%
+Progress: [██████░░░░] ~22%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
+- Total plans completed: 6
 - Average duration: 2 min
-- Total execution time: 0.15 hours
+- Total execution time: 0.18 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Async Foundation | 3/3 | 6 min | 2 min |
-| 2. Widget Extraction | 2/3 | 3 min | 1.5 min |
+| 2. Widget Extraction | 3/3 | 5 min | 1.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 2 min, 1 min, 2 min
+- Last 5 plans: 2 min, 1 min, 2 min, 2 min
 - Trend: Steady
 
 *Updated after each plan completion*
@@ -56,6 +56,8 @@ Recent decisions affecting current work:
 - ActionButton stores originalLabel for restoration (02-02)
 - LoadingRow.Stop() doesn't remove row, caller controls lifecycle (02-02)
 - NewButtonRow defaults to suggested-action CSS class (02-02)
+- Migrate loadNBCStatus as best example of full async lifecycle (02-03)
+- Keep complex rows with buttons inline for now (02-03)
 
 ### Pending Todos
 
@@ -68,7 +70,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 02-02-PLAN.md
+Stopped at: Completed Phase 2 (02-03-PLAN.md)
 Resume file: None
 
 ---
