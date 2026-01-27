@@ -103,10 +103,11 @@ Plans:
   2. Dry-run mode displays a persistent banner visible throughout the app
   3. Failed operations show a "Retry" button that re-attempts the operation
   4. Status banners are dismissible and don't obstruct primary content
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md — Create empty state widget and upgrade popover
+- [ ] 05-02-PLAN.md — Add dry-run banner and validate retry wiring
 
 ### Phase 6: Medium Pages
 **Goal**: Maintenance and Extensions pages are extracted, with updex using library instead of CLI
@@ -177,7 +178,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Widget Extraction | 3/3 | Complete | 2026-01-27 |
 | 3. Operations & Progress | 5/5 | Complete | 2026-01-27 |
 | 4. Simple Pages | 3/3 | Complete | 2026-01-27 |
-| 5. Feedback Polish | 0/TBD | Not started | - |
+| 5. Feedback Polish | 0/2 | Ready | - |
 | 6. Medium Pages | 0/TBD | Not started | - |
 | 7. Complex Pages | 0/TBD | Not started | - |
 | 8. Accessibility | 0/TBD | Not started | - |
