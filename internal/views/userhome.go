@@ -578,7 +578,7 @@ func (uh *UserHome) buildUpdatesPage() {
 		updateBtn.SetValign(gtk.AlignCenterValue)
 		updateBtn.AddCssClass("suggested-action")
 		updateClickedCb := func(btn gtk.Button) {
-			uh.onUpdateHomebrewClicked()
+			uh.onUpdateHomebrewClicked(updateBtn)
 		}
 		updateBtn.ConnectClicked(&updateClickedCb)
 
@@ -1705,16 +1705,34 @@ func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.
 	}()
 }
 
-func (uh *UserHome) onUpdateHomebrewClicked() {
+func (uh *UserHome) onUpdateHomebrewClicked(button *gtk.Button) {
+	// Disable button and show working state
+	button.SetSensitive(false)
+	button.SetLabel("Updating...")
+
+	// Start tracked operation (visible in operations popover)
+	op := operations.Start("Update Homebrew", operations.CategoryUpdate, false)
+
 	go func() {
-		if err := pm.HomebrewUpdate(); err != nil {
-			async.RunOnMain(func() {
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
-			})
-			return
-		}
+		err := pm.HomebrewUpdate()
+
 		async.RunOnMain(func() {
+			// Restore button state
+			button.SetSensitive(true)
+			button.SetLabel("Update")
+
+			// Complete the tracked operation
+			op.Complete(err)
+
+			if err != nil {
+				userErr := async.NewUserError("Couldn't update Homebrew", err)
+				uh.toastAdder.ShowErrorToast(userErr.FormatForUser())
+				log.Printf("Homebrew update error details: %v", err)
+				return
+			}
 			uh.toastAdder.ShowToast("Homebrew updated successfully")
+			// Refresh outdated packages list
+			go uh.loadOutdatedPackages()
 		})
 	}()
 }
