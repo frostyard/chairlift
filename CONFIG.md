@@ -66,7 +66,7 @@ page_name:
 ### Extensions Page (`extensions_page`)
 
 - `installed_group`: Installed systemd-sysext extensions (requires `updex` command)
-- `discover_group`: Discover and install extensions from remote repositories (requires `instex` command)
+- `discover_group`: Discover and install extensions from remote repositories
 
 ### Help Page (`help_page`)
 

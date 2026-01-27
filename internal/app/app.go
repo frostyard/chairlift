@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/pm"
 	"github.com/frostyard/chairlift/internal/window"
@@ -40,7 +39,6 @@ func New() *Application {
 		if arg == "--dry-run" || arg == "-d" {
 			log.Println("Running in dry-run mode")
 			app.dryRun = true
-			instex.SetDryRun(true)
 			nbc.SetDryRun(true)
 			pm.SetDryRun(true)
 			break
