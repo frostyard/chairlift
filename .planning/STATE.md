@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Less technical users can confidently manage their immutable Linux desktop without needing to understand the underlying CLI tools or immutable filesystem concepts.
-**Current focus:** Phase 4 - Simple Pages (Complete)
+**Current focus:** Phase 5 - Homebrew Package Manager (Next)
 
 ## Current Position
 
-Phase: 4 of 9 (Simple Pages)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-01-27 — Completed 04-03-PLAN.md
+Phase: 4 of 9 (Simple Pages) — COMPLETE
+Plan: Ready for Phase 5
+Status: Phase 4 UAT passed, ready for next phase
+Last activity: 2026-01-27 — UAT complete, all issues fixed
 
 Progress: [████████░░] ~55%
 
@@ -77,6 +77,8 @@ Recent decisions affecting current work:
 - FetchNBCStatus wraps nbc.GetStatus for future mock injection (04-02)
 - Page packages integrated with dependency injection via pages.Deps (04-03)
 - TODO added for Destroy() lifecycle when view cleanup is added (04-03)
+- openURL implemented using xdg-open for browser links (04-UAT)
+- launchApp detects flatpak apps and uses 'flatpak run' (04-UAT)
 
 ### Pending Todos
 
@@ -89,8 +91,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-27
-Stopped at: Completed 04-03-PLAN.md (Phase 4 complete)
-Resume file: None
+Stopped at: Phase 4 UAT complete, ready for Phase 5
+Resume with: `/gsd-plan-phase 5` or `/gsd-execute-phase 5`
 
 ---
 *State initialized: 2026-01-26*
