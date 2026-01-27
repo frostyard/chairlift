@@ -1024,9 +1024,28 @@ func (uh *UserHome) onInstallExtensionClicked(button *gtk.Button, repoURL, compo
 func (uh *UserHome) launchApp(appID string) {
 	log.Printf("Launching app: %s", appID)
 
-	// Use gtk-launch to launch the application by its desktop file ID
-	// gtk-launch handles looking up the desktop file and launching it correctly
-	cmd := exec.Command("gtk-launch", appID)
+	var cmd *exec.Cmd
+
+	// Check if this looks like a flatpak app ID (reverse DNS with 3+ parts)
+	// e.g., "io.missioncenter.MissionCenter" or "org.gnome.Calculator"
+	parts := strings.Split(appID, ".")
+	isFlatpakStyle := len(parts) >= 3
+
+	if isFlatpakStyle {
+		// Check if flatpak knows about this app
+		checkCmd := exec.Command("flatpak", "info", appID)
+		if err := checkCmd.Run(); err == nil {
+			// It's a flatpak app - use flatpak run
+			log.Printf("Detected flatpak app, using 'flatpak run': %s", appID)
+			cmd = exec.Command("flatpak", "run", appID)
+		}
+	}
+
+	// Fall back to gtk-launch for non-flatpak apps or if flatpak check failed
+	if cmd == nil {
+		cmd = exec.Command("gtk-launch", appID)
+	}
+
 	cmd.Env = os.Environ()
 
 	if err := cmd.Start(); err != nil {
@@ -1035,9 +1054,13 @@ func (uh *UserHome) launchApp(appID string) {
 		return
 	}
 
+	log.Printf("App launch started successfully: %s (pid: %d)", appID, cmd.Process.Pid)
+
 	// Don't wait for the command to finish - it's a GUI app
 	go func() {
-		_ = cmd.Wait()
+		if err := cmd.Wait(); err != nil {
+			log.Printf("App %s exited with error: %v", appID, err)
+		}
 	}()
 }
 
