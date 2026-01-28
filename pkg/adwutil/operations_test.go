@@ -1,4 +1,4 @@
-package operations
+package adwutil
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 )
 
 // newTestRegistry creates an isolated registry for testing.
-// This avoids the singleton defaultRegistry which uses async.RunOnMain
+// This avoids the singleton DefaultRegistry which uses RunOnMain
 // for listener notifications, ensuring isolated unit tests.
 func newTestRegistry() *Registry {
 	return &Registry{
@@ -52,9 +52,9 @@ func TestRegistry_Get(t *testing.T) {
 	r := newTestRegistry()
 	op := r.start("Test", CategoryUpdate, false, nil)
 
-	got := r.get(op.ID)
+	got := r.Get(op.ID)
 	if got == nil {
-		t.Fatal("get returned nil for existing operation")
+		t.Fatal("Get returned nil for existing operation")
 	}
 	if got.ID != op.ID {
 		t.Errorf("got ID %d, want %d", got.ID, op.ID)
@@ -64,26 +64,26 @@ func TestRegistry_Get(t *testing.T) {
 func TestRegistry_Get_NonExistent(t *testing.T) {
 	r := newTestRegistry()
 
-	if r.get(99999) != nil {
-		t.Error("get should return nil for non-existent ID")
+	if r.Get(99999) != nil {
+		t.Error("Get should return nil for non-existent ID")
 	}
 }
 
 func TestRegistry_ActiveCount(t *testing.T) {
 	r := newTestRegistry()
 
-	if r.activeCount() != 0 {
-		t.Errorf("initial activeCount = %d, want 0", r.activeCount())
+	if r.ActiveCount() != 0 {
+		t.Errorf("initial ActiveCount = %d, want 0", r.ActiveCount())
 	}
 
 	r.start("Op 1", CategoryInstall, false, nil)
-	if r.activeCount() != 1 {
-		t.Errorf("after 1 start, activeCount = %d, want 1", r.activeCount())
+	if r.ActiveCount() != 1 {
+		t.Errorf("after 1 start, ActiveCount = %d, want 1", r.ActiveCount())
 	}
 
 	r.start("Op 2", CategoryUpdate, false, nil)
-	if r.activeCount() != 2 {
-		t.Errorf("after 2 starts, activeCount = %d, want 2", r.activeCount())
+	if r.ActiveCount() != 2 {
+		t.Errorf("after 2 starts, ActiveCount = %d, want 2", r.ActiveCount())
 	}
 }
 
@@ -93,9 +93,9 @@ func TestRegistry_Active(t *testing.T) {
 	r.start("Op 1", CategoryInstall, false, nil)
 	r.start("Op 2", CategoryUpdate, false, nil)
 
-	active := r.active()
+	active := r.Active()
 	if len(active) != 2 {
-		t.Errorf("active length = %d, want 2", len(active))
+		t.Errorf("Active length = %d, want 2", len(active))
 	}
 
 	// Verify copies are returned (not references to internal state)
@@ -105,10 +105,10 @@ func TestRegistry_Active(t *testing.T) {
 	}
 
 	// Check original is unaffected
-	activeAgain := r.active()
+	activeAgain := r.Active()
 	for _, op := range activeAgain {
 		if op.Name == "Modified" {
-			t.Error("active() should return copies, not references")
+			t.Error("Active() should return copies, not references")
 		}
 	}
 }
@@ -120,17 +120,17 @@ func TestRegistry_Complete_Success(t *testing.T) {
 	r.complete(op.ID, nil) // nil error = success
 
 	// Should be removed from active
-	if r.activeCount() != 0 {
-		t.Errorf("after complete, activeCount = %d, want 0", r.activeCount())
+	if r.ActiveCount() != 0 {
+		t.Errorf("after complete, ActiveCount = %d, want 0", r.ActiveCount())
 	}
 
-	// Should not be retrievable via get
-	if r.get(op.ID) != nil {
+	// Should not be retrievable via Get
+	if r.Get(op.ID) != nil {
 		t.Error("completed operation should not be in active operations")
 	}
 
 	// Should be in history
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 1 {
 		t.Fatalf("history length = %d, want 1", len(history))
 	}
@@ -150,12 +150,12 @@ func TestRegistry_Complete_Failure(t *testing.T) {
 	r.complete(op.ID, testErr) // non-nil error = failure
 
 	// Failed operations stay in active list for retry
-	if r.activeCount() != 1 {
-		t.Errorf("after failure, activeCount = %d, want 1", r.activeCount())
+	if r.ActiveCount() != 1 {
+		t.Errorf("after failure, ActiveCount = %d, want 1", r.ActiveCount())
 	}
 
 	// Verify state and error
-	got := r.get(op.ID)
+	got := r.Get(op.ID)
 	if got == nil {
 		t.Fatal("failed operation should still be in active operations")
 	}
@@ -170,7 +170,7 @@ func TestRegistry_Complete_Failure(t *testing.T) {
 	}
 
 	// Should NOT be in history
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 0 {
 		t.Errorf("failed operations should not be in history, got %d entries", len(history))
 	}
@@ -191,17 +191,17 @@ func TestRegistry_Cancel(t *testing.T) {
 	}
 
 	// Should be removed from active
-	if r.activeCount() != 0 {
-		t.Errorf("after cancel, activeCount = %d, want 0", r.activeCount())
+	if r.ActiveCount() != 0 {
+		t.Errorf("after cancel, ActiveCount = %d, want 0", r.ActiveCount())
 	}
 
-	// Should not be retrievable via get
-	if r.get(op.ID) != nil {
+	// Should not be retrievable via Get
+	if r.Get(op.ID) != nil {
 		t.Error("cancelled operation should not be in active operations")
 	}
 
 	// Should be in history with cancelled state
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 1 {
 		t.Fatalf("history length = %d, want 1", len(history))
 	}
@@ -221,11 +221,11 @@ func TestRegistry_Cancel_NilCancelFunc(t *testing.T) {
 	r.cancel(op.ID)
 
 	// Should still move to history without panic
-	if r.activeCount() != 0 {
-		t.Errorf("after cancel, activeCount = %d, want 0", r.activeCount())
+	if r.ActiveCount() != 0 {
+		t.Errorf("after cancel, ActiveCount = %d, want 0", r.ActiveCount())
 	}
 
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 1 {
 		t.Fatalf("history length = %d, want 1", len(history))
 	}
@@ -244,7 +244,7 @@ func TestRegistry_Cancel_AlreadyCompleted(t *testing.T) {
 	r.cancel(op.ID)
 
 	// Should still be in history as completed (not cancelled)
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 1 {
 		t.Fatalf("history length = %d, want 1", len(history))
 	}
@@ -256,18 +256,18 @@ func TestRegistry_Cancel_AlreadyCompleted(t *testing.T) {
 func TestRegistry_HistoryCap(t *testing.T) {
 	r := newTestRegistry()
 
-	// Add more than maxHistory operations and complete them
-	for i := 0; i < maxHistory+10; i++ {
+	// Add more than MaxHistory operations and complete them
+	for i := 0; i < MaxHistory+10; i++ {
 		op := r.start("Op", CategoryInstall, false, nil)
 		r.complete(op.ID, nil)
 	}
 
-	history := r.getHistory()
-	if len(history) > maxHistory {
-		t.Errorf("history length = %d, exceeds maxHistory %d", len(history), maxHistory)
+	history := r.History()
+	if len(history) > MaxHistory {
+		t.Errorf("history length = %d, exceeds MaxHistory %d", len(history), MaxHistory)
 	}
-	if len(history) != maxHistory {
-		t.Errorf("history length = %d, want exactly %d", len(history), maxHistory)
+	if len(history) != MaxHistory {
+		t.Errorf("history length = %d, want exactly %d", len(history), MaxHistory)
 	}
 }
 
@@ -277,7 +277,7 @@ func TestRegistry_GetHistory_ReturnsCopies(t *testing.T) {
 	op := r.start("Test", CategoryInstall, false, nil)
 	r.complete(op.ID, nil)
 
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 1 {
 		t.Fatalf("history length = %d, want 1", len(history))
 	}
@@ -286,9 +286,9 @@ func TestRegistry_GetHistory_ReturnsCopies(t *testing.T) {
 	history[0].Name = "Modified"
 
 	// Check original is unaffected
-	historyAgain := r.getHistory()
+	historyAgain := r.History()
 	if historyAgain[0].Name == "Modified" {
-		t.Error("getHistory() should return copies, not references")
+		t.Error("History() should return copies, not references")
 	}
 }
 
@@ -298,7 +298,7 @@ func TestRegistry_UpdateProgress(t *testing.T) {
 
 	r.updateProgress(op.ID, 0.5, "Downloading...")
 
-	got := r.get(op.ID)
+	got := r.Get(op.ID)
 	if got.Progress != 0.5 {
 		t.Errorf("Progress = %v, want 0.5", got.Progress)
 	}
@@ -323,7 +323,7 @@ func TestRegistry_UpdateProgress_AlreadyCompleted(t *testing.T) {
 	r.updateProgress(op.ID, 0.5, "Should not update")
 
 	// History entry should not change
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 1 {
 		t.Fatal("expected operation in history")
 	}

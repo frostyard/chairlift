@@ -1,4 +1,4 @@
-package operations
+package adwutil
 
 import (
 	"testing"
@@ -35,8 +35,8 @@ func TestCategory_StringValues(t *testing.T) {
 
 func TestState_Values(t *testing.T) {
 	// Verify state constants have distinct values
-	states := []OperationState{StateActive, StateCompleted, StateFailed, StateCancelled}
-	seen := make(map[OperationState]bool)
+	states := []State{StateActive, StateCompleted, StateFailed, StateCancelled}
+	seen := make(map[State]bool)
 
 	for _, s := range states {
 		if seen[s] {
@@ -47,7 +47,7 @@ func TestState_Values(t *testing.T) {
 }
 
 func TestState_String(t *testing.T) {
-	tests := map[OperationState]string{
+	tests := map[State]string{
 		StateActive:    "Active",
 		StateCompleted: "Completed",
 		StateFailed:    "Failed",
@@ -61,7 +61,7 @@ func TestState_String(t *testing.T) {
 	}
 
 	// Test unknown state
-	unknown := OperationState(99)
+	unknown := State(99)
 	if unknown.String() != "Unknown" {
 		t.Errorf("Unknown state String() = %q, want %q", unknown.String(), "Unknown")
 	}
@@ -79,7 +79,7 @@ func TestOperation_UpdateProgress(t *testing.T) {
 	// Update via operation method
 	op.UpdateProgress(0.5, "Downloading...")
 
-	got := r.get(op.ID)
+	got := r.Get(op.ID)
 	if got.Progress != 0.5 {
 		t.Errorf("Progress = %v, want 0.5", got.Progress)
 	}
@@ -106,11 +106,11 @@ func TestOperation_Complete(t *testing.T) {
 	// Complete via operation method
 	op.Complete(nil)
 
-	if r.activeCount() != 0 {
-		t.Errorf("after Complete, activeCount = %d, want 0", r.activeCount())
+	if r.ActiveCount() != 0 {
+		t.Errorf("after Complete, activeCount = %d, want 0", r.ActiveCount())
 	}
 
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 1 {
 		t.Fatalf("history length = %d, want 1", len(history))
 	}
@@ -144,11 +144,11 @@ func TestOperation_Cancel(t *testing.T) {
 		t.Error("cancel func was not called")
 	}
 
-	if r.activeCount() != 0 {
-		t.Errorf("after Cancel, activeCount = %d, want 0", r.activeCount())
+	if r.ActiveCount() != 0 {
+		t.Errorf("after Cancel, activeCount = %d, want 0", r.ActiveCount())
 	}
 
-	history := r.getHistory()
+	history := r.History()
 	if len(history) != 1 {
 		t.Fatalf("history length = %d, want 1", len(history))
 	}
@@ -173,14 +173,14 @@ func TestOperation_IsCancellable_RequiresBothConditions(t *testing.T) {
 
 	// Not cancellable flag
 	op1 := r.start("Test", CategoryInstall, false, nil)
-	got1 := r.get(op1.ID)
+	got1 := r.Get(op1.ID)
 	if got1.IsCancellable() {
 		t.Error("operation without Cancellable flag should not be cancellable")
 	}
 
 	// Cancellable flag but just started (< 5s)
 	op2 := r.start("Test", CategoryInstall, true, nil)
-	got2 := r.get(op2.ID)
+	got2 := r.Get(op2.ID)
 	if got2.IsCancellable() {
 		t.Error("operation running < 5s should not be cancellable yet")
 	}
@@ -233,7 +233,7 @@ func TestOperation_Duration_Active(t *testing.T) {
 	op := r.start("Test", CategoryInstall, false, nil)
 
 	// Duration for active operation should be positive
-	got := r.get(op.ID)
+	got := r.Get(op.ID)
 	duration := got.Duration()
 	if duration < 0 {
 		t.Error("active operation should have non-negative duration")
@@ -248,7 +248,7 @@ func TestOperation_Duration_Completed(t *testing.T) {
 	r.complete(op.ID, nil)
 
 	// Duration for completed operation uses EndedAt
-	history := r.getHistory()
+	history := r.History()
 	if len(history) == 0 {
 		t.Fatal("expected operation in history")
 	}
@@ -274,11 +274,11 @@ func TestOperation_Duration_FixedEndedAt(t *testing.T) {
 	}
 }
 
-func TestNextID_IsAtomic(t *testing.T) {
+func TestNextOperationID_IsAtomic(t *testing.T) {
 	// Get some IDs and verify they're sequential and unique
 	ids := make(map[uint64]bool)
 	for i := 0; i < 100; i++ {
-		id := nextID()
+		id := nextOperationID()
 		if ids[id] {
 			t.Errorf("duplicate ID generated: %d", id)
 		}

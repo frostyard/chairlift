@@ -1,198 +1,39 @@
+// Package widgets provides reusable GTK4/Libadwaita widget components.
+//
+// This package re-exports functionality from pkg/adwutil for backward compatibility.
 package widgets
 
 import (
-	"sync"
-
+	"github.com/frostyard/chairlift/pkg/adwutil"
 	"github.com/jwijenbergh/puregotk/v4/adw"
-	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
-
-// callbackRegistry stores signal callbacks to prevent GC collection.
-// When GTK signal callbacks are passed to ConnectX methods, Go may GC them
-// before the signal fires. Storing them here keeps them alive.
-var (
-	signalCallbackMu sync.Mutex
-	signalCallbacks  = make(map[uintptr]any)
-	signalCallbackID uintptr
-)
-
-// storeCallback saves a callback to prevent GC and returns its ID.
-func storeCallback(cb any) uintptr {
-	signalCallbackMu.Lock()
-	defer signalCallbackMu.Unlock()
-	signalCallbackID++
-	signalCallbacks[signalCallbackID] = cb
-	return signalCallbackID
-}
 
 // NewLinkRow creates an ActionRow that triggers an action when activated.
-//
-// The row is styled with an external link icon suffix and is activatable,
-// making it suitable for "open URL" or "launch app" patterns.
-//
-// Parameters:
-//   - title: The main row text (e.g., "System Performance", "Website")
-//   - subtitle: Secondary text (e.g., "Monitor CPU and memory", "https://example.com")
-//   - onClick: Callback invoked when the row is activated
-//
-// Must be called from the GTK main thread.
-//
-// Example:
-//
-//	row := widgets.NewLinkRow(
-//	    "System Performance",
-//	    "Monitor CPU, memory, and system resources",
-//	    func() { launchApp("io.missioncenter.MissionCenter") },
-//	)
-//	group.Add(&row.Widget)
+// See [adwutil.NewLinkRow] for full documentation.
 func NewLinkRow(title, subtitle string, onClick func()) *adw.ActionRow {
-	row := adw.NewActionRow()
-	row.SetTitle(title)
-	row.SetSubtitle(subtitle)
-
-	// Use a button suffix instead of row activation for reliable click handling
-	// Row activation in PreferencesGroups can be unreliable
-	btn := gtk.NewButtonFromIconName("adw-external-link-symbolic")
-	btn.SetValign(gtk.AlignCenterValue)
-	btn.AddCssClass("flat")
-	btn.SetTooltipText("Open link")
-
-	cb := func(_ gtk.Button) {
-		onClick()
-	}
-	storeCallback(cb)
-	btn.ConnectClicked(&cb)
-
-	row.AddSuffix(&btn.Widget)
-	return row
+	return adwutil.NewLinkRow(title, subtitle, onClick)
 }
 
 // NewInfoRow creates a simple ActionRow for displaying information.
-//
-// The row is not activatable and has no icons or buttons - just title and subtitle.
-// Suitable for displaying read-only information in preference groups.
-//
-// Parameters:
-//   - title: The main row text (e.g., "Image", "Version", "Status")
-//   - subtitle: The value text (e.g., "fedora:latest", "1.2.3", "Active")
-//
-// Must be called from the GTK main thread.
-//
-// Example:
-//
-//	row := widgets.NewInfoRow("Filesystem", "btrfs")
-//	expander.AddRow(&row.Widget)
+// See [adwutil.NewInfoRow] for full documentation.
 func NewInfoRow(title, subtitle string) *adw.ActionRow {
-	row := adw.NewActionRow()
-	row.SetTitle(title)
-	row.SetSubtitle(subtitle)
-	return row
+	return adwutil.NewInfoRow(title, subtitle)
 }
 
 // NewButtonRow creates an ActionRow with an action button suffix.
-//
-// The button is styled with "suggested-action" CSS class (blue/accent color).
-// Use [NewButtonRowWithClass] for different button styles.
-//
-// Parameters:
-//   - title: The main row text (e.g., "Staged Update", "Extension")
-//   - subtitle: Secondary text (e.g., "Ready to apply", "v1.2.3 available")
-//   - buttonLabel: Text for the button (e.g., "Apply", "Install", "Update")
-//   - onClick: Callback invoked when the button is clicked
-//
-// Must be called from the GTK main thread.
-//
-// Example:
-//
-//	row := widgets.NewButtonRow(
-//	    "Staged Update",
-//	    "Ready: sha256:abc123...",
-//	    "Apply",
-//	    func() { applyUpdate() },
-//	)
-//	group.Add(&row.Widget)
+// See [adwutil.NewButtonRow] for full documentation.
 func NewButtonRow(title, subtitle, buttonLabel string, onClick func()) *adw.ActionRow {
-	return NewButtonRowWithClass(title, subtitle, buttonLabel, "suggested-action", onClick)
+	return adwutil.NewButtonRow(title, subtitle, buttonLabel, onClick)
 }
 
 // NewButtonRowWithClass creates an ActionRow with a styled button suffix.
-//
-// Parameters:
-//   - title: The main row text
-//   - subtitle: Secondary text
-//   - buttonLabel: Text for the button
-//   - cssClass: CSS class for the button (e.g., "suggested-action", "destructive-action")
-//   - onClick: Callback invoked when the button is clicked
-//
-// Common CSS classes:
-//   - "suggested-action": Blue/accent colored button for primary actions
-//   - "destructive-action": Red colored button for dangerous actions
-//
-// Must be called from the GTK main thread.
-//
-// Example:
-//
-//	row := widgets.NewButtonRowWithClass(
-//	    "Remove Extension",
-//	    "This will delete all extension data",
-//	    "Remove",
-//	    "destructive-action",
-//	    func() { removeExtension() },
-//	)
-//	group.Add(&row.Widget)
+// See [adwutil.NewButtonRowWithClass] for full documentation.
 func NewButtonRowWithClass(title, subtitle, buttonLabel, cssClass string, onClick func()) *adw.ActionRow {
-	row := adw.NewActionRow()
-	row.SetTitle(title)
-	row.SetSubtitle(subtitle)
-
-	btn := gtk.NewButtonWithLabel(buttonLabel)
-	btn.SetValign(gtk.AlignCenterValue)
-	btn.AddCssClass(cssClass)
-
-	cb := func(_ gtk.Button) {
-		onClick()
-	}
-	// Store callback to prevent GC before signal fires
-	storeCallback(cb)
-	btn.ConnectClicked(&cb)
-
-	row.AddSuffix(&btn.Widget)
-	return row
+	return adwutil.NewButtonRowWithClass(title, subtitle, buttonLabel, cssClass, onClick)
 }
 
 // NewIconRow creates an ActionRow with a prefix icon.
-//
-// Suitable for rows that need visual categorization or status indication.
-//
-// Parameters:
-//   - title: The main row text (e.g., "Error", "Warning", "Success")
-//   - subtitle: Secondary text (e.g., error message, status details)
-//   - iconName: Icon name (e.g., "dialog-error-symbolic", "dialog-warning-symbolic")
-//
-// Common icon names:
-//   - "dialog-error-symbolic": Error indicator (red X)
-//   - "dialog-warning-symbolic": Warning indicator (yellow triangle)
-//   - "object-select-symbolic": Checkmark for selected/active items
-//   - "user-trash-symbolic": Trash can for cleanup actions
-//   - "system-software-install-symbolic": Software/package icon
-//
-// Must be called from the GTK main thread.
-//
-// Example:
-//
-//	row := widgets.NewIconRow(
-//	    "Error",
-//	    "Failed to connect to server",
-//	    "dialog-error-symbolic",
-//	)
-//	expander.AddRow(&row.Widget)
+// See [adwutil.NewIconRow] for full documentation.
 func NewIconRow(title, subtitle, iconName string) *adw.ActionRow {
-	row := adw.NewActionRow()
-	row.SetTitle(title)
-	row.SetSubtitle(subtitle)
-
-	icon := gtk.NewImageFromIconName(iconName)
-	row.AddPrefix(&icon.Widget)
-
-	return row
+	return adwutil.NewIconRow(title, subtitle, iconName)
 }
