@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 9 of 9 (Testing & Library)
-Plan: 6 of 6 in current phase (gap closure)
+Plan: 7 of 7 in current phase (gap closure)
 Status: Gap closure complete
-Last activity: 2026-01-28 - Completed 09-06-PLAN.md (Warning Button with Toast Demo)
+Last activity: 2026-01-28 - Completed 09-07-PLAN.md (Flatpak User/System Classification Investigation)
 
 Progress: [████████████████] 100%
 
@@ -116,6 +116,8 @@ Recent decisions affecting current work:
 - Examples follow pkg/adwutil/examples/{name}/main.go convention (09-05)
 - Icon suffix before button for visual order [Icon] [Button] (09-06)
 - Warning button pattern: icon + destructive-action CSS + toast feedback (09-06)
+- False positive confirmed: flatpak user/system classification works correctly (09-07)
+- Namespace field documented with source comment in wrapper.go (09-07)
 
 ### Pending Todos
 
@@ -132,7 +134,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 09-06-PLAN.md (Gap Closure - Warning Button with Toast Demo)
+Stopped at: Completed 09-07-PLAN.md (Gap Closure - Flatpak Investigation)
 Resume with: All gap closure plans completed
 
 ---
