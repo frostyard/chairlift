@@ -150,10 +150,14 @@ Plans:
   3. userhome.go is reduced to a thin shell that composes pages (under 300 lines)
   4. All existing functionality works identically to before refactoring
   5. Package manager progress (Flatpak, Homebrew, Snap) routes through unified progress system
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 07-01: TBD
+- [ ] 07-01-PLAN.md — Extract Updates page with NBC/Flatpak/Homebrew sections
+- [ ] 07-02-PLAN.md — Create Applications page foundation with sidebar navigation
+- [ ] 07-03-PLAN.md — Add Applications page content (Flatpak/Snap/Homebrew sections, search)
+- [ ] 07-04-PLAN.md — Reduce shell and rename userhome.go to shell.go
+- [ ] 07-05-PLAN.md — Integration verification and final fixes
 
 ### Phase 8: Accessibility
 **Goal**: Users with assistive technologies can navigate and operate the full application
@@ -198,10 +202,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Feedback Polish | 2/2 | Complete | 2026-01-27 |
 | 6. Medium Pages | 3/3 | Complete | 2026-01-27 |
 | 6.1 Remove instex | 1/1 | Complete | 2026-01-27 |
-| 7. Complex Pages | 0/TBD | Not started | - |
+| 7. Complex Pages | 0/5 | Not started | - |
 | 8. Accessibility | 0/TBD | Not started | - |
 | 9. Testing & Library | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-27 — Phase 6.1 complete*
+*Last updated: 2026-01-28 — Phase 7 planned (5 plans)*
