@@ -85,10 +85,6 @@ func (w *Window) buildUI() {
 	contentPage := w.buildContentArea()
 	w.splitView.SetContent(contentPage)
 
-	// Create progress bottom sheet
-	progressSheet := w.views.BuildProgressBottomSheet()
-	progressSheet.SetContent(&w.splitView.Widget)
-
 	// Create dry-run banner (dismissible with "Understood" button)
 	w.dryRunBanner = adw.NewBanner("Dry-Run Mode: Changes will be simulated only")
 	w.dryRunBanner.SetButtonLabel("Understood")
@@ -101,7 +97,7 @@ func (w *Window) buildUI() {
 	// Create content box for banner + main content
 	contentBox := gtk.NewBox(gtk.OrientationVerticalValue, 0)
 	contentBox.Append(&w.dryRunBanner.Widget)
-	contentBox.Append(&progressSheet.Widget)
+	contentBox.Append(&w.splitView.Widget)
 
 	// Create toast overlay for notifications
 	w.toasts = adw.NewToastOverlay()
