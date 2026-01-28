@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Medium Pages** - Extract Maintenance & Extensions pages, updex library integration
 - [x] **Phase 7: Complex Pages** - Extract Applications & Updates pages, complete monolith split
 - [ ] **Phase 8: Accessibility** - Screen reader support, keyboard navigation, widget relationships
-- [ ] **Phase 9: Testing & Library** - Unit/integration tests, pattern documentation, library extraction
+- [x] **Phase 9: Testing & Library** - Unit/integration tests, pattern documentation, library extraction
 
 ## Phase Details
 
@@ -186,11 +186,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Add unit tests for page logic layers and config parsing
-- [ ] 09-02-PLAN.md — Add unit tests for async/errors and operations registry
-- [ ] 09-03-PLAN.md — Extract async utilities to pkg/adwutil library
-- [ ] 09-04-PLAN.md — Extract widgets and operations to pkg/adwutil library
-- [ ] 09-05-PLAN.md — Add library documentation and example applications
+- [x] 09-01-PLAN.md — Add unit tests for page logic layers and config parsing
+- [x] 09-02-PLAN.md — Add unit tests for async/errors and operations registry
+- [x] 09-03-PLAN.md — Extract async utilities to pkg/adwutil library
+- [x] 09-04-PLAN.md — Extract widgets and operations to pkg/adwutil library
+- [x] 09-05-PLAN.md — Add library documentation and example applications
 
 ## Progress
 
@@ -208,8 +208,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6.1 Remove instex | 1/1 | Complete | 2026-01-27 |
 | 7. Complex Pages | 5/5 | Complete | 2026-01-28 |
 | 8. Accessibility | 0/TBD | Not started | - |
-| 9. Testing & Library | 0/5 | Not started | - |
+| 9. Testing & Library | 5/5 | Complete | 2026-01-28 |
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-28 — Phase 9 planned (5 plans)*
+*Last updated: 2026-01-28 — Phase 9 complete (5 plans)*
