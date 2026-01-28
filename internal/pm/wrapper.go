@@ -153,10 +153,8 @@ func ListFlatpakApplications() ([]FlatpakApplication, error) {
 
 	var apps []FlatpakApplication
 	for _, pkg := range installed {
-		// Debug: log the raw Namespace value from pm library
-		log.Printf("[DEBUG] Flatpak app: %s, Namespace='%s', Kind=%s",
-			pkg.Ref.Name, pkg.Ref.Namespace, pkg.Ref.Kind)
-
+		// Namespace is "user" or "system" from pm library's flatpak backend.
+		// The pm library parses `flatpak list --columns=installation` to populate this.
 		isUser := pkg.Ref.Namespace == "user"
 		apps = append(apps, FlatpakApplication{
 			ID:      pkg.Ref.Name,
