@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 
 ## Current Position
 
-Phase: 6.1 of 9 (Remove instex - INSERTED)
-Plan: 1 of 1 in current phase (COMPLETE)
-Status: Phase complete
-Last activity: 2026-01-27 — Completed 06.1-01-PLAN.md
+Phase: 7 of 9 (Complex Pages)
+Plan: 2 of 4 in current phase
+Status: In progress
+Last activity: 2026-01-28 - Completed 07-02-PLAN.md
 
-Progress: [█████████████░] ~82%
+Progress: [█████████████░░] ~85%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 22
-- Average duration: 2.2 min
-- Total execution time: 0.80 hours
+- Total plans completed: 23
+- Average duration: 2.3 min
+- Total execution time: 0.87 hours
 
 **By Phase:**
 
@@ -34,9 +34,10 @@ Progress: [█████████████░] ~82%
 | 5. Feedback Polish | 2/2 | 4 min | 2 min |
 | 6. Medium Pages | 3/3 | 12 min | 4 min |
 | 6.1 Remove instex | 1/1 | 2 min | 2 min |
+| 7. Complex Pages | 2/4 | 8 min | 4 min |
 
 **Recent Trend:**
-- Last 5 plans: 4 min, 2 min, 3 min, 6 min, 2 min
+- Last 5 plans: 2 min, 3 min, 6 min, 2 min, 4 min
 - Trend: Variable (mix of sizes)
 
 *Updated after each plan completion*
@@ -92,6 +93,10 @@ Recent decisions affecting current work:
 - Extensions page follows established page package pattern (06-03)
 - Use p.ctx for Discover/Install calls to maintain goroutine lifecycle (06.1-01)
 - IsDiscoverAvailable checks IsAvailable since updex SDK needs systemd-sysext (06.1-01)
+- Applications page uses AdwNavigationSplitView for sidebar layout (07-02)
+- PM categories defined as typed constants in logic layer (07-02)
+- Sidebar shows 'Not installed' indicator for unavailable PMs (07-02)
+- Content area uses Stack with placeholder pages (real content in Plan 03) (07-02)
 
 ### Pending Todos
 
@@ -107,10 +112,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-01-27
-Stopped at: Completed Phase 6.1 (06.1-01-PLAN.md)
-Resume with: `/gsd-plan-phase 7` for Complex Pages
+Last session: 2026-01-28
+Stopped at: Completed 07-02-PLAN.md (Applications page foundation)
+Resume with: 07-03-PLAN.md for Applications page content migration
 
 ---
 *State initialized: 2026-01-26*
-*Last updated: 2026-01-27*
+*Last updated: 2026-01-28*
