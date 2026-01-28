@@ -15,6 +15,7 @@ import (
 	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/operations"
 	"github.com/frostyard/chairlift/internal/pages"
+	"github.com/frostyard/chairlift/internal/pages/applications"
 	"github.com/frostyard/chairlift/internal/pages/extensions"
 	"github.com/frostyard/chairlift/internal/pages/help"
 	"github.com/frostyard/chairlift/internal/pages/maintenance"
@@ -39,10 +40,11 @@ type UserHome struct {
 	toastAdder ToastAdder
 
 	// Page packages (extracted pages with lifecycle management)
-	systemPagePkg      *system.Page
-	helpPagePkg        *help.Page
-	maintenancePagePkg *maintenance.Page
-	extensionsPagePkg  *extensions.Page
+	systemPagePkg       *system.Page
+	helpPagePkg         *help.Page
+	maintenancePagePkg  *maintenance.Page
+	extensionsPagePkg   *extensions.Page
+	applicationsPagePkg *applications.Page
 
 	// Pages (ToolbarViews) - widgets returned by page packages or createPage()
 	systemPage       *adw.ToolbarView
@@ -51,9 +53,8 @@ type UserHome struct {
 	helpPage         *adw.ToolbarView
 
 	// PreferencesPages inside each ToolbarView - keep references to prevent GC
-	// (System, Help, Maintenance, and Extensions no longer need these - managed by their page packages)
-	updatesPrefsPage      *adw.PreferencesPage
-	applicationsPrefsPage *adw.PreferencesPage
+	// (System, Help, Maintenance, Extensions, and Applications no longer need these - managed by their page packages)
+	updatesPrefsPage *adw.PreferencesPage
 
 	// References for dynamic updates
 	formulaeExpander       *adw.ExpanderRow
@@ -102,12 +103,13 @@ type UserHome struct {
 // Help page's Destroy() is a no-op (no goroutines)
 // Maintenance page's Destroy() cancels action goroutines
 // Extensions page's Destroy() cancels discovery goroutines
+// Applications page's Destroy() cancels async operations
 // Example: func (uh *UserHome) Destroy() {
 //     if uh.systemPagePkg != nil { uh.systemPagePkg.Destroy() }
 //     if uh.helpPagePkg != nil { uh.helpPagePkg.Destroy() }
 //     if uh.maintenancePagePkg != nil { uh.maintenancePagePkg.Destroy() }
 //     if uh.extensionsPagePkg != nil { uh.extensionsPagePkg.Destroy() }
-// }
+//     if uh.applicationsPagePkg != nil { uh.applicationsPagePkg.Destroy() }
 // }
 
 // New creates a new UserHome views manager
@@ -143,9 +145,12 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	// Create Extensions page using extracted package
 	uh.extensionsPagePkg = extensions.New(deps)
 
+	// Create Applications page using extracted package
+	uh.applicationsPagePkg = applications.New(deps, uh.launchApp, uh.openURL)
+	uh.applicationsPage = uh.applicationsPagePkg.Widget()
+
 	// Create remaining pages using createPage (not yet extracted)
 	uh.updatesPage, uh.updatesPrefsPage = uh.createPage()
-	uh.applicationsPage, uh.applicationsPrefsPage = uh.createPage()
 
 	// Re-initialize Flatpak and Homebrew managers with progress callback
 	// This allows us to receive progress updates from long-running operations
@@ -428,8 +433,15 @@ func (uh *UserHome) buildUpdatesPage() {
 }
 
 // buildApplicationsPage builds the Applications page content
+// NOTE: This is now a no-op as the Applications page is built by the applications package.
+// This method and its associated UI code will be removed in Plan 03.
 func (uh *UserHome) buildApplicationsPage() {
-	page := uh.applicationsPrefsPage
+	// Applications page is now managed by applications.Page package
+	// Return early - the sidebar-based content will be added in Plan 03
+	return
+
+	// Legacy code below will be removed in Plan 03
+	var page *adw.PreferencesPage // placeholder to avoid compile errors
 	if page == nil {
 		return
 	}
