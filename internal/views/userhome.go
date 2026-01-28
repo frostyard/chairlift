@@ -107,6 +107,29 @@ func (uh *UserHome) GetPage(name string) *adw.ToolbarView {
 	}
 }
 
+// Destroy cleans up all page packages, cancelling their goroutines.
+// Call this when the window is being destroyed.
+func (uh *UserHome) Destroy() {
+	if uh.systemPagePkg != nil {
+		uh.systemPagePkg.Destroy()
+	}
+	if uh.helpPagePkg != nil {
+		uh.helpPagePkg.Destroy()
+	}
+	if uh.maintenancePagePkg != nil {
+		uh.maintenancePagePkg.Destroy()
+	}
+	if uh.extensionsPagePkg != nil {
+		uh.extensionsPagePkg.Destroy()
+	}
+	if uh.updatesPagePkg != nil {
+		uh.updatesPagePkg.Destroy()
+	}
+	if uh.applicationsPagePkg != nil {
+		uh.applicationsPagePkg.Destroy()
+	}
+}
+
 // Helper methods
 
 func (uh *UserHome) launchApp(appID string) {
