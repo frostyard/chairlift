@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 9 of 9 (Testing & Library)
-Plan: 3 of 5 in current phase
+Plan: 4 of 5 in current phase
 Status: In progress
-Last activity: 2026-01-28 - Completed 09-03-PLAN.md (Extract Async Utilities)
+Last activity: 2026-01-28 - Completed 09-04-PLAN.md (Extract Widgets & Operations)
 
-Progress: [████████████████] ~98%
+Progress: [████████████████] ~99%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 30
-- Average duration: 2.6 min
-- Total execution time: 1.35 hours
+- Total plans completed: 31
+- Average duration: 2.7 min
+- Total execution time: 1.4 hours
 
 **By Phase:**
 
@@ -35,10 +35,10 @@ Progress: [████████████████] ~98%
 | 6. Medium Pages | 3/3 | 12 min | 4 min |
 | 6.1 Remove instex | 1/1 | 2 min | 2 min |
 | 7. Complex Pages | 5/5 | 35 min | 7 min |
-| 9. Testing & Library | 3/5 | 8 min | 2.7 min |
+| 9. Testing & Library | 4/5 | 12 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 15 min, 3 min, 3 min, 2 min
+- Last 5 plans: 3 min, 3 min, 2 min, 4 min
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -110,6 +110,8 @@ Recent decisions affecting current work:
 - pkg/adwutil has zero internal chairlift imports - pure library (09-03)
 - Type alias (UserError = adwutil.UserError) maintains backward compatibility (09-03)
 - Re-export pattern allows gradual migration to adwutil (09-03)
+- Widget signal callbacks stored in registry to prevent GC collection (09-04)
+- Operations tests moved to pkg/adwutil with implementation (09-04)
 
 ### Pending Todos
 
@@ -126,8 +128,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 09-03-PLAN.md (Extract Async Utilities)
-Resume with: 09-04 (Widget Extraction)
+Stopped at: Completed 09-04-PLAN.md (Extract Widgets & Operations)
+Resume with: 09-05 (Documentation/Finalization)
 
 ---
 *State initialized: 2026-01-26*
