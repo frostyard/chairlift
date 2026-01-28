@@ -285,6 +285,20 @@ func TestIsGroupEnabled(t *testing.T) {
 - Don't rely on test execution order
 - Clean up any created resources
 
+## Known Issues
+
+**Snap-installed VSCode:**
+Snap-installed VSCode has sandboxing restrictions that can cause issues with Go builds and running chairlift during development. Symptoms include:
+- Build cache inconsistencies (rebuilt binaries don't reflect code changes)
+- Environment variable isolation affecting tool detection
+- File system access restrictions in certain directories
+
+**Workarounds:**
+1. Run user acceptance testing outside VSCode (use a separate terminal)
+2. Use the `.deb` or Flatpak version of VSCode instead of the Snap
+3. Build and test from command line: `go build -o /tmp/chairlift-test ./cmd/chairlift && /tmp/chairlift-test`
+
 ---
 
 *Testing analysis: 2026-01-26*
+*Updated: 2026-01-28 — Added snap VSCode known issue*
