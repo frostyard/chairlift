@@ -40,7 +40,7 @@ func TestNewClient(t *testing.T) {
 	// Verify client creation doesn't panic
 	client := NewClient()
 	if client == nil {
-		t.Error("expected non-nil client")
+		t.Fatal("expected non-nil client")
 	}
 	if client.client == nil {
 		t.Error("expected non-nil inner client")

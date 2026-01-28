@@ -27,7 +27,7 @@ func ParseOSRelease() ([]OSReleaseEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var entries []OSReleaseEntry
 	scanner := bufio.NewScanner(file)
