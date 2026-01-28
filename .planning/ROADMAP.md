@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Medium Pages** - Extract Maintenance & Extensions pages, updex library integration
 - [x] **Phase 7: Complex Pages** - Extract Applications & Updates pages, complete monolith split
 - [ ] **Phase 8: Accessibility** - Screen reader support, keyboard navigation, widget relationships
-- [ ] **Phase 9: Testing & Library** - Unit/integration tests, pattern documentation, library extraction (UAT gaps)
+- [x] **Phase 9: Testing & Library** - Unit/integration tests, pattern documentation, library extraction
 
 ## Phase Details
 
@@ -183,7 +183,7 @@ Plans:
   3. Extractable patterns are documented with usage examples
   4. Reusable GTK4/Go utilities exist in a separate package (same or separate repo)
   5. Test coverage enables confident future refactoring
-**Plans**: 7 plans (5 complete + 2 gap closure)
+**Plans**: 7 plans
 
 Plans:
 - [x] 09-01-PLAN.md — Add unit tests for page logic layers and config parsing
@@ -191,8 +191,8 @@ Plans:
 - [x] 09-03-PLAN.md — Extract async utilities to pkg/adwutil library
 - [x] 09-04-PLAN.md — Extract widgets and operations to pkg/adwutil library
 - [x] 09-05-PLAN.md — Add library documentation and example applications
-- [ ] 09-06-PLAN.md — Add warning button with toast demo to basic example (GAP CLOSURE)
-- [ ] 09-07-PLAN.md — Investigate flatpak user/system classification issue (GAP CLOSURE)
+- [x] 09-06-PLAN.md — Add warning button with toast demo to basic example (GAP CLOSURE)
+- [x] 09-07-PLAN.md — Investigate flatpak user/system classification issue (GAP CLOSURE)
 
 ## Progress
 
@@ -210,8 +210,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6.1 Remove instex | 1/1 | Complete | 2026-01-27 |
 | 7. Complex Pages | 5/5 | Complete | 2026-01-28 |
 | 8. Accessibility | 0/TBD | Not started | - |
-| 9. Testing & Library | 5/7 | Gap closure | - |
+| 9. Testing & Library | 7/7 | Complete | 2026-01-28 |
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-28 — Phase 9 gap closure plans (2 plans for UAT gaps)*
+*Last updated: 2026-01-28 — Phase 9 complete (all gap closure plans executed)*
