@@ -14,14 +14,10 @@ import (
 	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
-// Page implements the Applications page with sidebar navigation.
+// Page implements the Applications page.
 type Page struct {
-	toolbarView  *adw.ToolbarView
-	splitView    *adw.NavigationSplitView
-	sidebarList  *gtk.ListBox
-	contentStack *gtk.Stack
-
-	currentCategory PMCategory
+	toolbarView *adw.ToolbarView
+	prefsPage   *adw.PreferencesPage
 
 	// Flatpak UI elements
 	flatpakUserExpander   *adw.ExpanderRow
@@ -81,24 +77,22 @@ func (p *Page) Destroy() {
 func (p *Page) buildUI() {
 	p.toolbarView = adw.NewToolbarView()
 
-	// Note: No header bar on outer toolbarView since NavigationSplitView
-	// manages its own headers for sidebar and content areas.
+	headerBar := adw.NewHeaderBar()
+	p.toolbarView.AddTopBar(&headerBar.Widget)
 
-	// Create NavigationSplitView for sidebar layout
-	p.splitView = adw.NewNavigationSplitView()
-	p.splitView.SetSidebarWidthFraction(0.25)
-	p.splitView.SetMinSidebarWidth(180)
-	p.splitView.SetMaxSidebarWidth(280)
+	scrolled := gtk.NewScrolledWindow()
+	scrolled.SetPolicy(gtk.PolicyNeverValue, gtk.PolicyAutomaticValue)
+	scrolled.SetVexpand(true)
 
-	// Build sidebar
-	sidebarPage := p.buildSidebar()
-	p.splitView.SetSidebar(sidebarPage)
+	p.prefsPage = adw.NewPreferencesPage()
+	scrolled.SetChild(&p.prefsPage.Widget)
+	p.toolbarView.SetContent(&scrolled.Widget)
 
-	// Build content area with real content
-	contentPage := p.buildContent()
-	p.splitView.SetContent(contentPage)
-
-	p.toolbarView.SetContent(&p.splitView.Widget)
+	// Build groups based on config and PM availability
+	p.buildFlatpakGroups()
+	p.buildSnapGroup()
+	p.buildHomebrewGroup()
+	p.buildSearchGroup()
 
 	// Start async loads
 	if pm.FlatpakIsInstalled() {
@@ -112,180 +106,11 @@ func (p *Page) buildUI() {
 	}
 }
 
-func (p *Page) buildSidebar() *adw.NavigationPage {
-	toolbarView := adw.NewToolbarView()
-
-	headerBar := adw.NewHeaderBar()
-	headerBar.SetShowEndTitleButtons(false)
-	toolbarView.AddTopBar(&headerBar.Widget)
-
-	scrolled := gtk.NewScrolledWindow()
-	scrolled.SetPolicy(gtk.PolicyNeverValue, gtk.PolicyAutomaticValue)
-	scrolled.SetVexpand(true)
-
-	p.sidebarList = gtk.NewListBox()
-	p.sidebarList.SetSelectionMode(gtk.SelectionSingleValue)
-	p.sidebarList.AddCssClass("navigation-sidebar")
-
-	// Add sidebar items
-	items := GetSidebarItems()
-	for _, item := range items {
-		p.addSidebarRow(item)
-	}
-
-	// Connect row-activated signal
-	rowActivatedCb := func(listbox gtk.ListBox, rowPtr uintptr) {
-		row := gtk.ListBoxRowNewFromInternalPtr(rowPtr)
-		p.onSidebarRowActivated(*row)
-	}
-	p.sidebarList.ConnectRowActivated(&rowActivatedCb)
-
-	// Select first row by default
-	if first := p.sidebarList.GetRowAtIndex(0); first != nil {
-		p.sidebarList.SelectRow(first)
-	}
-
-	scrolled.SetChild(&p.sidebarList.Widget)
-	toolbarView.SetContent(&scrolled.Widget)
-
-	return adw.NewNavigationPage(&toolbarView.Widget, "Categories")
-}
-
-func (p *Page) addSidebarRow(item SidebarItem) {
-	row := gtk.NewListBoxRow()
-
-	box := gtk.NewBox(gtk.OrientationHorizontalValue, 12)
-	box.SetMarginTop(8)
-	box.SetMarginBottom(8)
-	box.SetMarginStart(12)
-	box.SetMarginEnd(12)
-
-	icon := gtk.NewImageFromIconName(item.IconName)
-	box.Append(&icon.Widget)
-
-	label := gtk.NewLabel(item.Label)
-	label.SetHexpand(true)
-	label.SetXalign(0)
-	box.Append(&label.Widget)
-
-	// Show "Not installed" indicator if PM unavailable
-	if !item.IsInstalled && item.Category != CategoryAll {
-		dimLabel := gtk.NewLabel("Not installed")
-		dimLabel.AddCssClass("dim-label")
-		box.Append(&dimLabel.Widget)
-		row.SetSensitive(false)
-	}
-
-	row.SetChild(&box.Widget)
-	// Store category in row name for lookup
-	row.SetName(string(item.Category))
-
-	p.sidebarList.Append(&row.Widget)
-}
-
-func (p *Page) buildContent() *adw.NavigationPage {
-	toolbarView := adw.NewToolbarView()
-
-	headerBar := adw.NewHeaderBar()
-	toolbarView.AddTopBar(&headerBar.Widget)
-
-	scrolled := gtk.NewScrolledWindow()
-	scrolled.SetPolicy(gtk.PolicyNeverValue, gtk.PolicyAutomaticValue)
-	scrolled.SetVexpand(true)
-
-	// Stack to hold different category views
-	p.contentStack = gtk.NewStack()
-	p.contentStack.SetTransitionType(gtk.StackTransitionTypeCrossfadeValue)
-
-	// Build content pages for each category
-	p.contentStack.AddNamed(&p.buildAllContent().Widget, string(CategoryAll))
-	p.contentStack.AddNamed(&p.buildFlatpakContent().Widget, string(CategoryFlatpak))
-	p.contentStack.AddNamed(&p.buildHomebrewContent().Widget, string(CategoryHomebrew))
-	p.contentStack.AddNamed(&p.buildSnapContent().Widget, string(CategorySnap))
-
-	// Show "all" by default
-	p.contentStack.SetVisibleChildName(string(CategoryAll))
-	p.currentCategory = CategoryAll
-
-	scrolled.SetChild(&p.contentStack.Widget)
-	toolbarView.SetContent(&scrolled.Widget)
-
-	return adw.NewNavigationPage(&toolbarView.Widget, "Applications")
-}
-
-func (p *Page) buildAllContent() *adw.PreferencesPage {
-	page := adw.NewPreferencesPage()
-
-	// Add flatpak groups if available
-	if pm.FlatpakIsInstalled() && p.config.IsGroupEnabled("applications_page", "flatpak_user_group") {
-		p.addFlatpakGroupsToPage(page)
-	}
-
-	// Add snap group if available
-	if pm.SnapIsInstalled() && p.config.IsGroupEnabled("applications_page", "snap_group") {
-		p.addSnapGroupToPage(page)
-	}
-
-	// Add homebrew group if available
-	if pm.HomebrewIsInstalled() && p.config.IsGroupEnabled("applications_page", "brew_group") {
-		p.addHomebrewGroupToPage(page)
-	}
-
-	// Add search at the bottom
-	if HasSearchCapability() && p.config.IsGroupEnabled("applications_page", "brew_search_group") {
-		p.addSearchGroupToPage(page)
-	}
-
-	return page
-}
-
-func (p *Page) buildFlatpakContent() *adw.PreferencesPage {
-	page := adw.NewPreferencesPage()
-
+func (p *Page) buildFlatpakGroups() {
 	if !pm.FlatpakIsInstalled() {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Flatpak")
-		group.SetDescription("Flatpak is not installed on this system")
-		page.Add(group)
-		return page
+		return
 	}
 
-	p.addFlatpakGroupsToPage(page)
-	return page
-}
-
-func (p *Page) buildSnapContent() *adw.PreferencesPage {
-	page := adw.NewPreferencesPage()
-
-	if !pm.SnapIsInstalled() {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Snap")
-		group.SetDescription("Snap is not installed on this system")
-		page.Add(group)
-		return page
-	}
-
-	p.addSnapGroupToPage(page)
-	return page
-}
-
-func (p *Page) buildHomebrewContent() *adw.PreferencesPage {
-	page := adw.NewPreferencesPage()
-
-	if !pm.HomebrewIsInstalled() {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Homebrew")
-		group.SetDescription("Homebrew is not installed on this system")
-		page.Add(group)
-		return page
-	}
-
-	p.addHomebrewGroupToPage(page)
-	p.addSearchGroupToPage(page)
-	return page
-}
-
-func (p *Page) addFlatpakGroupsToPage(page *adw.PreferencesPage) {
 	// User applications group
 	if p.config.IsGroupEnabled("applications_page", "flatpak_user_group") {
 		group := adw.NewPreferencesGroup()
@@ -297,7 +122,7 @@ func (p *Page) addFlatpakGroupsToPage(page *adw.PreferencesPage) {
 		p.flatpakUserExpander.SetSubtitle("Loading...")
 		group.Add(&p.flatpakUserExpander.Widget)
 
-		page.Add(group)
+		p.prefsPage.Add(group)
 	}
 
 	// System applications group
@@ -311,11 +136,18 @@ func (p *Page) addFlatpakGroupsToPage(page *adw.PreferencesPage) {
 		p.flatpakSystemExpander.SetSubtitle("Loading...")
 		group.Add(&p.flatpakSystemExpander.Widget)
 
-		page.Add(group)
+		p.prefsPage.Add(group)
 	}
 }
 
-func (p *Page) addSnapGroupToPage(page *adw.PreferencesPage) {
+func (p *Page) buildSnapGroup() {
+	if !pm.SnapIsInstalled() {
+		return
+	}
+	if !p.config.IsGroupEnabled("applications_page", "snap_group") {
+		return
+	}
+
 	group := adw.NewPreferencesGroup()
 	group.SetTitle("Snap Applications")
 	group.SetDescription("Manage Snap packages installed on your system")
@@ -360,10 +192,17 @@ func (p *Page) addSnapGroupToPage(page *adw.PreferencesPage) {
 	p.snapExpander.SetSubtitle("Loading...")
 	group.Add(&p.snapExpander.Widget)
 
-	page.Add(group)
+	p.prefsPage.Add(group)
 }
 
-func (p *Page) addHomebrewGroupToPage(page *adw.PreferencesPage) {
+func (p *Page) buildHomebrewGroup() {
+	if !pm.HomebrewIsInstalled() {
+		return
+	}
+	if !p.config.IsGroupEnabled("applications_page", "brew_group") {
+		return
+	}
+
 	group := adw.NewPreferencesGroup()
 	group.SetTitle("Homebrew")
 	group.SetDescription("Manage Homebrew packages installed on your system")
@@ -396,10 +235,17 @@ func (p *Page) addHomebrewGroupToPage(page *adw.PreferencesPage) {
 	p.casksExpander.SetSubtitle("Loading...")
 	group.Add(&p.casksExpander.Widget)
 
-	page.Add(group)
+	p.prefsPage.Add(group)
 }
 
-func (p *Page) addSearchGroupToPage(page *adw.PreferencesPage) {
+func (p *Page) buildSearchGroup() {
+	if !HasSearchCapability() {
+		return
+	}
+	if !p.config.IsGroupEnabled("applications_page", "brew_search_group") {
+		return
+	}
+
 	group := adw.NewPreferencesGroup()
 	group.SetTitle("Search Homebrew")
 	group.SetDescription("Search for and install Homebrew formulae")
@@ -426,16 +272,7 @@ func (p *Page) addSearchGroupToPage(page *adw.PreferencesPage) {
 	p.searchResultsExpander.SetEnableExpansion(false)
 	group.Add(&p.searchResultsExpander.Widget)
 
-	page.Add(group)
-}
-
-func (p *Page) onSidebarRowActivated(row gtk.ListBoxRow) {
-	category := PMCategory(row.GetName())
-	if category == p.currentCategory {
-		return
-	}
-	p.currentCategory = category
-	p.contentStack.SetVisibleChildName(string(category))
+	p.prefsPage.Add(group)
 }
 
 // loadFlatpakApplications loads installed Flatpak applications asynchronously.

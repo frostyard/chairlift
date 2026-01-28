@@ -178,16 +178,24 @@ func (uh *UserHome) launchApp(appID string) {
 func (uh *UserHome) openURL(url string) {
 	log.Printf("Opening URL: %s", url)
 
-	cmd := exec.Command("xdg-open", url)
+	// Try gio open first (handles flatpak/snap portals better)
+	// Fall back to xdg-open if gio fails
+	cmd := exec.Command("gio", "open", url)
 	cmd.Env = os.Environ()
 
 	if err := cmd.Start(); err != nil {
-		log.Printf("Failed to open URL %s: %v", url, err)
-		uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to open %s", url))
-		return
+		// Fallback to xdg-open
+		log.Printf("gio open failed, trying xdg-open: %v", err)
+		cmd = exec.Command("xdg-open", url)
+		cmd.Env = os.Environ()
+		if err := cmd.Start(); err != nil {
+			log.Printf("Failed to open URL %s: %v", url, err)
+			uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to open %s", url))
+			return
+		}
 	}
 
-	// Don't wait for xdg-open to finish
+	// Don't wait for the command to finish
 	go func() {
 		_ = cmd.Wait()
 	}()

@@ -1,9 +1,29 @@
 package widgets
 
 import (
+	"sync"
+
 	"github.com/jwijenbergh/puregotk/v4/adw"
 	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
+
+// callbackRegistry stores signal callbacks to prevent GC collection.
+// When GTK signal callbacks are passed to ConnectX methods, Go may GC them
+// before the signal fires. Storing them here keeps them alive.
+var (
+	signalCallbackMu sync.Mutex
+	signalCallbacks  = make(map[uintptr]any)
+	signalCallbackID uintptr
+)
+
+// storeCallback saves a callback to prevent GC and returns its ID.
+func storeCallback(cb any) uintptr {
+	signalCallbackMu.Lock()
+	defer signalCallbackMu.Unlock()
+	signalCallbackID++
+	signalCallbacks[signalCallbackID] = cb
+	return signalCallbackID
+}
 
 // NewLinkRow creates an ActionRow that triggers an action when activated.
 //
@@ -29,16 +49,21 @@ func NewLinkRow(title, subtitle string, onClick func()) *adw.ActionRow {
 	row := adw.NewActionRow()
 	row.SetTitle(title)
 	row.SetSubtitle(subtitle)
-	row.SetActivatable(true)
 
-	icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-	row.AddSuffix(&icon.Widget)
+	// Use a button suffix instead of row activation for reliable click handling
+	// Row activation in PreferencesGroups can be unreliable
+	btn := gtk.NewButtonFromIconName("adw-external-link-symbolic")
+	btn.SetValign(gtk.AlignCenterValue)
+	btn.AddCssClass("flat")
+	btn.SetTooltipText("Open link")
 
-	cb := func(_ adw.ActionRow) {
+	cb := func(_ gtk.Button) {
 		onClick()
 	}
-	row.ConnectActivated(&cb)
+	storeCallback(cb)
+	btn.ConnectClicked(&cb)
 
+	row.AddSuffix(&btn.Widget)
 	return row
 }
 
@@ -127,6 +152,8 @@ func NewButtonRowWithClass(title, subtitle, buttonLabel, cssClass string, onClic
 	cb := func(_ gtk.Button) {
 		onClick()
 	}
+	// Store callback to prevent GC before signal fires
+	storeCallback(cb)
 	btn.ConnectClicked(&cb)
 
 	row.AddSuffix(&btn.Widget)
