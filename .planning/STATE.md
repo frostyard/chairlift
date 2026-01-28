@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 9 of 9 (Testing & Library)
-Plan: 5 of 5 in current phase
-Status: Phase complete
-Last activity: 2026-01-28 - Completed 09-05-PLAN.md (Documentation & Examples)
+Plan: 6 of 6 in current phase (gap closure)
+Status: Gap closure complete
+Last activity: 2026-01-28 - Completed 09-06-PLAN.md (Warning Button with Toast Demo)
 
 Progress: [████████████████] 100%
 
@@ -114,6 +114,8 @@ Recent decisions affecting current work:
 - Operations tests moved to pkg/adwutil with implementation (09-04)
 - README covers all features with Quick Start samples (09-05)
 - Examples follow pkg/adwutil/examples/{name}/main.go convention (09-05)
+- Icon suffix before button for visual order [Icon] [Button] (09-06)
+- Warning button pattern: icon + destructive-action CSS + toast feedback (09-06)
 
 ### Pending Todos
 
@@ -130,8 +132,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 09-05-PLAN.md (Documentation & Examples)
-Resume with: Milestone complete - all phases finished
+Stopped at: Completed 09-06-PLAN.md (Gap Closure - Warning Button with Toast Demo)
+Resume with: All gap closure plans completed
 
 ---
 *State initialized: 2026-01-26*
