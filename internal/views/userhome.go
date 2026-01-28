@@ -13,13 +13,13 @@ import (
 	"github.com/frostyard/chairlift/internal/async"
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/nbc"
-	"github.com/frostyard/chairlift/internal/operations"
 	"github.com/frostyard/chairlift/internal/pages"
 	"github.com/frostyard/chairlift/internal/pages/applications"
 	"github.com/frostyard/chairlift/internal/pages/extensions"
 	"github.com/frostyard/chairlift/internal/pages/help"
 	"github.com/frostyard/chairlift/internal/pages/maintenance"
 	"github.com/frostyard/chairlift/internal/pages/system"
+	"github.com/frostyard/chairlift/internal/pages/updates"
 	"github.com/frostyard/chairlift/internal/pm"
 
 	pmlib "github.com/frostyard/pm"
@@ -45,6 +45,7 @@ type UserHome struct {
 	maintenancePagePkg  *maintenance.Page
 	extensionsPagePkg   *extensions.Page
 	applicationsPagePkg *applications.Page
+	updatesPagePkg      *updates.Page
 
 	// Pages (ToolbarViews) - widgets returned by page packages or createPage()
 	systemPage       *adw.ToolbarView
@@ -52,41 +53,22 @@ type UserHome struct {
 	applicationsPage *adw.ToolbarView
 	helpPage         *adw.ToolbarView
 
-	// PreferencesPages inside each ToolbarView - keep references to prevent GC
-	// (System, Help, Maintenance, Extensions, and Applications no longer need these - managed by their page packages)
-	updatesPrefsPage *adw.PreferencesPage
-
-	// References for dynamic updates
+	// References for dynamic updates (legacy - used by unreachable buildApplicationsPage)
 	formulaeExpander       *adw.ExpanderRow
 	casksExpander          *adw.ExpanderRow
-	outdatedExpander       *adw.ExpanderRow
 	searchResultsExpander  *adw.ExpanderRow
 	searchEntry            *gtk.SearchEntry
 	flatpakUserExpander    *adw.ExpanderRow
 	flatpakSystemExpander  *adw.ExpanderRow
-	flatpakUpdatesExpander *adw.ExpanderRow
-	flatpakUpdateRows      []*adw.ActionRow // Store references for cleanup
 	snapExpander           *adw.ExpanderRow
 	snapStoreLinkRow       *adw.ActionRow
 	snapStoreInstallRow    *adw.ActionRow
 	snapRows               []*adw.ActionRow // Store references for cleanup
 
-	// NBC update references
-	nbcUpdateBtn      *gtk.Button
-	nbcDownloadBtn    *gtk.Button
-	nbcUpdateExpander *adw.ExpanderRow
-	nbcCheckRow       *adw.ActionRow
-
 	// Progress tracking UI
 	progressBottomSheet *adw.BottomSheet     // BottomSheet for displaying active operations
 	progressPage        *adw.PreferencesPage // Preferences page inside the bottom sheet
 	progressScrolled    *gtk.ScrolledWindow  // Scrolled window for progress content
-
-	// Update badge tracking
-	nbcUpdateCount     int
-	flatpakUpdateCount int
-	brewUpdateCount    int
-	updateCountMu      sync.Mutex
 
 	// Progress UI tracking
 	progressExpanders map[string]*adw.ExpanderRow      // Map of action names to expander rows
@@ -104,12 +86,14 @@ type UserHome struct {
 // Maintenance page's Destroy() cancels action goroutines
 // Extensions page's Destroy() cancels discovery goroutines
 // Applications page's Destroy() cancels async operations
+// Updates page's Destroy() cancels update check/install goroutines
 // Example: func (uh *UserHome) Destroy() {
 //     if uh.systemPagePkg != nil { uh.systemPagePkg.Destroy() }
 //     if uh.helpPagePkg != nil { uh.helpPagePkg.Destroy() }
 //     if uh.maintenancePagePkg != nil { uh.maintenancePagePkg.Destroy() }
 //     if uh.extensionsPagePkg != nil { uh.extensionsPagePkg.Destroy() }
 //     if uh.applicationsPagePkg != nil { uh.applicationsPagePkg.Destroy() }
+//     if uh.updatesPagePkg != nil { uh.updatesPagePkg.Destroy() }
 // }
 
 // New creates a new UserHome views manager
@@ -149,8 +133,9 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.applicationsPagePkg = applications.New(deps, uh.launchApp, uh.openURL)
 	uh.applicationsPage = uh.applicationsPagePkg.Widget()
 
-	// Create remaining pages using createPage (not yet extracted)
-	uh.updatesPage, uh.updatesPrefsPage = uh.createPage()
+	// Create Updates page using extracted package
+	uh.updatesPagePkg = updates.New(deps, uh.toastAdder.SetUpdateBadge)
+	uh.updatesPage = uh.updatesPagePkg.Widget()
 
 	// Re-initialize Flatpak and Homebrew managers with progress callback
 	// This allows us to receive progress updates from long-running operations
@@ -169,23 +154,11 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 		time.Sleep(200 * time.Millisecond)
 
 		// Build page content now that PM managers are initialized with progress callbacks
-		// NOTE: System, Help, Maintenance, and Extensions pages build their UI in their constructors, so no calls here
-		uh.buildUpdatesPage()
+		// NOTE: All page packages now build their UI in their constructors, so no calls here
 		uh.buildApplicationsPage()
 	}()
 
 	return uh
-}
-
-// updateBadgeCount updates the total update count and notifies the window
-func (uh *UserHome) updateBadgeCount() {
-	uh.updateCountMu.Lock()
-	total := uh.nbcUpdateCount + uh.flatpakUpdateCount + uh.brewUpdateCount
-	uh.updateCountMu.Unlock()
-
-	async.RunOnMain(func() {
-		uh.toastAdder.SetUpdateBadge(total)
-	})
 }
 
 // GetPage returns a page by name
@@ -318,118 +291,6 @@ func (uh *UserHome) onSystemUpdateClicked(button *gtk.Button) {
 			}
 		})
 	}()
-}
-
-// buildUpdatesPage builds the Updates page content
-func (uh *UserHome) buildUpdatesPage() {
-	page := uh.updatesPrefsPage
-	if page == nil {
-		return
-	}
-
-	// NBC System Updates group - only show if NBC is available
-	if _, err := os.Stat("/run/nbc-booted"); err == nil {
-		if uh.config.IsGroupEnabled("updates_page", "nbc_updates_group") {
-			group := adw.NewPreferencesGroup()
-			group.SetTitle("System Updates")
-			group.SetDescription("Check for and install NBC system updates")
-
-			// Check for updates row
-			uh.nbcCheckRow = adw.NewActionRow()
-			uh.nbcCheckRow.SetTitle("Check for Updates")
-			uh.nbcCheckRow.SetSubtitle("Checking...")
-
-			checkBtn := gtk.NewButtonWithLabel("Check")
-			checkBtn.SetValign(gtk.AlignCenterValue)
-			checkClickedCb := func(btn gtk.Button) {
-				uh.onNBCCheckUpdateClicked()
-			}
-			checkBtn.ConnectClicked(&checkClickedCb)
-			uh.nbcCheckRow.AddSuffix(&checkBtn.Widget)
-			group.Add(&uh.nbcCheckRow.Widget)
-
-			// Update now row with progress expander
-			uh.nbcUpdateExpander = adw.NewExpanderRow()
-			uh.nbcUpdateExpander.SetTitle("Install System Update")
-			uh.nbcUpdateExpander.SetSubtitle("Checking for updates...")
-
-			uh.nbcDownloadBtn = gtk.NewButtonWithLabel("Download")
-			uh.nbcDownloadBtn.SetValign(gtk.AlignCenterValue)
-			uh.nbcDownloadBtn.SetSensitive(false) // Disabled until we check for updates
-			downloadClickedCb := func(btn gtk.Button) {
-				uh.onNBCDownloadClicked(uh.nbcUpdateExpander, uh.nbcDownloadBtn)
-			}
-			uh.nbcDownloadBtn.ConnectClicked(&downloadClickedCb)
-			uh.nbcUpdateExpander.AddSuffix(&uh.nbcDownloadBtn.Widget)
-
-			uh.nbcUpdateBtn = gtk.NewButtonWithLabel("Update")
-			uh.nbcUpdateBtn.SetValign(gtk.AlignCenterValue)
-			uh.nbcUpdateBtn.AddCssClass("suggested-action")
-			uh.nbcUpdateBtn.SetSensitive(false) // Disabled until we check for updates
-			updateClickedCb := func(btn gtk.Button) {
-				uh.onNBCUpdateClicked(uh.nbcUpdateExpander, uh.nbcUpdateBtn)
-			}
-			uh.nbcUpdateBtn.ConnectClicked(&updateClickedCb)
-			uh.nbcUpdateExpander.AddSuffix(&uh.nbcUpdateBtn.Widget)
-			group.Add(&uh.nbcUpdateExpander.Widget)
-
-			page.Add(group)
-
-			// Check for updates on startup
-			go uh.checkNBCUpdateAvailability()
-		}
-	}
-
-	// Flatpak Updates group
-	if uh.config.IsGroupEnabled("updates_page", "flatpak_updates_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Flatpak Updates")
-		group.SetDescription("Available updates for Flatpak applications")
-
-		uh.flatpakUpdatesExpander = adw.NewExpanderRow()
-		uh.flatpakUpdatesExpander.SetTitle("Available Updates")
-		uh.flatpakUpdatesExpander.SetSubtitle("Loading...")
-		group.Add(&uh.flatpakUpdatesExpander.Widget)
-
-		page.Add(group)
-
-		// Load flatpak updates asynchronously
-		go uh.loadFlatpakUpdates()
-	}
-
-	// Homebrew Updates group
-	if uh.config.IsGroupEnabled("updates_page", "brew_updates_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Homebrew Updates")
-		group.SetDescription("Check for and install Homebrew package updates")
-
-		// Update button row
-		updateRow := adw.NewActionRow()
-		updateRow.SetTitle("Update Homebrew")
-		updateRow.SetSubtitle("Update Homebrew itself and all formulae definitions")
-
-		updateBtn := gtk.NewButtonWithLabel("Update")
-		updateBtn.SetValign(gtk.AlignCenterValue)
-		updateBtn.AddCssClass("suggested-action")
-		updateClickedCb := func(btn gtk.Button) {
-			uh.onUpdateHomebrewClicked(updateBtn)
-		}
-		updateBtn.ConnectClicked(&updateClickedCb)
-
-		updateRow.AddSuffix(&updateBtn.Widget)
-		group.Add(&updateRow.Widget)
-
-		// Outdated packages expander
-		uh.outdatedExpander = adw.NewExpanderRow()
-		uh.outdatedExpander.SetTitle("Outdated Packages")
-		uh.outdatedExpander.SetSubtitle("Loading...")
-		group.Add(&uh.outdatedExpander.Widget)
-
-		page.Add(group)
-
-		// Load outdated packages asynchronously
-		go uh.loadOutdatedPackages()
-	}
 }
 
 // buildApplicationsPage builds the Applications page content
@@ -698,392 +559,6 @@ func (uh *UserHome) openURL(url string) {
 	}()
 }
 
-// onNBCCheckUpdateClicked checks if an NBC system update is available
-func (uh *UserHome) onNBCCheckUpdateClicked() {
-	if uh.nbcCheckRow != nil {
-		uh.nbcCheckRow.SetSubtitle("Checking for updates...")
-	}
-	if uh.nbcUpdateBtn != nil {
-		uh.nbcUpdateBtn.SetSensitive(false)
-	}
-	if uh.nbcDownloadBtn != nil {
-		uh.nbcDownloadBtn.SetSensitive(false)
-	}
-
-	go uh.checkNBCUpdateAvailability()
-}
-
-// checkNBCUpdateAvailability checks for NBC updates and updates the UI accordingly
-func (uh *UserHome) checkNBCUpdateAvailability() {
-	ctx, cancel := nbc.DefaultContext()
-	defer cancel()
-
-	result, err := nbc.CheckUpdate(ctx)
-	if err != nil {
-		uh.updateCountMu.Lock()
-		uh.nbcUpdateCount = 0
-		uh.updateCountMu.Unlock()
-		uh.updateBadgeCount()
-
-		async.RunOnMain(func() {
-			if uh.nbcCheckRow != nil {
-				uh.nbcCheckRow.SetSubtitle(fmt.Sprintf("Error: %v", err))
-			}
-			if uh.nbcUpdateExpander != nil {
-				uh.nbcUpdateExpander.SetSubtitle("Failed to check for updates")
-			}
-			if uh.nbcUpdateBtn != nil {
-				uh.nbcUpdateBtn.SetSensitive(false)
-			}
-			if uh.nbcDownloadBtn != nil {
-				uh.nbcDownloadBtn.SetSensitive(false)
-			}
-		})
-		return
-	}
-
-	// Update the badge count
-	if result.UpdateNeeded {
-		uh.updateCountMu.Lock()
-		uh.nbcUpdateCount = 1
-		uh.updateCountMu.Unlock()
-	} else {
-		uh.updateCountMu.Lock()
-		uh.nbcUpdateCount = 0
-		uh.updateCountMu.Unlock()
-	}
-	uh.updateBadgeCount()
-
-	async.RunOnMain(func() {
-		if result.UpdateNeeded {
-			if uh.nbcCheckRow != nil {
-				digest := result.NewDigest
-				if len(digest) > 19 {
-					digest = digest[:19] + "..."
-				}
-				uh.nbcCheckRow.SetSubtitle(fmt.Sprintf("Update available: %s", digest))
-			}
-			if uh.nbcUpdateExpander != nil {
-				uh.nbcUpdateExpander.SetSubtitle("Update available - click to install")
-			}
-			if uh.nbcUpdateBtn != nil {
-				uh.nbcUpdateBtn.SetSensitive(true)
-			}
-			if uh.nbcDownloadBtn != nil {
-				uh.nbcDownloadBtn.SetSensitive(true)
-			}
-		} else {
-			if uh.nbcCheckRow != nil {
-				uh.nbcCheckRow.SetSubtitle("System is up to date")
-			}
-			if uh.nbcUpdateExpander != nil {
-				uh.nbcUpdateExpander.SetSubtitle("No updates available")
-			}
-			if uh.nbcUpdateBtn != nil {
-				uh.nbcUpdateBtn.SetSensitive(false)
-			}
-			if uh.nbcDownloadBtn != nil {
-				uh.nbcDownloadBtn.SetSensitive(false)
-			}
-		}
-	})
-}
-
-// onNBCUpdateClicked initiates an NBC system update with progress display
-func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Button) {
-	// Disable button and expand to show progress
-	button.SetSensitive(false)
-	button.SetLabel("Updating...")
-	expander.SetExpanded(true)
-	expander.SetSubtitle("Starting update...")
-
-	// Clear any existing progress rows
-	// Note: GTK doesn't have a direct "remove all children" for ExpanderRow,
-	// so we'll just add new rows as progress updates come in
-
-	// Create a progress bar row
-	progressRow := adw.NewActionRow()
-	progressRow.SetTitle("Progress")
-	progressRow.SetSubtitle("Initializing...")
-
-	progressBar := gtk.NewProgressBar()
-	progressBar.SetHexpand(true)
-	progressBar.SetValign(gtk.AlignCenterValue)
-	progressBar.SetFraction(0)
-	progressRow.AddSuffix(&progressBar.Widget)
-	expander.AddRow(&progressRow.Widget)
-
-	// Create a log expander for detailed messages
-	logExpander := adw.NewExpanderRow()
-	logExpander.SetTitle("Details")
-	logExpander.SetSubtitle("View detailed progress messages")
-	expander.AddRow(&logExpander.Widget)
-
-	go func() {
-		ctx, cancel := nbc.DefaultContext()
-		defer cancel()
-
-		progressCh := make(chan nbc.ProgressEvent)
-
-		// Start processing progress events in a separate goroutine
-		var updateErr error
-		var wg sync.WaitGroup
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			updateErr = nbc.Update(ctx, nbc.UpdateOptions{Auto: true}, progressCh)
-		}()
-
-		// Process progress events
-		for event := range progressCh {
-			evt := event // capture for closure
-			async.RunOnMain(func() {
-				switch evt.Type {
-				case nbc.EventTypeStep:
-					// Update main progress
-					progress := float64(evt.Step) / float64(evt.TotalSteps)
-					progressBar.SetFraction(progress)
-					progressRow.SetSubtitle(fmt.Sprintf("Step %d/%d: %s", evt.Step, evt.TotalSteps, evt.StepName))
-					expander.SetSubtitle(fmt.Sprintf("[%d/%d] %s", evt.Step, evt.TotalSteps, evt.StepName))
-
-				case nbc.EventTypeProgress:
-					// Update progress bar with percentage
-					progressBar.SetFraction(float64(evt.Percent) / 100.0)
-					if evt.Message != "" {
-						progressRow.SetSubtitle(fmt.Sprintf("%d%% - %s", evt.Percent, evt.Message))
-					}
-
-				case nbc.EventTypeMessage:
-					// Add message to log
-					msgRow := adw.NewActionRow()
-					msgRow.SetTitle(evt.Message)
-					msgRow.SetSubtitle(time.Now().Format("15:04:05"))
-					logExpander.AddRow(&msgRow.Widget)
-
-				case nbc.EventTypeWarning:
-					// Add warning to log with icon
-					warnRow := adw.NewActionRow()
-					warnRow.SetTitle(evt.Message)
-					warnRow.SetSubtitle("Warning")
-					warnIcon := gtk.NewImageFromIconName("dialog-warning-symbolic")
-					warnRow.AddPrefix(&warnIcon.Widget)
-					logExpander.AddRow(&warnRow.Widget)
-
-				case nbc.EventTypeError:
-					// Add error to log with icon
-					errRow := adw.NewActionRow()
-					errRow.SetTitle(evt.Message)
-					errRow.SetSubtitle("Error")
-					errIcon := gtk.NewImageFromIconName("dialog-error-symbolic")
-					errRow.AddPrefix(&errIcon.Widget)
-					logExpander.AddRow(&errRow.Widget)
-					logExpander.SetExpanded(true)
-
-				case nbc.EventTypeComplete:
-					// Update with success
-					progressBar.SetFraction(1.0)
-					progressRow.SetSubtitle("Complete")
-					expander.SetSubtitle("Update complete - please reboot")
-
-					// Add completion message
-					completeRow := adw.NewActionRow()
-					completeRow.SetTitle(evt.Message)
-					completeRow.SetSubtitle("Complete")
-					completeIcon := gtk.NewImageFromIconName("object-select-symbolic")
-					completeRow.AddPrefix(&completeIcon.Widget)
-					logExpander.AddRow(&completeRow.Widget)
-				}
-			})
-		}
-
-		// Wait for update to finish
-		wg.Wait()
-
-		// Handle final result
-		async.RunOnMain(func() {
-			button.SetSensitive(true)
-			button.SetLabel("Update")
-
-			if updateErr != nil {
-				expander.SetSubtitle(fmt.Sprintf("Update failed: %v", updateErr))
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", updateErr))
-			} else {
-				uh.toastAdder.ShowToast("System update complete! Please reboot to apply changes.")
-			}
-		})
-	}()
-}
-
-// onNBCDownloadClicked initiates an NBC system update download with progress display
-func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.Button) {
-	// Disable buttons and expand to show progress
-	button.SetSensitive(false)
-	button.SetLabel("Downloading...")
-	if uh.nbcUpdateBtn != nil {
-		uh.nbcUpdateBtn.SetSensitive(false)
-	}
-	expander.SetExpanded(true)
-	expander.SetSubtitle("Starting download...")
-
-	// Create a progress bar row
-	progressRow := adw.NewActionRow()
-	progressRow.SetTitle("Progress")
-	progressRow.SetSubtitle("Initializing...")
-
-	progressBar := gtk.NewProgressBar()
-	progressBar.SetHexpand(true)
-	progressBar.SetValign(gtk.AlignCenterValue)
-	progressBar.SetFraction(0)
-	progressRow.AddSuffix(&progressBar.Widget)
-	expander.AddRow(&progressRow.Widget)
-
-	// Create a log expander for detailed messages
-	logExpander := adw.NewExpanderRow()
-	logExpander.SetTitle("Details")
-	logExpander.SetSubtitle("View detailed progress messages")
-	expander.AddRow(&logExpander.Widget)
-
-	go func() {
-		ctx, cancel := nbc.DefaultContext()
-		defer cancel()
-
-		progressCh := make(chan nbc.ProgressEvent)
-
-		// Start processing progress events in a separate goroutine
-		var downloadErr error
-		var wg sync.WaitGroup
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			downloadErr = nbc.Download(ctx, nbc.DownloadOptions{ForUpdate: true}, progressCh)
-		}()
-
-		// Process progress events
-		for event := range progressCh {
-			evt := event // capture for closure
-			async.RunOnMain(func() {
-				switch evt.Type {
-				case nbc.EventTypeStep:
-					// Update main progress
-					progress := float64(evt.Step) / float64(evt.TotalSteps)
-					progressBar.SetFraction(progress)
-					progressRow.SetSubtitle(fmt.Sprintf("Step %d/%d: %s", evt.Step, evt.TotalSteps, evt.StepName))
-					expander.SetSubtitle(fmt.Sprintf("[%d/%d] %s", evt.Step, evt.TotalSteps, evt.StepName))
-
-				case nbc.EventTypeProgress:
-					// Update progress bar with percentage
-					progressBar.SetFraction(float64(evt.Percent) / 100.0)
-					if evt.Message != "" {
-						progressRow.SetSubtitle(fmt.Sprintf("%d%% - %s", evt.Percent, evt.Message))
-					}
-
-				case nbc.EventTypeMessage:
-					// Add message to log
-					msgRow := adw.NewActionRow()
-					msgRow.SetTitle(evt.Message)
-					msgRow.SetSubtitle(time.Now().Format("15:04:05"))
-					logExpander.AddRow(&msgRow.Widget)
-
-				case nbc.EventTypeWarning:
-					// Add warning to log with icon
-					warnRow := adw.NewActionRow()
-					warnRow.SetTitle(evt.Message)
-					warnRow.SetSubtitle("Warning")
-					warnIcon := gtk.NewImageFromIconName("dialog-warning-symbolic")
-					warnRow.AddPrefix(&warnIcon.Widget)
-					logExpander.AddRow(&warnRow.Widget)
-
-				case nbc.EventTypeError:
-					// Add error to log with icon
-					errRow := adw.NewActionRow()
-					errRow.SetTitle(evt.Message)
-					errRow.SetSubtitle("Error")
-					errIcon := gtk.NewImageFromIconName("dialog-error-symbolic")
-					errRow.AddPrefix(&errIcon.Widget)
-					logExpander.AddRow(&errRow.Widget)
-					logExpander.SetExpanded(true)
-
-				case nbc.EventTypeComplete:
-					// Update with success
-					progressBar.SetFraction(1.0)
-					progressRow.SetSubtitle("Complete")
-					expander.SetSubtitle("Download complete - ready to install")
-
-					// Add completion message
-					completeRow := adw.NewActionRow()
-					completeRow.SetTitle(evt.Message)
-					completeRow.SetSubtitle("Complete")
-					completeIcon := gtk.NewImageFromIconName("object-select-symbolic")
-					completeRow.AddPrefix(&completeIcon.Widget)
-					logExpander.AddRow(&completeRow.Widget)
-				}
-			})
-		}
-
-		// Wait for download to finish
-		wg.Wait()
-
-		// Handle final result
-		async.RunOnMain(func() {
-			button.SetSensitive(true)
-			button.SetLabel("Download")
-
-			if downloadErr != nil {
-				expander.SetSubtitle(fmt.Sprintf("Download failed: %v", downloadErr))
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Download failed: %v", downloadErr))
-				if uh.nbcUpdateBtn != nil {
-					uh.nbcUpdateBtn.SetSensitive(true)
-				}
-			} else {
-				uh.toastAdder.ShowToast("Update downloaded! Click Update to install.")
-				// Keep update button enabled so user can install the downloaded update
-				if uh.nbcUpdateBtn != nil {
-					uh.nbcUpdateBtn.SetSensitive(true)
-				}
-			}
-		})
-	}()
-}
-
-func (uh *UserHome) onUpdateHomebrewClicked(button *gtk.Button) {
-	// Disable button and show working state
-	button.SetSensitive(false)
-	button.SetLabel("Updating...")
-
-	// Start tracked operation (visible in operations popover)
-	op := operations.Start("Update Homebrew", operations.CategoryUpdate, false)
-
-	// Wire retry capability - enables Retry button in operations popover
-	op.RetryFunc = func() {
-		uh.onUpdateHomebrewClicked(button)
-	}
-
-	go func() {
-		err := pm.HomebrewUpdate()
-
-		async.RunOnMain(func() {
-			// Restore button state
-			button.SetSensitive(true)
-			button.SetLabel("Update")
-
-			// Complete the tracked operation
-			op.Complete(err)
-
-			if err != nil {
-				userErr := async.NewUserError("Couldn't update Homebrew", err)
-				uh.toastAdder.ShowErrorToast(userErr.FormatForUser())
-				log.Printf("Homebrew update error details: %v", err)
-				return
-			}
-			uh.toastAdder.ShowToast("Homebrew updated successfully")
-			// Refresh outdated packages list
-			go uh.loadOutdatedPackages()
-		})
-	}()
-}
-
 func (uh *UserHome) onBrewBundleDumpClicked() {
 	go func() {
 		homeDir, _ := os.UserHomeDir()
@@ -1098,69 +573,6 @@ func (uh *UserHome) onBrewBundleDumpClicked() {
 			uh.toastAdder.ShowToast(fmt.Sprintf("Brewfile saved to %s", path))
 		})
 	}()
-}
-
-func (uh *UserHome) loadOutdatedPackages() {
-	if !pm.HomebrewIsInstalled() {
-		uh.updateCountMu.Lock()
-		uh.brewUpdateCount = 0
-		uh.updateCountMu.Unlock()
-		uh.updateBadgeCount()
-
-		async.RunOnMain(func() {
-			uh.outdatedExpander.SetSubtitle("Homebrew not installed")
-		})
-		return
-	}
-
-	packages, err := pm.ListHomebrewOutdated()
-	if err != nil {
-		uh.updateCountMu.Lock()
-		uh.brewUpdateCount = 0
-		uh.updateCountMu.Unlock()
-		uh.updateBadgeCount()
-
-		async.RunOnMain(func() {
-			uh.outdatedExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
-		})
-		return
-	}
-
-	// Update the badge count
-	uh.updateCountMu.Lock()
-	uh.brewUpdateCount = len(packages)
-	uh.updateCountMu.Unlock()
-	uh.updateBadgeCount()
-
-	async.RunOnMain(func() {
-		uh.outdatedExpander.SetSubtitle(fmt.Sprintf("%d packages available", len(packages)))
-		for _, pkg := range packages {
-			row := adw.NewActionRow()
-			row.SetTitle(pkg.Name)
-			row.SetSubtitle(pkg.Version)
-
-			upgradeBtn := gtk.NewButtonWithLabel("Upgrade")
-			upgradeBtn.SetValign(gtk.AlignCenterValue)
-			pkgName := pkg.Name
-			clickedCb := func(btn gtk.Button) {
-				go func() {
-					if err := pm.HomebrewUpgrade(pkgName); err != nil {
-						async.RunOnMain(func() {
-							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Upgrade failed: %v", err))
-						})
-						return
-					}
-					async.RunOnMain(func() {
-						uh.toastAdder.ShowToast(fmt.Sprintf("%s upgraded", pkgName))
-					})
-				}()
-			}
-			upgradeBtn.ConnectClicked(&clickedCb)
-
-			row.AddSuffix(&upgradeBtn.Widget)
-			uh.outdatedExpander.AddRow(&row.Widget)
-		}
-	})
 }
 
 func (uh *UserHome) loadHomebrewPackages() {
@@ -1448,111 +860,6 @@ func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
 		// Reload the snap list to update the UI
 		uh.loadSnapApplications()
 	}()
-}
-
-func (uh *UserHome) loadFlatpakUpdates() {
-	if !pm.FlatpakIsInstalled() {
-		uh.updateCountMu.Lock()
-		uh.flatpakUpdateCount = 0
-		uh.updateCountMu.Unlock()
-		uh.updateBadgeCount()
-
-		async.RunOnMain(func() {
-			if uh.flatpakUpdatesExpander != nil {
-				uh.flatpakUpdatesExpander.SetSubtitle("Flatpak not installed")
-			}
-		})
-		return
-	}
-
-	// Get updates from pm library (automatically handles user/system distinction)
-	allUpdates, err := pm.ListFlatpakUpdates()
-	if err != nil {
-		log.Printf("Error loading flatpak updates: %v", err)
-		uh.updateCountMu.Lock()
-		uh.flatpakUpdateCount = 0
-		uh.updateCountMu.Unlock()
-		uh.updateBadgeCount()
-
-		async.RunOnMain(func() {
-			if uh.flatpakUpdatesExpander != nil {
-				uh.flatpakUpdatesExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
-			}
-		})
-		return
-	}
-
-	// Update the badge count
-	uh.updateCountMu.Lock()
-	uh.flatpakUpdateCount = len(allUpdates)
-	uh.updateCountMu.Unlock()
-	uh.updateBadgeCount()
-
-	async.RunOnMain(func() {
-		if uh.flatpakUpdatesExpander == nil {
-			return
-		}
-
-		// Clear existing rows
-		for _, row := range uh.flatpakUpdateRows {
-			uh.flatpakUpdatesExpander.Remove(&row.Widget)
-		}
-		uh.flatpakUpdateRows = nil
-
-		if len(allUpdates) == 0 {
-			uh.flatpakUpdatesExpander.SetSubtitle("All applications are up to date")
-			uh.flatpakUpdatesExpander.SetEnableExpansion(false)
-			return
-		}
-
-		uh.flatpakUpdatesExpander.SetSubtitle(fmt.Sprintf("%d updates available", len(allUpdates)))
-		uh.flatpakUpdatesExpander.SetEnableExpansion(true)
-
-		for _, update := range allUpdates {
-			row := adw.NewActionRow()
-			row.SetTitle(update.ID)
-			subtitle := update.ID
-			if update.AvailableVer != "" {
-				subtitle = fmt.Sprintf("%s → %s", update.CurrentVer, update.AvailableVer)
-			}
-			if !update.IsUser {
-				subtitle += " (system)"
-			}
-			row.SetSubtitle(subtitle)
-
-			// Add update button
-			updateBtn := gtk.NewButtonWithLabel("Update")
-			updateBtn.SetValign(gtk.AlignCenterValue)
-			updateBtn.AddCssClass("suggested-action")
-
-			appID := update.ID
-			isUser := update.IsUser
-			clickedCb := func(btn gtk.Button) {
-				btn.SetSensitive(false)
-				btn.SetLabel("Updating...")
-				go func() {
-					if err := pm.FlatpakUpdate(appID, isUser); err != nil {
-						async.RunOnMain(func() {
-							btn.SetSensitive(true)
-							btn.SetLabel("Update")
-							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
-						})
-						return
-					}
-					async.RunOnMain(func() {
-						uh.toastAdder.ShowToast(fmt.Sprintf("%s updated", appID))
-						// Refresh the updates list
-						go uh.loadFlatpakUpdates()
-					})
-				}()
-			}
-			updateBtn.ConnectClicked(&clickedCb)
-
-			row.AddSuffix(&updateBtn.Widget)
-			uh.flatpakUpdatesExpander.AddRow(&row.Widget)
-			uh.flatpakUpdateRows = append(uh.flatpakUpdateRows, row)
-		}
-	})
 }
 
 func (uh *UserHome) onHomebrewSearch() {
