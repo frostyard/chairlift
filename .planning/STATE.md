@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-26)
 
 **Core value:** Less technical users can confidently manage their immutable Linux desktop without needing to understand the underlying CLI tools or immutable filesystem concepts.
-**Current focus:** Phase 7 Complete - Ready for Phase 8
+**Current focus:** Phase 9 - Testing & Library Extraction
 
 ## Current Position
 
-Phase: 7 of 9 (Complex Pages) - COMPLETE
-Plan: 5 of 5 in current phase
-Status: All plans complete, user verified
-Last activity: 2026-01-28 - Completed Phase 7 with integration fixes
+Phase: 9 of 9 (Testing & Library)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-01-28 - Completed 09-01-PLAN.md (Unit Tests for Logic Layers)
 
-Progress: [███████████████] ~93%
+Progress: [████████████████] ~95%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 27
+- Total plans completed: 28
 - Average duration: 2.6 min
-- Total execution time: 1.2 hours
+- Total execution time: 1.25 hours
 
 **By Phase:**
 
@@ -35,10 +35,11 @@ Progress: [███████████████] ~93%
 | 6. Medium Pages | 3/3 | 12 min | 4 min |
 | 6.1 Remove instex | 1/1 | 2 min | 2 min |
 | 7. Complex Pages | 5/5 | 35 min | 7 min |
+| 9. Testing & Library | 1/3 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 5 min, 5 min, 5 min, 15 min
-- Trend: Consistent (verification plan included debugging)
+- Last 5 plans: 5 min, 5 min, 15 min, 3 min
+- Trend: Consistent
 
 *Updated after each plan completion*
 
@@ -102,6 +103,7 @@ Recent decisions affecting current work:
 - Remove PM progress bottom sheet - operations popover is unified display (07-04)
 - Rename userhome.go to shell.go to reflect composition role (07-04)
 - Destroy() implemented but window.go lacks close handler - noted for future (07-04)
+- Test pure logic functions only, skip external service calls (09-01)
 
 ### Pending Todos
 
@@ -118,8 +120,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Phase 7 Complete - All pages extracted, shell.go at 202 lines
-Resume with: Phase 8 (Accessibility) or Phase 9 (Testing & Library)
+Stopped at: Completed 09-01-PLAN.md (Unit Tests for Logic Layers)
+Resume with: 09-02 (Operations Tests) or 09-03 (Async/Widgets Tests)
 
 ---
 *State initialized: 2026-01-26*
