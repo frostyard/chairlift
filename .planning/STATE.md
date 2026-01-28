@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 7 of 9 (Complex Pages)
-Plan: 2 of 4 in current phase
-Status: In progress
-Last activity: 2026-01-28 - Completed 07-02-PLAN.md
+Plan: 1 of 4 in current phase
+Status: Plan 01 complete
+Last activity: 2026-01-28 - Completed 07-01-PLAN.md
 
-Progress: [█████████████░░] ~85%
+Progress: [█████████████░░] ~84%
 
 ## Performance Metrics
 
@@ -34,10 +34,10 @@ Progress: [█████████████░░] ~85%
 | 5. Feedback Polish | 2/2 | 4 min | 2 min |
 | 6. Medium Pages | 3/3 | 12 min | 4 min |
 | 6.1 Remove instex | 1/1 | 2 min | 2 min |
-| 7. Complex Pages | 2/4 | 8 min | 4 min |
+| 7. Complex Pages | 1/4 | 5 min | 5 min |
 
 **Recent Trend:**
-- Last 5 plans: 2 min, 3 min, 6 min, 2 min, 4 min
+- Last 5 plans: 3 min, 6 min, 2 min, 2 min, 5 min
 - Trend: Variable (mix of sizes)
 
 *Updated after each plan completion*
@@ -93,10 +93,8 @@ Recent decisions affecting current work:
 - Extensions page follows established page package pattern (06-03)
 - Use p.ctx for Discover/Install calls to maintain goroutine lifecycle (06.1-01)
 - IsDiscoverAvailable checks IsAvailable since updex SDK needs systemd-sysext (06.1-01)
-- Applications page uses AdwNavigationSplitView for sidebar layout (07-02)
-- PM categories defined as typed constants in logic layer (07-02)
-- Sidebar shows 'Not installed' indicator for unavailable PMs (07-02)
-- Content area uses Stack with placeholder pages (real content in Plan 03) (07-02)
+- Badge count callback via onBadgeUpdate func(int) for parent notification (07-01)
+- Updates page logic layer has no GTK dependencies for testability (07-01)
 
 ### Pending Todos
 
@@ -113,8 +111,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 07-02-PLAN.md (Applications page foundation)
-Resume with: 07-03-PLAN.md for Applications page content migration
+Stopped at: Completed 07-01-PLAN.md (Updates page extraction)
+Resume with: 07-02-PLAN.md for Applications page foundation
 
 ---
 *State initialized: 2026-01-26*
