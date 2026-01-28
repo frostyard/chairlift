@@ -32,7 +32,10 @@ func main() {
 func activate(app *adw.Application) {
 	window := adw.NewApplicationWindow(&app.Application)
 	window.SetTitle("adwutil Basic Example")
-	window.SetDefaultSize(400, 300)
+	window.SetDefaultSize(400, 500)
+
+	// Create toast overlay for notifications
+	toastOverlay := adw.NewToastOverlay()
 
 	// Create main content
 	box := gtk.NewBox(gtk.OrientationVerticalValue, 12)
@@ -131,15 +134,36 @@ func activate(app *adw.Application) {
 
 	box.Append(&emptyGroup.Widget)
 
+	// Warning actions example - demonstrates NewButtonRowWarning with toast
+	warningGroup := adw.NewPreferencesGroup()
+	warningGroup.SetTitle("Warning Actions")
+	warningGroup.SetDescription("Demonstrates destructive action pattern with toast feedback")
+
+	warningRow := adwutil.NewButtonRowWarning(
+		"Clear Cache",
+		"Remove temporary files (this action cannot be undone)",
+		"Clear",
+		func() {
+			toast := adw.NewToast("Cache cleared successfully")
+			toastOverlay.AddToast(toast)
+		},
+	)
+	warningGroup.Add(&warningRow.Widget)
+
+	box.Append(&warningGroup.Widget)
+
 	// Wrap in scrolled window
 	scrolled := gtk.NewScrolledWindow()
 	scrolled.SetChild(&box.Widget)
+
+	// Set scrolled window as toast overlay child
+	toastOverlay.SetChild(&scrolled.Widget)
 
 	// Wrap in toolbar view
 	toolbarView := adw.NewToolbarView()
 	headerBar := adw.NewHeaderBar()
 	toolbarView.AddTopBar(&headerBar.Widget)
-	toolbarView.SetContent(&scrolled.Widget)
+	toolbarView.SetContent(&toastOverlay.Widget)
 
 	window.SetContent(&toolbarView.Widget)
 	window.Present()
