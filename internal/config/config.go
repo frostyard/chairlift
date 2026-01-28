@@ -93,8 +93,9 @@ func loadFromPath(path string) (*Config, error) {
 func defaultConfig() *Config {
 	return &Config{
 		SystemPage: PageConfig{
-			"system_info_group": GroupConfig{Enabled: true},
-			"nbc_status_group":  GroupConfig{Enabled: true},
+			"system_info_group":     GroupConfig{Enabled: true},
+			"nbc_status_group":      GroupConfig{Enabled: true},
+			"debian_packages_group": GroupConfig{Enabled: true},
 			"health_group": GroupConfig{
 				Enabled: true,
 				AppID:   "io.missioncenter.MissionCenter",

@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -73,4 +74,77 @@ func TestIsNBCAvailable(t *testing.T) {
 	// On most systems /run/nbc-booted won't exist, so expect false
 	// But we don't assert this since the test should work on any system
 	t.Logf("IsNBCAvailable() returned %v", result)
+}
+
+func TestGetOSReleaseValue(t *testing.T) {
+	entries := []OSReleaseEntry{
+		{Key: "ID", Value: "debian"},
+		{Key: "IMAGE_ID", Value: "snowloaded"},
+		{Key: "IMAGE_VERSION", Value: "20260128190159"},
+	}
+
+	tests := []struct {
+		key      string
+		expected string
+	}{
+		{"ID", "debian"},
+		{"IMAGE_ID", "snowloaded"},
+		{"IMAGE_VERSION", "20260128190159"},
+		{"NONEXISTENT", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.key, func(t *testing.T) {
+			result := GetOSReleaseValue(entries, tc.key)
+			if result != tc.expected {
+				t.Errorf("GetOSReleaseValue(entries, %q) = %q, want %q", tc.key, result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGetOSReleaseValue_EmptyEntries(t *testing.T) {
+	result := GetOSReleaseValue(nil, "ID")
+	if result != "" {
+		t.Errorf("GetOSReleaseValue(nil, \"ID\") = %q, want empty string", result)
+	}
+
+	result = GetOSReleaseValue([]OSReleaseEntry{}, "ID")
+	if result != "" {
+		t.Errorf("GetOSReleaseValue([], \"ID\") = %q, want empty string", result)
+	}
+}
+
+func TestFetchManifest_EmptyParams(t *testing.T) {
+	tests := []struct {
+		name         string
+		imageID      string
+		imageVersion string
+	}{
+		{"empty image ID", "", "20260128190159"},
+		{"empty image version", "snowloaded", ""},
+		{"both empty", "", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest, err := FetchManifest(context.Background(), tc.imageID, tc.imageVersion)
+			if err != nil {
+				t.Errorf("FetchManifest() returned error: %v", err)
+			}
+			if manifest != nil {
+				t.Error("FetchManifest() returned non-nil manifest for empty params")
+			}
+		})
+	}
+}
+
+func TestFetchManifest_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	_, err := FetchManifest(ctx, "snowloaded", "20260128190159")
+	if err == nil {
+		t.Error("FetchManifest() should return error for cancelled context")
+	}
 }

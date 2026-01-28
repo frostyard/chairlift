@@ -74,6 +74,7 @@ func (p *Page) buildUI() {
 	// Build groups based on config
 	p.buildSystemInfoGroup()
 	p.buildNBCStatusGroup()
+	p.buildDebianPackagesGroup()
 	p.buildSystemHealthGroup()
 }
 
@@ -247,4 +248,76 @@ func (p *Page) buildSystemHealthGroup() {
 
 	group.Add(&row.Widget)
 	p.prefsPage.Add(group)
+}
+
+func (p *Page) buildDebianPackagesGroup() {
+	if !p.config.IsGroupEnabled("system_page", "debian_packages_group") {
+		return
+	}
+
+	// Get IMAGE_ID and IMAGE_VERSION from os-release
+	entries, err := ParseOSRelease()
+	if err != nil {
+		return
+	}
+
+	imageID := GetOSReleaseValue(entries, "IMAGE_ID")
+	imageVersion := GetOSReleaseValue(entries, "IMAGE_VERSION")
+	if imageID == "" || imageVersion == "" {
+		return
+	}
+
+	group := adw.NewPreferencesGroup()
+	group.SetTitle("Debian Packages")
+	group.SetDescription("Base system packages from the image manifest")
+
+	expander := widgets.NewAsyncExpanderRow("Packages", "Loading...")
+
+	group.Add(&expander.Expander.Widget)
+	p.prefsPage.Add(group)
+
+	// Start async load
+	p.loadDebianPackages(expander, imageID, imageVersion)
+}
+
+func (p *Page) loadDebianPackages(expander *widgets.AsyncExpanderRow, imageID, imageVersion string) {
+	expander.StartLoading("Fetching package manifest")
+
+	go func() {
+		manifest, err := FetchManifest(p.ctx, imageID, imageVersion)
+
+		// Check if page was destroyed while we were fetching
+		select {
+		case <-p.ctx.Done():
+			return // Page destroyed, don't update UI
+		default:
+		}
+
+		async.RunOnMain(func() {
+			// Double-check before UI update
+			if p.ctx.Err() != nil {
+				return // Page destroyed
+			}
+
+			if err != nil {
+				expander.SetError(fmt.Sprintf("Failed to load packages: %v", err))
+				return
+			}
+
+			if manifest == nil {
+				expander.SetError("Package manifest not found")
+				return
+			}
+
+			// Set title to image name from config
+			expander.Expander.SetTitle(manifest.Config.Name)
+			expander.SetContent(fmt.Sprintf("%d packages", len(manifest.Packages)))
+
+			// Add package rows
+			for _, pkg := range manifest.Packages {
+				row := widgets.NewInfoRow(pkg.Name, pkg.Version)
+				expander.Expander.AddRow(&row.Widget)
+			}
+		})
+	}()
 }
