@@ -97,6 +97,8 @@ func (w *Window) buildUI() {
 	// Create content box for banner + main content
 	contentBox := gtk.NewBox(gtk.OrientationVerticalValue, 0)
 	contentBox.Append(&w.dryRunBanner.Widget)
+	// splitView must expand to fill available vertical space
+	w.splitView.SetVexpand(true)
 	contentBox.Append(&w.splitView.Widget)
 
 	// Create toast overlay for notifications

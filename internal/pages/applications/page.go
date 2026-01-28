@@ -81,6 +81,9 @@ func (p *Page) Destroy() {
 func (p *Page) buildUI() {
 	p.toolbarView = adw.NewToolbarView()
 
+	// Note: No header bar on outer toolbarView since NavigationSplitView
+	// manages its own headers for sidebar and content areas.
+
 	// Create NavigationSplitView for sidebar layout
 	p.splitView = adw.NewNavigationSplitView()
 	p.splitView.SetSidebarWidthFraction(0.25)
