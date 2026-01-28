@@ -2,122 +2,130 @@
 phase: 07-complex-pages
 plan: 05
 subsystem: ui
-tags: [gtk4, puregotk, integration, verification, lint]
+tags: [gtk4, puregotk, integration, verification]
 
 # Dependency graph
 requires:
   - phase: 07-01
     provides: Updates page extracted to package
   - phase: 07-02
-    provides: Applications page with NavigationSplitView sidebar
+    provides: Applications page foundation
   - phase: 07-03
-    provides: Applications page content (all PM sections)
+    provides: Applications page content
   - phase: 07-04
-    provides: Shell.go reduced to 194 lines
+    provides: Shell.go reduced
 provides:
-  - All lint issues fixed across codebase
+  - All integration issues fixed
   - Build/lint/tests verified passing
-  - Shell confirmed under 300 lines (194 actual)
-affects: [08-testing, 09-polish]
+  - Shell confirmed under 300 lines (202 actual)
+  - Full functionality verified by user
+affects: [08-accessibility, 09-testing]
 
 # Tech tracking
 tech-stack:
   added: []
-  patterns: []
+  patterns:
+    - Callback registry to prevent GC of signal handlers
+    - gio open for URL handling (better portal support)
 
 key-files:
   created: []
   modified:
     - internal/pages/system/logic.go
     - internal/pages/extensions/logic_test.go
+    - internal/window/window.go
+    - internal/pages/applications/page.go
+    - internal/widgets/rows.go
+    - internal/views/shell.go
 
 key-decisions:
-  - "Handle file.Close() error with deferred closure to satisfy errcheck"
-  - "Use t.Fatal instead of t.Error for nil check to prevent nil dereference warning"
+  - "Add SetVexpand(true) to splitView after BottomSheet removal"
+  - "Simplify Applications page to single view (no internal navigation)"
+  - "Use gio open for URLs (better flatpak/snap portal support)"
+  - "Add callback registry to prevent GC of GTK signal handlers"
 
-patterns-established: []
+patterns-established:
+  - Signal callback registry in widgets package
 
 # Metrics
-duration: 2min
+duration: 15min
 completed: 2026-01-28
 ---
 
-# Phase 07 Plan 05: Final Integration Summary
+# Phase 07 Plan 05: Integration Verification Summary
 
-**Build, lint, and test verification passing with lint fixes for errcheck and staticcheck warnings**
+**All integration issues identified and fixed during user verification**
 
 ## Performance
 
-- **Duration:** 2 min
-- **Started:** 2026-01-28T15:56:38Z
-- **Completed:** 2026-01-28T15:58:XX (awaiting checkpoint)
-- **Tasks:** 2/3 (checkpoint pending)
-- **Files modified:** 2
+- **Duration:** ~15 min (including debugging)
+- **Started:** 2026-01-28
+- **Completed:** 2026-01-28
+- **Tasks:** 3/3 complete
+- **Files modified:** 6
 
 ## Accomplishments
-- Fixed 3 lint issues (1 errcheck, 2 staticcheck)
-- Verified build, lint, and all tests pass
-- Confirmed shell.go at 194 lines (well under 300 target)
-- Application startup verified clean (no errors)
+
+1. Fixed lint issues (errcheck, staticcheck)
+2. Fixed splitView vexpand - 80% blank screen after BottomSheet removal
+3. Fixed Applications page "Loading..." stuck - simplified to single view
+4. Fixed Help page links not working - added callback registry + gio open
+5. Verified all pages working correctly
+6. Shell.go confirmed at 202 lines (target: <300)
 
 ## Task Commits
 
-Each task was committed atomically:
+1. **Task 1: Build and lint** - `5d8233c`
+   - Fixed errcheck and staticcheck warnings
 
-1. **Task 1: Run full build and lint** - `5d8233c` (fix)
-   - Fixed errcheck: file.Close() error not checked in system/logic.go
-   - Fixed staticcheck: nil pointer dereference in extensions/logic_test.go
+2. **Task 2: Integration issues** - `682a45e`, `3a005d4`
+   - `682a45e` - Add vexpand to splitView
+   - `3a005d4` - Fix Applications page, Help links, callback registry
 
-2. **Task 2: Fix any integration issues** - No commit (no issues found)
-   - Application starts successfully
-   - All integration points verified in code review
+3. **Task 3: User verification** - APPROVED
 
-3. **Task 3: User verification** - CHECKPOINT (awaiting user approval)
+## Issues Found and Fixed
 
-## Files Created/Modified
-- `internal/pages/system/logic.go` - Handle file.Close() error properly
-- `internal/pages/extensions/logic_test.go` - Use t.Fatal for nil check
+### 1. Blank Screen (80% covered from bottom)
+- **Cause:** After removing BottomSheet wrapper, splitView lost vexpand behavior
+- **Fix:** Added `w.splitView.SetVexpand(true)` in window.go
 
-## Decisions Made
-- **errcheck handling:** Use `defer func() { _ = file.Close() }()` pattern to explicitly acknowledge the error while keeping defer semantics
-- **staticcheck fix:** Changed `t.Error` to `t.Fatal` so test stops immediately on nil, preventing subsequent nil dereference
+### 2. Applications Page "Loading..." Stuck
+- **Cause:** Internal NavigationSplitView created separate expander instances per category; async loads only updated "All" page expanders
+- **Fix:** Simplified to single PreferencesPage view (removed internal navigation)
 
-## Deviations from Plan
+### 3. Help Links Not Working
+- **Cause:** Signal callbacks being garbage collected before firing
+- **Fix:** Added callback registry in widgets/rows.go to keep callbacks alive
 
-### Auto-fixed Issues
+### 4. URLs Not Opening (VSCode snap environment)
+- **Cause:** xdg-open issues in snap sandbox
+- **Fix:** Changed to `gio open` which handles portals better
 
-**1. [Rule 1 - Bug] Fixed errcheck warning for file.Close()**
-- **Found during:** Task 1 (lint verification)
-- **Issue:** `file.Close()` error not checked in ParseOSRelease
-- **Fix:** Changed to `defer func() { _ = file.Close() }()`
-- **Files modified:** internal/pages/system/logic.go
-- **Verification:** `make lint` passes with 0 issues
-- **Committed in:** 5d8233c
+## Known Issues (Noted as TODO)
 
-**2. [Rule 1 - Bug] Fixed possible nil pointer dereference in test**
-- **Found during:** Task 1 (lint verification)
-- **Issue:** staticcheck SA5011: checking `client == nil` then accessing `client.client`
-- **Fix:** Changed `t.Error` to `t.Fatal` so test stops on nil
-- **Files modified:** internal/pages/extensions/logic_test.go
-- **Verification:** `make lint` passes with 0 issues
-- **Committed in:** 5d8233c
+- GTK markup parsing error: "•" character in operation status text is interpreted as markup
 
----
+## Files Modified
 
-**Total deviations:** 2 auto-fixed (both Rule 1 - Bug fixes for lint warnings)
-**Impact on plan:** Both fixes necessary for lint compliance. No scope creep.
+| File | Changes |
+|------|---------|
+| internal/window/window.go | Added splitView.SetVexpand(true) |
+| internal/pages/applications/page.go | Simplified to single view (removed NavigationSplitView) |
+| internal/widgets/rows.go | Added callback registry for signal handlers |
+| internal/views/shell.go | Use gio open for URLs |
+| internal/pages/system/logic.go | Fixed errcheck warning |
+| internal/pages/extensions/logic_test.go | Fixed staticcheck warning |
 
-## Issues Encountered
-None - lint issues were expected and handled per Task 1 action plan.
+## Phase 7 Complete
 
-## User Setup Required
-None - no external service configuration required.
-
-## Next Phase Readiness
-- All automated verification complete
-- Awaiting user manual verification of application functionality
-- Upon approval, Phase 7 complete and ready for Phase 8 (Testing)
+All success criteria met:
+- [x] Applications page exists in own package
+- [x] Updates page exists in own package
+- [x] shell.go under 300 lines (202 actual)
+- [x] All existing functionality preserved
+- [x] User verification approved
 
 ---
 *Phase: 07-complex-pages*
-*Completed: 2026-01-28 (pending checkpoint approval)*
+*Completed: 2026-01-28*

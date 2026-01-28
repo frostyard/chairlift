@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Simple Pages** - Extract System & Help pages, establish page interface pattern
 - [x] **Phase 5: Feedback Polish** - Empty states, status banners, retry capability
 - [x] **Phase 6: Medium Pages** - Extract Maintenance & Extensions pages, updex library integration
-- [ ] **Phase 7: Complex Pages** - Extract Applications & Updates pages, complete monolith split
+- [x] **Phase 7: Complex Pages** - Extract Applications & Updates pages, complete monolith split
 - [ ] **Phase 8: Accessibility** - Screen reader support, keyboard navigation, widget relationships
 - [ ] **Phase 9: Testing & Library** - Unit/integration tests, pattern documentation, library extraction
 
@@ -153,11 +153,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Extract Updates page with NBC/Flatpak/Homebrew sections
-- [ ] 07-02-PLAN.md — Create Applications page foundation with sidebar navigation
-- [ ] 07-03-PLAN.md — Add Applications page content (Flatpak/Snap/Homebrew sections, search)
-- [ ] 07-04-PLAN.md — Reduce shell and rename userhome.go to shell.go
-- [ ] 07-05-PLAN.md — Integration verification and final fixes
+- [x] 07-01-PLAN.md — Extract Updates page with NBC/Flatpak/Homebrew sections
+- [x] 07-02-PLAN.md — Create Applications page foundation with sidebar navigation
+- [x] 07-03-PLAN.md — Add Applications page content (Flatpak/Snap/Homebrew sections, search)
+- [x] 07-04-PLAN.md — Reduce shell and rename userhome.go to shell.go
+- [x] 07-05-PLAN.md — Integration verification and final fixes
 
 ### Phase 8: Accessibility
 **Goal**: Users with assistive technologies can navigate and operate the full application
@@ -202,7 +202,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Feedback Polish | 2/2 | Complete | 2026-01-27 |
 | 6. Medium Pages | 3/3 | Complete | 2026-01-27 |
 | 6.1 Remove instex | 1/1 | Complete | 2026-01-27 |
-| 7. Complex Pages | 0/5 | Not started | - |
+| 7. Complex Pages | 5/5 | Complete | 2026-01-28 |
 | 8. Accessibility | 0/TBD | Not started | - |
 | 9. Testing & Library | 0/TBD | Not started | - |
 
