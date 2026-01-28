@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-01-26)
 ## Current Position
 
 Phase: 9 of 9 (Testing & Library)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-01-28 - Completed 09-01-PLAN.md (Unit Tests for Logic Layers)
+Last activity: 2026-01-28 - Completed 09-02-PLAN.md (Async & Operations Tests)
 
-Progress: [████████████████] ~95%
+Progress: [████████████████] ~97%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 28
+- Total plans completed: 29
 - Average duration: 2.6 min
-- Total execution time: 1.25 hours
+- Total execution time: 1.3 hours
 
 **By Phase:**
 
@@ -35,10 +35,10 @@ Progress: [████████████████] ~95%
 | 6. Medium Pages | 3/3 | 12 min | 4 min |
 | 6.1 Remove instex | 1/1 | 2 min | 2 min |
 | 7. Complex Pages | 5/5 | 35 min | 7 min |
-| 9. Testing & Library | 1/3 | 3 min | 3 min |
+| 9. Testing & Library | 2/3 | 6 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 5 min, 5 min, 15 min, 3 min
+- Last 5 plans: 5 min, 15 min, 3 min, 3 min
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -104,6 +104,9 @@ Recent decisions affecting current work:
 - Rename userhome.go to shell.go to reflect composition role (07-04)
 - Destroy() implemented but window.go lacks close handler - noted for future (07-04)
 - Test pure logic functions only, skip external service calls (09-01)
+- Use isolated test registries to avoid singleton and async.RunOnMain (09-02)
+- Table-driven tests for format method variations (09-02)
+- Test nil-safety for all public methods (09-02)
 
 ### Pending Todos
 
@@ -120,8 +123,8 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-28
-Stopped at: Completed 09-01-PLAN.md (Unit Tests for Logic Layers)
-Resume with: 09-02 (Operations Tests) or 09-03 (Async/Widgets Tests)
+Stopped at: Completed 09-02-PLAN.md (Async & Operations Tests)
+Resume with: 09-03 (Package Manager Tests)
 
 ---
 *State initialized: 2026-01-26*
