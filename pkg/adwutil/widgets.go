@@ -118,3 +118,64 @@ func NewIconRow(title, subtitle, iconName string) *adw.ActionRow {
 
 	return row
 }
+
+// NewButtonRowWithIcon creates an ActionRow with an icon suffix and button.
+//
+// The icon appears before the button in the suffix area.
+// Visual order: [Title/Subtitle] ... [Icon] [Button]
+//
+// Common icon names:
+//   - "dialog-warning-symbolic": Warning indicator
+//   - "dialog-error-symbolic": Error indicator
+//   - "dialog-information-symbolic": Info indicator
+//
+// Must be called from the GTK main thread.
+func NewButtonRowWithIcon(title, subtitle, buttonLabel, iconName string, onClick func()) *adw.ActionRow {
+	return NewButtonRowWithIconAndClass(title, subtitle, buttonLabel, iconName, "suggested-action", onClick)
+}
+
+// NewButtonRowWithIconAndClass creates an ActionRow with an icon suffix and styled button.
+//
+// The icon appears before the button in the suffix area.
+//
+// Common CSS classes:
+//   - "suggested-action": Blue/accent colored for primary actions
+//   - "destructive-action": Red colored for dangerous actions
+//
+// Must be called from the GTK main thread.
+func NewButtonRowWithIconAndClass(title, subtitle, buttonLabel, iconName, cssClass string, onClick func()) *adw.ActionRow {
+	row := adw.NewActionRow()
+	row.SetTitle(title)
+	row.SetSubtitle(subtitle)
+
+	// Add icon as suffix (appears before button)
+	icon := gtk.NewImageFromIconName(iconName)
+	row.AddSuffix(&icon.Widget)
+
+	// Add button as suffix (appears after icon)
+	btn := gtk.NewButtonWithLabel(buttonLabel)
+	btn.SetValign(gtk.AlignCenterValue)
+	btn.AddCssClass(cssClass)
+
+	cb := func(_ gtk.Button) {
+		onClick()
+	}
+	storeSignalCallback(cb)
+	btn.ConnectClicked(&cb)
+
+	row.AddSuffix(&btn.Widget)
+	return row
+}
+
+// NewButtonRowWarning creates an ActionRow with a warning icon and destructive button.
+//
+// This is a convenience wrapper around [NewButtonRowWithIconAndClass] that:
+//   - Uses "dialog-warning-symbolic" icon
+//   - Uses "destructive-action" button style (red)
+//
+// Use for actions that are potentially dangerous or cannot be undone.
+//
+// Must be called from the GTK main thread.
+func NewButtonRowWarning(title, subtitle, buttonLabel string, onClick func()) *adw.ActionRow {
+	return NewButtonRowWithIconAndClass(title, subtitle, buttonLabel, "dialog-warning-symbolic", "destructive-action", onClick)
+}
