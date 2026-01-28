@@ -183,10 +183,14 @@ Plans:
   3. Extractable patterns are documented with usage examples
   4. Reusable GTK4/Go utilities exist in a separate package (same or separate repo)
   5. Test coverage enables confident future refactoring
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 09-01: TBD
+- [ ] 09-01-PLAN.md — Add unit tests for page logic layers and config parsing
+- [ ] 09-02-PLAN.md — Add unit tests for async/errors and operations registry
+- [ ] 09-03-PLAN.md — Extract async utilities to pkg/adwutil library
+- [ ] 09-04-PLAN.md — Extract widgets and operations to pkg/adwutil library
+- [ ] 09-05-PLAN.md — Add library documentation and example applications
 
 ## Progress
 
@@ -204,8 +208,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6.1 Remove instex | 1/1 | Complete | 2026-01-27 |
 | 7. Complex Pages | 5/5 | Complete | 2026-01-28 |
 | 8. Accessibility | 0/TBD | Not started | - |
-| 9. Testing & Library | 0/TBD | Not started | - |
+| 9. Testing & Library | 0/5 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-26*
-*Last updated: 2026-01-28 — Phase 7 planned (5 plans)*
+*Last updated: 2026-01-28 — Phase 9 planned (5 plans)*
