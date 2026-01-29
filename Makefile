@@ -41,6 +41,9 @@ build:
 run: build
 	./$(BUILD_DIR)/$(BINARY_NAME) --dry-run
 
+wet: build
+	./$(BUILD_DIR)/$(BINARY_NAME)
+
 clean:
 	$(GOCLEAN)
 	rm -rf $(BUILD_DIR)

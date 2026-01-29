@@ -36,3 +36,8 @@ vendor/
 # OS
 .DS_Store
 Thumbs.db
+
+# binary
+/chairlift
+/pkg/adwutil/examples/basic/basic
+/pkg/adwutil/examples/operations/operations

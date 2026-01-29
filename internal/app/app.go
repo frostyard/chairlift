@@ -5,11 +5,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/frostyard/chairlift/internal/flatpak"
-	"github.com/frostyard/chairlift/internal/homebrew"
-	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
-	"github.com/frostyard/chairlift/internal/updex"
+	"github.com/frostyard/chairlift/internal/pm"
 	"github.com/frostyard/chairlift/internal/window"
 
 	"github.com/jwijenbergh/puregotk/v4/adw"
@@ -42,13 +39,24 @@ func New() *Application {
 		if arg == "--dry-run" || arg == "-d" {
 			log.Println("Running in dry-run mode")
 			app.dryRun = true
-			flatpak.SetDryRun(true)
-			homebrew.SetDryRun(true)
-			instex.SetDryRun(true)
 			nbc.SetDryRun(true)
-			updex.SetDryRun(true)
+			pm.SetDryRun(true)
 			break
 		}
+	}
+
+	// Initialize pm managers (without progress reporter initially)
+	// Flatpak and Homebrew will be re-initialized with progress callback after window is created
+	if err := pm.InitializeFlatpak(nil); err != nil {
+		log.Printf("Warning: Failed to initialize Flatpak manager: %v", err)
+	}
+
+	if err := pm.InitializeSnap(); err != nil {
+		log.Printf("Warning: Failed to initialize Snap manager: %v", err)
+	}
+
+	if err := pm.InitializeHomebrew(nil); err != nil {
+		log.Printf("Warning: Failed to initialize Homebrew manager: %v", err)
 	}
 
 	// Connect activate signal

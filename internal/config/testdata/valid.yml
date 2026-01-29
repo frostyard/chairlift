@@ -1,0 +1,26 @@
+system_page:
+  system_info_group:
+    enabled: true
+  nbc_status_group:
+    enabled: true
+  health_group:
+    enabled: true
+    app_id: "io.missioncenter.MissionCenter"
+
+help_page:
+  help_resources_group:
+    enabled: true
+    website: "https://example.com"
+    issues: "https://github.com/example/issues"
+    chat: "https://discord.gg/example"
+
+maintenance_page:
+  maintenance_cleanup_group:
+    enabled: true
+    actions:
+      - title: "Clean Up Temp Files"
+        script: "/usr/local/bin/cleanup.sh"
+        sudo: false
+      - title: "System Maintenance"
+        script: "/usr/libexec/maintenance"
+        sudo: true
