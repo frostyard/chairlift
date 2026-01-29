@@ -19,6 +19,8 @@ type Page struct {
 	prefsPage   *adw.PreferencesPage
 
 	// UI state
+	featuresGroup        *adw.PreferencesGroup
+	featureRows          []*adw.ActionRow
 	extensionsGroup      *adw.PreferencesGroup
 	discoverEntry        *gtk.Entry
 	discoverResultsGroup *adw.PreferencesGroup
@@ -81,8 +83,208 @@ func (p *Page) buildUI() {
 	p.toolbarView.SetContent(&scrolled.Widget)
 
 	// Build groups based on config and availability
+	p.buildFeaturesGroup()
 	p.buildInstalledGroup()
 	p.buildDiscoverGroup()
+}
+
+func (p *Page) buildFeaturesGroup() {
+	// Features require systemd-sysext
+	if !IsAvailable() {
+		return
+	}
+
+	if !p.config.IsGroupEnabled("extensions_page", "features_group") {
+		return
+	}
+
+	p.featuresGroup = adw.NewPreferencesGroup()
+	p.featuresGroup.SetTitle("Features")
+	p.featuresGroup.SetDescription("Loading features...")
+
+	p.prefsPage.Add(p.featuresGroup)
+
+	// Load features asynchronously
+	go p.loadFeatures()
+}
+
+func (p *Page) loadFeatures() {
+	features, err := p.client.Features(p.ctx)
+
+	// Check if page was destroyed while fetching
+	select {
+	case <-p.ctx.Done():
+		return
+	default:
+	}
+
+	async.RunOnMain(func() {
+		// Double-check before UI update
+		if p.ctx.Err() != nil {
+			return
+		}
+
+		if p.featuresGroup == nil {
+			return
+		}
+
+		// Clear existing rows (for reload)
+		for _, row := range p.featureRows {
+			p.featuresGroup.Remove(&row.Widget)
+		}
+		p.featureRows = nil
+
+		if err != nil {
+			p.featuresGroup.SetDescription(fmt.Sprintf("Error: %v", err))
+			return
+		}
+
+		if len(features) == 0 {
+			p.featuresGroup.SetDescription("No features configured")
+			return
+		}
+
+		p.featuresGroup.SetDescription(fmt.Sprintf("%d features configured", len(features)))
+
+		for _, feature := range features {
+			row := adw.NewActionRow()
+			row.SetTitle(feature.Name)
+			if feature.Description != "" {
+				row.SetSubtitle(feature.Description)
+			}
+
+			if feature.Masked {
+				// Show masked label, no button
+				maskedLabel := gtk.NewLabel("Masked")
+				maskedLabel.AddCssClass("dim-label")
+				maskedLabel.SetValign(gtk.AlignCenterValue)
+				row.AddSuffix(&maskedLabel.Widget)
+			} else if feature.Enabled {
+				// Add Disable button
+				btn := gtk.NewButtonWithLabel("Disable")
+				btn.SetValign(gtk.AlignCenterValue)
+				btn.AddCssClass("destructive-action")
+
+				featureName := feature.Name
+				clickedCb := func(b gtk.Button) {
+					p.onDisableFeatureClicked(btn, featureName)
+				}
+				btn.ConnectClicked(&clickedCb)
+				row.AddSuffix(&btn.Widget)
+			} else {
+				// Add Enable button
+				btn := gtk.NewButtonWithLabel("Enable")
+				btn.SetValign(gtk.AlignCenterValue)
+				btn.AddCssClass("suggested-action")
+
+				featureName := feature.Name
+				clickedCb := func(b gtk.Button) {
+					p.onEnableFeatureClicked(btn, featureName)
+				}
+				btn.ConnectClicked(&clickedCb)
+				row.AddSuffix(&btn.Widget)
+			}
+
+			p.featuresGroup.Add(&row.Widget)
+			p.featureRows = append(p.featureRows, row)
+		}
+	})
+}
+
+func (p *Page) onEnableFeatureClicked(button *gtk.Button, featureName string) {
+	button.SetSensitive(false)
+	button.SetLabel("Enabling...")
+
+	op := operations.Start(fmt.Sprintf("Enable %s", featureName), operations.CategoryInstall, false)
+	op.RetryFunc = func() {
+		p.onEnableFeatureClicked(button, featureName)
+	}
+
+	go func() {
+		err := p.client.EnableFeature(p.ctx, featureName)
+
+		select {
+		case <-p.ctx.Done():
+			op.Complete(nil)
+			return
+		default:
+		}
+
+		async.RunOnMain(func() {
+			if p.ctx.Err() != nil {
+				op.Complete(nil)
+				return
+			}
+
+			op.Complete(err)
+
+			if err != nil {
+				button.SetSensitive(true)
+				button.SetLabel("Enable")
+				userErr := async.NewUserErrorWithHint(
+					fmt.Sprintf("Couldn't enable feature '%s'", featureName),
+					"Check system logs for details",
+					err,
+				)
+				p.toaster.ShowErrorToast(userErr.FormatForUser())
+				log.Printf("Feature enable error details: %v", err)
+				return
+			}
+
+			p.toaster.ShowToast(fmt.Sprintf("Feature '%s' enabled. Reboot required for changes to take effect.", featureName))
+
+			// Reload features list
+			go p.loadFeatures()
+		})
+	}()
+}
+
+func (p *Page) onDisableFeatureClicked(button *gtk.Button, featureName string) {
+	button.SetSensitive(false)
+	button.SetLabel("Disabling...")
+
+	op := operations.Start(fmt.Sprintf("Disable %s", featureName), operations.CategoryInstall, false)
+	op.RetryFunc = func() {
+		p.onDisableFeatureClicked(button, featureName)
+	}
+
+	go func() {
+		err := p.client.DisableFeature(p.ctx, featureName)
+
+		select {
+		case <-p.ctx.Done():
+			op.Complete(nil)
+			return
+		default:
+		}
+
+		async.RunOnMain(func() {
+			if p.ctx.Err() != nil {
+				op.Complete(nil)
+				return
+			}
+
+			op.Complete(err)
+
+			if err != nil {
+				button.SetSensitive(true)
+				button.SetLabel("Disable")
+				userErr := async.NewUserErrorWithHint(
+					fmt.Sprintf("Couldn't disable feature '%s'", featureName),
+					"Check system logs for details",
+					err,
+				)
+				p.toaster.ShowErrorToast(userErr.FormatForUser())
+				log.Printf("Feature disable error details: %v", err)
+				return
+			}
+
+			p.toaster.ShowToast(fmt.Sprintf("Feature '%s' disabled. Reboot required for changes to take effect.", featureName))
+
+			// Reload features list
+			go p.loadFeatures()
+		})
+	}()
 }
 
 func (p *Page) buildInstalledGroup() {

@@ -4,6 +4,7 @@ package extensions
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 
 	"github.com/frostyard/pm/progress"
@@ -15,6 +16,14 @@ type ExtensionInfo struct {
 	Component string
 	Version   string
 	Current   bool
+}
+
+// FeatureInfo represents a feature for UI display.
+type FeatureInfo struct {
+	Name        string
+	Description string
+	Enabled     bool
+	Masked      bool
 }
 
 // DiscoveredExtension represents an available extension from a repository.
@@ -100,4 +109,46 @@ func (c *Client) Install(ctx context.Context, repoURL, component string) error {
 // This requires systemd-sysext to be installed.
 func (c *Client) IsDiscoverAvailable() bool {
 	return IsAvailable()
+}
+
+// Features returns all configured features with their status.
+func (c *Client) Features(ctx context.Context) ([]FeatureInfo, error) {
+	features, err := c.client.Features(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var result []FeatureInfo
+	for _, f := range features {
+		result = append(result, FeatureInfo{
+			Name:        f.Name,
+			Description: f.Description,
+			Enabled:     f.Enabled,
+			Masked:      f.Masked,
+		})
+	}
+	return result, nil
+}
+
+// EnableFeature enables a feature by name.
+// Uses pkexec to run updex CLI since this requires root privileges.
+func (c *Client) EnableFeature(ctx context.Context, name string) error {
+	cmd := exec.CommandContext(ctx, "pkexec", "updex", "features", "enable", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s: %w", string(output), err)
+	}
+	return nil
+}
+
+// DisableFeature disables a feature by name.
+// Uses pkexec to run updex CLI since this requires root privileges.
+// Uses --force to allow disabling merged extensions (requires reboot).
+func (c *Client) DisableFeature(ctx context.Context, name string) error {
+	cmd := exec.CommandContext(ctx, "pkexec", "updex", "features", "disable", "--force", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s: %w", string(output), err)
+	}
+	return nil
 }
