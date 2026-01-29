@@ -5,60 +5,73 @@
 ## Languages
 
 **Primary:**
+
 - Go 1.25.6 - All application code
 
 **Secondary:**
+
 - YAML - Configuration files (`config.yml`, `.goreleaser.yaml`)
 - Bash - Wrapper scripts (`data/chairlift-wrapper.sh`)
 
 ## Runtime
 
 **Environment:**
+
 - Linux only (GTK4/Libadwaita desktop environment required)
 - No CGO required (uses puregotk for GTK bindings)
 
 **Package Manager:**
+
 - Go modules
 - Lockfile: `go.sum` present
 
 ## Frameworks
 
 **Core:**
+
 - `github.com/jwijenbergh/puregotk` v0.0.0 - Pure Go GTK4/Libadwaita bindings (no CGO)
 - GTK4 + Libadwaita (Adw) - Modern GNOME UI framework
 
 **Configuration:**
+
 - `gopkg.in/yaml.v3` v3.0.1 - YAML configuration parsing
 
 **Internal Libraries (Frostyard):**
+
 - `github.com/frostyard/nbc` v0.14.0 - NBC bootc container installer types
 - `github.com/frostyard/pm` v0.2.1 - Package manager abstraction (Flatpak, Snap, Homebrew)
 - `github.com/frostyard/pm/progress` v0.1.0 - Progress reporting for package operations
 
 **Build/Release:**
+
 - GoReleaser Pro v2 - Builds, packaging (deb, rpm, apk), and releases
 
 **Linting:**
+
 - golangci-lint (latest) - Go linting
 
 ## Key Dependencies
 
 **Critical:**
+
 - `puregotk` - Enables GTK4/Libadwaita UI without CGO
 - `frostyard/nbc` - Provides types for NBC bootc system status and updates
 - `frostyard/pm` - Unified package manager interface for Flatpak, Snap, Homebrew
 
 **Infrastructure:**
+
 - `google/uuid` v1.6.0 - UUID generation (indirect)
 - `golang.org/x/text` v0.33.0 - Text processing, title casing
 
 ## Configuration
 
 **Environment:**
+
 - `GORELEASER_KEY` - Required for GoReleaser Pro releases (in `.envrc`)
 - No other runtime environment variables required
 
 **Application Configuration:**
+
 - YAML-based configuration (`config.yml`)
 - Search paths (in order):
   1. `/etc/chairlift/config.yml`
@@ -67,6 +80,7 @@
 - Defaults to all features enabled if no config found
 
 **Build Configuration:**
+
 - `go.mod` - Go module definition
 - `Makefile` - Build, test, install targets
 - `.goreleaser.yaml` - Release packaging configuration
@@ -89,12 +103,14 @@ make bump           # Create new version tag and push
 ## Platform Requirements
 
 **Development:**
-- Go 1.24+ (CI) / 1.25.6 (go.mod)
+
+- Go 1.25+ (CI) / 1.25.6 (go.mod)
 - GTK4 and Libadwaita libraries installed
 - make
 - Optional: golangci-lint, svu
 
 **Production:**
+
 - Linux (x86_64 or arm64)
 - GTK4 + Libadwaita runtime libraries
 - PolicyKit (for privileged operations via pkexec)
@@ -107,6 +123,7 @@ make bump           # Create new version tag and push
   - `brew` - Homebrew package management
 
 **Deployment:**
+
 - Native packages: deb, rpm, apk (via GoReleaser)
 - Installation includes:
   - Binary: `/usr/local/bin/chairlift`
@@ -127,4 +144,4 @@ make bump           # Create new version tag and push
 
 ---
 
-*Stack analysis: 2026-01-26*
+_Stack analysis: 2026-01-26_
