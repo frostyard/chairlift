@@ -77,20 +77,18 @@ func InitializeFlatpak(progressCallback ProgressCallback) error {
 	flatpakManager = mgr
 
 	// Check availability synchronously during init (before UI is built)
-	// This happens early enough to not block UI rendering
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+	// This MUST complete before returning so UI code can rely on the cached value
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-		available, err := mgr.Available(ctx)
-		if err != nil {
-			available = false
-		}
+	available, err := mgr.Available(ctx)
+	if err != nil {
+		available = false
+	}
 
-		flatpakAvailMu.Lock()
-		flatpakAvailable = &available
-		flatpakAvailMu.Unlock()
-	}()
+	flatpakAvailMu.Lock()
+	flatpakAvailable = &available
+	flatpakAvailMu.Unlock()
 
 	return nil
 }
@@ -439,21 +437,19 @@ func InitializeSnap() error {
 	mgr := pm.NewSnap()
 	snapManager = mgr
 
-	// Check availability asynchronously during init (before UI is built)
-	// This happens early enough to not block UI rendering
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+	// Check availability synchronously during init (before UI is built)
+	// This MUST complete before returning so UI code can rely on the cached value
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-		available, err := mgr.Available(ctx)
-		if err != nil {
-			available = false
-		}
+	available, err := mgr.Available(ctx)
+	if err != nil {
+		available = false
+	}
 
-		snapAvailMu.Lock()
-		snapAvailable = &available
-		snapAvailMu.Unlock()
-	}()
+	snapAvailMu.Lock()
+	snapAvailable = &available
+	snapAvailMu.Unlock()
 
 	return nil
 }
@@ -617,21 +613,19 @@ func InitializeHomebrew(progressCallback ProgressCallback) error {
 	mgr := pm.NewBrew(opts...)
 	brewManager = mgr
 
-	// Check availability asynchronously during init (before UI is built)
-	// This happens early enough to not block UI rendering
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
+	// Check availability synchronously during init (before UI is built)
+	// This MUST complete before returning so UI code can rely on the cached value
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-		available, err := mgr.Available(ctx)
-		if err != nil {
-			available = false
-		}
+	available, err := mgr.Available(ctx)
+	if err != nil {
+		available = false
+	}
 
-		brewAvailMu.Lock()
-		brewAvailable = &available
-		brewAvailMu.Unlock()
-	}()
+	brewAvailMu.Lock()
+	brewAvailable = &available
+	brewAvailMu.Unlock()
 
 	return nil
 }
