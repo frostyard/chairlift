@@ -21,7 +21,7 @@ type EmptyStateConfig struct {
 //
 // Common icon names:
 //   - "folder-symbolic" for empty file/folder lists
-//   - "emblem-synchronizing-symbolic" for empty operations
+//   - "system-run-symbolic" for empty operations
 //   - "document-open-recent-symbolic" for empty history
 //   - "package-x-generic-symbolic" for empty package lists
 //

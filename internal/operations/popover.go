@@ -41,13 +41,13 @@ func BuildOperationsButton() *OperationsButton {
 
 	// Create the menu button
 	ob.Button = gtk.NewMenuButton()
-	ob.Button.SetIconName("emblem-synchronizing-symbolic")
+	ob.Button.SetIconName("system-run-symbolic")
 	ob.Button.SetTooltipText("Operations")
 	ob.Button.SetHasFrame(false)
 
 	// Create badge overlay
 	overlay := gtk.NewOverlay()
-	icon := gtk.NewImageFromIconName("emblem-synchronizing-symbolic")
+	icon := gtk.NewImageFromIconName("system-run-symbolic")
 	overlay.SetChild(&icon.Widget)
 
 	// Badge for operation count (circular label)
@@ -97,7 +97,7 @@ func (ob *OperationsButton) buildPopoverContent() *gtk.Widget {
 	ob.emptyState = adw.NewStatusPage()
 	ob.emptyState.SetTitle("No Active Operations")
 	ob.emptyState.SetDescription("Operations will appear here when running")
-	ob.emptyState.SetIconName("emblem-synchronizing-symbolic")
+	ob.emptyState.SetIconName("system-run-symbolic")
 	ob.emptyState.AddCssClass("compact")
 	activeContent.Append(&ob.emptyState.Widget)
 
@@ -112,7 +112,7 @@ func (ob *OperationsButton) buildPopoverContent() *gtk.Widget {
 	activeContent.Append(&ob.activeList.Widget)
 
 	activeScrolled.SetChild(&activeContent.Widget)
-	ob.viewStack.AddTitledWithIcon(&activeScrolled.Widget, "active", "Active", "emblem-synchronizing-symbolic")
+	ob.viewStack.AddTitledWithIcon(&activeScrolled.Widget, "active", "Active", "system-run-symbolic")
 
 	// History page
 	historyScrolled := gtk.NewScrolledWindow()
