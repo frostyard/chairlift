@@ -43,7 +43,7 @@ var navItems = []NavItem{
 	{Name: "maintenance", Title: "Maintenance", Icon: "emblem-system-symbolic"},
 	{Name: "updates", Title: "Updates", Icon: "software-update-available-symbolic"},
 	{Name: "system", Title: "System", Icon: "computer-symbolic"},
-	{Name: "extensions", Title: "Extensions", Icon: "application-x-addon-symbolic"},
+	{Name: "features", Title: "Features", Icon: "application-x-addon-symbolic"},
 	{Name: "help", Title: "Help", Icon: "help-browser-symbolic"},
 }
 
@@ -339,7 +339,8 @@ func (w *Window) onShowShortcuts() {
 		{"Alt+2", "Go to Maintenance"},
 		{"Alt+3", "Go to Updates"},
 		{"Alt+4", "Go to System"},
-		{"Alt+5", "Go to Help"},
+		{"Alt+5", "Go to Features"},
+		{"Alt+6", "Go to Help"},
 	}
 
 	for _, s := range navShortcuts {
