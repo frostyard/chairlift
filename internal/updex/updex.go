@@ -1,4 +1,4 @@
-// Package updex provides an interface to systemd-sysext extension management via updex
+// Package updex provides an interface to system feature management via updex
 package updex
 
 import (
@@ -13,6 +13,7 @@ import (
 
 const (
 	updexCommand   = "updex"
+	pkexecCommand  = "pkexec"
 	DefaultTimeout = 5 * time.Minute
 )
 
@@ -52,13 +53,14 @@ func (e *NotFoundError) Error() string {
 	return e.Message
 }
 
-// Extension represents a systemd-sysext extension version
-type Extension struct {
-	Version   string `json:"version"`
-	Installed bool   `json:"installed"`
-	Available bool   `json:"available"`
-	Current   bool   `json:"current"`
-	Component string `json:"component"`
+// Feature represents a system feature managed by updex
+type Feature struct {
+	Name          string   `json:"name"`
+	Description   string   `json:"description"`
+	Documentation string   `json:"documentation"`
+	Enabled       bool     `json:"enabled"`
+	Source        string   `json:"source"`
+	Transfers     []string `json:"transfers"`
 }
 
 // IsInstalled checks if updex is installed and accessible
@@ -105,34 +107,71 @@ func runCommand(ctx context.Context, args ...string) (string, string, error) {
 	return stdout.String(), stderr.String(), nil
 }
 
-// List returns all extensions (installed and available versions)
-func List(ctx context.Context) ([]Extension, error) {
-	output, _, err := runCommand(ctx, "list", "--json")
+// runPrivilegedCommand executes an updex command via pkexec for privileged operations
+func runPrivilegedCommand(ctx context.Context, args ...string) (string, string, error) {
+	if dryRun {
+		log.Printf("[DRY-RUN] would execute: pkexec %s %v", updexCommand, args)
+		return "", "", nil
+	}
+
+	fullArgs := append([]string{updexCommand}, args...)
+	cmd := exec.CommandContext(ctx, pkexecCommand, fullArgs...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+
+	if stderr.Len() > 0 {
+		log.Printf("updex stderr: %s", stderr.String())
+	}
+
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", stderr.String(), &Error{Message: "Command timed out"}
+		}
+		if execErr, ok := err.(*exec.Error); ok && execErr.Err == exec.ErrNotFound {
+			return "", stderr.String(), &NotFoundError{Message: "pkexec or updex not found"}
+		}
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", stderr.String(), &Error{Message: fmt.Sprintf("command failed (exit %d): %s", exitErr.ExitCode(), stderr.String())}
+		}
+		return "", stderr.String(), &Error{Message: err.Error()}
+	}
+
+	return stdout.String(), stderr.String(), nil
+}
+
+// ListFeatures returns all available features
+func ListFeatures(ctx context.Context) ([]Feature, error) {
+	output, _, err := runCommand(ctx, "features", "list", "--json")
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse JSON array output
-	var extensions []Extension
-	if err := json.Unmarshal([]byte(output), &extensions); err != nil {
+	var features []Feature
+	if err := json.Unmarshal([]byte(output), &features); err != nil {
 		return nil, &Error{Message: fmt.Sprintf("failed to parse JSON output: %v", err)}
 	}
 
-	return extensions, nil
+	return features, nil
 }
 
-// ListInstalled returns only installed extensions
-func ListInstalled(ctx context.Context) ([]Extension, error) {
-	extensions, err := List(ctx)
-	if err != nil {
-		return nil, err
-	}
+// EnableFeature enables a feature for download
+func EnableFeature(ctx context.Context, name string) error {
+	_, _, err := runPrivilegedCommand(ctx, "features", "enable", name)
+	return err
+}
 
-	var installed []Extension
-	for _, ext := range extensions {
-		if ext.Installed {
-			installed = append(installed, ext)
-		}
-	}
-	return installed, nil
+// DisableFeature disables a feature
+func DisableFeature(ctx context.Context, name string) error {
+	_, _, err := runPrivilegedCommand(ctx, "features", "disable", name)
+	return err
+}
+
+// UpdateFeatures downloads enabled features
+func UpdateFeatures(ctx context.Context) error {
+	_, _, err := runPrivilegedCommand(ctx, "features", "update")
+	return err
 }
