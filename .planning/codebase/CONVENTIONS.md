@@ -22,7 +22,7 @@
 - Mutex naming: append `Mu` suffix (`dryRunMu`, `flatpakMu`, `updateCountMu`)
 
 **Types:**
-- Structs: PascalCase (`Application`, `UserHome`, `Config`, `Extension`)
+- Structs: PascalCase (`Application`, `UserHome`, `Config`, `Feature`)
 - Interfaces: PascalCase with descriptive names (`ToastAdder`, `ProgressCallback`)
 - Type aliases: Match original type name (`StatusOutput = types.StatusOutput`)
 
@@ -55,7 +55,6 @@ import (
     "log"
     "os"
 
-    "github.com/frostyard/chairlift/internal/instex"
     "github.com/frostyard/chairlift/internal/nbc"
     "github.com/frostyard/chairlift/internal/pm"
     "github.com/frostyard/chairlift/internal/updex"

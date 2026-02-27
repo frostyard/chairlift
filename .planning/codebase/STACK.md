@@ -100,8 +100,7 @@ make bump           # Create new version tag and push
 - PolicyKit (for privileged operations via pkexec)
 - Optional external tools:
   - `nbc` - NBC bootc management
-  - `updex` - systemd-sysext extension listing
-  - `instex` - systemd-sysext extension installation
+  - `updex` - system feature management
   - `flatpak` - Flatpak package management
   - `snap` - Snap package management
   - `brew` - Homebrew package management

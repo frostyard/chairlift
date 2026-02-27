@@ -81,7 +81,7 @@
 - Risk: Several operations use `pkexec` for elevated privileges
 - Files:
   - `internal/nbc/nbc.go:206-244` - system updates via pkexec
-  - `internal/instex/instex.go:112-147` - extension install via pkexec
+  - `internal/updex/updex.go:111-144` - feature enable/disable/update via pkexec
 - Current mitigation: pkexec prompts for authentication, dry-run mode available
 - Recommendations: Limit which commands can be run with pkexec, use polkit rules
 
@@ -201,7 +201,6 @@
 2. `internal/pm/wrapper.go` - Mock pm.Manager interface
 3. `internal/nbc/nbc.go` - Mock exec.Command
 4. `internal/updex/updex.go` - Mock exec.Command
-5. `internal/instex/instex.go` - Mock exec.Command
 
 ---
 
