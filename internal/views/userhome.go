@@ -908,7 +908,8 @@ func (uh *UserHome) buildFeaturesPage() {
 	}
 
 	// Features group - only show if updex is available
-	if updex.IsInstalled() && uh.config.IsGroupEnabled("features_page", "features_group") {
+	installed := updex.IsInstalled()
+	if installed && uh.config.IsGroupEnabled("features_page", "features_group") {
 		uh.featuresGroup = adw.NewPreferencesGroup()
 		uh.featuresGroup.SetTitle("Features")
 		uh.featuresGroup.SetDescription("Loading features...")
@@ -927,7 +928,7 @@ func (uh *UserHome) buildFeaturesPage() {
 
 		// Load features asynchronously
 		go uh.loadFeatures()
-	} else if !updex.IsInstalled() {
+	} else if !installed {
 		group := adw.NewPreferencesGroup()
 		group.SetTitle("Features")
 		group.SetDescription("Manage system features")
@@ -974,13 +975,10 @@ func (uh *UserHome) loadFeatures() {
 			toggle.SetValign(gtk.AlignCenterValue)
 
 			featName := feat.Name
-			featEnabled := feat.Enabled
-			stateSetCb := func(sw gtk.Switch, state bool) bool {
-				if state == featEnabled {
-					return false
-				}
-				uh.onFeatureToggled(featName, state)
-				return false
+			sw := toggle
+			stateSetCb := func(_ gtk.Switch, state bool) bool {
+				uh.onFeatureToggled(featName, state, sw)
+				return true // block visual change until confirmed
 			}
 			toggle.ConnectStateSet(&stateSetCb)
 
@@ -992,7 +990,7 @@ func (uh *UserHome) loadFeatures() {
 }
 
 // onFeatureToggled handles enabling/disabling a feature
-func (uh *UserHome) onFeatureToggled(name string, enabled bool) {
+func (uh *UserHome) onFeatureToggled(name string, enabled bool, toggle *gtk.Switch) {
 	go func() {
 		ctx, cancel := updex.DefaultContext()
 		defer cancel()
@@ -1006,9 +1004,14 @@ func (uh *UserHome) onFeatureToggled(name string, enabled bool) {
 
 		runOnMainThread(func() {
 			if err != nil {
+				// Revert switch to previous state
+				toggle.SetActive(!enabled)
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to update %s: %v", name, err))
 				return
 			}
+
+			// Confirm the visual state change
+			toggle.SetActive(enabled)
 
 			if enabled {
 				uh.toastAdder.ShowToast(fmt.Sprintf("%s enabled. Update to download, reboot to apply.", name))
