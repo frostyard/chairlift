@@ -14,7 +14,6 @@ import (
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
-	"github.com/frostyard/chairlift/internal/instex"
 	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/snap"
 	"github.com/frostyard/chairlift/internal/updex"
@@ -72,7 +71,7 @@ type UserHome struct {
 	updatesPage      *adw.ToolbarView
 	applicationsPage *adw.ToolbarView
 	maintenancePage  *adw.ToolbarView
-	extensionsPage   *adw.ToolbarView
+	featuresPage     *adw.ToolbarView
 	helpPage         *adw.ToolbarView
 
 	// PreferencesPages inside each ToolbarView - keep references to prevent GC
@@ -80,7 +79,7 @@ type UserHome struct {
 	updatesPrefsPage      *adw.PreferencesPage
 	applicationsPrefsPage *adw.PreferencesPage
 	maintenancePrefsPage  *adw.PreferencesPage
-	extensionsPrefsPage   *adw.PreferencesPage
+	featuresPrefsPage     *adw.PreferencesPage
 	helpPrefsPage         *adw.PreferencesPage
 
 	// References for dynamic updates
@@ -104,12 +103,8 @@ type UserHome struct {
 	nbcUpdateExpander *adw.ExpanderRow
 	nbcCheckRow       *adw.ActionRow
 
-	// Extensions page references
-	extensionsGroup        *adw.PreferencesGroup
-	discoverEntry          *gtk.Entry
-	discoverResultsGroup   *adw.PreferencesGroup
-	discoverResultRows     []*adw.ActionRow // Track rows to clear on new discovery
-	installedComponentsMap map[string]bool  // Cache of installed component names
+	// Features page references
+	featuresGroup *adw.PreferencesGroup
 
 	// Update badge tracking
 	nbcUpdateCount     int
@@ -130,7 +125,7 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.updatesPage, uh.updatesPrefsPage = uh.createPage()
 	uh.applicationsPage, uh.applicationsPrefsPage = uh.createPage()
 	uh.maintenancePage, uh.maintenancePrefsPage = uh.createPage()
-	uh.extensionsPage, uh.extensionsPrefsPage = uh.createPage()
+	uh.featuresPage, uh.featuresPrefsPage = uh.createPage()
 	uh.helpPage, uh.helpPrefsPage = uh.createPage()
 
 	// Build page content
@@ -138,7 +133,7 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.buildUpdatesPage()
 	uh.buildApplicationsPage()
 	uh.buildMaintenancePage()
-	uh.buildExtensionsPage()
+	uh.buildFeaturesPage()
 	uh.buildHelpPage()
 
 	return uh
@@ -166,8 +161,8 @@ func (uh *UserHome) GetPage(name string) *adw.ToolbarView {
 		return uh.applicationsPage
 	case "maintenance":
 		return uh.maintenancePage
-	case "extensions":
-		return uh.extensionsPage
+	case "features":
+		return uh.featuresPage
 	case "help":
 		return uh.helpPage
 	default:
@@ -905,273 +900,146 @@ func (uh *UserHome) buildMaintenancePage() {
 	}
 }
 
-// buildExtensionsPage builds the Extensions page content
-func (uh *UserHome) buildExtensionsPage() {
-	page := uh.extensionsPrefsPage
+// buildFeaturesPage builds the Features page content
+func (uh *UserHome) buildFeaturesPage() {
+	page := uh.featuresPrefsPage
 	if page == nil {
 		return
 	}
 
-	// Initialize the installed components cache
-	uh.installedComponentsMap = make(map[string]bool)
+	// Features group - only show if updex is available
+	if updex.IsInstalled() && uh.config.IsGroupEnabled("features_page", "features_group") {
+		uh.featuresGroup = adw.NewPreferencesGroup()
+		uh.featuresGroup.SetTitle("Features")
+		uh.featuresGroup.SetDescription("Loading features...")
 
-	// Installed extensions group - only show if updex is available
-	if updex.IsInstalled() && uh.config.IsGroupEnabled("extensions_page", "installed_group") {
-		uh.extensionsGroup = adw.NewPreferencesGroup()
-		uh.extensionsGroup.SetTitle("Installed")
-		uh.extensionsGroup.SetDescription("Loading extensions...")
+		// Add Update button as header suffix
+		updateBtn := gtk.NewButtonWithLabel("Update")
+		updateBtn.SetValign(gtk.AlignCenterValue)
+		updateBtn.AddCssClass("suggested-action")
+		updateClickedCb := func(btn gtk.Button) {
+			uh.onUpdateFeaturesClicked(updateBtn)
+		}
+		updateBtn.ConnectClicked(&updateClickedCb)
+		uh.featuresGroup.SetHeaderSuffix(&updateBtn.Widget)
 
-		page.Add(uh.extensionsGroup)
+		page.Add(uh.featuresGroup)
 
-		// Load extensions asynchronously
-		go uh.loadExtensions()
+		// Load features asynchronously
+		go uh.loadFeatures()
 	} else if !updex.IsInstalled() {
-		// Show a message that updex is not installed
 		group := adw.NewPreferencesGroup()
-		group.SetTitle("Installed")
-		group.SetDescription("Manage systemd-sysext extensions")
+		group.SetTitle("Features")
+		group.SetDescription("Manage system features")
 
 		row := adw.NewActionRow()
-		row.SetTitle("Extension Manager Not Available")
+		row.SetTitle("Feature Manager Not Available")
 		row.SetSubtitle("The updex command is not installed on this system")
 		group.Add(&row.Widget)
 		page.Add(group)
 	}
-
-	// Discover extensions group - only show if instex is available
-	if instex.IsInstalled() && uh.config.IsGroupEnabled("extensions_page", "discover_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Discover")
-		group.SetDescription("Find and install extensions from remote repositories")
-
-		// URL entry row
-		entryRow := adw.NewActionRow()
-		entryRow.SetTitle("Repository URL")
-
-		uh.discoverEntry = gtk.NewEntry()
-		//uh.discoverEntry.SetPlaceholderText("https://repository.example.org")
-		uh.discoverEntry.SetText("https://repository.frostyard.org")
-		uh.discoverEntry.SetHexpand(true)
-		uh.discoverEntry.SetValign(gtk.AlignCenterValue)
-		entryRow.AddSuffix(&uh.discoverEntry.Widget)
-
-		discoverBtn := gtk.NewButtonWithLabel("Discover")
-		discoverBtn.SetValign(gtk.AlignCenterValue)
-		discoverBtn.AddCssClass("suggested-action")
-		discoverClickedCb := func(btn gtk.Button) {
-			uh.onDiscoverClicked(discoverBtn)
-		}
-		discoverBtn.ConnectClicked(&discoverClickedCb)
-		entryRow.AddSuffix(&discoverBtn.Widget)
-
-		group.Add(&entryRow.Widget)
-		page.Add(group)
-
-		// Results group (initially hidden, will be populated after discovery)
-		uh.discoverResultsGroup = adw.NewPreferencesGroup()
-		uh.discoverResultsGroup.SetTitle("Available Extensions")
-		uh.discoverResultsGroup.SetVisible(false)
-		page.Add(uh.discoverResultsGroup)
-	}
 }
 
-// loadExtensions loads extension information asynchronously
-func (uh *UserHome) loadExtensions() {
+// loadFeatures loads feature information asynchronously
+func (uh *UserHome) loadFeatures() {
 	ctx, cancel := updex.DefaultContext()
 	defer cancel()
 
-	extensions, err := updex.ListInstalled(ctx)
+	features, err := updex.ListFeatures(ctx)
 
 	runOnMainThread(func() {
-		if uh.extensionsGroup == nil {
+		if uh.featuresGroup == nil {
 			return
 		}
 
 		if err != nil {
-			uh.extensionsGroup.SetDescription(fmt.Sprintf("Error: %v", err))
+			uh.featuresGroup.SetDescription(fmt.Sprintf("Error: %v", err))
 			return
 		}
 
-		if len(extensions) == 0 {
-			uh.extensionsGroup.SetDescription("No extensions installed")
+		if len(features) == 0 {
+			uh.featuresGroup.SetDescription("No features available")
 			return
 		}
 
-		// Group extensions by component and populate installed cache
-		componentMap := make(map[string][]updex.Extension)
-		for _, ext := range extensions {
-			componentMap[ext.Component] = append(componentMap[ext.Component], ext)
-			uh.installedComponentsMap[ext.Component] = true
-		}
+		uh.featuresGroup.SetDescription(fmt.Sprintf("%d features available", len(features)))
 
-		uh.extensionsGroup.SetDescription(fmt.Sprintf("%d components installed", len(componentMap)))
+		for _, feat := range features {
+			row := adw.NewActionRow()
+			row.SetTitle(feat.Description)
+			row.SetSubtitle(feat.Name)
 
-		// Create an expander row for each component
-		for component, versions := range componentMap {
-			expander := adw.NewExpanderRow()
-			expander.SetTitle(component)
+			toggle := gtk.NewSwitch()
+			toggle.SetActive(feat.Enabled)
+			toggle.SetValign(gtk.AlignCenterValue)
 
-			// Count current version and set subtitle
-			var currentVersion string
-			for _, v := range versions {
-				if v.Current {
-					currentVersion = v.Version
-					break
+			featName := feat.Name
+			featEnabled := feat.Enabled
+			stateSetCb := func(sw gtk.Switch, state bool) bool {
+				if state == featEnabled {
+					return false
 				}
+				uh.onFeatureToggled(featName, state)
+				return false
 			}
-			if currentVersion != "" {
-				expander.SetSubtitle(fmt.Sprintf("%d versions (current: %s)", len(versions), currentVersion))
-			} else {
-				expander.SetSubtitle(fmt.Sprintf("%d versions", len(versions)))
-			}
+			toggle.ConnectStateSet(&stateSetCb)
 
-			// Add version rows
-			for _, ext := range versions {
-				row := adw.NewActionRow()
-				row.SetTitle(ext.Version)
-
-				// Add checkmark icon if this is the current (active) version
-				if ext.Current {
-					icon := gtk.NewImageFromIconName("object-select-symbolic")
-					row.AddSuffix(&icon.Widget)
-				}
-
-				expander.AddRow(&row.Widget)
-			}
-
-			uh.extensionsGroup.Add(&expander.Widget)
+			row.AddSuffix(&toggle.Widget)
+			row.SetActivatableWidget(&toggle.Widget)
+			uh.featuresGroup.Add(&row.Widget)
 		}
 	})
 }
 
-// onDiscoverClicked handles the discover button click
-func (uh *UserHome) onDiscoverClicked(button *gtk.Button) {
-	if uh.discoverEntry == nil {
-		return
-	}
-
-	url := uh.discoverEntry.GetText()
-	if url == "" {
-		uh.toastAdder.ShowErrorToast("Please enter a repository URL")
-		return
-	}
-
-	button.SetSensitive(false)
-	button.SetLabel("Discovering...")
-
+// onFeatureToggled handles enabling/disabling a feature
+func (uh *UserHome) onFeatureToggled(name string, enabled bool) {
 	go func() {
-		ctx, cancel := instex.DefaultContext()
+		ctx, cancel := updex.DefaultContext()
 		defer cancel()
 
-		result, err := instex.Discover(ctx, url)
+		var err error
+		if enabled {
+			err = updex.EnableFeature(ctx, name)
+		} else {
+			err = updex.DisableFeature(ctx, name)
+		}
 
 		runOnMainThread(func() {
-			button.SetSensitive(true)
-			button.SetLabel("Discover")
-
 			if err != nil {
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Discovery failed: %v", err))
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to update %s: %v", name, err))
 				return
 			}
 
-			uh.displayDiscoveryResults(url, result)
+			if enabled {
+				uh.toastAdder.ShowToast(fmt.Sprintf("%s enabled. Update to download, reboot to apply.", name))
+			} else {
+				uh.toastAdder.ShowToast(fmt.Sprintf("%s disabled. Update to apply, reboot to complete.", name))
+			}
 		})
 	}()
 }
 
-// displayDiscoveryResults shows discovered extensions in the results group
-func (uh *UserHome) displayDiscoveryResults(repoURL string, result *instex.DiscoverOutput) {
-	if uh.discoverResultsGroup == nil {
-		return
-	}
-
-	// Clear existing result rows
-	for _, row := range uh.discoverResultRows {
-		uh.discoverResultsGroup.Remove(&row.Widget)
-	}
-	uh.discoverResultRows = nil
-
-	uh.discoverResultsGroup.SetVisible(true)
-
-	if len(result.Extensions) == 0 {
-		uh.discoverResultsGroup.SetDescription("No extensions found in repository")
-		return
-	}
-
-	uh.discoverResultsGroup.SetDescription(fmt.Sprintf("%d extensions available", len(result.Extensions)))
-
-	for _, ext := range result.Extensions {
-		row := adw.NewActionRow()
-		row.SetTitle(ext.Name)
-
-		// Show version count
-		if len(ext.Versions) > 0 {
-			row.SetSubtitle(fmt.Sprintf("%d versions available (latest: %s)", len(ext.Versions), ext.Versions[0]))
-		}
-
-		// Add extension icon
-		icon := gtk.NewImageFromIconName("application-x-addon-symbolic")
-		row.AddPrefix(&icon.Widget)
-
-		// Check if already installed
-		if uh.installedComponentsMap[ext.Name] {
-			// Show installed badge
-			installedLabel := gtk.NewLabel("Installed")
-			installedLabel.AddCssClass("dim-label")
-			installedLabel.SetValign(gtk.AlignCenterValue)
-			row.AddSuffix(&installedLabel.Widget)
-		} else {
-			// Add install button
-			installBtn := gtk.NewButtonWithLabel("Install")
-			installBtn.SetValign(gtk.AlignCenterValue)
-			installBtn.AddCssClass("suggested-action")
-
-			// Capture values for callback
-			extName := ext.Name
-			url := repoURL
-			installClickedCb := func(btn gtk.Button) {
-				uh.onInstallExtensionClicked(installBtn, url, extName)
-			}
-			installBtn.ConnectClicked(&installClickedCb)
-			row.AddSuffix(&installBtn.Widget)
-		}
-
-		uh.discoverResultsGroup.Add(&row.Widget)
-		uh.discoverResultRows = append(uh.discoverResultRows, row)
-	}
-}
-
-// onInstallExtensionClicked handles installing an extension
-func (uh *UserHome) onInstallExtensionClicked(button *gtk.Button, repoURL, component string) {
+// onUpdateFeaturesClicked handles the Update button click
+func (uh *UserHome) onUpdateFeaturesClicked(button *gtk.Button) {
 	button.SetSensitive(false)
-	button.SetLabel("Installing...")
+	button.SetLabel("Updating...")
 
 	go func() {
-		ctx, cancel := instex.DefaultContext()
+		ctx, cancel := updex.DefaultContext()
 		defer cancel()
 
-		err := instex.Install(ctx, repoURL, component)
+		err := updex.UpdateFeatures(ctx)
 
 		runOnMainThread(func() {
+			button.SetSensitive(true)
+			button.SetLabel("Update")
+
 			if err != nil {
-				button.SetSensitive(true)
-				button.SetLabel("Install")
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Installation failed: %v", err))
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
 				return
 			}
 
-			// Update button to show installed
-			button.SetLabel("Installed")
-			button.RemoveCssClass("suggested-action")
-			button.AddCssClass("dim-label")
-
-			// Update installed components cache
-			uh.installedComponentsMap[component] = true
-
-			uh.toastAdder.ShowToast(fmt.Sprintf("Installed %s successfully", component))
-
-			// Reload the installed extensions list
-			go uh.loadExtensions()
+			uh.toastAdder.ShowToast("Features updated. Changes apply after reboot.")
 		})
 	}()
 }
