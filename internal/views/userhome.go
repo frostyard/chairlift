@@ -105,6 +105,7 @@ type UserHome struct {
 
 	// Features page references
 	featuresGroup *adw.PreferencesGroup
+	featureRows   map[string]*adw.ActionRow
 
 	// Update badge tracking
 	nbcUpdateCount     int
@@ -964,6 +965,7 @@ func (uh *UserHome) loadFeatures() {
 		}
 
 		uh.featuresGroup.SetDescription(fmt.Sprintf("%d features available", len(features)))
+		uh.featureRows = make(map[string]*adw.ActionRow)
 
 		for _, feat := range features {
 			row := adw.NewActionRow()
@@ -985,6 +987,45 @@ func (uh *UserHome) loadFeatures() {
 			row.AddSuffix(&toggle.Widget)
 			row.SetActivatableWidget(&toggle.Widget)
 			uh.featuresGroup.Add(&row.Widget)
+			uh.featureRows[feat.Name] = row
+		}
+
+		// Check for updates after rendering the feature list
+		go uh.checkFeatureUpdates(len(features))
+	})
+}
+
+// checkFeatureUpdates checks enabled features for available updates
+func (uh *UserHome) checkFeatureUpdates(totalFeatures int) {
+	ctx, cancel := updex.DefaultContext()
+	defer cancel()
+
+	checks, err := updex.CheckFeatures(ctx)
+
+	runOnMainThread(func() {
+		if err != nil {
+			log.Printf("Feature update check failed: %v", err)
+			return
+		}
+
+		updateCount := 0
+		for _, check := range checks {
+			row, ok := uh.featureRows[check.Feature]
+			if !ok || len(check.Results) == 0 {
+				continue
+			}
+
+			result := check.Results[0]
+			if result.UpdateAvailable {
+				row.SetSubtitle(fmt.Sprintf("%s — v%s → v%s available", check.Feature, result.CurrentVersion, result.NewestVersion))
+				updateCount++
+			} else {
+				row.SetSubtitle(fmt.Sprintf("%s — v%s", check.Feature, result.CurrentVersion))
+			}
+		}
+
+		if uh.featuresGroup != nil && updateCount > 0 {
+			uh.featuresGroup.SetDescription(fmt.Sprintf("%d features available (%d updates)", totalFeatures, updateCount))
 		}
 	})
 }

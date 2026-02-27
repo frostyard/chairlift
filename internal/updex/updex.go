@@ -143,6 +143,35 @@ func runPrivilegedCommand(ctx context.Context, args ...string) (string, string, 
 	return stdout.String(), stderr.String(), nil
 }
 
+// CheckResult represents the update status of a single component
+type CheckResult struct {
+	Component       string `json:"component"`
+	CurrentVersion  string `json:"current_version"`
+	NewestVersion   string `json:"newest_version"`
+	UpdateAvailable bool   `json:"update_available"`
+}
+
+// FeatureCheck represents the update check results for a feature
+type FeatureCheck struct {
+	Feature string        `json:"feature"`
+	Results []CheckResult `json:"results"`
+}
+
+// CheckFeatures checks enabled features for available updates
+func CheckFeatures(ctx context.Context) ([]FeatureCheck, error) {
+	output, _, err := runCommand(ctx, "features", "check", "--json")
+	if err != nil {
+		return nil, err
+	}
+
+	var checks []FeatureCheck
+	if err := json.Unmarshal([]byte(output), &checks); err != nil {
+		return nil, &Error{Message: fmt.Sprintf("failed to parse check JSON output: %v", err)}
+	}
+
+	return checks, nil
+}
+
 // ListFeatures returns all available features
 func ListFeatures(ctx context.Context) ([]Feature, error) {
 	output, _, err := runCommand(ctx, "features", "list", "--json")
