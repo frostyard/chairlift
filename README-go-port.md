@@ -1,6 +1,6 @@
 # ChairLift (Go/puregotk version)
 
-A modern GTK4/Libadwaita system management tool written in Go using [puregotk](https://github.com/jwijenbergh/puregotk) bindings.
+A modern GTK4/Libadwaita system management tool written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings.
 
 ## Features
 

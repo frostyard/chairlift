@@ -14,7 +14,7 @@ ChairLift is a modern GTK4/Libadwaita system management tool originally designed
 
 ### Technology Stack
 
-- **UI Framework**: GTK4 + Libadwaita via [puregotk](https://github.com/jwijenbergh/puregotk)
+- **UI Framework**: GTK4 + Libadwaita via [puregotk](https://codeberg.org/puregotk/puregotk)
 - **Language**: Go
 - **Build System**: Make
 - **Configuration**: YAML-based
@@ -301,6 +301,6 @@ Use conventional commits format:
 
 - CONFIG.md - Complete configuration documentation
 - README.md - User and developer documentation
-- [puregotk](https://github.com/jwijenbergh/puregotk) - Pure Go GTK4 bindings
+- [puregotk](https://codeberg.org/puregotk/puregotk) - Pure Go GTK4 bindings
 - [Adwaita documentation](https://gnome.pages.gitlab.gnome.org/libadwaita/doc/)
 - [GTK4 documentation](https://docs.gtk.org/gtk4/)

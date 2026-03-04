@@ -3,14 +3,15 @@ module github.com/frostyard/chairlift
 go 1.24.2
 
 require (
+	codeberg.org/puregotk/puregotk v0.0.0-20260226083027-5647eb6a2bba
 	github.com/frostyard/nbc v0.14.0
-	github.com/jwijenbergh/puregotk v0.0.0-20260115100645-c78e1521129b
 	github.com/snapcore/snapd v0.0.0-20260121163940-7314b8b629e5
 	golang.org/x/text v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
+	codeberg.org/puregotk/purego v0.0.0-20260224095105-2513c838cb80 // indirect
 	github.com/canonical/cpuid v0.0.0-20220614022739-219e067757cb // indirect
 	github.com/canonical/go-efilib v1.7.0 // indirect
 	github.com/canonical/go-kbkdf v0.0.0-20250104172618-3b1308f9acf9 // indirect
@@ -19,7 +20,6 @@ require (
 	github.com/canonical/go-tpm2 v1.13.0 // indirect
 	github.com/canonical/tcglog-parser v0.0.0-20240924110432-d15eaf652981 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
-	github.com/jwijenbergh/purego v0.0.0-20251017112123-b71757b9ba42 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pilebones/go-udev v0.9.0 // indirect
