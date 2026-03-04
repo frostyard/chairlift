@@ -3,19 +3,28 @@ package window
 
 import (
 	"fmt"
+	"log"
+	"runtime"
+	"unsafe"
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/version"
 	"github.com/frostyard/chairlift/internal/views"
 
-	"github.com/jwijenbergh/puregotk/v4/adw"
-	"github.com/jwijenbergh/puregotk/v4/gio"
-	"github.com/jwijenbergh/puregotk/v4/gtk"
+	"codeberg.org/puregotk/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/gio"
+	"codeberg.org/puregotk/puregotk/v4/glib"
+	"codeberg.org/puregotk/puregotk/v4/gobject"
+	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
+
+const dataKeyGoInstance = "go_instance"
+
+var gTypeWindow gobject.Type
 
 // Window represents the main application window
 type Window struct {
-	*adw.ApplicationWindow
+	adw.ApplicationWindow
 
 	splitView    *adw.NavigationSplitView
 	sidebarList  *gtk.ListBox
@@ -47,22 +56,60 @@ var navItems = []NavItem{
 	{Name: "help", Title: "Help", Icon: "help-browser-symbolic"},
 }
 
-// New creates a new main window
-func New(app *adw.Application) *Window {
-	w := &Window{
-		ApplicationWindow: adw.NewApplicationWindow(&app.Application),
-		pages:             make(map[string]*adw.ToolbarView),
-		navRows:           make(map[string]*adw.ActionRow),
-		config:            config.Load(),
+func init() {
+	var windowClassInit gobject.ClassInitFunc = func(tc *gobject.TypeClass, u uintptr) {
+		objClass := (*gobject.ObjectClass)(unsafe.Pointer(tc))
+		objClass.OverrideConstructed(func(o *gobject.Object) {
+			parentObjClass := (*gobject.ObjectClass)(unsafe.Pointer(tc.PeekParent()))
+			parentObjClass.GetConstructed()(o)
+
+			var parent adw.ApplicationWindow
+			o.Cast(&parent)
+
+			w := &Window{
+				ApplicationWindow: parent,
+				pages:             make(map[string]*adw.ToolbarView),
+				navRows:           make(map[string]*adw.ActionRow),
+				config:            config.Load(),
+			}
+
+			var pinner runtime.Pinner
+			pinner.Pin(w)
+			var cleanup glib.DestroyNotify = func(data uintptr) {
+				pinner.Unpin()
+			}
+			o.SetDataFull(dataKeyGoInstance, uintptr(unsafe.Pointer(w)), &cleanup)
+
+			w.SetDefaultSize(900, 700)
+			w.SetTitle("ChairLift")
+			w.buildUI()
+			w.setupActions()
+		})
 	}
 
-	w.SetDefaultSize(900, 700)
-	w.SetTitle("ChairLift")
+	var windowInstanceInit gobject.InstanceInitFunc = func(ti *gobject.TypeInstance, tc *gobject.TypeClass) {}
 
-	w.buildUI()
-	w.setupActions()
+	var windowParentQuery gobject.TypeQuery
+	gobject.NewTypeQuery(adw.ApplicationWindowGLibType(), &windowParentQuery)
 
-	return w
+	gTypeWindow = gobject.TypeRegisterStaticSimple(
+		windowParentQuery.Type,
+		"ChairLiftWindow",
+		windowParentQuery.ClassSize,
+		&windowClassInit,
+		windowParentQuery.InstanceSize,
+		&windowInstanceInit,
+		0,
+	)
+}
+
+// New creates a new main window
+func New(app adw.Application) *Window {
+	obj := gobject.NewObject(gTypeWindow, "application", &app.Application)
+	if obj == nil {
+		log.Fatal("Failed to create window")
+	}
+	return (*Window)(unsafe.Pointer(obj.GetData(dataKeyGoInstance)))
 }
 
 // buildUI constructs the window UI
@@ -284,7 +331,7 @@ func (w *Window) navigateToPage(pageName string) {
 		// Select the corresponding row and update title
 		for i, item := range navItems {
 			if item.Name == pageName {
-				row := w.sidebarList.GetRowAtIndex(i)
+				row := w.sidebarList.GetRowAtIndex(int32(i))
 				if row != nil {
 					w.sidebarList.SelectRow(row)
 				}

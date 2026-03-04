@@ -4,6 +4,8 @@ package app
 import (
 	"log"
 	"os"
+	"runtime"
+	"unsafe"
 
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
@@ -11,32 +13,86 @@ import (
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/window"
 
-	"github.com/jwijenbergh/puregotk/v4/adw"
-	"github.com/jwijenbergh/puregotk/v4/gio"
-	"github.com/jwijenbergh/puregotk/v4/glib"
-	"github.com/jwijenbergh/puregotk/v4/gtk"
+	"codeberg.org/puregotk/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/gio"
+	"codeberg.org/puregotk/puregotk/v4/glib"
+	"codeberg.org/puregotk/puregotk/v4/gobject"
+	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
 const (
-	appID   = "org.frostyard.ChairLift"
-	appName = "ChairLift"
+	appID             = "org.frostyard.ChairLift"
+	dataKeyGoInstance = "go_instance"
 )
 
-// Application wraps the Adwaita Application
+var gTypeApplication gobject.Type
+
+// Application wraps the Adwaita Application as a proper GObject subtype
 type Application struct {
-	*adw.Application
+	adw.Application
+	window *window.Window
 	dryRun bool
+}
+
+func init() {
+	var appClassInit gobject.ClassInitFunc = func(tc *gobject.TypeClass, u uintptr) {
+		// Override Constructed to initialize the Go struct
+		objClass := (*gobject.ObjectClass)(unsafe.Pointer(tc))
+		objClass.OverrideConstructed(func(o *gobject.Object) {
+			// Chain up to parent
+			parentObjClass := (*gobject.ObjectClass)(unsafe.Pointer(tc.PeekParent()))
+			parentObjClass.GetConstructed()(o)
+
+			// Cast to adw.Application
+			var parent adw.Application
+			o.Cast(&parent)
+
+			// Allocate Go struct and pin it
+			app := &Application{Application: parent}
+			var pinner runtime.Pinner
+			pinner.Pin(app)
+
+			// Attach Go pointer to GObject lifetime
+			var cleanup glib.DestroyNotify = func(data uintptr) {
+				pinner.Unpin()
+			}
+			o.SetDataFull(dataKeyGoInstance, uintptr(unsafe.Pointer(app)), &cleanup)
+		})
+
+		// Override Activate for app lifecycle
+		appClass := (*gio.ApplicationClass)(unsafe.Pointer(tc))
+		appClass.OverrideActivate(func(a *gio.Application) {
+			myApp := (*Application)(unsafe.Pointer(a.GetData(dataKeyGoInstance)))
+			myApp.onActivate()
+		})
+	}
+
+	var appInstanceInit gobject.InstanceInitFunc = func(ti *gobject.TypeInstance, tc *gobject.TypeClass) {}
+
+	var appParentQuery gobject.TypeQuery
+	gobject.NewTypeQuery(adw.ApplicationGLibType(), &appParentQuery)
+
+	gTypeApplication = gobject.TypeRegisterStaticSimple(
+		appParentQuery.Type,
+		"ChairLiftApplication",
+		appParentQuery.ClassSize,
+		&appClassInit,
+		appParentQuery.InstanceSize,
+		&appInstanceInit,
+		0,
+	)
 }
 
 // New creates a new ChairLift application
 func New() *Application {
-	app := &Application{
-		Application: adw.NewApplication(appID, gio.GApplicationFlagsNoneValue),
-		dryRun:      false,
+	obj := gobject.NewObject(gTypeApplication, "application_id", appID, "flags", gio.GApplicationFlagsNoneValue)
+	if obj == nil {
+		log.Fatal("Failed to create application")
 	}
 
-	// Check for --dry-run flag in command line args before GTK processes them
-	// This is simpler and more reliable than trying to wrap GVariantDict
+	app := (*Application)(unsafe.Pointer(obj.GetData(dataKeyGoInstance)))
+
+	// Check for --dry-run flag before GTK processes args
 	for _, arg := range os.Args[1:] {
 		if arg == "--dry-run" || arg == "-d" {
 			log.Println("Running in dry-run mode")
@@ -49,16 +105,10 @@ func New() *Application {
 		}
 	}
 
-	// Connect activate signal
-	activateCb := func(_ gio.Application) {
-		app.onActivate()
-	}
-	app.ConnectActivate(&activateCb)
-
 	// Set up keyboard shortcuts
 	app.setupKeyboardShortcuts()
 
-	// Register command line options (for --help display)
+	// Register command line options
 	app.registerOptions()
 
 	return app
@@ -68,8 +118,16 @@ func New() *Application {
 func (a *Application) onActivate() {
 	log.Println("ChairLift activated")
 
+	// Guard: reuse existing window if already created
+	if a.window != nil {
+		a.window.Present()
+		return
+	}
+
 	// Create and present the main window
 	win := window.New(a.Application)
+	a.window = win
+	a.AddWindow(&win.Window)
 	win.Present()
 }
 
@@ -87,25 +145,14 @@ func (a *Application) setupKeyboardShortcuts() {
 
 // registerOptions registers command line options
 func (a *Application) registerOptions() {
-	// Add --dry-run option using the simpler AddMainOption API
 	a.AddMainOption(
-		"dry-run",                               // long name
-		'd',                                     // short name
-		glib.GOptionFlagNoneValue,               // flags
-		glib.GOptionArgNoneValue,                // arg type
-		"Don't make any changes to the system.", // description
-		"",                                      // arg description
+		"dry-run",
+		'd',
+		glib.GOptionFlagNoneValue,
+		glib.GOptionArgNoneValue,
+		"Don't make any changes to the system.",
+		"",
 	)
-}
-
-// SetDryRun sets whether the application is in dry-run mode
-func (a *Application) SetDryRun(dryRun bool) {
-	a.dryRun = dryRun
-}
-
-// IsDryRun returns whether the application is in dry-run mode
-func (a *Application) IsDryRun() bool {
-	return a.dryRun
 }
 
 // GetGtkApplication returns the underlying GTK Application
