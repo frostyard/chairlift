@@ -18,9 +18,10 @@ import (
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
-const dataKeyGoInstance = "go_instance"
-
-var gTypeWindow gobject.Type
+var (
+	gTypeWindow     gobject.Type
+	windowInstances = make(map[uintptr]*Window) // Go-side registry keyed by GObject pointer
+)
 
 // Window represents the main application window
 type Window struct {
@@ -75,10 +76,13 @@ func init() {
 
 			var pinner runtime.Pinner
 			pinner.Pin(w)
+			ptr := o.GoPointer()
+			windowInstances[ptr] = w
 			var cleanup glib.DestroyNotify = func(data uintptr) {
+				delete(windowInstances, ptr)
 				pinner.Unpin()
 			}
-			o.SetDataFull(dataKeyGoInstance, uintptr(unsafe.Pointer(w)), &cleanup)
+			o.SetDataFull("prevent_gc", 0, &cleanup)
 
 			w.SetDefaultSize(900, 700)
 			w.SetTitle("ChairLift")
@@ -109,7 +113,7 @@ func New(app adw.Application) *Window {
 	if obj == nil {
 		log.Fatal("Failed to create window")
 	}
-	return (*Window)(unsafe.Pointer(obj.GetData(dataKeyGoInstance))) //nolint:govet // puregotk GObject pattern: retrieve pinned Go struct from GObject data
+	return windowInstances[obj.GoPointer()]
 }
 
 // buildUI constructs the window UI

@@ -20,12 +20,12 @@ import (
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
-const (
-	appID             = "org.frostyard.ChairLift"
-	dataKeyGoInstance = "go_instance"
-)
+const appID = "org.frostyard.ChairLift"
 
-var gTypeApplication gobject.Type
+var (
+	gTypeApplication gobject.Type
+	appInstances     = make(map[uintptr]*Application) // Go-side registry keyed by GObject pointer
+)
 
 // Application wraps the Adwaita Application as a proper GObject subtype
 type Application struct {
@@ -47,22 +47,25 @@ func init() {
 			var parent adw.Application
 			o.Cast(&parent)
 
-			// Allocate Go struct and pin it
+			// Allocate Go struct, pin it, and register by GObject pointer
 			app := &Application{Application: parent}
 			var pinner runtime.Pinner
 			pinner.Pin(app)
+			ptr := o.GoPointer()
+			appInstances[ptr] = app
 
-			// Attach Go pointer to GObject lifetime
+			// Clean up when GObject is destroyed
 			var cleanup glib.DestroyNotify = func(data uintptr) {
+				delete(appInstances, ptr)
 				pinner.Unpin()
 			}
-			o.SetDataFull(dataKeyGoInstance, uintptr(unsafe.Pointer(app)), &cleanup)
+			o.SetDataFull("prevent_gc", 0, &cleanup)
 		})
 
 		// Override Activate for app lifecycle
 		appClass := (*gio.ApplicationClass)(unsafe.Pointer(tc))
 		appClass.OverrideActivate(func(a *gio.Application) {
-			myApp := (*Application)(unsafe.Pointer(a.GetData(dataKeyGoInstance))) //nolint:govet // puregotk GObject pattern: retrieve pinned Go struct from GObject data
+			myApp := appInstances[a.GoPointer()]
 			myApp.onActivate()
 		})
 	}
@@ -90,7 +93,7 @@ func New() *Application {
 		log.Fatal("Failed to create application")
 	}
 
-	app := (*Application)(unsafe.Pointer(obj.GetData(dataKeyGoInstance))) //nolint:govet // puregotk GObject pattern: retrieve pinned Go struct from GObject data
+	app := appInstances[obj.GoPointer()]
 
 	// Check for --dry-run flag before GTK processes args
 	for _, arg := range os.Args[1:] {
