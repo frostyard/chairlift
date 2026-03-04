@@ -62,7 +62,7 @@ func init() {
 		// Override Activate for app lifecycle
 		appClass := (*gio.ApplicationClass)(unsafe.Pointer(tc))
 		appClass.OverrideActivate(func(a *gio.Application) {
-			myApp := (*Application)(unsafe.Pointer(a.GetData(dataKeyGoInstance)))
+			myApp := (*Application)(unsafe.Pointer(a.GetData(dataKeyGoInstance))) //nolint:govet // puregotk GObject pattern: retrieve pinned Go struct from GObject data
 			myApp.onActivate()
 		})
 	}
@@ -90,7 +90,7 @@ func New() *Application {
 		log.Fatal("Failed to create application")
 	}
 
-	app := (*Application)(unsafe.Pointer(obj.GetData(dataKeyGoInstance)))
+	app := (*Application)(unsafe.Pointer(obj.GetData(dataKeyGoInstance))) //nolint:govet // puregotk GObject pattern: retrieve pinned Go struct from GObject data
 
 	// Check for --dry-run flag before GTK processes args
 	for _, arg := range os.Args[1:] {

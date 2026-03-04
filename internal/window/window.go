@@ -109,7 +109,7 @@ func New(app adw.Application) *Window {
 	if obj == nil {
 		log.Fatal("Failed to create window")
 	}
-	return (*Window)(unsafe.Pointer(obj.GetData(dataKeyGoInstance)))
+	return (*Window)(unsafe.Pointer(obj.GetData(dataKeyGoInstance))) //nolint:govet // puregotk GObject pattern: retrieve pinned Go struct from GObject data
 }
 
 // buildUI constructs the window UI
