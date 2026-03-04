@@ -11,6 +11,8 @@ import (
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/nbc"
 
+	sgtk "github.com/frostyard/snowkit/gtk"
+
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
@@ -135,7 +137,7 @@ func (uh *UserHome) loadOutdatedPackages() {
 		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.outdatedExpander.SetSubtitle("Homebrew not installed")
 		})
 		return
@@ -148,7 +150,7 @@ func (uh *UserHome) loadOutdatedPackages() {
 		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.outdatedExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 		})
 		return
@@ -160,7 +162,7 @@ func (uh *UserHome) loadOutdatedPackages() {
 	uh.updateCountMu.Unlock()
 	uh.updateBadgeCount()
 
-	runOnMainThread(func() {
+	sgtk.RunOnMainThread(func() {
 		uh.outdatedExpander.SetSubtitle(fmt.Sprintf("%d packages available", len(packages)))
 		for _, pkg := range packages {
 			row := adw.NewActionRow()
@@ -173,12 +175,12 @@ func (uh *UserHome) loadOutdatedPackages() {
 			clickedCb := func(btn gtk.Button) {
 				go func() {
 					if err := homebrew.Upgrade(pkgName); err != nil {
-						runOnMainThread(func() {
+						sgtk.RunOnMainThread(func() {
 							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Upgrade failed: %v", err))
 						})
 						return
 					}
-					runOnMainThread(func() {
+					sgtk.RunOnMainThread(func() {
 						uh.toastAdder.ShowToast(fmt.Sprintf("%s upgraded", pkgName))
 					})
 				}()
@@ -199,7 +201,7 @@ func (uh *UserHome) loadFlatpakUpdates() {
 		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			if uh.flatpakUpdatesExpander != nil {
 				uh.flatpakUpdatesExpander.SetSubtitle("Flatpak not installed")
 			}
@@ -232,7 +234,7 @@ func (uh *UserHome) loadFlatpakUpdates() {
 	uh.updateCountMu.Unlock()
 	uh.updateBadgeCount()
 
-	runOnMainThread(func() {
+	sgtk.RunOnMainThread(func() {
 		if uh.flatpakUpdatesExpander == nil {
 			return
 		}
@@ -276,14 +278,14 @@ func (uh *UserHome) loadFlatpakUpdates() {
 				btn.SetLabel("Updating...")
 				go func() {
 					if err := flatpak.Update(appID, isUser); err != nil {
-						runOnMainThread(func() {
+						sgtk.RunOnMainThread(func() {
 							btn.SetSensitive(true)
 							btn.SetLabel("Update")
 							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
 						})
 						return
 					}
-					runOnMainThread(func() {
+					sgtk.RunOnMainThread(func() {
 						uh.toastAdder.ShowToast(fmt.Sprintf("%s updated", appID))
 						// Refresh the updates list
 						go uh.loadFlatpakUpdates()
@@ -326,7 +328,7 @@ func (uh *UserHome) checkNBCUpdateAvailability() {
 		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			if uh.nbcCheckRow != nil {
 				uh.nbcCheckRow.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			}
@@ -355,7 +357,7 @@ func (uh *UserHome) checkNBCUpdateAvailability() {
 	}
 	uh.updateBadgeCount()
 
-	runOnMainThread(func() {
+	sgtk.RunOnMainThread(func() {
 		if result.UpdateNeeded {
 			if uh.nbcCheckRow != nil {
 				digest := result.NewDigest
@@ -439,7 +441,7 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 		// Process progress events
 		for event := range progressCh {
 			evt := event // capture for closure
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				switch evt.Type {
 				case nbc.EventTypeStep:
 					// Update main progress
@@ -502,7 +504,7 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 		wg.Wait()
 
 		// Handle final result
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Update")
 
@@ -564,7 +566,7 @@ func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.
 		// Process progress events
 		for event := range progressCh {
 			evt := event // capture for closure
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				switch evt.Type {
 				case nbc.EventTypeStep:
 					// Update main progress
@@ -627,7 +629,7 @@ func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.
 		wg.Wait()
 
 		// Handle final result
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Download")
 
@@ -652,12 +654,12 @@ func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.
 func (uh *UserHome) onUpdateHomebrewClicked() {
 	go func() {
 		if err := homebrew.Update(); err != nil {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
 			})
 			return
 		}
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.toastAdder.ShowToast("Homebrew updated successfully")
 		})
 	}()

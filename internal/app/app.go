@@ -4,7 +4,6 @@ package app
 import (
 	"log"
 	"os"
-	"runtime"
 	"unsafe"
 
 	"github.com/frostyard/chairlift/internal/flatpak"
@@ -12,6 +11,8 @@ import (
 	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/window"
+
+	"github.com/frostyard/snowkit/gobj"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gio"
@@ -24,7 +25,7 @@ const appID = "org.frostyard.ChairLift"
 
 var (
 	gTypeApplication gobject.Type
-	appInstances     = make(map[uintptr]*Application) // Go-side registry keyed by GObject pointer
+	appRegistry      *gobj.InstanceRegistry
 )
 
 // Application wraps the Adwaita Application as a proper GObject subtype
@@ -35,55 +36,32 @@ type Application struct {
 }
 
 func init() {
-	var appClassInit gobject.ClassInitFunc = func(tc *gobject.TypeClass, u uintptr) {
-		// Override Constructed to initialize the Go struct
-		objClass := (*gobject.ObjectClass)(unsafe.Pointer(tc))
-		objClass.OverrideConstructed(func(o *gobject.Object) {
-			// Chain up to parent
-			parentObjClass := (*gobject.ObjectClass)(unsafe.Pointer(tc.PeekParent()))
-			parentObjClass.GetConstructed()(o)
+	gTypeApplication, appRegistry = gobj.RegisterType(gobj.TypeDef{
+		ParentGLibType: adw.ApplicationGLibType,
+		ClassName:      "ChairLiftApplication",
+		ClassInit: func(tc *gobject.TypeClass, reg *gobj.InstanceRegistry) {
+			objClass := (*gobject.ObjectClass)(unsafe.Pointer(tc))
+			objClass.OverrideConstructed(func(o *gobject.Object) {
+				parentObjClass := (*gobject.ObjectClass)(unsafe.Pointer(tc.PeekParent()))
+				parentObjClass.GetConstructed()(o)
 
-			// Cast to adw.Application
-			var parent adw.Application
-			o.Cast(&parent)
+				var parent adw.Application
+				o.Cast(&parent)
 
-			// Allocate Go struct, pin it, and register by GObject pointer
-			app := &Application{Application: parent}
-			var pinner runtime.Pinner
-			pinner.Pin(app)
-			ptr := o.GoPointer()
-			appInstances[ptr] = app
+				app := &Application{Application: parent}
+				reg.Pin(o, unsafe.Pointer(app))
+			})
 
-			// Clean up when GObject is destroyed
-			var cleanup glib.DestroyNotify = func(data uintptr) {
-				delete(appInstances, ptr)
-				pinner.Unpin()
-			}
-			o.SetDataFull("prevent_gc", 0, &cleanup)
-		})
-
-		// Override Activate for app lifecycle
-		appClass := (*gio.ApplicationClass)(unsafe.Pointer(tc))
-		appClass.OverrideActivate(func(a *gio.Application) {
-			myApp := appInstances[a.GoPointer()]
-			myApp.onActivate()
-		})
-	}
-
-	var appInstanceInit gobject.InstanceInitFunc = func(ti *gobject.TypeInstance, tc *gobject.TypeClass) {}
-
-	var appParentQuery gobject.TypeQuery
-	gobject.NewTypeQuery(adw.ApplicationGLibType(), &appParentQuery)
-
-	gTypeApplication = gobject.TypeRegisterStaticSimple(
-		appParentQuery.Type,
-		"ChairLiftApplication",
-		appParentQuery.ClassSize,
-		&appClassInit,
-		appParentQuery.InstanceSize,
-		&appInstanceInit,
-		0,
-	)
+			appClass := (*gio.ApplicationClass)(unsafe.Pointer(tc))
+			appClass.OverrideActivate(func(a *gio.Application) {
+				ptr := reg.Get(a.GoPointer())
+				if ptr == nil {
+					log.Fatal("Application instance not found")
+				}
+				(*Application)(ptr).onActivate()
+			})
+		},
+	})
 }
 
 // New creates a new ChairLift application
@@ -93,7 +71,7 @@ func New() *Application {
 		log.Fatal("Failed to create application")
 	}
 
-	app := appInstances[obj.GoPointer()]
+	app := (*Application)(appRegistry.Get(obj.GoPointer()))
 
 	// Check for --dry-run flag before GTK processes args
 	for _, arg := range os.Args[1:] {

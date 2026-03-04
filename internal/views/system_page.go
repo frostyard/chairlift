@@ -9,6 +9,8 @@ import (
 
 	"github.com/frostyard/chairlift/internal/nbc"
 
+	sgtk "github.com/frostyard/snowkit/gtk"
+
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 	"golang.org/x/text/cases"
@@ -152,7 +154,7 @@ func (uh *UserHome) loadNBCStatus(expander *adw.ExpanderRow) {
 
 		status, err := nbc.GetStatus(ctx)
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			// Remove loading row
 			expander.Remove(&loadingRow.Widget)
 
@@ -273,11 +275,11 @@ func (uh *UserHome) onSystemUpdateClicked(button *gtk.Button) {
 			evt := event
 			if evt.Type == nbc.EventTypeStep && evt.StepName != lastStep {
 				lastStep = evt.StepName
-				runOnMainThread(func() {
+				sgtk.RunOnMainThread(func() {
 					uh.toastAdder.ShowToast(fmt.Sprintf("[%d/%d] %s", evt.Step, evt.TotalSteps, evt.StepName))
 				})
 			} else if evt.Type == nbc.EventTypeError {
-				runOnMainThread(func() {
+				sgtk.RunOnMainThread(func() {
 					uh.toastAdder.ShowErrorToast(evt.Message)
 				})
 			}
@@ -285,7 +287,7 @@ func (uh *UserHome) onSystemUpdateClicked(button *gtk.Button) {
 
 		wg.Wait()
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			// Re-enable the button
 			if button != nil {
 				button.SetSensitive(true)

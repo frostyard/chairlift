@@ -8,6 +8,8 @@ import (
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
 
+	sgtk "github.com/frostyard/snowkit/gtk"
+
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
@@ -137,7 +139,7 @@ func (uh *UserHome) onBrewCleanupClicked(button *gtk.Button) {
 	go func() {
 		output, err := homebrew.Cleanup()
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Clean Up")
 
@@ -163,7 +165,7 @@ func (uh *UserHome) onFlatpakCleanupClicked(button *gtk.Button) {
 	go func() {
 		output, err := flatpak.UninstallUnused()
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Clean Up")
 
@@ -187,12 +189,12 @@ func (uh *UserHome) onBrewBundleDumpClicked() {
 		homeDir, _ := os.UserHomeDir()
 		path := homeDir + "/Brewfile"
 		if err := homebrew.BundleDump(path, true); err != nil {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Bundle dump failed: %v", err))
 			})
 			return
 		}
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.toastAdder.ShowToast(fmt.Sprintf("Brewfile saved to %s", path))
 		})
 	}()
