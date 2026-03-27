@@ -5,13 +5,11 @@ go 1.24.2
 require (
 	codeberg.org/puregotk/puregotk v0.0.0-20260226083027-5647eb6a2bba
 	github.com/frostyard/nbc v0.14.0
-	github.com/frostyard/snowkit v0.0.0
+	github.com/frostyard/snowkit v0.1.0
 	github.com/snapcore/snapd v0.0.0-20260121163940-7314b8b629e5
 	golang.org/x/text v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace github.com/frostyard/snowkit => ../snowkit
 
 require (
 	codeberg.org/puregotk/purego v0.0.0-20260224095105-2513c838cb80 // indirect
