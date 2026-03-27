@@ -58,10 +58,8 @@ maintenance_page:
   maintenance_optimization_group:
     enabled: true
 
-extensions_page:
-  installed_group:
-    enabled: true
-  discover_group:
+features_page:
+  features_group:
     enabled: true
 
 help_page:

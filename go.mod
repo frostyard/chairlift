@@ -3,19 +3,19 @@ module github.com/frostyard/chairlift
 go 1.25.6
 
 require (
+	codeberg.org/puregotk/puregotk v0.0.0-20260226083027-5647eb6a2bba
 	github.com/frostyard/nbc v0.14.0
 	github.com/frostyard/pm v0.2.1
 	github.com/frostyard/pm/progress v0.2.1
 	github.com/frostyard/updex v1.0.0
-	github.com/jwijenbergh/puregotk v0.0.0-20260115100645-c78e1521129b
 	golang.org/x/text v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
+	codeberg.org/puregotk/purego v0.0.0-20260224095105-2513c838cb80 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
-	github.com/jwijenbergh/purego v0.0.0-20251017112123-b71757b9ba42 // indirect
 	github.com/klauspost/compress v1.18.3 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect

@@ -11,10 +11,9 @@ chairlift/
 ├── internal/               # Internal packages (not importable externally)
 │   ├── app/                # GTK Application lifecycle
 │   ├── config/             # YAML configuration loading
-│   ├── instex/             # instex CLI wrapper (extension install)
 │   ├── nbc/                # nbc CLI wrapper (bootc updates)
 │   ├── pm/                 # Package manager wrapper (Flatpak, Snap, Homebrew)
-│   ├── updex/              # updex CLI wrapper (extension management)
+│   ├── updex/              # updex CLI wrapper (feature management)
 │   ├── version/            # Build version info
 │   ├── views/              # Page content and UI logic
 │   └── window/             # Main window composition
@@ -62,14 +61,9 @@ chairlift/
 - Key files: `internal/nbc/nbc.go`
 
 **internal/updex/:**
-- Purpose: Updex extension manager CLI wrapper
-- Contains: Extension listing and management
+- Purpose: Updex feature manager CLI wrapper
+- Contains: Feature listing, enable/disable, and update operations
 - Key files: `internal/updex/updex.go`
-
-**internal/instex/:**
-- Purpose: Instex extension installer CLI wrapper
-- Contains: Repository discovery and extension installation
-- Key files: `internal/instex/instex.go`
 
 **internal/pm/:**
 - Purpose: Package manager abstraction (wraps frostyard/pm library)
@@ -108,8 +102,7 @@ chairlift/
 **Tool Wrappers:**
 - `internal/nbc/nbc.go`: NBC wrapper (515 lines)
 - `internal/pm/wrapper.go`: PM library wrapper (1048 lines)
-- `internal/updex/updex.go`: Updex wrapper (139 lines)
-- `internal/instex/instex.go`: Instex wrapper (169 lines)
+- `internal/updex/updex.go`: Updex wrapper (178 lines)
 
 **Build:**
 - `Makefile`: Build, install, release targets

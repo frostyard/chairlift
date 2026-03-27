@@ -26,7 +26,7 @@
 - Purpose: GTK Application lifecycle, keyboard shortcuts, activation
 - Location: `internal/app/`
 - Contains: `app.go` - Application struct wrapping adw.Application
-- Depends on: `internal/window`, `internal/nbc`, `internal/updex`, `internal/instex`, `internal/pm`
+- Depends on: `internal/window`, `internal/nbc`, `internal/updex`, `internal/pm`
 - Used by: `cmd/chairlift/main.go`
 
 **Window Layer (window):**
@@ -40,7 +40,7 @@
 - Purpose: Page content, UI actions, async data loading
 - Location: `internal/views/`
 - Contains: `userhome.go` - All page builders and event handlers
-- Depends on: `internal/config`, `internal/nbc`, `internal/updex`, `internal/instex`, `internal/pm`
+- Depends on: `internal/config`, `internal/nbc`, `internal/updex`, `internal/pm`
 - Used by: `internal/window`
 
 **Configuration Layer (config):**
@@ -51,8 +51,8 @@
 - Used by: `internal/window`, `internal/views`
 
 **External Tool Wrappers:**
-- Purpose: Interface with system tools (nbc, updex, instex, brew, flatpak, snap)
-- Location: `internal/nbc/`, `internal/updex/`, `internal/instex/`, `internal/pm/`
+- Purpose: Interface with system tools (nbc, updex, brew, flatpak, snap)
+- Location: `internal/nbc/`, `internal/updex/`, `internal/pm/`
 - Contains: Command execution, JSON parsing, dry-run support
 - Depends on: External CLI tools via exec
 - Used by: `internal/views`

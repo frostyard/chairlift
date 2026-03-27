@@ -30,7 +30,7 @@ func main() {
 	application := app.New()
 	defer application.Unref()
 
-	if code := application.Run(len(os.Args), os.Args); code > 0 {
-		os.Exit(code)
+	if code := application.Run(int32(len(os.Args)), os.Args); code > 0 {
+		os.Exit(int(code))
 	}
 }

@@ -28,17 +28,11 @@
   - Auth: PolicyKit (pkexec) for state-changing operations
   - Progress: JSON Lines streaming for long operations
 
-**Systemd-sysext Extensions:**
-- updex - List installed systemd-sysext extensions
+**System Features (via updex):**
+- updex - List, enable, disable, and update system features
   - Implementation: `internal/updex/updex.go`
-  - Commands executed: `updex list --json`, `updex --version`
-  - Auth: None (read-only)
-
-- instex - Discover and install extensions from remote repositories
-  - Implementation: `internal/instex/instex.go`
-  - Commands executed: `instex discover <url> --json`, `instex install <url> --component <name>`
-  - Auth: PolicyKit (pkexec) for installation
-  - Default repository: `https://repository.frostyard.org`
+  - Commands executed: `updex features list --json`, `updex features enable <name>`, `updex features disable <name>`, `updex features update`, `updex --version`
+  - Auth: PolicyKit (pkexec) for enable/disable/update operations; read-only for listing
 
 ## Data Storage
 
@@ -59,11 +53,11 @@
 - PolicyKit (pkexec) for privileged operations
   - PolicyKit policies in `data/org.frostyard.ChairLift.*.policy`
   - PolicyKit rules in `data/org.frostyard.ChairLift.*.rules`
-  - Used for: nbc operations, instex install, snap operations
+  - Used for: nbc operations, updex feature enable/disable/update, snap operations
 
 **Operations Requiring Elevation:**
 - NBC: update, download, install, cache clear/remove
-- Extensions: instex install
+- Features: updex enable, disable, update
 - System cleanup scripts with `sudo: true` in config
 
 ## Monitoring & Observability
@@ -126,8 +120,7 @@
 
 **System Tools:**
 - `nbc` - NBC bootc operations (with pkexec for state changes)
-- `updex` - Extension listing
-- `instex` - Extension discovery/installation (with pkexec)
+- `updex` - Feature listing, enable/disable/update (with pkexec for state changes)
 - `pkexec` - PolicyKit privilege escalation
 - `gtk-launch` - Launch desktop applications
 

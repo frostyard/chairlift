@@ -63,7 +63,7 @@ page_name:
 - `maintenance_flatpak_group`: Flatpak cleanup (runs `flatpak uninstall --unused` to remove unused runtimes)
 - `maintenance_optimization_group`: System optimization tools
 
-### Extensions Page (`extensions_page`)
+### Features Page (`features_page`)
 
 - `installed_group`: Installed systemd-sysext extensions (requires `updex` command)
 - `discover_group`: Discover and install extensions from remote repositories

@@ -57,7 +57,7 @@ dev:
 
 # Install dependencies
 install-deps:
-	$(GOGET) github.com/jwijenbergh/puregotk
+	$(GOGET) codeberg.org/puregotk/puregotk
 	$(GOGET) gopkg.in/yaml.v3
 
 # Format code
