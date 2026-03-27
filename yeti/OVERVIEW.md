@@ -28,7 +28,7 @@ internal/views/                 Page builders and event handlers (one file per p
 
 `cmd → app → window → views → {config, homebrew, flatpak, nbc, snap, updex}`
 
-External shared library: `github.com/frostyard/snowkit` (local replace directive in go.mod) provides:
+External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
 - `gobj` — GObject type registration and instance registry
 - `sgtk.RunOnMainThread()` — main-thread dispatch for GTK safety
 
@@ -164,7 +164,7 @@ page_name:
 | Module | Purpose |
 |--------|---------|
 | `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO) |
-| `github.com/frostyard/snowkit` | GObject registration, main-thread dispatch (local) |
+| `github.com/frostyard/snowkit` | GObject registration, main-thread dispatch |
 | `github.com/frostyard/nbc` | NBC types (ProgressEvent, StatusOutput, etc.) |
 | `github.com/snapcore/snapd` | Snapd client library |
 | `gopkg.in/yaml.v3` | YAML config parsing |

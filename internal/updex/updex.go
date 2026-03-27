@@ -1,18 +1,22 @@
-// Package updex provides an interface to system feature management via updex
+// Package updex provides an interface to system feature management via the updex API.
+// Read operations use the updex Go library directly. Write operations that require
+// root are delegated to the chairlift-updex-helper binary via pkexec.
 package updex
 
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
+	"sync"
 	"time"
+
+	updexapi "github.com/frostyard/updex/updex"
 )
 
 const (
-	updexCommand   = "updex"
+	helperCommand  = "chairlift-updex-helper"
 	pkexecCommand  = "pkexec"
 	DefaultTimeout = 5 * time.Minute
 )
@@ -44,7 +48,7 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
-// NotFoundError is returned when updex is not installed
+// NotFoundError is returned when updex features are not configured
 type NotFoundError struct {
 	Message string
 }
@@ -53,68 +57,80 @@ func (e *NotFoundError) Error() string {
 	return e.Message
 }
 
-// Feature represents a system feature managed by updex
-type Feature struct {
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	Documentation string   `json:"documentation"`
-	Enabled       bool     `json:"enabled"`
-	Source        string   `json:"source"`
-	Transfers     []string `json:"transfers"`
+// Type aliases to the updex API types
+type (
+	Feature      = updexapi.FeatureInfo
+	CheckResult  = updexapi.CheckResult
+	FeatureCheck = updexapi.CheckFeaturesResult
+)
+
+// Singleton API client
+var (
+	clientOnce sync.Once
+	apiClient  *updexapi.Client
+)
+
+func getClient() *updexapi.Client {
+	clientOnce.Do(func() {
+		apiClient = updexapi.NewClient(updexapi.ClientConfig{})
+	})
+	return apiClient
 }
 
-// IsInstalled checks if updex is installed and accessible
+// IsInstalled checks if updex features are configured on this system
 func IsInstalled() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, updexCommand, "--version")
-	err := cmd.Run()
+	_, err := getClient().Features(ctx)
 	return err == nil
 }
 
-// runCommand executes an updex command and returns stdout, stderr, and any error
-func runCommand(ctx context.Context, args ...string) (string, string, error) {
-	if dryRun {
-		log.Printf("[DRY-RUN] updex: %v", args)
-	}
-
-	cmd := exec.CommandContext(ctx, updexCommand, args...)
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-
-	if stderr.Len() > 0 {
-		log.Printf("updex stderr: %s", stderr.String())
-	}
-
+// ListFeatures returns all available features
+func ListFeatures(ctx context.Context) ([]Feature, error) {
+	features, err := getClient().Features(ctx)
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return "", stderr.String(), &Error{Message: "Command timed out"}
-		}
-		if execErr, ok := err.(*exec.Error); ok && execErr.Err == exec.ErrNotFound {
-			return "", stderr.String(), &NotFoundError{Message: "updex not found"}
-		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", stderr.String(), &Error{Message: fmt.Sprintf("command failed (exit %d): %s", exitErr.ExitCode(), stderr.String())}
-		}
-		return "", stderr.String(), &Error{Message: err.Error()}
+		return nil, &Error{Message: fmt.Sprintf("failed to list features: %v", err)}
 	}
-
-	return stdout.String(), stderr.String(), nil
+	return features, nil
 }
 
-// runPrivilegedCommand executes an updex command via pkexec for privileged operations
-func runPrivilegedCommand(ctx context.Context, args ...string) (string, string, error) {
+// CheckFeatures checks enabled features for available updates
+func CheckFeatures(ctx context.Context) ([]FeatureCheck, error) {
+	checks, err := getClient().CheckFeatures(ctx, updexapi.CheckFeaturesOptions{})
+	if err != nil {
+		return nil, &Error{Message: fmt.Sprintf("failed to check features: %v", err)}
+	}
+	return checks, nil
+}
+
+// EnableFeature enables a feature for download
+func EnableFeature(ctx context.Context, name string) error {
+	_, _, err := runHelper(ctx, "enable-feature", name)
+	return err
+}
+
+// DisableFeature disables a feature
+func DisableFeature(ctx context.Context, name string) error {
+	_, _, err := runHelper(ctx, "disable-feature", name)
+	return err
+}
+
+// UpdateFeatures downloads enabled features
+func UpdateFeatures(ctx context.Context) error {
+	_, _, err := runHelper(ctx, "update")
+	return err
+}
+
+// runHelper executes the chairlift-updex-helper via pkexec for privileged operations
+func runHelper(ctx context.Context, args ...string) (string, string, error) {
 	if dryRun {
-		log.Printf("[DRY-RUN] would execute: pkexec %s %v", updexCommand, args)
+		args = append(args, "--dry-run")
+		log.Printf("[DRY-RUN] would execute: pkexec %s %v", helperCommand, args)
 		return "", "", nil
 	}
 
-	fullArgs := append([]string{updexCommand}, args...)
+	fullArgs := append([]string{helperCommand}, args...)
 	cmd := exec.CommandContext(ctx, pkexecCommand, fullArgs...)
 
 	var stdout, stderr bytes.Buffer
@@ -124,15 +140,15 @@ func runPrivilegedCommand(ctx context.Context, args ...string) (string, string, 
 	err := cmd.Run()
 
 	if stderr.Len() > 0 {
-		log.Printf("updex stderr: %s", stderr.String())
+		log.Printf("updex helper stderr: %s", stderr.String())
 	}
 
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", stderr.String(), &Error{Message: "Command timed out"}
+			return "", stderr.String(), &Error{Message: "command timed out"}
 		}
 		if execErr, ok := err.(*exec.Error); ok && execErr.Err == exec.ErrNotFound {
-			return "", stderr.String(), &NotFoundError{Message: "pkexec or updex not found"}
+			return "", stderr.String(), &NotFoundError{Message: "pkexec or chairlift-updex-helper not found"}
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return "", stderr.String(), &Error{Message: fmt.Sprintf("command failed (exit %d): %s", exitErr.ExitCode(), stderr.String())}
@@ -141,66 +157,4 @@ func runPrivilegedCommand(ctx context.Context, args ...string) (string, string, 
 	}
 
 	return stdout.String(), stderr.String(), nil
-}
-
-// CheckResult represents the update status of a single component
-type CheckResult struct {
-	Component       string `json:"component"`
-	CurrentVersion  string `json:"current_version"`
-	NewestVersion   string `json:"newest_version"`
-	UpdateAvailable bool   `json:"update_available"`
-}
-
-// FeatureCheck represents the update check results for a feature
-type FeatureCheck struct {
-	Feature string        `json:"feature"`
-	Results []CheckResult `json:"results"`
-}
-
-// CheckFeatures checks enabled features for available updates
-func CheckFeatures(ctx context.Context) ([]FeatureCheck, error) {
-	output, _, err := runCommand(ctx, "features", "check", "--json")
-	if err != nil {
-		return nil, err
-	}
-
-	var checks []FeatureCheck
-	if err := json.Unmarshal([]byte(output), &checks); err != nil {
-		return nil, &Error{Message: fmt.Sprintf("failed to parse check JSON output: %v", err)}
-	}
-
-	return checks, nil
-}
-
-// ListFeatures returns all available features
-func ListFeatures(ctx context.Context) ([]Feature, error) {
-	output, _, err := runCommand(ctx, "features", "list", "--json")
-	if err != nil {
-		return nil, err
-	}
-
-	var features []Feature
-	if err := json.Unmarshal([]byte(output), &features); err != nil {
-		return nil, &Error{Message: fmt.Sprintf("failed to parse JSON output: %v", err)}
-	}
-
-	return features, nil
-}
-
-// EnableFeature enables a feature for download
-func EnableFeature(ctx context.Context, name string) error {
-	_, _, err := runPrivilegedCommand(ctx, "features", "enable", name)
-	return err
-}
-
-// DisableFeature disables a feature
-func DisableFeature(ctx context.Context, name string) error {
-	_, _, err := runPrivilegedCommand(ctx, "features", "disable", name)
-	return err
-}
-
-// UpdateFeatures downloads enabled features
-func UpdateFeatures(ctx context.Context) error {
-	_, _, err := runPrivilegedCommand(ctx, "features", "update")
-	return err
 }
