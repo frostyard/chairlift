@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/frostyard/nbc/pkg/types"
+	"github.com/frostyard/std/reporter"
 )
 
 const (
@@ -82,19 +83,19 @@ type (
 	// ValidateOutput from `nbc validate`
 	ValidateOutput = types.ValidateOutput
 	// ProgressEvent represents a streaming progress event
-	ProgressEvent = types.ProgressEvent
+	ProgressEvent = reporter.ProgressEvent
 	// EventType represents the type of progress event
-	EventType = types.EventType
+	EventType = reporter.EventType
 )
 
 // Re-export event type constants
 const (
-	EventTypeStep     = types.EventTypeStep
-	EventTypeProgress = types.EventTypeProgress
-	EventTypeMessage  = types.EventTypeMessage
-	EventTypeWarning  = types.EventTypeWarning
-	EventTypeError    = types.EventTypeError
-	EventTypeComplete = types.EventTypeComplete
+	EventTypeStep     = reporter.EventTypeStep
+	EventTypeProgress = reporter.EventTypeProgress
+	EventTypeMessage  = reporter.EventTypeMessage
+	EventTypeWarning  = reporter.EventTypeWarning
+	EventTypeError    = reporter.EventTypeError
+	EventTypeComplete = reporter.EventTypeComplete
 )
 
 // --- Option Structs ---
