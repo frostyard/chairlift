@@ -36,3 +36,4 @@ vendor/
 # OS
 .DS_Store
 Thumbs.db
+/chairlift-updex-helper

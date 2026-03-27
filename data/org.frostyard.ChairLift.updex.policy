@@ -16,7 +16,7 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/updex</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/chairlift-updex-helper</annotate>
   </action>
 
   <action id="org.frostyard.ChairLift.updex.update">
@@ -27,7 +27,7 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/updex</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/chairlift-updex-helper</annotate>
   </action>
 
   <action id="org.frostyard.ChairLift.updex.vacuum">
@@ -38,7 +38,7 @@
       <allow_inactive>auth_admin</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/updex</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/bin/chairlift-updex-helper</annotate>
   </action>
 
 </policyconfig>

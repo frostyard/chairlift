@@ -1,7 +1,8 @@
 .PHONY: all build run clean deps tidy install uninstall
 
-# Binary name
+# Binary names
 BINARY_NAME=chairlift
+HELPER_NAME=chairlift-updex-helper
 
 # Build directory
 BUILD_DIR=build
@@ -35,8 +36,13 @@ deps:
 tidy:
 	$(GOMOD) tidy
 
-build:
+build: build-app build-helper
+
+build-app:
 	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/chairlift
+
+build-helper:
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(HELPER_NAME) ./cmd/chairlift-updex-helper
 
 run: build
 	./$(BUILD_DIR)/$(BINARY_NAME) --dry-run
@@ -84,9 +90,14 @@ install: build
 	install -Dm644 data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift.svg
 	install -Dm644 data/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
 	install -Dm644 data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
+	# Install updex helper binary
+	install -Dm755 $(BUILD_DIR)/$(HELPER_NAME) $(DESTDIR)$(BINDIR)/$(HELPER_NAME)
 	# Install PolicyKit policy and rules for nbc
 	install -Dm644 data/org.frostyard.ChairLift.nbc.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.nbc.policy
 	install -Dm644 data/org.frostyard.ChairLift.nbc.rules $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.nbc.rules
+	# Install PolicyKit policy and rules for updex
+	install -Dm644 data/org.frostyard.ChairLift.updex.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
+	install -Dm644 data/org.frostyard.ChairLift.updex.rules $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
 
 # Uninstall the application
 uninstall:
@@ -96,8 +107,11 @@ uninstall:
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift.svg
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
+	rm -f $(DESTDIR)$(BINDIR)/$(HELPER_NAME)
 	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.nbc.policy
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.nbc.rules
+	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
+	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
 
 bump: ## generate a new version with svu
 	@$(MAKE) build

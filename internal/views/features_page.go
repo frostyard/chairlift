@@ -47,7 +47,7 @@ func (uh *UserHome) buildFeaturesPage() {
 
 		row := adw.NewActionRow()
 		row.SetTitle("Feature Manager Not Available")
-		row.SetSubtitle("The updex command is not installed on this system")
+		row.SetSubtitle("System features are not configured on this system")
 		group.Add(&row.Widget)
 		page.Add(group)
 	}
