@@ -6,39 +6,11 @@ import (
 
 	"github.com/frostyard/chairlift/internal/config"
 
+	sgtk "github.com/frostyard/snowkit/gtk"
+
 	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/glib"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
-
-// idleCallbackRegistry stores callbacks to prevent GC collection
-var (
-	idleCallbackMu sync.Mutex
-	idleCallbacks  = make(map[uintptr]func())
-	idleCallbackID uintptr
-)
-
-// runOnMainThread schedules a function to run on the GTK main thread
-func runOnMainThread(fn func()) {
-	idleCallbackMu.Lock()
-	idleCallbackID++
-	id := idleCallbackID
-	idleCallbacks[id] = fn
-	idleCallbackMu.Unlock()
-
-	cb := glib.SourceFunc(func(data uintptr) bool {
-		idleCallbackMu.Lock()
-		callback, ok := idleCallbacks[data]
-		delete(idleCallbacks, data)
-		idleCallbackMu.Unlock()
-
-		if ok {
-			callback()
-		}
-		return false // Remove source after execution
-	})
-	glib.IdleAdd(&cb, id)
-}
 
 // ToastAdder is an interface for adding toasts and notifying about updates
 type ToastAdder interface {
@@ -132,7 +104,7 @@ func (uh *UserHome) updateBadgeCount() {
 	total := uh.nbcUpdateCount + uh.flatpakUpdateCount + uh.brewUpdateCount
 	uh.updateCountMu.Unlock()
 
-	runOnMainThread(func() {
+	sgtk.RunOnMainThread(func() {
 		uh.toastAdder.SetUpdateBadge(total)
 	})
 }

@@ -6,6 +6,8 @@ import (
 
 	"github.com/frostyard/chairlift/internal/updex"
 
+	sgtk "github.com/frostyard/snowkit/gtk"
+
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
@@ -58,7 +60,7 @@ func (uh *UserHome) loadFeatures() {
 
 	features, err := updex.ListFeatures(ctx)
 
-	runOnMainThread(func() {
+	sgtk.RunOnMainThread(func() {
 		if uh.featuresGroup == nil {
 			return
 		}
@@ -111,7 +113,7 @@ func (uh *UserHome) checkFeatureUpdates(totalFeatures int) {
 
 	checks, err := updex.CheckFeatures(ctx)
 
-	runOnMainThread(func() {
+	sgtk.RunOnMainThread(func() {
 		if err != nil {
 			log.Printf("Feature update check failed: %v", err)
 			return
@@ -152,7 +154,7 @@ func (uh *UserHome) onFeatureToggled(name string, enabled bool, toggle *gtk.Swit
 			err = updex.DisableFeature(ctx, name)
 		}
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			if err != nil {
 				// Revert switch to previous state
 				toggle.SetActive(!enabled)
@@ -183,7 +185,7 @@ func (uh *UserHome) onUpdateFeaturesClicked(button *gtk.Button) {
 
 		err := updex.UpdateFeatures(ctx)
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Update")
 

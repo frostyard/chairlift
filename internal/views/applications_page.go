@@ -10,6 +10,8 @@ import (
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/snap"
 
+	sgtk "github.com/frostyard/snowkit/gtk"
+
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
@@ -211,7 +213,7 @@ func (uh *UserHome) buildApplicationsPage() {
 // loadHomebrewPackages loads installed Homebrew packages asynchronously
 func (uh *UserHome) loadHomebrewPackages() {
 	if !homebrew.IsInstalled() {
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.formulaeExpander.SetSubtitle("Homebrew not installed")
 			uh.casksExpander.SetSubtitle("Homebrew not installed")
 		})
@@ -221,11 +223,11 @@ func (uh *UserHome) loadHomebrewPackages() {
 	// Load formulae
 	formulae, err := homebrew.ListInstalledFormulae()
 	if err != nil {
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.formulaeExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 		})
 	} else {
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.formulaeExpander.SetSubtitle(fmt.Sprintf("%d installed", len(formulae)))
 			for _, pkg := range formulae {
 				row := adw.NewActionRow()
@@ -239,11 +241,11 @@ func (uh *UserHome) loadHomebrewPackages() {
 	// Load casks
 	casks, err := homebrew.ListInstalledCasks()
 	if err != nil {
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.casksExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 		})
 	} else {
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.casksExpander.SetSubtitle(fmt.Sprintf("%d installed", len(casks)))
 			for _, pkg := range casks {
 				row := adw.NewActionRow()
@@ -258,7 +260,7 @@ func (uh *UserHome) loadHomebrewPackages() {
 // loadFlatpakApplications loads installed Flatpak applications asynchronously
 func (uh *UserHome) loadFlatpakApplications() {
 	if !flatpak.IsInstalled() {
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			if uh.flatpakUserExpander != nil {
 				uh.flatpakUserExpander.SetSubtitle("Flatpak not installed")
 			}
@@ -273,11 +275,11 @@ func (uh *UserHome) loadFlatpakApplications() {
 	if uh.flatpakUserExpander != nil {
 		userApps, err := flatpak.ListUserApplications()
 		if err != nil {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				uh.flatpakUserExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			})
 		} else {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				uh.flatpakUserExpander.SetSubtitle(fmt.Sprintf("%d installed", len(userApps)))
 				for _, app := range userApps {
 					row := adw.NewActionRow()
@@ -299,13 +301,13 @@ func (uh *UserHome) loadFlatpakApplications() {
 						btn.SetSensitive(false)
 						go func() {
 							if err := flatpak.Uninstall(appID, true); err != nil {
-								runOnMainThread(func() {
+								sgtk.RunOnMainThread(func() {
 									btn.SetSensitive(true)
 									uh.toastAdder.ShowErrorToast(fmt.Sprintf("Uninstall failed: %v", err))
 								})
 								return
 							}
-							runOnMainThread(func() {
+							sgtk.RunOnMainThread(func() {
 								uh.toastAdder.ShowToast(fmt.Sprintf("%s uninstalled", appID))
 								// Refresh the list
 								go uh.loadFlatpakApplications()
@@ -325,11 +327,11 @@ func (uh *UserHome) loadFlatpakApplications() {
 	if uh.flatpakSystemExpander != nil {
 		systemApps, err := flatpak.ListSystemApplications()
 		if err != nil {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				uh.flatpakSystemExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			})
 		} else {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				uh.flatpakSystemExpander.SetSubtitle(fmt.Sprintf("%d installed", len(systemApps)))
 				for _, app := range systemApps {
 					row := adw.NewActionRow()
@@ -351,13 +353,13 @@ func (uh *UserHome) loadFlatpakApplications() {
 						btn.SetSensitive(false)
 						go func() {
 							if err := flatpak.Uninstall(appID, false); err != nil {
-								runOnMainThread(func() {
+								sgtk.RunOnMainThread(func() {
 									btn.SetSensitive(true)
 									uh.toastAdder.ShowErrorToast(fmt.Sprintf("Uninstall failed: %v", err))
 								})
 								return
 							}
-							runOnMainThread(func() {
+							sgtk.RunOnMainThread(func() {
 								uh.toastAdder.ShowToast(fmt.Sprintf("%s uninstalled", appID))
 								// Refresh the list
 								go uh.loadFlatpakApplications()
@@ -377,7 +379,7 @@ func (uh *UserHome) loadFlatpakApplications() {
 // loadSnapApplications loads installed snap packages asynchronously
 func (uh *UserHome) loadSnapApplications() {
 	if !snap.IsInstalled() {
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			if uh.snapExpander != nil {
 				uh.snapExpander.SetSubtitle("Snap not installed")
 			}
@@ -394,7 +396,7 @@ func (uh *UserHome) loadSnapApplications() {
 	// Load installed snaps
 	snaps, err := snap.ListInstalledSnaps()
 	if err != nil {
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			if uh.snapExpander != nil {
 				uh.snapExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			}
@@ -402,7 +404,7 @@ func (uh *UserHome) loadSnapApplications() {
 		return
 	}
 
-	runOnMainThread(func() {
+	sgtk.RunOnMainThread(func() {
 		if uh.snapExpander != nil {
 			// Clear existing rows
 			for _, row := range uh.snapRows {
@@ -456,7 +458,7 @@ func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
 
 		changeID, err := snap.Install(ctx, "snap-store")
 		if err != nil {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				button.SetSensitive(true)
 				button.SetLabel("Install")
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to install snap-store: %v", err))
@@ -467,7 +469,7 @@ func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
 		// Wait for the installation to complete
 		err = snap.WaitForChange(ctx, changeID)
 		if err != nil {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				button.SetSensitive(true)
 				button.SetLabel("Install")
 				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Installation failed: %v", err))
@@ -475,7 +477,7 @@ func (uh *UserHome) onInstallSnapStoreClicked(button *gtk.Button) {
 			return
 		}
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Install")
 			uh.toastAdder.ShowToast("Snap Store installed successfully!")
@@ -499,13 +501,13 @@ func (uh *UserHome) onHomebrewSearch() {
 	go func() {
 		results, err := homebrew.Search(query)
 		if err != nil {
-			runOnMainThread(func() {
+			sgtk.RunOnMainThread(func() {
 				uh.searchResultsExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			})
 			return
 		}
 
-		runOnMainThread(func() {
+		sgtk.RunOnMainThread(func() {
 			uh.searchResultsExpander.SetSubtitle(fmt.Sprintf("%d results", len(results)))
 			uh.searchResultsExpander.SetEnableExpansion(len(results) > 0)
 
@@ -522,12 +524,12 @@ func (uh *UserHome) onHomebrewSearch() {
 				clickedCb := func(btn gtk.Button) {
 					go func() {
 						if err := homebrew.Install(pkgName, false); err != nil {
-							runOnMainThread(func() {
+							sgtk.RunOnMainThread(func() {
 								uh.toastAdder.ShowErrorToast(fmt.Sprintf("Install failed: %v", err))
 							})
 							return
 						}
-						runOnMainThread(func() {
+						sgtk.RunOnMainThread(func() {
 							uh.toastAdder.ShowToast(fmt.Sprintf("%s installed", pkgName))
 						})
 					}()
