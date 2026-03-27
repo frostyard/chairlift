@@ -11,10 +11,10 @@ import (
 	"os"
 	"time"
 
+	"codeberg.org/puregotk/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/gio"
+	"codeberg.org/puregotk/puregotk/v4/gtk"
 	"github.com/frostyard/chairlift/pkg/adwutil"
-	"github.com/jwijenbergh/puregotk/v4/adw"
-	"github.com/jwijenbergh/puregotk/v4/gio"
-	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
 var (
@@ -30,8 +30,8 @@ func main() {
 	}
 	app.ConnectActivate(&onActivate)
 
-	if code := app.Run(len(os.Args), os.Args); code > 0 {
-		os.Exit(code)
+	if code := app.Run(int32(len(os.Args)), os.Args); code > 0 {
+		os.Exit(int(code))
 	}
 }
 

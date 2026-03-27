@@ -3,8 +3,8 @@ package widgets
 import (
 	"time"
 
-	"github.com/jwijenbergh/puregotk/v4/adw"
-	"github.com/jwijenbergh/puregotk/v4/gtk"
+	"codeberg.org/puregotk/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
 // ProgressRow displays operation progress with spinner or progress bar.

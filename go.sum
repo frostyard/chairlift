@@ -2,6 +2,8 @@ codeberg.org/puregotk/purego v0.0.0-20260224095105-2513c838cb80 h1:y5ZxMLLOjl4xc
 codeberg.org/puregotk/purego v0.0.0-20260224095105-2513c838cb80/go.mod h1:hVVM4ddvYRlc3IcK3CXJPlMwd/vaLj7gdDBZ6oPgT8w=
 codeberg.org/puregotk/puregotk v0.0.0-20260226083027-5647eb6a2bba h1:vaq9DqM7xkLsqKP7aYvVwirqStiJk6OnXy12BtwiG6k=
 codeberg.org/puregotk/puregotk v0.0.0-20260226083027-5647eb6a2bba/go.mod h1:Q2E89WEkiGRObalH0QeYJe19f1H+6cn40xavs9+cxdU=
+github.com/chengxilo/virtualterm v1.0.4 h1:Z6IpERbRVlfB8WkOmtbHiDbBANU7cimRIof7mk9/PwM=
+github.com/chengxilo/virtualterm v1.0.4/go.mod h1:DyxxBZz/x1iqJjFxTFcr6/x+jSpqN0iwWCOK1q10rlY=
 github.com/clipperhouse/stringish v0.1.1 h1:+NSqMOr3GR6k1FdRhhnXrLfztGzuG+VuFDfatpWHKCs=
 github.com/clipperhouse/stringish v0.1.1/go.mod h1:v/WhFtE1q0ovMta2+m+UbpZ+2/HEXNWYXQgCt4hdOzA=
 github.com/clipperhouse/uax29/v2 v2.4.0 h1:RXqE/l5EiAbA4u97giimKNlmpvkmz+GrBVTelsoXy9g=
@@ -16,6 +18,8 @@ github.com/frostyard/pm v0.2.1 h1:nlRfH47XQ345bfRHvZQSLcLfpFFsP3RNBTTQKaupwUE=
 github.com/frostyard/pm v0.2.1/go.mod h1:eHQ4EC4UFgfq9YLGZVFMrtQcPjJnVlAFBLfSyk9rmwY=
 github.com/frostyard/pm/progress v0.2.1 h1:GfDQps62YVmKxt7Ou22dMJ3zSirtu3lipV56zKU7DiI=
 github.com/frostyard/pm/progress v0.2.1/go.mod h1:RAxYAznK1kwgq1+HYc292SLlgr12itigenOYKEsBHEM=
+github.com/frostyard/snowkit v0.1.0 h1:SQVxfJ+76TC2mLcZ9OVjGfAILRMr19Ar6CQEeWBVtZ8=
+github.com/frostyard/snowkit v0.1.0/go.mod h1:Wm3EZbySuCbsAp+OJtA7KzZ1BFjuqvUCn3R1MkMKbDo=
 github.com/frostyard/updex v1.0.0 h1:BHBD4rQZ00modNCEYFS7HyVO6dA8UVr4+gvUzaHGE/s=
 github.com/frostyard/updex v1.0.0/go.mod h1:wxiz34nZJuIW6veQKRybL3VkSfLw9TcgJy2/xAQCTbQ=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=

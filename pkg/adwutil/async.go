@@ -6,7 +6,7 @@ package adwutil
 import (
 	"sync"
 
-	"github.com/jwijenbergh/puregotk/v4/glib"
+	"codeberg.org/puregotk/puregotk/v4/glib"
 )
 
 // callbackRegistry stores callbacks to prevent GC collection before GTK executes them.

@@ -18,7 +18,7 @@ import (
 	"github.com/frostyard/chairlift/internal/pages/system"
 	"github.com/frostyard/chairlift/internal/pages/updates"
 
-	"github.com/jwijenbergh/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/adw"
 )
 
 // ToastAdder is an interface for adding toasts and notifying about updates
