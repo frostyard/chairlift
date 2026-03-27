@@ -4,7 +4,6 @@ package window
 import (
 	"fmt"
 	"log"
-	"runtime"
 	"unsafe"
 
 	"github.com/frostyard/chairlift/internal/config"
@@ -13,16 +12,17 @@ import (
 	"github.com/frostyard/chairlift/internal/version"
 	"github.com/frostyard/chairlift/internal/views"
 
+	"github.com/frostyard/snowkit/gobj"
+
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gio"
-	"codeberg.org/puregotk/puregotk/v4/glib"
 	"codeberg.org/puregotk/puregotk/v4/gobject"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
 var (
-	gTypeWindow     gobject.Type
-	windowInstances = make(map[uintptr]*Window) // Go-side registry keyed by GObject pointer
+	gTypeWindow    gobject.Type
+	windowRegistry *gobj.InstanceRegistry
 )
 
 // Window represents the main application window
@@ -62,53 +62,34 @@ var navItems = []NavItem{
 }
 
 func init() {
-	var windowClassInit gobject.ClassInitFunc = func(tc *gobject.TypeClass, u uintptr) {
-		objClass := (*gobject.ObjectClass)(unsafe.Pointer(tc))
-		objClass.OverrideConstructed(func(o *gobject.Object) {
-			parentObjClass := (*gobject.ObjectClass)(unsafe.Pointer(tc.PeekParent()))
-			parentObjClass.GetConstructed()(o)
+	gTypeWindow, windowRegistry = gobj.RegisterType(gobj.TypeDef{
+		ParentGLibType: adw.ApplicationWindowGLibType,
+		ClassName:      "ChairLiftWindow",
+		ClassInit: func(tc *gobject.TypeClass, reg *gobj.InstanceRegistry) {
+			objClass := (*gobject.ObjectClass)(unsafe.Pointer(tc))
+			objClass.OverrideConstructed(func(o *gobject.Object) {
+				parentObjClass := (*gobject.ObjectClass)(unsafe.Pointer(tc.PeekParent()))
+				parentObjClass.GetConstructed()(o)
 
-			var parent adw.ApplicationWindow
-			o.Cast(&parent)
+				var parent adw.ApplicationWindow
+				o.Cast(&parent)
 
-			w := &Window{
-				ApplicationWindow: parent,
-				pages:             make(map[string]*adw.ToolbarView),
-				navRows:           make(map[string]*adw.ActionRow),
-				config:            config.Load(),
-			}
+				w := &Window{
+					ApplicationWindow: parent,
+					pages:             make(map[string]*adw.ToolbarView),
+					navRows:           make(map[string]*adw.ActionRow),
+					config:            config.Load(),
+				}
 
-			var pinner runtime.Pinner
-			pinner.Pin(w)
-			ptr := o.GoPointer()
-			windowInstances[ptr] = w
-			var cleanup glib.DestroyNotify = func(data uintptr) {
-				delete(windowInstances, ptr)
-				pinner.Unpin()
-			}
-			o.SetDataFull("prevent_gc", 0, &cleanup)
+				reg.Pin(o, unsafe.Pointer(w))
 
-			w.SetDefaultSize(900, 700)
-			w.SetTitle("ChairLift")
-			w.buildUI()
-			w.setupActions()
-		})
-	}
-
-	var windowInstanceInit gobject.InstanceInitFunc = func(ti *gobject.TypeInstance, tc *gobject.TypeClass) {}
-
-	var windowParentQuery gobject.TypeQuery
-	gobject.NewTypeQuery(adw.ApplicationWindowGLibType(), &windowParentQuery)
-
-	gTypeWindow = gobject.TypeRegisterStaticSimple(
-		windowParentQuery.Type,
-		"ChairLiftWindow",
-		windowParentQuery.ClassSize,
-		&windowClassInit,
-		windowParentQuery.InstanceSize,
-		&windowInstanceInit,
-		0,
-	)
+				w.SetDefaultSize(900, 700)
+				w.SetTitle("ChairLift")
+				w.buildUI()
+				w.setupActions()
+			})
+		},
+	})
 }
 
 // New creates a new main window
@@ -117,7 +98,7 @@ func New(app adw.Application) *Window {
 	if obj == nil {
 		log.Fatal("Failed to create window")
 	}
-	return windowInstances[obj.GoPointer()]
+	return (*Window)(windowRegistry.Get(obj.GoPointer()))
 }
 
 // buildUI constructs the window UI
