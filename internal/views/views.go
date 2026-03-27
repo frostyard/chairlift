@@ -62,8 +62,14 @@ type UserHome struct {
 	nbcCheckRow       *adw.ActionRow
 
 	// Features page references
-	featuresGroup *adw.PreferencesGroup
-	featureRows   map[string]*adw.ActionRow
+	featuresGroup            *adw.PreferencesGroup
+	featuresUnavailableGroup *adw.PreferencesGroup
+	featureRows              map[string]*adw.ActionRow
+
+	// Groups with deferred visibility
+	snapGroup               *adw.PreferencesGroup
+	maintenanceBrewGroup    *adw.PreferencesGroup
+	maintenanceFlatpakGroup *adw.PreferencesGroup
 
 	// Update badge tracking
 	nbcUpdateCount     int

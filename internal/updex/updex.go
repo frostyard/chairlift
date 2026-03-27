@@ -86,6 +86,19 @@ func IsInstalled() bool {
 	return err == nil
 }
 
+var (
+	installedOnce   sync.Once
+	installedResult bool
+)
+
+// IsInstalledCached returns a cached result of IsInstalled, running the check at most once.
+func IsInstalledCached() bool {
+	installedOnce.Do(func() {
+		installedResult = IsInstalled()
+	})
+	return installedResult
+}
+
 // ListFeatures returns all available features
 func ListFeatures(ctx context.Context) ([]Feature, error) {
 	features, err := getClient().Features(ctx)

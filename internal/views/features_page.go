@@ -19,17 +19,17 @@ func (uh *UserHome) buildFeaturesPage() {
 		return
 	}
 
-	// Features group - only show if updex is available
-	installed := updex.IsInstalled()
-	if installed && uh.config.IsGroupEnabled("features_page", "features_group") {
+	if uh.config.IsGroupEnabled("features_page", "features_group") {
+		// Build the features group (shown if updex is available)
 		uh.featuresGroup = adw.NewPreferencesGroup()
 		uh.featuresGroup.SetTitle("Features")
-		uh.featuresGroup.SetDescription("Loading features...")
+		uh.featuresGroup.SetDescription("Checking feature availability...")
 
-		// Add Update button as header suffix
+		// Add Update button as header suffix (disabled until availability confirmed)
 		updateBtn := gtk.NewButtonWithLabel("Update")
 		updateBtn.SetValign(gtk.AlignCenterValue)
 		updateBtn.AddCssClass("suggested-action")
+		updateBtn.SetSensitive(false)
 		updateClickedCb := func(btn gtk.Button) {
 			uh.onUpdateFeaturesClicked(updateBtn)
 		}
@@ -38,19 +38,42 @@ func (uh *UserHome) buildFeaturesPage() {
 
 		page.Add(uh.featuresGroup)
 
-		// Load features asynchronously
-		go uh.loadFeatures()
-	} else if !installed {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("Features")
-		group.SetDescription("Manage system features")
+		// Build the "not available" group (hidden by default)
+		uh.featuresUnavailableGroup = adw.NewPreferencesGroup()
+		uh.featuresUnavailableGroup.SetTitle("Features")
+		uh.featuresUnavailableGroup.SetDescription("Manage system features")
+		uh.featuresUnavailableGroup.SetVisible(false)
 
-		row := adw.NewActionRow()
-		row.SetTitle("Feature Manager Not Available")
-		row.SetSubtitle("System features are not configured on this system")
-		group.Add(&row.Widget)
-		page.Add(group)
+		unavailRow := adw.NewActionRow()
+		unavailRow.SetTitle("Feature Manager Not Available")
+		unavailRow.SetSubtitle("System features are not configured on this system")
+		uh.featuresUnavailableGroup.Add(&unavailRow.Widget)
+		page.Add(uh.featuresUnavailableGroup)
+
+		// Check availability and load features asynchronously
+		go uh.checkAndLoadFeatures(updateBtn)
 	}
+}
+
+// checkAndLoadFeatures checks updex availability then loads features
+func (uh *UserHome) checkAndLoadFeatures(updateBtn *gtk.Button) {
+	if !updex.IsInstalledCached() {
+		sgtk.RunOnMainThread(func() {
+			if uh.featuresGroup != nil {
+				uh.featuresGroup.SetVisible(false)
+			}
+			if uh.featuresUnavailableGroup != nil {
+				uh.featuresUnavailableGroup.SetVisible(true)
+			}
+		})
+		return
+	}
+
+	sgtk.RunOnMainThread(func() {
+		updateBtn.SetSensitive(true)
+	})
+
+	uh.loadFeatures()
 }
 
 // loadFeatures loads feature information asynchronously

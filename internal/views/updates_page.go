@@ -131,7 +131,7 @@ func (uh *UserHome) buildUpdatesPage() {
 
 // loadOutdatedPackages loads outdated Homebrew packages asynchronously
 func (uh *UserHome) loadOutdatedPackages() {
-	if !homebrew.IsInstalled() {
+	if !homebrew.IsInstalledCached() {
 		uh.updateCountMu.Lock()
 		uh.brewUpdateCount = 0
 		uh.updateCountMu.Unlock()
@@ -195,7 +195,7 @@ func (uh *UserHome) loadOutdatedPackages() {
 
 // loadFlatpakUpdates loads available Flatpak updates asynchronously
 func (uh *UserHome) loadFlatpakUpdates() {
-	if !flatpak.IsInstalled() {
+	if !flatpak.IsInstalledCached() {
 		uh.updateCountMu.Lock()
 		uh.flatpakUpdateCount = 0
 		uh.updateCountMu.Unlock()
