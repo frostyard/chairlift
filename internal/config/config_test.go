@@ -203,7 +203,7 @@ func TestGetGroupConfig_AllPages(t *testing.T) {
 		{"updates_page", "nbc_updates_group"},
 		{"applications_page", "flatpak_user_group"},
 		{"maintenance_page", "maintenance_brew_group"},
-		{"features_page", "features_group"},
+		{"extensions_page", "installed_group"},
 		{"help_page", "help_resources_group"},
 	}
 
