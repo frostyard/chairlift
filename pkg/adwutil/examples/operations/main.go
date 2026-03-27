@@ -30,8 +30,8 @@ func main() {
 	}
 	app.ConnectActivate(&onActivate)
 
-	if code := app.Run(int32(len(os.Args)), os.Args); code > 0 {
-		os.Exit(int(code))
+	if code := app.Run(len(os.Args), os.Args); code > 0 {
+		os.Exit(code)
 	}
 }
 
