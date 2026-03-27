@@ -3,7 +3,7 @@ package pages
 
 import (
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/jwijenbergh/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/adw"
 )
 
 // Toaster provides toast notification methods.

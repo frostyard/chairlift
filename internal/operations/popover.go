@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jwijenbergh/puregotk/v4/adw"
-	"github.com/jwijenbergh/puregotk/v4/gtk"
+	"codeberg.org/puregotk/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
 // OperationsButton is a MenuButton that shows the operations popover.

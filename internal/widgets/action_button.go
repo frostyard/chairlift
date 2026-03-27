@@ -2,7 +2,7 @@ package widgets
 
 import (
 	"github.com/frostyard/chairlift/internal/operations"
-	"github.com/jwijenbergh/puregotk/v4/gtk"
+	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
 // ActionButton wraps a [gtk.Button] with self-disabling behavior during operations.
