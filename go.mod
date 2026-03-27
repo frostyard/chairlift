@@ -7,13 +7,10 @@ require (
 	github.com/frostyard/nbc v0.14.0
 	github.com/frostyard/pm v0.2.1
 	github.com/frostyard/pm/progress v0.2.1
-	github.com/frostyard/snowkit v0.0.0
 	github.com/frostyard/updex v1.0.0
 	golang.org/x/text v0.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
-
-replace github.com/frostyard/snowkit => ../snowkit
 
 require (
 	codeberg.org/puregotk/purego v0.0.0-20260224095105-2513c838cb80 // indirect
