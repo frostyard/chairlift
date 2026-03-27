@@ -71,6 +71,17 @@ go func() {
 }()
 ```
 
+### Deferred visibility (async startup)
+
+To avoid blocking startup on slow tool-availability checks, groups that depend on optional tools (Snap, Homebrew, Flatpak, Updex) are built immediately with placeholder descriptions (e.g., "Checking Snap availability...") and then shown or hidden asynchronously. The pattern:
+
+1. Build the UI group unconditionally (if config-enabled), with a placeholder description
+2. Store a reference to the group on `UserHome` (e.g., `snapGroup`, `maintenanceBrewGroup`)
+3. Spawn a goroutine that calls `IsInstalledCached()` (see below)
+4. On the main thread, either hide the group (`SetVisible(false)`) or update its description
+
+This applies to: `snapGroup`, `maintenanceBrewGroup`, `maintenanceFlatpakGroup`, `featuresGroup`/`featuresUnavailableGroup`. The Features page uses a dual-group approach — one for available features, one for "not available" — toggling visibility between them.
+
 ### Dry-run mode
 
 The `--dry-run` / `-d` flag is propagated to every wrapper package via `SetDryRun(true)`. Each wrapper skips state-changing commands when dry-run is active. This is set once at startup in `app.New()`.
@@ -83,7 +94,8 @@ Each preference group on every page checks `config.IsGroupEnabled(pageName, grou
 
 Each wrapper in `internal/` follows a consistent shape:
 - Module-level `dryRun` flag with `SetDryRun()`/`IsDryRun()`
-- `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`) for use from views
+- `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`) for use from views during async startup
+- All four wrapper packages (homebrew, flatpak, snap, updex) implement both `IsInstalled()` and `IsInstalledCached()`
 - List/Search/Install/Uninstall/Update functions
 - Context-based timeouts (30s for Homebrew, 60s for Flatpak/Snap, 5min for updex, 30min for NBC)
 - Custom error types where needed
