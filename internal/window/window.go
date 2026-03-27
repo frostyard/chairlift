@@ -12,7 +12,7 @@ import (
 	"github.com/frostyard/chairlift/internal/version"
 	"github.com/frostyard/chairlift/internal/views"
 
-	"github.com/frostyard/chairlift/internal/gobj"
+	"github.com/frostyard/snowkit/gobj"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gio"
