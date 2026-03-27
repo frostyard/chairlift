@@ -36,7 +36,8 @@ before:
 
 
 builds:
-  - env:
+  - id: chairlift
+    env:
       - CGO_ENABLED=0
     goos:
       - linux
@@ -48,6 +49,21 @@ builds:
     ldflags:
       - -s -w -X main.buildVersion={{ .Version }} -X main.buildCommit={{ .Commit }} -X main.buildDate={{ .CommitDate }} -X main.buildBy=goreleaser
     main: ./cmd/chairlift/main.go
+
+  - id: chairlift-updex-helper
+    binary: chairlift-updex-helper
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    main: ./cmd/chairlift-updex-helper/main.go
 
 archives:
   - files:
@@ -114,6 +130,11 @@ nfpms:
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.nbc.policy
       - src: ./data/org.frostyard.ChairLift.nbc.rules
         dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.nbc.rules
+      # Updex helper binary
+      - src: ./chairlift-updex-helper
+        dst: /usr/bin/chairlift-updex-helper
+        file_info:
+          mode: 0755
       # PolicyKit policy and rules for updex
       - src: ./data/org.frostyard.ChairLift.updex.policy
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy
