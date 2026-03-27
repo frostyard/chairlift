@@ -1,6 +1,6 @@
 # Package Manager Wrappers
 
-Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check, and context-based timeouts. All are called from `internal/views/` page builders.
+Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts. All are called from `internal/views/` page builders. The cached availability check is important for the deferred-visibility startup pattern — multiple goroutines may check the same tool, and the result should only be computed once.
 
 ## Homebrew (`internal/homebrew/homebrew.go`)
 
