@@ -7,7 +7,8 @@ ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://gi
 ## Architecture
 
 ```
-cmd/chairlift/main.go          Entry point: version injection, app creation
+cmd/chairlift/main.go                 Entry point: version injection, app creation
+cmd/chairlift-updex-helper/main.go    Privileged helper for updex write operations
         │
 internal/app/app.go             GObject-registered Application (adw.Application subtype)
         │
@@ -20,7 +21,7 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/flatpak/   Flatpak CLI wrapper (tabular output parsing)
         ├── internal/nbc/       NBC bootc wrapper (pkexec, streaming progress)
         ├── internal/snap/      Snap wrapper (snapd REST API, not CLI)
-        ├── internal/updex/     Updex feature manager wrapper (pkexec)
+        ├── internal/updex/     Updex feature manager (Go library reads, helper binary writes)
         └── internal/version/   Build metadata (ldflags injection)
 ```
 
@@ -82,7 +83,7 @@ Each preference group on every page checks `config.IsGroupEnabled(pageName, grou
 
 Each wrapper in `internal/` follows a consistent shape:
 - Module-level `dryRun` flag with `SetDryRun()`/`IsDryRun()`
-- `IsInstalled()` to check tool availability
+- `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`) for use from views
 - List/Search/Install/Uninstall/Update functions
 - Context-based timeouts (30s for Homebrew, 60s for Flatpak/Snap, 5min for updex, 30min for NBC)
 - Custom error types where needed
@@ -100,7 +101,7 @@ The updates page tracks counts from NBC, Flatpak, and Homebrew separately using 
 
 ### Privileged operations
 
-NBC and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). A polkit policy file is installed at `data/org.frostyard.ChairLift.nbc.policy`.
+NBC and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). NBC calls `pkexec nbc ...` directly, while updex delegates to a separate `chairlift-updex-helper` binary via `pkexec`. Polkit policy files are installed for both: `data/org.frostyard.ChairLift.nbc.policy` and `data/org.frostyard.ChairLift.updex.policy`.
 
 ## Configuration
 
@@ -136,7 +137,7 @@ page_name:
 |------|-------|----------|
 | `system_page` | `nbc_status_group` | NBC bootc status display |
 | `system_page` | `health_group` | System monitor launcher (configurable `app_id`) |
-| `updates_page` | `updates_status_group` | Custom update scripts with sudo support |
+| `updates_page` | `nbc_updates_group` | NBC bootc system updates |
 | `applications_page` | `snap_group` | Snap package listing |
 | `applications_page` | `brew_bundles_group` | Brewfile bundles from `bundles_paths` |
 | `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts |
@@ -144,7 +145,7 @@ page_name:
 
 ## Build and Release
 
-- **Build**: `make build` → `CGO_ENABLED=0 go build -o build/chairlift ./cmd/chairlift`
+- **Build**: `make build` builds two binaries: `build/chairlift` (main app) and `build/chairlift-updex-helper` (privileged helper), both with `CGO_ENABLED=0`
 - **Version**: Set via ldflags by goreleaser (`buildVersion`, `buildCommit`, `buildDate`, `buildBy`)
 - **Semantic versioning**: Uses [svu](https://github.com/caarlos0/svu) via `make bump`
 - **CI**: GitHub Actions workflows for test, snapshot, and release (`.github/workflows/`)
@@ -157,7 +158,7 @@ page_name:
 - Flatpak (optional)
 - Snap/snapd (optional)
 - NBC (`/usr/bin/nbc`) (optional)
-- Updex (`/usr/bin/updex`) (optional)
+- Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
 
 ### Key external Go dependencies
 
@@ -166,6 +167,7 @@ page_name:
 | `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO) |
 | `github.com/frostyard/snowkit` | GObject registration, main-thread dispatch |
 | `github.com/frostyard/nbc` | NBC types (ProgressEvent, StatusOutput, etc.) |
+| `github.com/frostyard/updex` | Updex Go library for feature reads and helper binary |
 | `github.com/snapcore/snapd` | Snapd client library |
 | `gopkg.in/yaml.v3` | YAML config parsing |
 
