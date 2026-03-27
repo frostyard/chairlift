@@ -62,22 +62,25 @@ Uses the **snapd REST API** directly (via `github.com/snapcore/snapd` client lib
 
 ### Key types
 
-- **`Application`** — name, version, channel, confinement, type, installedSize, publisher
+- **`Application`** — name, ID, version, channel, confinement, developer, status
 
 ### Operations
 
 | Function | Method | Timeout | Notes |
 |----------|--------|---------|-------|
+| `IsInstalled()` | `GET /v2/system-info` | 60s | Checks snapd availability |
+| `IsInstalledCached()` | Cached `IsInstalled()` | — | `sync.Once` |
 | `ListInstalledSnaps()` | `GET /v2/snaps` | 60s | API call |
 | `IsSnapInstalled(name)` | `GET /v2/snaps/<name>` | 60s | API call |
-| `Install(name)` | `POST /v2/snaps/<name>` | 60s | Returns changeID, async |
-| `WaitForChange(changeID)` | Polls `GET /v2/changes/<id>` | — | Polls until done/error |
+| `Install(ctx, name)` | `POST /v2/snaps/<name>` | 60s | Returns changeID, async, dry-run aware |
+| `WaitForChange(ctx, changeID)` | Polls `GET /v2/changes/<id>` | — | Polls every 500ms until done/error |
 
 ### Notable
 
 - Uses snapd socket at `/run/snapd.socket`
 - Snap install is async — returns a changeID that must be polled
 - Supports interactive polkit authentication
+- Handles `ErrNoSnapsInstalled` gracefully (returns empty list)
 
 ## NBC (`internal/nbc/nbc.go`)
 
@@ -135,23 +138,30 @@ for event := range events {
 
 ## Updex (`internal/updex/updex.go`)
 
-Wraps the `updex` CLI for managing system features (add-on software/configuration modules).
+Manages system features (add-on software/configuration modules). Unlike other wrappers, updex does **not** shell out to a CLI for reads. It uses the `github.com/frostyard/updex/updex` Go library directly for read operations, with a singleton `*updexapi.Client`. Write operations that require root are delegated to the `chairlift-updex-helper` binary (at `cmd/chairlift-updex-helper/main.go`) via pkexec.
 
 ### Key types
 
-- **`Feature`** — name, description, enabled flag, documentation URL
-- **`FeatureCheck`** — feature name, update available flag, component versions
+Type aliases to `github.com/frostyard/updex/updex`:
+- **`Feature`** (`FeatureInfo`) — name, description, enabled flag, documentation URL
+- **`FeatureCheck`** (`CheckFeaturesResult`) — feature name, update available flag, component versions
 - **`CheckResult`** — component name, current/available versions
 
 ### Operations
 
-| Function | CLI command | Mode | Timeout | Notes |
-|----------|------------|------|---------|-------|
-| `ListFeatures()` | `updex list --json` | Direct | 5min | JSON parsed |
-| `CheckFeatures()` | `updex check --json` | Direct | 5min | JSON parsed |
-| `EnableFeature(name)` | `pkexec updex enable <name>` | pkexec | 5min | State-changing |
-| `DisableFeature(name)` | `pkexec updex disable <name>` | pkexec | 5min | State-changing |
-| `UpdateFeatures()` | `pkexec updex update` | pkexec | 5min | Downloads enabled features |
+| Function | Implementation | Mode | Timeout | Notes |
+|----------|---------------|------|---------|-------|
+| `IsInstalled()` | Go library: `client.Features()` | Direct | 3s | Checks if updex features are configured |
+| `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
+| `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
+| `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Returns `[]FeatureCheck` |
+| `EnableFeature(name)` | `pkexec chairlift-updex-helper enable-feature <name>` | pkexec | 5min | State-changing |
+| `DisableFeature(name)` | `pkexec chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
+| `UpdateFeatures()` | `pkexec chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features |
+
+### Helper binary (`cmd/chairlift-updex-helper/main.go`)
+
+A small standalone binary that accepts commands (`enable-feature`, `disable-feature`, `update`) and uses the updex Go library to perform privileged operations. It supports `--dry-run` and outputs JSON to stdout. It is invoked via pkexec so that the main chairlift process does not need root.
 
 ## Cross-cutting: dry-run
 
@@ -159,3 +169,4 @@ Every wrapper has `SetDryRun(bool)` and `IsDryRun() bool`. When dry-run is activ
 - State-changing commands are skipped (return mock/empty results)
 - Read-only commands still execute normally
 - Set once at startup from `app.New()` based on `--dry-run` flag
+- **Note**: `app.New()` calls `SetDryRun` on flatpak, homebrew, nbc, and updex. Snap defines `SetDryRun` but it is not called from `app.New()` (possible oversight — snap's `Install` does check `dryRun` internally).
