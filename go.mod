@@ -1,10 +1,10 @@
 module github.com/frostyard/chairlift
 
-go 1.24.2
+go 1.26
 
 require (
 	codeberg.org/puregotk/puregotk v0.0.0-20260226083027-5647eb6a2bba
-	github.com/frostyard/nbc v0.14.0
+	github.com/frostyard/nbc v0.16.2
 	github.com/frostyard/snowkit v0.1.0
 	github.com/snapcore/snapd v0.0.0-20260121163940-7314b8b629e5
 	golang.org/x/text v0.33.0
@@ -20,17 +20,19 @@ require (
 	github.com/canonical/go-sp800.90a-drbg v0.0.0-20210314144037-6eeb1040d6c3 // indirect
 	github.com/canonical/go-tpm2 v1.13.0 // indirect
 	github.com/canonical/tcglog-parser v0.0.0-20240924110432-d15eaf652981 // indirect
+	github.com/frankban/quicktest v1.14.6 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pilebones/go-udev v0.9.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/snapcore/go-gettext v0.0.0-20191107141714-82bbea49e785 // indirect
 	github.com/snapcore/secboot v0.0.0-20260116095945-507475da2340 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
+	golang.org/x/crypto v0.47.0 // indirect
 	golang.org/x/exp v0.0.0-20240416160154-fe59bbe5cc7f // indirect
 	golang.org/x/net v0.48.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/retry.v1 v1.0.3 // indirect
