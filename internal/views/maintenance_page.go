@@ -60,10 +60,11 @@ func (uh *UserHome) buildMaintenancePage() {
 	}
 
 	// Homebrew Cleanup group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_brew_group") && homebrew.IsInstalled() {
+	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_brew_group") {
 		group := adw.NewPreferencesGroup()
 		group.SetTitle("Homebrew Cleanup")
-		group.SetDescription("Remove old versions and clear Homebrew cache")
+		group.SetDescription("Checking Homebrew availability...")
+		uh.maintenanceBrewGroup = group
 
 		row := adw.NewActionRow()
 		row.SetTitle("Clean Up Homebrew")
@@ -85,13 +86,26 @@ func (uh *UserHome) buildMaintenancePage() {
 		group.Add(&row.Widget)
 
 		page.Add(group)
+
+		go func() {
+			if !homebrew.IsInstalledCached() {
+				sgtk.RunOnMainThread(func() {
+					uh.maintenanceBrewGroup.SetVisible(false)
+				})
+			} else {
+				sgtk.RunOnMainThread(func() {
+					uh.maintenanceBrewGroup.SetDescription("Remove old versions and clear Homebrew cache")
+				})
+			}
+		}()
 	}
 
 	// Flatpak Cleanup group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_flatpak_group") && flatpak.IsInstalled() {
+	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_flatpak_group") {
 		group := adw.NewPreferencesGroup()
 		group.SetTitle("Flatpak Cleanup")
-		group.SetDescription("Remove unused Flatpak runtimes and extensions")
+		group.SetDescription("Checking Flatpak availability...")
+		uh.maintenanceFlatpakGroup = group
 
 		row := adw.NewActionRow()
 		row.SetTitle("Remove Unused Runtimes")
@@ -113,6 +127,18 @@ func (uh *UserHome) buildMaintenancePage() {
 		group.Add(&row.Widget)
 
 		page.Add(group)
+
+		go func() {
+			if !flatpak.IsInstalledCached() {
+				sgtk.RunOnMainThread(func() {
+					uh.maintenanceFlatpakGroup.SetVisible(false)
+				})
+			} else {
+				sgtk.RunOnMainThread(func() {
+					uh.maintenanceFlatpakGroup.SetDescription("Remove unused Flatpak runtimes and extensions")
+				})
+			}
+		}()
 	}
 
 	// Optimization group

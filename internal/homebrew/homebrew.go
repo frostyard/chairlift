@@ -9,6 +9,7 @@ import (
 	"log"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -117,6 +118,19 @@ func IsInstalled() bool {
 	cmd := exec.CommandContext(ctx, "brew", "--version")
 	err := cmd.Run()
 	return err == nil
+}
+
+var (
+	installedOnce   sync.Once
+	installedResult bool
+)
+
+// IsInstalledCached returns a cached result of IsInstalled, running the check at most once.
+func IsInstalledCached() bool {
+	installedOnce.Do(func() {
+		installedResult = IsInstalled()
+	})
+	return installedResult
 }
 
 // ListInstalledFormulae returns all installed formulae

@@ -4,6 +4,7 @@ package snap
 import (
 	"context"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/snapcore/snapd/client"
@@ -48,6 +49,19 @@ func IsInstalled() bool {
 	cli := getClient()
 	_, err := cli.SysInfo()
 	return err == nil
+}
+
+var (
+	installedOnce   sync.Once
+	installedResult bool
+)
+
+// IsInstalledCached returns a cached result of IsInstalled, running the check at most once.
+func IsInstalledCached() bool {
+	installedOnce.Do(func() {
+		installedResult = IsInstalled()
+	})
+	return installedResult
 }
 
 // ListInstalledSnaps returns all installed Snap applications

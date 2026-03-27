@@ -87,10 +87,11 @@ func (uh *UserHome) buildApplicationsPage() {
 	}
 
 	// Snap Applications group
-	if uh.config.IsGroupEnabled("applications_page", "snap_group") && snap.IsInstalled() {
+	if uh.config.IsGroupEnabled("applications_page", "snap_group") {
 		group := adw.NewPreferencesGroup()
 		group.SetTitle("Snap Applications")
-		group.SetDescription("Manage Snap packages installed on your system")
+		group.SetDescription("Checking Snap availability...")
+		uh.snapGroup = group
 
 		// Snap Store link row - shown when snap-store is installed
 		uh.snapStoreLinkRow = adw.NewActionRow()
@@ -212,7 +213,7 @@ func (uh *UserHome) buildApplicationsPage() {
 
 // loadHomebrewPackages loads installed Homebrew packages asynchronously
 func (uh *UserHome) loadHomebrewPackages() {
-	if !homebrew.IsInstalled() {
+	if !homebrew.IsInstalledCached() {
 		sgtk.RunOnMainThread(func() {
 			uh.formulaeExpander.SetSubtitle("Homebrew not installed")
 			uh.casksExpander.SetSubtitle("Homebrew not installed")
@@ -259,7 +260,7 @@ func (uh *UserHome) loadHomebrewPackages() {
 
 // loadFlatpakApplications loads installed Flatpak applications asynchronously
 func (uh *UserHome) loadFlatpakApplications() {
-	if !flatpak.IsInstalled() {
+	if !flatpak.IsInstalledCached() {
 		sgtk.RunOnMainThread(func() {
 			if uh.flatpakUserExpander != nil {
 				uh.flatpakUserExpander.SetSubtitle("Flatpak not installed")
@@ -378,14 +379,20 @@ func (uh *UserHome) loadFlatpakApplications() {
 
 // loadSnapApplications loads installed snap packages asynchronously
 func (uh *UserHome) loadSnapApplications() {
-	if !snap.IsInstalled() {
+	if !snap.IsInstalledCached() {
 		sgtk.RunOnMainThread(func() {
-			if uh.snapExpander != nil {
-				uh.snapExpander.SetSubtitle("Snap not installed")
+			if uh.snapGroup != nil {
+				uh.snapGroup.SetVisible(false)
 			}
 		})
 		return
 	}
+
+	sgtk.RunOnMainThread(func() {
+		if uh.snapGroup != nil {
+			uh.snapGroup.SetDescription("Manage Snap packages installed on your system")
+		}
+	})
 
 	// Check if snap-store is installed
 	snapStoreInstalled, err := snap.IsSnapInstalled("snap-store")
