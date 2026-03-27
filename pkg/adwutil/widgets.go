@@ -6,8 +6,8 @@ package adwutil
 import (
 	"sync"
 
-	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/jwijenbergh/puregotk/v4/adw"
+	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
 // signalCallbackRegistry stores signal callbacks to prevent GC collection.

@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/frostyard/chairlift/pkg/adwutil"
-	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/gio"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/jwijenbergh/puregotk/v4/adw"
+	"github.com/jwijenbergh/puregotk/v4/gio"
+	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
 func main() {

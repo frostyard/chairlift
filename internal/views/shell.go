@@ -18,7 +18,7 @@ import (
 	"github.com/frostyard/chairlift/internal/pages/system"
 	"github.com/frostyard/chairlift/internal/pages/updates"
 
-	"codeberg.org/puregotk/puregotk/v4/adw"
+	"github.com/jwijenbergh/puregotk/v4/adw"
 )
 
 // ToastAdder is an interface for adding toasts and notifying about updates
@@ -98,7 +98,7 @@ func (uh *UserHome) GetPage(name string) *adw.ToolbarView {
 		return uh.applicationsPage
 	case "maintenance":
 		return uh.maintenancePagePkg.Widget()
-	case "features", "extensions":
+	case "extensions":
 		return uh.extensionsPagePkg.Widget()
 	case "help":
 		return uh.helpPage

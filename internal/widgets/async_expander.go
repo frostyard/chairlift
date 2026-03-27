@@ -3,8 +3,8 @@
 package widgets
 
 import (
-	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/jwijenbergh/puregotk/v4/adw"
+	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
 // AsyncExpanderRow wraps an [adw.ExpanderRow] with async loading state support.

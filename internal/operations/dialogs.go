@@ -3,8 +3,8 @@ package operations
 import (
 	"fmt"
 
-	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/jwijenbergh/puregotk/v4/adw"
+	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
 // ShowCancelConfirmation shows a confirmation dialog before cancelling an operation.

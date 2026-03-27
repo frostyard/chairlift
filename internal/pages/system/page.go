@@ -9,8 +9,8 @@ import (
 	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/pages"
 	"github.com/frostyard/chairlift/internal/widgets"
-	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/jwijenbergh/puregotk/v4/adw"
+	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
 // Page implements the System page.

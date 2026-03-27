@@ -1,8 +1,8 @@
 package widgets
 
 import (
-	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/jwijenbergh/puregotk/v4/adw"
+	"github.com/jwijenbergh/puregotk/v4/gtk"
 )
 
 // LoadingRow represents an [adw.ActionRow] with a spinner indicating loading state.
