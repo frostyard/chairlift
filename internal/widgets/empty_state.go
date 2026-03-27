@@ -4,8 +4,8 @@
 package widgets
 
 import (
-	"codeberg.org/puregotk/puregotk/v4/adw"
 	"github.com/frostyard/chairlift/pkg/adwutil"
+	"codeberg.org/puregotk/puregotk/v4/adw"
 )
 
 // EmptyStateConfig is an alias for [adwutil.EmptyStateConfig].
