@@ -11,10 +11,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/frostyard/chairlift/pkg/adwutil"
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gio"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/frostyard/chairlift/pkg/adwutil"
 )
 
 var (

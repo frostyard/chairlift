@@ -4,8 +4,8 @@
 package widgets
 
 import (
-	"github.com/frostyard/chairlift/pkg/adwutil"
 	"codeberg.org/puregotk/puregotk/v4/adw"
+	"github.com/frostyard/chairlift/pkg/adwutil"
 )
 
 // NewLinkRow creates an ActionRow that triggers an action when activated.

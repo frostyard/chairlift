@@ -6,12 +6,12 @@ import (
 	"log"
 	"os"
 
+	"codeberg.org/puregotk/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/gtk"
 	"github.com/frostyard/chairlift/internal/async"
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/pages"
 	"github.com/frostyard/chairlift/internal/pm"
-	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
 // Page implements the Applications page.
