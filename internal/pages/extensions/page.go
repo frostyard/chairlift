@@ -94,7 +94,7 @@ func (p *Page) buildFeaturesGroup() {
 		return
 	}
 
-	if !p.config.IsGroupEnabled("extensions_page", "features_group") {
+	if !p.config.IsGroupEnabled("features_page", "features_group") {
 		return
 	}
 
@@ -303,7 +303,7 @@ func (p *Page) buildInstalledGroup() {
 		return
 	}
 
-	if !p.config.IsGroupEnabled("extensions_page", "installed_group") {
+	if !p.config.IsGroupEnabled("features_page", "installed_group") {
 		return
 	}
 
@@ -400,7 +400,7 @@ func (p *Page) buildDiscoverGroup() {
 		return
 	}
 
-	if !p.config.IsGroupEnabled("extensions_page", "discover_group") {
+	if !p.config.IsGroupEnabled("features_page", "discover_group") {
 		return
 	}
 
