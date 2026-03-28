@@ -1,9 +1,12 @@
 package views
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"time"
 
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
@@ -46,8 +49,9 @@ func (uh *UserHome) buildMaintenancePage() {
 				script := action.Script
 				sudo := action.Sudo
 				title := action.Title
-				clickedCb := func(btn gtk.Button) {
-					uh.runMaintenanceAction(title, script, sudo)
+				btn := button
+				clickedCb := func(_ gtk.Button) {
+					uh.runMaintenanceAction(title, script, sudo, btn)
 				}
 				button.ConnectClicked(&clickedCb)
 
@@ -227,7 +231,35 @@ func (uh *UserHome) onBrewBundleDumpClicked() {
 }
 
 // runMaintenanceAction runs a maintenance action script
-func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool) {
+func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool, button *gtk.Button) {
 	log.Printf("Running action: %s (script: %s, sudo: %v)", title, script, sudo)
-	// TODO: Execute the script
+
+	button.SetSensitive(false)
+	button.SetLabel("Running...")
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		var cmd *exec.Cmd
+		if sudo {
+			cmd = exec.CommandContext(ctx, "pkexec", script)
+		} else {
+			cmd = exec.CommandContext(ctx, script)
+		}
+
+		err := cmd.Run()
+
+		sgtk.RunOnMainThread(func() {
+			button.SetSensitive(true)
+			button.SetLabel("Run")
+
+			if err != nil {
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("%s failed: %v", title, err))
+				return
+			}
+
+			uh.toastAdder.ShowToast(fmt.Sprintf("%s completed", title))
+		})
+	}()
 }
