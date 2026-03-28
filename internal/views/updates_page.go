@@ -1,6 +1,7 @@
 package views
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -392,17 +393,26 @@ func (uh *UserHome) checkNBCUpdateAvailability() {
 	})
 }
 
-// onNBCUpdateClicked initiates an NBC system update with progress display
-func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Button) {
-	// Disable button and expand to show progress
-	button.SetSensitive(false)
-	button.SetLabel("Updating...")
-	expander.SetExpanded(true)
-	expander.SetSubtitle("Starting update...")
+// nbcOperationFunc is the signature shared by nbc.Update and nbc.Download.
+type nbcOperationFunc func(ctx context.Context, progressCh chan<- nbc.ProgressEvent) error
 
-	// Clear any existing progress rows
-	// Note: GTK doesn't have a direct "remove all children" for ExpanderRow,
-	// so we'll just add new rows as progress updates come in
+// nbcOperationParams captures the per-operation differences for runNBCOperation.
+type nbcOperationParams struct {
+	activeLabel   string // button label while running (e.g. "Updating...")
+	resetLabel    string // button label after completion (e.g. "Update")
+	startSubtitle string // expander subtitle at start (e.g. "Starting update...")
+	completionMsg string // expander subtitle on EventTypeComplete
+	successToast  string // toast shown on success
+	failurePrefix string // prefix for failure messages (e.g. "Update")
+	onFinished    func() // optional extra work on the main thread after completion
+}
+
+// runNBCOperation handles the shared progress UI scaffolding for NBC operations.
+func (uh *UserHome) runNBCOperation(expander *adw.ExpanderRow, button *gtk.Button, opFunc nbcOperationFunc, params nbcOperationParams) {
+	button.SetSensitive(false)
+	button.SetLabel(params.activeLabel)
+	expander.SetExpanded(true)
+	expander.SetSubtitle(params.startSubtitle)
 
 	// Create a progress bar row
 	progressRow := adw.NewActionRow()
@@ -428,14 +438,13 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 
 		progressCh := make(chan nbc.ProgressEvent)
 
-		// Start processing progress events in a separate goroutine
-		var updateErr error
+		var opErr error
 		var wg sync.WaitGroup
 		wg.Add(1)
 
 		go func() {
 			defer wg.Done()
-			updateErr = nbc.Update(ctx, nbc.UpdateOptions{Auto: true}, progressCh)
+			opErr = opFunc(ctx, progressCh)
 		}()
 
 		// Process progress events
@@ -444,28 +453,24 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 			sgtk.RunOnMainThread(func() {
 				switch evt.Type {
 				case nbc.EventTypeStep:
-					// Update main progress
 					progress := float64(evt.Step) / float64(evt.TotalSteps)
 					progressBar.SetFraction(progress)
 					progressRow.SetSubtitle(fmt.Sprintf("Step %d/%d: %s", evt.Step, evt.TotalSteps, evt.StepName))
 					expander.SetSubtitle(fmt.Sprintf("[%d/%d] %s", evt.Step, evt.TotalSteps, evt.StepName))
 
 				case nbc.EventTypeProgress:
-					// Update progress bar with percentage
 					progressBar.SetFraction(float64(evt.Percent) / 100.0)
 					if evt.Message != "" {
 						progressRow.SetSubtitle(fmt.Sprintf("%d%% - %s", evt.Percent, evt.Message))
 					}
 
 				case nbc.EventTypeMessage:
-					// Add message to log
 					msgRow := adw.NewActionRow()
 					msgRow.SetTitle(evt.Message)
 					msgRow.SetSubtitle(time.Now().Format("15:04:05"))
 					logExpander.AddRow(&msgRow.Widget)
 
 				case nbc.EventTypeWarning:
-					// Add warning to log with icon
 					warnRow := adw.NewActionRow()
 					warnRow.SetTitle(evt.Message)
 					warnRow.SetSubtitle("Warning")
@@ -474,7 +479,6 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 					logExpander.AddRow(&warnRow.Widget)
 
 				case nbc.EventTypeError:
-					// Add error to log with icon
 					errRow := adw.NewActionRow()
 					errRow.SetTitle(evt.Message)
 					errRow.SetSubtitle("Error")
@@ -484,12 +488,10 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 					logExpander.SetExpanded(true)
 
 				case nbc.EventTypeComplete:
-					// Update with success
 					progressBar.SetFraction(1.0)
 					progressRow.SetSubtitle("Complete")
-					expander.SetSubtitle("Update complete - please reboot")
+					expander.SetSubtitle(params.completionMsg)
 
-					// Add completion message
 					completeRow := adw.NewActionRow()
 					completeRow.SetTitle(evt.Message)
 					completeRow.SetSubtitle("Complete")
@@ -500,154 +502,67 @@ func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Bu
 			})
 		}
 
-		// Wait for update to finish
 		wg.Wait()
 
-		// Handle final result
 		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
-			button.SetLabel("Update")
+			button.SetLabel(params.resetLabel)
 
-			if updateErr != nil {
-				expander.SetSubtitle(fmt.Sprintf("Update failed: %v", updateErr))
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", updateErr))
+			if opErr != nil {
+				expander.SetSubtitle(fmt.Sprintf("%s failed: %v", params.failurePrefix, opErr))
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("%s failed: %v", params.failurePrefix, opErr))
 			} else {
-				uh.toastAdder.ShowToast("System update complete! Please reboot to apply changes.")
+				uh.toastAdder.ShowToast(params.successToast)
+			}
+
+			if params.onFinished != nil {
+				params.onFinished()
 			}
 		})
 	}()
 }
 
+// onNBCUpdateClicked initiates an NBC system update with progress display
+func (uh *UserHome) onNBCUpdateClicked(expander *adw.ExpanderRow, button *gtk.Button) {
+	uh.runNBCOperation(expander, button,
+		func(ctx context.Context, progressCh chan<- nbc.ProgressEvent) error {
+			return nbc.Update(ctx, nbc.UpdateOptions{Auto: true}, progressCh)
+		},
+		nbcOperationParams{
+			activeLabel:   "Updating...",
+			resetLabel:    "Update",
+			startSubtitle: "Starting update...",
+			completionMsg: "Update complete - please reboot",
+			successToast:  "System update complete! Please reboot to apply changes.",
+			failurePrefix: "Update",
+		},
+	)
+}
+
 // onNBCDownloadClicked initiates an NBC system update download with progress display
 func (uh *UserHome) onNBCDownloadClicked(expander *adw.ExpanderRow, button *gtk.Button) {
-	// Disable buttons and expand to show progress
-	button.SetSensitive(false)
-	button.SetLabel("Downloading...")
 	if uh.nbcUpdateBtn != nil {
 		uh.nbcUpdateBtn.SetSensitive(false)
 	}
-	expander.SetExpanded(true)
-	expander.SetSubtitle("Starting download...")
 
-	// Create a progress bar row
-	progressRow := adw.NewActionRow()
-	progressRow.SetTitle("Progress")
-	progressRow.SetSubtitle("Initializing...")
-
-	progressBar := gtk.NewProgressBar()
-	progressBar.SetHexpand(true)
-	progressBar.SetValign(gtk.AlignCenterValue)
-	progressBar.SetFraction(0)
-	progressRow.AddSuffix(&progressBar.Widget)
-	expander.AddRow(&progressRow.Widget)
-
-	// Create a log expander for detailed messages
-	logExpander := adw.NewExpanderRow()
-	logExpander.SetTitle("Details")
-	logExpander.SetSubtitle("View detailed progress messages")
-	expander.AddRow(&logExpander.Widget)
-
-	go func() {
-		ctx, cancel := nbc.DefaultContext()
-		defer cancel()
-
-		progressCh := make(chan nbc.ProgressEvent)
-
-		// Start processing progress events in a separate goroutine
-		var downloadErr error
-		var wg sync.WaitGroup
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			downloadErr = nbc.Download(ctx, nbc.DownloadOptions{ForUpdate: true}, progressCh)
-		}()
-
-		// Process progress events
-		for event := range progressCh {
-			evt := event // capture for closure
-			sgtk.RunOnMainThread(func() {
-				switch evt.Type {
-				case nbc.EventTypeStep:
-					// Update main progress
-					progress := float64(evt.Step) / float64(evt.TotalSteps)
-					progressBar.SetFraction(progress)
-					progressRow.SetSubtitle(fmt.Sprintf("Step %d/%d: %s", evt.Step, evt.TotalSteps, evt.StepName))
-					expander.SetSubtitle(fmt.Sprintf("[%d/%d] %s", evt.Step, evt.TotalSteps, evt.StepName))
-
-				case nbc.EventTypeProgress:
-					// Update progress bar with percentage
-					progressBar.SetFraction(float64(evt.Percent) / 100.0)
-					if evt.Message != "" {
-						progressRow.SetSubtitle(fmt.Sprintf("%d%% - %s", evt.Percent, evt.Message))
-					}
-
-				case nbc.EventTypeMessage:
-					// Add message to log
-					msgRow := adw.NewActionRow()
-					msgRow.SetTitle(evt.Message)
-					msgRow.SetSubtitle(time.Now().Format("15:04:05"))
-					logExpander.AddRow(&msgRow.Widget)
-
-				case nbc.EventTypeWarning:
-					// Add warning to log with icon
-					warnRow := adw.NewActionRow()
-					warnRow.SetTitle(evt.Message)
-					warnRow.SetSubtitle("Warning")
-					warnIcon := gtk.NewImageFromIconName("dialog-warning-symbolic")
-					warnRow.AddPrefix(&warnIcon.Widget)
-					logExpander.AddRow(&warnRow.Widget)
-
-				case nbc.EventTypeError:
-					// Add error to log with icon
-					errRow := adw.NewActionRow()
-					errRow.SetTitle(evt.Message)
-					errRow.SetSubtitle("Error")
-					errIcon := gtk.NewImageFromIconName("dialog-error-symbolic")
-					errRow.AddPrefix(&errIcon.Widget)
-					logExpander.AddRow(&errRow.Widget)
-					logExpander.SetExpanded(true)
-
-				case nbc.EventTypeComplete:
-					// Update with success
-					progressBar.SetFraction(1.0)
-					progressRow.SetSubtitle("Complete")
-					expander.SetSubtitle("Download complete - ready to install")
-
-					// Add completion message
-					completeRow := adw.NewActionRow()
-					completeRow.SetTitle(evt.Message)
-					completeRow.SetSubtitle("Complete")
-					completeIcon := gtk.NewImageFromIconName("object-select-symbolic")
-					completeRow.AddPrefix(&completeIcon.Widget)
-					logExpander.AddRow(&completeRow.Widget)
-				}
-			})
-		}
-
-		// Wait for download to finish
-		wg.Wait()
-
-		// Handle final result
-		sgtk.RunOnMainThread(func() {
-			button.SetSensitive(true)
-			button.SetLabel("Download")
-
-			if downloadErr != nil {
-				expander.SetSubtitle(fmt.Sprintf("Download failed: %v", downloadErr))
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Download failed: %v", downloadErr))
+	uh.runNBCOperation(expander, button,
+		func(ctx context.Context, progressCh chan<- nbc.ProgressEvent) error {
+			return nbc.Download(ctx, nbc.DownloadOptions{ForUpdate: true}, progressCh)
+		},
+		nbcOperationParams{
+			activeLabel:   "Downloading...",
+			resetLabel:    "Download",
+			startSubtitle: "Starting download...",
+			completionMsg: "Download complete - ready to install",
+			successToast:  "Update downloaded! Click Update to install.",
+			failurePrefix: "Download",
+			onFinished: func() {
 				if uh.nbcUpdateBtn != nil {
 					uh.nbcUpdateBtn.SetSensitive(true)
 				}
-			} else {
-				uh.toastAdder.ShowToast("Update downloaded! Click Update to install.")
-				// Keep update button enabled so user can install the downloaded update
-				if uh.nbcUpdateBtn != nil {
-					uh.nbcUpdateBtn.SetSensitive(true)
-				}
-			}
-		})
-	}()
+			},
+		},
+	)
 }
 
 // onUpdateHomebrewClicked handles the Homebrew update button click
