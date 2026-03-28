@@ -39,7 +39,7 @@ The UI has six pages, each in its own file under `internal/views/`:
 
 | Page | File | Purpose |
 |------|------|---------|
-| Applications | `applications_page.go` | Browse/install Flatpak, Snap, Homebrew packages; bundle install |
+| Applications | `applications_page.go` | Browse/install Flatpak (user+system), Snap, Homebrew packages; bundle install; snap-store management |
 | Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts |
 | Updates | `updates_page.go` | NBC system updates, Flatpak updates, Homebrew outdated packages |
 | System | `system_page.go` | OS info (`/etc/os-release`), NBC bootc status, health monitor launch |
@@ -103,9 +103,10 @@ Each wrapper in `internal/` follows a consistent shape:
 ### Streaming progress (NBC)
 
 NBC operations (update, download, install) use channel-based streaming:
-1. `nbc.Update()` returns a `<-chan ProgressEvent`
-2. The view goroutine reads events and dispatches UI updates to the main thread
-3. Event types: `EventTypeStep`, `EventTypeProgress`, `EventTypeMessage`, `EventTypeError`, `EventTypeComplete`
+1. Caller creates a `chan ProgressEvent` and passes it to `nbc.Update(ctx, opts, progressCh)`
+2. The function streams events to the channel and closes it when done
+3. The view goroutine reads events and dispatches UI updates to the main thread
+4. Event types: `EventTypeStep`, `EventTypeProgress`, `EventTypeMessage`, `EventTypeWarning`, `EventTypeError`, `EventTypeComplete`
 
 ### Update badge tracking
 
@@ -147,13 +148,26 @@ page_name:
 
 | Page | Group | Controls |
 |------|-------|----------|
+| `system_page` | `system_info_group` | OS info from `/etc/os-release` |
 | `system_page` | `nbc_status_group` | NBC bootc status display |
-| `system_page` | `health_group` | System monitor launcher (configurable `app_id`) |
-| `updates_page` | `nbc_updates_group` | NBC bootc system updates |
-| `applications_page` | `snap_group` | Snap package listing |
+| `system_page` | `health_group` | System monitor launcher (configurable `app_id`, default: Mission Center) |
+| `updates_page` | `nbc_updates_group` | NBC bootc system updates (download + apply) |
+| `updates_page` | `flatpak_updates_group` | Flatpak pending updates |
+| `updates_page` | `brew_updates_group` | Homebrew outdated packages |
+| `updates_page` | `updates_settings_group` | Update settings |
+| `applications_page` | `flatpak_user_group` | User Flatpak applications |
+| `applications_page` | `flatpak_system_group` | System Flatpak applications |
+| `applications_page` | `snap_group` | Snap package listing and snap-store management |
+| `applications_page` | `brew_group` | Homebrew formulae and casks |
+| `applications_page` | `brew_search_group` | Homebrew package search |
 | `applications_page` | `brew_bundles_group` | Brewfile bundles from `bundles_paths` |
+| `applications_page` | `applications_installed_group` | Installed apps launcher (configurable `app_id`, default: Bazaar) |
 | `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts |
+| `maintenance_page` | `maintenance_brew_group` | Homebrew cleanup (deferred visibility) |
+| `maintenance_page` | `maintenance_flatpak_group` | Flatpak unused cleanup (deferred visibility) |
+| `maintenance_page` | `maintenance_optimization_group` | System optimization (placeholder) |
 | `features_page` | `features_group` | Updex feature toggles |
+| `help_page` | `help_resources_group` | Configurable links (website, issues, chat) |
 
 ## Build and Release
 
