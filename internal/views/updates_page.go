@@ -398,13 +398,13 @@ type nbcOperationFunc func(ctx context.Context, progressCh chan<- nbc.ProgressEv
 
 // nbcOperationParams captures the per-operation differences for runNBCOperation.
 type nbcOperationParams struct {
-	activeLabel     string // button label while running (e.g. "Updating...")
-	resetLabel      string // button label after completion (e.g. "Update")
-	startSubtitle   string // expander subtitle at start (e.g. "Starting update...")
-	completionMsg   string // expander subtitle on EventTypeComplete
-	successToast    string // toast shown on success
-	failurePrefix   string // prefix for failure messages (e.g. "Update")
-	onFinished      func() // optional extra work on the main thread after completion
+	activeLabel   string // button label while running (e.g. "Updating...")
+	resetLabel    string // button label after completion (e.g. "Update")
+	startSubtitle string // expander subtitle at start (e.g. "Starting update...")
+	completionMsg string // expander subtitle on EventTypeComplete
+	successToast  string // toast shown on success
+	failurePrefix string // prefix for failure messages (e.g. "Update")
+	onFinished    func() // optional extra work on the main thread after completion
 }
 
 // runNBCOperation handles the shared progress UI scaffolding for NBC operations.
