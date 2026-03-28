@@ -39,7 +39,7 @@ Wraps the `flatpak` CLI. Parses tabular (whitespace-delimited) output.
 ### Key types
 
 - **`Application`** — name, appID, version, branch, origin, installation (user/system)
-- **`UpdateInfo`** — appID, remoteRef, installedSize, downloadSize
+- **`UpdateInfo`** — appID, remoteRef, installedSize, downloadSize, newVersion
 - **`ApplicationInfo`** — detailed metadata (description, developer, etc.)
 
 ### Operations
@@ -48,7 +48,7 @@ Wraps the `flatpak` CLI. Parses tabular (whitespace-delimited) output.
 |----------|------------|---------|-------|
 | `ListUserApplications()` | `flatpak list --user --app --columns=...` | 60s | Tabular parsed |
 | `ListSystemApplications()` | `flatpak list --system --app --columns=...` | 60s | Tabular parsed |
-| `ListUpdates()` | `flatpak remote-ls --updates --columns=...` | 60s | Both user+system |
+| `ListUpdates()` | `flatpak remote-ls --updates --columns=...` | 60s | Both user+system; includes `NewVersion` field |
 | `Install(appID)` | `flatpak install -y <appID>` | 60s | State-changing |
 | `Uninstall(appID, userOrSystem)` | `flatpak uninstall -y [--user\|--system] <appID>` | 60s | State-changing |
 | `Update(appID)` | `flatpak update -y <appID>` | 60s | State-changing |
@@ -96,14 +96,20 @@ Wraps the `nbc` CLI for bootc (OSTree-based) system updates. The most complex wr
 
 Re-exported from `github.com/frostyard/nbc/pkg/types`:
 - **`StatusOutput`** — booted/staged image info, device, slots
-- **`UpdateCheck`** — available update details
-- **`ProgressEvent`** — step, progress percentage, messages, errors
+- **`UpdateCheck`** / **`UpdateCheckOutput`** — available update details
+- **`StagedUpdate`** — staged update in cache
+- **`ListOutput`** / **`DiskOutput`** / **`PartitionOutput`** — disk information
+- **`CacheListOutput`** / **`CachedImageMetadata`** — cached image details
+- **`DownloadOutput`** — download result
+- **`ValidateOutput`** — disk validation result
+- **`ProgressEvent`** — step, progress percentage, messages, warnings, errors
 
 ### Event types for streaming
 
 - `EventTypeStep` — new operation phase
 - `EventTypeProgress` — percentage update
 - `EventTypeMessage` — informational log line
+- `EventTypeWarning` — non-fatal warning during operation
 - `EventTypeError` — error during operation
 - `EventTypeComplete` — operation finished
 
@@ -114,17 +120,22 @@ Re-exported from `github.com/frostyard/nbc/pkg/types`:
 | `GetStatus()` | `nbc status --json` | Direct | 30min | JSON parsed |
 | `CheckUpdate()` | `nbc check-update --json` | Direct | 30min | JSON parsed |
 | `ListDisks()` | `nbc disk list --json` | Direct | 30min | JSON parsed |
-| `Update(opts)` | `pkexec nbc update --json` | Streaming | 30min | Channel-based progress |
-| `Download(opts)` | `pkexec nbc download --json` | Streaming | 30min | Channel-based progress |
-| `Install(opts)` | `pkexec nbc install --json` | Streaming | 30min | Channel-based progress |
-| `Validate(device)` | `pkexec nbc disk validate --json` | pkexec | 30min | |
-| `ClearCache()` | `pkexec nbc cache clear` | pkexec | 30min | State-changing |
+| `ListCachedImages(cacheType)` | `nbc cache list --json` | Direct | 30min | JSON parsed |
+| `Update(ctx, opts, progressCh)` | `pkexec nbc update --json` | Streaming | 30min | Caller provides channel; closed when done |
+| `Download(ctx, opts, progressCh)` | `pkexec nbc download --json` | Streaming | 30min | Caller provides channel; closed when done |
+| `Validate(ctx, device)` | `pkexec nbc disk validate --json` | pkexec | 30min | |
+| `RemoveCachedImage(ctx, digest, cacheType)` | `pkexec nbc cache remove` | pkexec | 30min | State-changing |
+| `ClearCache(ctx, cacheType)` | `pkexec nbc cache clear` | pkexec | 30min | State-changing |
 
 ### Streaming pattern
 
 ```go
-events := nbc.Update(ctx, opts)
-for event := range events {
+progressCh := make(chan nbc.ProgressEvent)
+go func() {
+    err := nbc.Update(ctx, opts, progressCh)
+    // channel is closed when done
+}()
+for event := range progressCh {
     sgtk.RunOnMainThread(func() {
         switch event.EventType {
         case nbc.EventTypeProgress:
