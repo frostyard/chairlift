@@ -4,7 +4,6 @@ package flatpak
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
@@ -420,16 +419,6 @@ func Info(appID string, user bool) (*ApplicationInfo, error) {
 	}
 
 	return info, nil
-}
-
-// MarshalJSON implements json.Marshaler for Application
-func (a Application) MarshalJSON() ([]byte, error) {
-	type Alias Application
-	return json.Marshal(&struct {
-		Alias
-	}{
-		Alias: (Alias)(a),
-	})
 }
 
 // UninstallUnused removes unused Flatpak runtimes and extensions
