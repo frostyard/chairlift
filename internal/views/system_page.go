@@ -230,10 +230,10 @@ func (uh *UserHome) loadNBCStatus(expander *adw.ExpanderRow) {
 				row := adw.NewActionRow()
 				row.SetTitle("Staged Update")
 				digest := status.StagedUpdate.ImageDigest
-			if len(digest) > 19 {
-				digest = digest[:19] + "..."
-			}
-			row.SetSubtitle(fmt.Sprintf("Ready: %s", digest))
+				if len(digest) > 19 {
+					digest = digest[:19] + "..."
+				}
+				row.SetSubtitle(fmt.Sprintf("Ready: %s", digest))
 				applyButton := gtk.NewButtonWithLabel("Apply")
 				applyButton.SetValign(gtk.AlignCenterValue)
 				applyButton.AddCssClass("suggested-action")
