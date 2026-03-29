@@ -107,6 +107,11 @@ NBC operations (update, download, install) use channel-based streaming:
 2. The function streams events to the channel and closes it when done
 3. The view goroutine reads events and dispatches UI updates to the main thread
 4. Event types: `EventTypeStep`, `EventTypeProgress`, `EventTypeMessage`, `EventTypeWarning`, `EventTypeError`, `EventTypeComplete`
+5. ProgressEvent fields: `Type`, `Step`, `TotalSteps`, `StepName`, `Percent`, `Message`
+
+### Shared NBC progress UI helper
+
+The updates page uses `runNBCOperation()` (`internal/views/updates_page.go`) to consolidate progress UI handling for both Update and Download operations. It accepts an `nbcOperationFunc` (the signature shared by `nbc.Update` and `nbc.Download`) and `nbcOperationParams` that capture per-operation labels, messages, and callbacks. The helper creates a progress bar row, a log expander for detailed messages, handles all six event types with appropriate UI (icons for warnings/errors, timestamps for messages), and manages button state and toast notifications on completion. Individual operation handlers (`onNBCUpdateClicked`, `onNBCDownloadClicked`) simply call `runNBCOperation` with operation-specific parameters.
 
 ### Update badge tracking
 
