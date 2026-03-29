@@ -113,6 +113,17 @@ Re-exported from `github.com/frostyard/nbc/pkg/types`:
 - `EventTypeError` — error during operation
 - `EventTypeComplete` — operation finished
 
+### ProgressEvent fields
+
+| Field | Type | Used by |
+|-------|------|---------|
+| `Type` | `EventType` | All events — determines which case to handle |
+| `Step` | `int` | `EventTypeStep` — current step number |
+| `TotalSteps` | `int` | `EventTypeStep` — total number of steps |
+| `StepName` | `string` | `EventTypeStep` — human-readable step description |
+| `Percent` | `int` | `EventTypeProgress` — 0-100 completion percentage |
+| `Message` | `string` | All types — descriptive text (progress detail, log line, warning/error text, completion summary) |
+
 ### Operations
 
 | Function | CLI command | Mode | Timeout | Notes |
@@ -136,16 +147,27 @@ go func() {
     // channel is closed when done
 }()
 for event := range progressCh {
+    evt := event // capture for closure
     sgtk.RunOnMainThread(func() {
-        switch event.EventType {
+        switch evt.Type {
+        case nbc.EventTypeStep:
+            progressBar.SetFraction(float64(evt.Step) / float64(evt.TotalSteps))
         case nbc.EventTypeProgress:
-            progressBar.SetFraction(event.Progress / 100.0)
+            progressBar.SetFraction(float64(evt.Percent) / 100.0)
         case nbc.EventTypeComplete:
             // done
         }
     })
 }
 ```
+
+### Shared progress UI helper (`internal/views/updates_page.go`)
+
+The view layer consolidates NBC progress UI into a single `runNBCOperation()` method on `UserHome`. It accepts:
+- `nbcOperationFunc` — type alias for `func(ctx context.Context, progressCh chan<- nbc.ProgressEvent) error`, matching the signatures of `nbc.Update` and `nbc.Download`
+- `nbcOperationParams` — struct with operation-specific labels (`activeLabel`, `resetLabel`, `startSubtitle`, `completionMsg`, `successToast`, `failurePrefix`) and an optional `onFinished` callback
+
+The helper creates a progress bar row and a log expander inside the given `ExpanderRow`, spawns goroutines for the operation and event processing, handles all six event types with appropriate icons and formatting, and restores button state with success/failure toasts on completion. `onNBCUpdateClicked` and `onNBCDownloadClicked` are thin wrappers that call `runNBCOperation` with operation-specific parameters and options.
 
 ## Updex (`internal/updex/updex.go`)
 
