@@ -77,7 +77,7 @@ chairlift
 1. **System**: Monitor system health and performance
 2. **Updates**: Manage Homebrew updates and outdated packages
 3. **Applications**: View installed packages, search for new ones, and install curated bundles
-4. **Maintenance**: System maintenance tools (coming soon)
+4. **Maintenance**: System cleanup and maintenance tools (Homebrew, Flatpak, custom scripts)
 5. **Help**: Documentation and support resources (coming soon)
 
 ### Managing Packages
