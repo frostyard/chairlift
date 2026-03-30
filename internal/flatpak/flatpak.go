@@ -162,7 +162,7 @@ func parseApplicationList(output string, installFlag string) ([]Application, err
 		fields := strings.Split(line, "\t")
 		if len(fields) < 6 {
 			// Try splitting by multiple spaces for systems that might use spaces
-			fields = splitByWhitespace(line)
+			fields = strings.Fields(line)
 			if len(fields) < 2 {
 				continue
 			}
@@ -195,18 +195,6 @@ func parseApplicationList(output string, installFlag string) ([]Application, err
 	}
 
 	return apps, nil
-}
-
-// splitByWhitespace splits a string by whitespace, handling multiple spaces
-func splitByWhitespace(s string) []string {
-	var result []string
-	fields := strings.Fields(s)
-	for _, f := range fields {
-		if f != "" {
-			result = append(result, f)
-		}
-	}
-	return result
 }
 
 // Install installs a Flatpak application
@@ -300,7 +288,7 @@ func parseUpdateList(output string, user bool) ([]UpdateInfo, error) {
 		fields := strings.Split(line, "\t")
 		if len(fields) < 5 {
 			// Try splitting by multiple spaces for systems that might use spaces
-			fields = splitByWhitespace(line)
+			fields = strings.Fields(line)
 			if len(fields) < 2 {
 				continue
 			}
