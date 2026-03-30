@@ -1,7 +1,10 @@
 package views
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"os/exec"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
@@ -83,8 +86,20 @@ func (uh *UserHome) buildHelpPage() {
 	}
 }
 
-// openURL opens a URL in the default browser
+// openURL opens a URL in the default browser using xdg-open
 func (uh *UserHome) openURL(url string) {
 	log.Printf("Opening URL: %s", url)
-	// Use gtk_show_uri or xdg-open
+
+	cmd := exec.Command("xdg-open", url)
+	cmd.Env = os.Environ()
+
+	if err := cmd.Start(); err != nil {
+		log.Printf("Failed to open URL %s: %v", url, err)
+		uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to open URL: %s", url))
+		return
+	}
+
+	go func() {
+		_ = cmd.Wait()
+	}()
 }
