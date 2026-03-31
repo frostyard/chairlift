@@ -40,11 +40,11 @@ The UI has six pages, each in its own file under `internal/views/`:
 | Page | File | Purpose |
 |------|------|---------|
 | Applications | `applications_page.go` | Browse/install Flatpak (user+system), Snap, Homebrew packages; bundle install; snap-store management |
-| Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts |
+| Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts (executed via `exec.Command`/`pkexec`) |
 | Updates | `updates_page.go` | NBC system updates, Flatpak updates, Homebrew outdated packages |
 | System | `system_page.go` | OS info (`/etc/os-release`), NBC bootc status, health monitor launch |
 | Features | `features_page.go` | Toggle system features via `updex` tool |
-| Help | `help_page.go` | Configurable links to website, issues, chat |
+| Help | `help_page.go` | Configurable links to website, issues, chat (opened via `xdg-open`) |
 
 ## Key Patterns
 
@@ -121,6 +121,17 @@ The updates page tracks counts from NBC, Flatpak, and Homebrew separately using 
 
 NBC and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). NBC calls `pkexec nbc ...` directly, while updex delegates to a separate `chairlift-updex-helper` binary via `pkexec`. Polkit policy files are installed for both: `data/org.frostyard.ChairLift.nbc.policy` and `data/org.frostyard.ChairLift.updex.policy`.
 
+### Maintenance action execution
+
+Configurable maintenance scripts (from `config.yml` `actions` entries) are executed via `runMaintenanceAction()` in `internal/views/maintenance_page.go`. The pattern:
+1. Button is disabled and label set to "Running..."
+2. A goroutine spawns the script via `exec.CommandContext` (5-minute timeout), using `pkexec` wrapper if `sudo: true`
+3. On completion, the main thread re-enables the button and shows a success/error toast
+
+### URL opening
+
+Help page links are opened via `xdg-open` using `exec.Command`. The process is started asynchronously and its exit is waited on in a goroutine to avoid zombie processes.
+
 ## Configuration
 
 ### Config file search order
@@ -167,7 +178,7 @@ page_name:
 | `applications_page` | `brew_search_group` | Homebrew package search |
 | `applications_page` | `brew_bundles_group` | Brewfile bundles from `bundles_paths` |
 | `applications_page` | `applications_installed_group` | Installed apps launcher (configurable `app_id`, default: Bazaar) |
-| `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts |
+| `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts (5min timeout, pkexec for sudo) |
 | `maintenance_page` | `maintenance_brew_group` | Homebrew cleanup (deferred visibility) |
 | `maintenance_page` | `maintenance_flatpak_group` | Flatpak unused cleanup (deferred visibility) |
 | `maintenance_page` | `maintenance_optimization_group` | System optimization (placeholder) |
