@@ -54,6 +54,7 @@ type UserHome struct {
 	snapStoreLinkRow       *adw.ActionRow
 	snapStoreInstallRow    *adw.ActionRow
 	snapRows               []*adw.ActionRow // Store references for cleanup
+	searchResultRows       []*adw.ActionRow // Store references for cleanup
 
 	// NBC update references
 	nbcUpdateBtn      *gtk.Button

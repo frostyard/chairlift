@@ -515,6 +515,12 @@ func (uh *UserHome) onHomebrewSearch() {
 		}
 
 		sgtk.RunOnMainThread(func() {
+			// Clear previous search results
+			for _, row := range uh.searchResultRows {
+				uh.searchResultsExpander.Remove(&row.Widget)
+			}
+			uh.searchResultRows = nil
+
 			uh.searchResultsExpander.SetSubtitle(fmt.Sprintf("%d results", len(results)))
 			uh.searchResultsExpander.SetEnableExpansion(len(results) > 0)
 
@@ -545,6 +551,7 @@ func (uh *UserHome) onHomebrewSearch() {
 
 				row.AddSuffix(&installBtn.Widget)
 				uh.searchResultsExpander.AddRow(&row.Widget)
+				uh.searchResultRows = append(uh.searchResultRows, row)
 			}
 		})
 	}()
