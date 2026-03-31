@@ -205,13 +205,13 @@ func runNbcCommandDirect(ctx context.Context, args ...string) (string, string, e
 
 // runNbcCommand executes nbc via pkexec and returns stdout, stderr, and error
 func runNbcCommand(ctx context.Context, args ...string) (string, string, error) {
-	// Add --json flag to all commands
-	args = append([]string{"--json"}, args...)
-
 	// Add --dry-run for state-changing commands if in dry-run mode
 	if dryRun && isStateChanging(args) {
 		args = append(args, "--dry-run")
 	}
+
+	// Add --json flag to all commands
+	args = append([]string{"--json"}, args...)
 
 	fullArgs := append([]string{nbcCommand}, args...)
 	cmd := exec.CommandContext(ctx, pkexecCommand, fullArgs...)
@@ -247,13 +247,13 @@ func runNbcCommand(ctx context.Context, args ...string) (string, string, error) 
 func runNbcCommandStreaming(ctx context.Context, progressCh chan<- ProgressEvent, args ...string) error {
 	defer close(progressCh)
 
-	// Add --json flag to all commands
-	args = append([]string{"--json"}, args...)
-
 	// Add --dry-run for state-changing commands if in dry-run mode
 	if dryRun && isStateChanging(args) {
 		args = append(args, "--dry-run")
 	}
+
+	// Add --json flag to all commands
+	args = append([]string{"--json"}, args...)
 
 	fullArgs := append([]string{nbcCommand}, args...)
 	cmd := exec.CommandContext(ctx, pkexecCommand, fullArgs...)
