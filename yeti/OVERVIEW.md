@@ -33,13 +33,19 @@ External shared library: `github.com/frostyard/snowkit` (published module, pinne
 - `gobj` — GObject type registration and instance registry
 - `sgtk.RunOnMainThread()` — main-thread dispatch for GTK safety
 
+### Views coordinator (`internal/views/views.go`)
+
+The `views.go` file defines the central `UserHome` struct that holds references to all page widgets, config, and the `ToastAdder` interface. It provides:
+- `New(cfg, toastAdder)` — constructor that initializes `UserHome`
+- `ToastAdder` interface — `ShowToast(msg)`, `ShowErrorToast(msg)`, `SetUpdateBadge(count)` — implemented by Window
+
 ### Pages
 
 The UI has six pages, each in its own file under `internal/views/`:
 
 | Page | File | Purpose |
 |------|------|---------|
-| Applications | `applications_page.go` | Browse/install Flatpak (user+system), Snap, Homebrew packages; bundle install; snap-store management |
+| Applications | `applications_page.go` | Browse/install Flatpak (user+system), Snap, Homebrew packages; snap-store management |
 | Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts (executed via `exec.Command`/`pkexec`) |
 | Updates | `updates_page.go` | NBC system updates, Flatpak updates, Homebrew outdated packages |
 | System | `system_page.go` | OS info (`/etc/os-release`), NBC bootc status, health monitor launch |
@@ -56,7 +62,7 @@ Application and Window are registered as GObject subtypes using `gobj.RegisterTy
 2. `ClassInit` overrides `Constructed` to create the Go struct and pin it in the registry
 3. Constructor (`New()`) calls `gobject.NewObject()` then retrieves the Go instance from the registry
 
-See `internal/app/app.go:38-65` and `internal/window/window.go:60-88`.
+See `internal/app/app.go` and `internal/window/window.go`.
 
 ### Async operations with main-thread dispatch
 
@@ -64,7 +70,7 @@ All external tool calls run in goroutines. UI updates are marshaled back via `sg
 
 ```go
 go func() {
-    result, err := homebrew.ListInstalledFormulae(ctx)
+    result, err := homebrew.ListInstalledFormulae()
     sgtk.RunOnMainThread(func() {
         // update widgets here
     })
@@ -82,13 +88,21 @@ To avoid blocking startup on slow tool-availability checks, groups that depend o
 
 This applies to: `snapGroup`, `maintenanceBrewGroup`, `maintenanceFlatpakGroup`, `featuresGroup`/`featuresUnavailableGroup`. The Features page uses a dual-group approach — one for available features, one for "not available" — toggling visibility between them.
 
+### NBC boot gate
+
+NBC-related UI groups (system page's `nbc_status_group` and updates page's `nbc_updates_group`) are gated on `os.Stat("/run/nbc-booted")` existing — not on `nbc.IsInstalled()`. This means a system that has `nbc` installed but is not currently running as an NBC-booted system will not show those groups.
+
 ### Dry-run mode
 
-The `--dry-run` / `-d` flag is propagated to every wrapper package via `SetDryRun(true)`. Each wrapper skips state-changing commands when dry-run is active. This is set once at startup in `app.New()`.
+The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`. Set once at startup in `app.New()` for homebrew, flatpak, nbc, and updex. Each wrapper handles dry-run differently:
+
+- **Homebrew/Flatpak/Updex**: State-changing commands are skipped entirely (return mock/empty results)
+- **NBC**: Dry-run is delegated to the `nbc` binary itself via `--dry-run` flag — commands still execute but nbc performs no real changes
+- **Snap**: Defines `SetDryRun` but it is not called from `app.New()` (snap's `Install` does check `dryRun` internally)
 
 ### Configuration-driven UI visibility
 
-Each preference group on every page checks `config.IsGroupEnabled(pageName, groupName)` before building its widgets. Groups default to enabled if not specified in config.
+Each preference group on every page checks `config.IsGroupEnabled(pageName, groupName)` before building its widgets. Groups default to enabled if not specified in config. The `maintenance_cleanup_group` defaults to disabled in the default config.
 
 ### Package manager wrapper pattern
 
@@ -102,7 +116,7 @@ Each wrapper in `internal/` follows a consistent shape:
 
 ### Streaming progress (NBC)
 
-NBC operations (update, download, install) use channel-based streaming:
+NBC operations (update, download) use channel-based streaming:
 1. Caller creates a `chan ProgressEvent` and passes it to `nbc.Update(ctx, opts, progressCh)`
 2. The function streams events to the channel and closes it when done
 3. The view goroutine reads events and dispatches UI updates to the main thread
@@ -112,6 +126,8 @@ NBC operations (update, download, install) use channel-based streaming:
 ### Shared NBC progress UI helper
 
 The updates page uses `runNBCOperation()` (`internal/views/updates_page.go`) to consolidate progress UI handling for both Update and Download operations. It accepts an `nbcOperationFunc` (the signature shared by `nbc.Update` and `nbc.Download`) and `nbcOperationParams` that capture per-operation labels, messages, and callbacks. The helper creates a progress bar row, a log expander for detailed messages, handles all six event types with appropriate UI (icons for warnings/errors, timestamps for messages), and manages button state and toast notifications on completion. Individual operation handlers (`onNBCUpdateClicked`, `onNBCDownloadClicked`) simply call `runNBCOperation` with operation-specific parameters.
+
+The system page also has a separate NBC update path: when `GetStatus()` returns a `StagedUpdate`, it shows an "Apply" button that triggers `nbc.Update(ctx, UpdateOptions{Auto: true}, progressCh)` with simpler toast-based progress feedback.
 
 ### Update badge tracking
 
@@ -128,6 +144,15 @@ Configurable maintenance scripts (from `config.yml` `actions` entries) are execu
 2. A goroutine spawns the script via `exec.CommandContext` (5-minute timeout), using `pkexec` wrapper if `sudo: true`
 3. On completion, the main thread re-enables the button and shows a success/error toast
 
+### Keyboard shortcuts
+
+The window registers keyboard accelerators (`internal/window/window.go`):
+- `Ctrl+Q` → quit
+- `Ctrl+?` → show shortcuts dialog
+- `Alt+1` through `Alt+6` → navigate to each page (Applications, Maintenance, Updates, System, Features, Help)
+
+Note: `GtkShortcutsWindow` is not available in puregotk, so a custom `adw.Window` with `adw.PreferencesGroup` rows is used for the shortcuts dialog.
+
 ### URL opening
 
 Help page links are opened via `xdg-open` using `exec.Command`. The process is started asynchronously and its exit is waited on in a goroutine to avoid zombie processes.
@@ -140,7 +165,7 @@ Help page links are opened via `xdg-open` using `exec.Command`. The process is s
 2. `/usr/share/chairlift/config.yml` — package maintainer defaults
 3. `config.yml` — relative to executable (development)
 
-If no file is found, all features default to enabled. See [CONFIG.md](../CONFIG.md) for the full reference.
+If no file is found, all features default to enabled (except `maintenance_cleanup_group` which defaults to disabled). See [CONFIG.md](../CONFIG.md) for the full reference.
 
 ### Config structure
 
@@ -165,9 +190,9 @@ page_name:
 | Page | Group | Controls |
 |------|-------|----------|
 | `system_page` | `system_info_group` | OS info from `/etc/os-release` |
-| `system_page` | `nbc_status_group` | NBC bootc status display |
+| `system_page` | `nbc_status_group` | NBC bootc status display (gated on `/run/nbc-booted`) |
 | `system_page` | `health_group` | System monitor launcher (configurable `app_id`, default: Mission Center) |
-| `updates_page` | `nbc_updates_group` | NBC bootc system updates (download + apply) |
+| `updates_page` | `nbc_updates_group` | NBC bootc system updates — download + apply (gated on `/run/nbc-booted`) |
 | `updates_page` | `flatpak_updates_group` | Flatpak pending updates |
 | `updates_page` | `brew_updates_group` | Homebrew outdated packages |
 | `updates_page` | `updates_settings_group` | Update settings |
@@ -176,9 +201,9 @@ page_name:
 | `applications_page` | `snap_group` | Snap package listing and snap-store management |
 | `applications_page` | `brew_group` | Homebrew formulae and casks |
 | `applications_page` | `brew_search_group` | Homebrew package search |
-| `applications_page` | `brew_bundles_group` | Brewfile bundles from `bundles_paths` |
+| `applications_page` | `brew_bundles_group` | Config key exists but has no corresponding UI builder in current code |
 | `applications_page` | `applications_installed_group` | Installed apps launcher (configurable `app_id`, default: Bazaar) |
-| `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts (5min timeout, pkexec for sudo) |
+| `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts (5min timeout, pkexec for sudo); **disabled by default** |
 | `maintenance_page` | `maintenance_brew_group` | Homebrew cleanup (deferred visibility) |
 | `maintenance_page` | `maintenance_flatpak_group` | Flatpak unused cleanup (deferred visibility) |
 | `maintenance_page` | `maintenance_optimization_group` | System optimization (placeholder) |
@@ -188,10 +213,12 @@ page_name:
 ## Build and Release
 
 - **Build**: `make build` builds two binaries: `build/chairlift` (main app) and `build/chairlift-updex-helper` (privileged helper), both with `CGO_ENABLED=0`
+- **Dev build**: `make dev` builds with `CGO_ENABLED=1` and `-race` flag for race detection
 - **Version**: Set via ldflags by goreleaser (`buildVersion`, `buildCommit`, `buildDate`, `buildBy`)
 - **Semantic versioning**: Uses [svu](https://github.com/caarlos0/svu) via `make bump`
 - **CI**: GitHub Actions workflows for test, snapshot, and release (`.github/workflows/`)
 - **Release**: GoReleaser config at `.goreleaser.yaml`
+- **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint), `make install`/`make uninstall` (system install including polkit policies, icons, and wrapper script), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
 
 ### Runtime dependencies
 
@@ -199,7 +226,7 @@ page_name:
 - Homebrew (optional)
 - Flatpak (optional)
 - Snap/snapd (optional)
-- NBC (`/usr/bin/nbc`) (optional)
+- NBC (`/usr/bin/nbc`) (optional; UI gated on `/run/nbc-booted` sentinel file)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
 
 ### Key external Go dependencies
@@ -212,6 +239,7 @@ page_name:
 | `github.com/frostyard/updex` | Updex Go library for feature reads and helper binary |
 | `github.com/snapcore/snapd` | Snapd client library |
 | `gopkg.in/yaml.v3` | YAML config parsing |
+| `golang.org/x/text` | Title-casing OS release info keys |
 
 ## Subsystem Details
 
