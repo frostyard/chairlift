@@ -18,7 +18,6 @@ import (
 	"codeberg.org/puregotk/puregotk/v4/gio"
 	"codeberg.org/puregotk/puregotk/v4/glib"
 	"codeberg.org/puregotk/puregotk/v4/gobject"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
 const appID = "org.frostyard.ChairLift"
@@ -134,9 +133,4 @@ func (a *Application) registerOptions() {
 		"Don't make any changes to the system.",
 		"",
 	)
-}
-
-// GetGtkApplication returns the underlying GTK Application
-func (a *Application) GetGtkApplication() *gtk.Application {
-	return &a.Application.Application
 }

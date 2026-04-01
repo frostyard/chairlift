@@ -398,10 +398,6 @@ func (a *Application) registerOptions() {
 	)
 }
 
-// GetGtkApplication returns the underlying GTK Application
-func (a *Application) GetGtkApplication() *gtk.Application {
-	return &a.Application.Application
-}
 ```
 
 Key changes from current code:
