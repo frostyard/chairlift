@@ -9,6 +9,7 @@ import (
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/nbc"
+	"github.com/frostyard/chairlift/internal/snap"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/window"
 
@@ -81,6 +82,7 @@ func New() *Application {
 			flatpak.SetDryRun(true)
 			homebrew.SetDryRun(true)
 			nbc.SetDryRun(true)
+			snap.SetDryRun(true)
 			updex.SetDryRun(true)
 			break
 		}
