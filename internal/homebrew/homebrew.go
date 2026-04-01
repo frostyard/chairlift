@@ -338,6 +338,7 @@ func BundleDump(path string, force bool) error {
 	_, err := runBrewCommand(args...)
 	return err
 }
+
 // Cleanup removes old versions, outdated downloads, and clears cache
 func Cleanup() (string, error) {
 	return runBrewCommand("cleanup")
