@@ -4,8 +4,9 @@ go 1.26
 
 require (
 	codeberg.org/puregotk/puregotk v0.0.0-20260226083027-5647eb6a2bba
-	github.com/frostyard/nbc v0.14.0
+	github.com/frostyard/nbc v0.16.2
 	github.com/frostyard/snowkit v0.1.0
+	github.com/frostyard/std v0.1.0
 	github.com/frostyard/updex v1.2.0
 	github.com/snapcore/snapd v0.0.0-20260121163940-7314b8b629e5
 	golang.org/x/text v0.35.0
@@ -21,8 +22,9 @@ require (
 	github.com/canonical/go-sp800.90a-drbg v0.0.0-20210314144037-6eeb1040d6c3 // indirect
 	github.com/canonical/go-tpm2 v1.13.0 // indirect
 	github.com/canonical/tcglog-parser v0.0.0-20240924110432-d15eaf652981 // indirect
-	github.com/frostyard/std v0.1.0 // indirect
+	github.com/frankban/quicktest v1.14.6 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/hashicorp/go-version v1.8.0 // indirect
 	github.com/klauspost/compress v1.18.4 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
