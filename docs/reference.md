@@ -8,7 +8,7 @@ Configuration files are searched in order (first found wins):
 
 1. `/etc/chairlift/config.yml` — system-wide (highest priority)
 2. `/usr/share/chairlift/config.yml` — package maintainer defaults
-3. `chairlift/config.yml` — relative to executable (development)
+3. `config.yml` — relative to executable (development)
 
 If no file is found, all features default to enabled.
 
