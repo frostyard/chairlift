@@ -26,7 +26,6 @@ Wraps the `brew` CLI. Uses JSON output (`--json=v2`) for structured data where a
 | `Pin(name)` / `Unpin(name)` | `brew pin/unpin <name>` | 30s | State-changing |
 | `Cleanup()` | `brew cleanup` | 30s | State-changing; returns output string |
 | `BundleDump(path, force)` | `brew bundle dump [--file=<path>] [--force]` | 30s | State-changing; writes to file path |
-| `BundleInstall(path)` | `brew bundle install [--file=<path>]` | 30s | State-changing |
 
 ### State-changing commands
 

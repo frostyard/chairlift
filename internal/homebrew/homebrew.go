@@ -339,17 +339,6 @@ func BundleDump(path string, force bool) error {
 	return err
 }
 
-// BundleInstall installs packages from a Brewfile
-func BundleInstall(path string) error {
-	args := []string{"bundle", "install"}
-	if path != "" {
-		args = append(args, "--file="+path)
-	}
-
-	_, err := runBrewCommand(args...)
-	return err
-}
-
 // Cleanup removes old versions, outdated downloads, and clears cache
 func Cleanup() (string, error) {
 	return runBrewCommand("cleanup")
