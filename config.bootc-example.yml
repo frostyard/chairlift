@@ -10,17 +10,15 @@
 system_page:
   system_info_group:
     enabled: true  # Show OS information
+  bootc_status_group:
+    enabled: true  # Show bootc system status
   health_group:
     enabled: true  # Show system health monitoring
     app_id: io.missioncenter.MissionCenter  # App to launch for system monitoring
 
 updates_page:
-  updates_status_group:
+  bootc_updates_group:
     enabled: true  # Show system updates
-    actions:
-      - title: Check for Updates  # Display title for the action
-        script: /usr/bin/bootc upgrade  # Path to the script to execute
-        sudo: true  # Whether the script requires administrator privileges
   brew_updates_group:
     enabled: false  # Hide Homebrew updates (not typically used on other distros)
   updates_settings_group:

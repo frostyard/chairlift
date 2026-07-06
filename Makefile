@@ -92,9 +92,9 @@ install: build
 	install -Dm644 data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
 	# Install updex helper binary
 	install -Dm755 $(BUILD_DIR)/$(HELPER_NAME) $(DESTDIR)$(BINDIR)/$(HELPER_NAME)
-	# Install PolicyKit policy and rules for nbc
-	install -Dm644 data/org.frostyard.ChairLift.nbc.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.nbc.policy
-	install -Dm644 data/org.frostyard.ChairLift.nbc.rules $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.nbc.rules
+	# Install PolicyKit policy and rules for bootc
+	install -Dm644 data/org.frostyard.ChairLift.bootc.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.bootc.policy
+	install -Dm644 data/org.frostyard.ChairLift.bootc.rules $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.bootc.rules
 	# Install PolicyKit policy and rules for updex
 	install -Dm644 data/org.frostyard.ChairLift.updex.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
 	install -Dm644 data/org.frostyard.ChairLift.updex.rules $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
@@ -108,8 +108,8 @@ uninstall:
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
 	rm -f $(DESTDIR)$(BINDIR)/$(HELPER_NAME)
-	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.nbc.policy
-	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.nbc.rules
+	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.bootc.policy
+	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.bootc.rules
 	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
 

@@ -1,6 +1,6 @@
-// Allow users in the sudo group to run nbc commands via ChairLift without authentication
+// Allow users in the sudo group to stage bootc updates via ChairLift without authentication
 polkit.addRule(function(action, subject) {
-    if (action.id.startsWith("org.frostyard.ChairLift.nbc.") &&
+    if (action.id.startsWith("org.frostyard.ChairLift.bootc.") &&
         subject.active == true &&
         subject.local == true &&
         subject.isInGroup("sudo")) {

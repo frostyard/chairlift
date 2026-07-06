@@ -5,19 +5,15 @@
 system_page:
   system_info_group:
     enabled: true
-  nbc_status_group:
+  bootc_status_group:
     enabled: true
   health_group:
     enabled: true
     app_id: io.missioncenter.MissionCenter
 
 updates_page:
-  updates_status_group:
+  bootc_updates_group:
     enabled: true
-    actions:
-      - title: Check for System Updates
-        script: /usr/bin/bootc upgrade
-        sudo: true
   flatpak_updates_group:
     enabled: true
   brew_updates_group:

@@ -106,7 +106,7 @@ nfpms:
   - file_name_template: "{{ .ConventionalFileName }}"
     package_name: frostyard-chairlift
     description: |-
-      System management tool for nbc/bootc installations.
+      System management tool for bootc-based installations.
       Manage flatpaks, homebrew and system updates with a modern GTK4/Libadwaita interface.
     license: MIT
     contents:
@@ -125,11 +125,11 @@ nfpms:
         dst: /usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
       - src: ./data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
         dst: /usr/share/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
-      # PolicyKit policy and rules for nbc
-      - src: ./data/org.frostyard.ChairLift.nbc.policy
-        dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.nbc.policy
-      - src: ./data/org.frostyard.ChairLift.nbc.rules
-        dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.nbc.rules
+      # PolicyKit policy and rules for bootc
+      - src: ./data/org.frostyard.ChairLift.bootc.policy
+        dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.bootc.policy
+      - src: ./data/org.frostyard.ChairLift.bootc.rules
+        dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.bootc.rules
       # Updex helper binary
       - src: ./chairlift-updex-helper
         dst: /usr/bin/chairlift-updex-helper
