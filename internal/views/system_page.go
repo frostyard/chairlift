@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
-	"github.com/frostyard/chairlift/internal/nbc"
+	"github.com/frostyard/chairlift/internal/bootc"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -39,23 +38,24 @@ func (uh *UserHome) buildSystemPage() {
 		page.Add(group)
 	}
 
-	// NBC Status group - only show if NBC is booted
-	if _, err := os.Stat("/run/nbc-booted"); err == nil {
-		if uh.config.IsGroupEnabled("system_page", "nbc_status_group") {
-			group := adw.NewPreferencesGroup()
-			group.SetTitle("NBC Status")
-			group.SetDescription("View NBC system status information")
+	// bootc Status group - built hidden, shown asynchronously if this host
+	// is booted from a bootc deployment (bootc status requires an exec, so
+	// the gate must not run synchronously during page construction).
+	if uh.config.IsGroupEnabled("system_page", "bootc_status_group") {
+		group := adw.NewPreferencesGroup()
+		group.SetTitle("System Image")
+		group.SetDescription("bootc deployment status")
+		group.SetVisible(false)
 
-			nbcExpander := adw.NewExpanderRow()
-			nbcExpander.SetTitle("NBC Status Details")
-			nbcExpander.SetSubtitle("Loading...")
+		bootcExpander := adw.NewExpanderRow()
+		bootcExpander.SetTitle("Deployment Details")
+		bootcExpander.SetSubtitle("Loading...")
 
-			group.Add(&nbcExpander.Widget)
-			page.Add(group)
+		group.Add(&bootcExpander.Widget)
+		page.Add(group)
 
-			// Load NBC status asynchronously
-			uh.loadNBCStatus(nbcExpander)
-		}
+		// Gate + load asynchronously
+		go uh.loadBootcStatus(group, bootcExpander)
 	}
 
 	// System Health group
@@ -136,173 +136,66 @@ func (uh *UserHome) loadOSRelease(expander *adw.ExpanderRow) {
 	}
 }
 
-// loadNBCStatus loads NBC status information asynchronously into the expander
-func (uh *UserHome) loadNBCStatus(expander *adw.ExpanderRow) {
-	// Add loading row
-	loadingRow := adw.NewActionRow()
-	loadingRow.SetTitle("Loading...")
-	loadingRow.SetSubtitle("Fetching NBC status")
-
-	spinner := gtk.NewSpinner()
-	spinner.Start()
-	loadingRow.AddPrefix(&spinner.Widget)
-	expander.AddRow(&loadingRow.Widget)
-
-	go func() {
-		ctx, cancel := nbc.DefaultContext()
-		defer cancel()
-
-		status, err := nbc.GetStatus(ctx)
-
-		sgtk.RunOnMainThread(func() {
-			// Remove loading row
-			expander.Remove(&loadingRow.Widget)
-
-			if err != nil {
-				errorRow := adw.NewActionRow()
-				errorRow.SetTitle("Error")
-				errorRow.SetSubtitle(fmt.Sprintf("Failed to load NBC status: %v", err))
-				errorIcon := gtk.NewImageFromIconName("dialog-error-symbolic")
-				errorRow.AddPrefix(&errorIcon.Widget)
-				expander.AddRow(&errorRow.Widget)
-				expander.SetSubtitle("Failed to load")
-				return
-			}
-
-			// Display status information
-			expander.SetSubtitle("Loaded")
-
-			// Image
-			if status.Image != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Image")
-				row.SetSubtitle(status.Image)
-				expander.AddRow(&row.Widget)
-			}
-
-			// Digest
-			if status.Digest != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Digest")
-				// Show shortened digest
-				digest := status.Digest
-				if len(digest) > 19 {
-					digest = digest[:19] + "..."
-				}
-				row.SetSubtitle(digest)
-				expander.AddRow(&row.Widget)
-			}
-
-			// Device
-			if status.Device != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Device")
-				row.SetSubtitle(status.Device)
-				expander.AddRow(&row.Widget)
-			}
-
-			// Active Slot
-			if status.ActiveSlot != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Active Slot")
-				row.SetSubtitle(status.ActiveSlot)
-				expander.AddRow(&row.Widget)
-			}
-
-			// Filesystem Type
-			if status.FilesystemType != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Filesystem")
-				row.SetSubtitle(status.FilesystemType)
-				expander.AddRow(&row.Widget)
-			}
-
-			// Root Mount Mode
-			if status.RootMountMode != "" {
-				row := adw.NewActionRow()
-				row.SetTitle("Root Mount")
-				row.SetSubtitle(status.RootMountMode)
-				expander.AddRow(&row.Widget)
-			}
-
-			// Staged Update
-			if status.StagedUpdate != nil {
-				row := adw.NewActionRow()
-				row.SetTitle("Staged Update")
-				digest := status.StagedUpdate.ImageDigest
-				if len(digest) > 19 {
-					digest = digest[:19] + "..."
-				}
-				row.SetSubtitle(fmt.Sprintf("Ready: %s", digest))
-				applyButton := gtk.NewButtonWithLabel("Apply")
-				applyButton.SetValign(gtk.AlignCenterValue)
-				applyButton.AddCssClass("suggested-action")
-				btn := applyButton // capture for closure
-				applyClickedCb := func(_ gtk.Button) {
-					uh.onSystemUpdateClicked(btn)
-				}
-				applyButton.ConnectClicked(&applyClickedCb)
-				row.AddSuffix(&applyButton.Widget)
-				expander.AddRow(&row.Widget)
-			}
-		})
-	}()
-}
-
-// onSystemUpdateClicked handles the system update button click using the nbc package
-func (uh *UserHome) onSystemUpdateClicked(button *gtk.Button) {
-	// Disable the button while updating
-	if button != nil {
-		button.SetSensitive(false)
-		button.SetLabel("Updating...")
+// loadBootcStatus checks the bootc boot gate and populates the status
+// expander. Runs in a goroutine; shows the group only on bootc hosts.
+func (uh *UserHome) loadBootcStatus(group *adw.PreferencesGroup, expander *adw.ExpanderRow) {
+	if !bootc.IsBootcBootedCached() {
+		return // group stays hidden on non-bootc hosts
 	}
-	uh.toastAdder.ShowToast("Starting system update...")
 
-	go func() {
-		ctx, cancel := nbc.DefaultContext()
-		defer cancel()
+	ctx, cancel := bootc.DefaultContext()
+	defer cancel()
 
-		progressCh := make(chan nbc.ProgressEvent)
+	status, err := bootc.GetStatus(ctx)
 
-		var updateErr error
-		var wg sync.WaitGroup
-		wg.Add(1)
+	sgtk.RunOnMainThread(func() {
+		group.SetVisible(true)
 
-		go func() {
-			defer wg.Done()
-			updateErr = nbc.Update(ctx, nbc.UpdateOptions{Auto: true}, progressCh)
-		}()
-
-		// Process progress events and show key updates via toasts
-		var lastStep string
-		for event := range progressCh {
-			evt := event
-			if evt.Type == nbc.EventTypeStep && evt.StepName != lastStep {
-				lastStep = evt.StepName
-				sgtk.RunOnMainThread(func() {
-					uh.toastAdder.ShowToast(fmt.Sprintf("[%d/%d] %s", evt.Step, evt.TotalSteps, evt.StepName))
-				})
-			} else if evt.Type == nbc.EventTypeError {
-				sgtk.RunOnMainThread(func() {
-					uh.toastAdder.ShowErrorToast(evt.Message)
-				})
-			}
+		if err != nil {
+			expander.SetSubtitle(fmt.Sprintf("Error: %v", err))
+			return
 		}
 
-		wg.Wait()
+		expander.SetSubtitle("Loaded")
 
-		sgtk.RunOnMainThread(func() {
-			// Re-enable the button
-			if button != nil {
-				button.SetSensitive(true)
-				button.SetLabel("Update")
-			}
+		addRow := func(title, subtitle string) {
+			row := adw.NewActionRow()
+			row.SetTitle(title)
+			row.SetSubtitle(subtitle)
+			expander.AddRow(&row.Widget)
+		}
 
-			if updateErr != nil {
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", updateErr))
-			} else {
-				uh.toastAdder.ShowToast("Update complete! Reboot now to apply changes.")
+		booted := status.Status.Booted
+		if booted.ImageRef() != "" {
+			addRow("Image", booted.ImageRef())
+		}
+		if booted.Version() != "" {
+			addRow("Version", booted.Version())
+		}
+		if booted.Timestamp() != "" {
+			addRow("Built", booted.Timestamp())
+		}
+		if digest := booted.Digest(); digest != "" {
+			if len(digest) > 19 {
+				digest = digest[:19] + "..."
 			}
-		})
-	}()
+			addRow("Digest", digest)
+		}
+
+		if staged := status.Status.Staged; staged != nil {
+			subtitle := "Restart to apply"
+			if staged.Version() != "" {
+				subtitle = fmt.Sprintf("%s — restart to apply", staged.Version())
+			}
+			addRow("Staged Update", subtitle)
+		}
+
+		if rollback := status.Status.Rollback; rollback != nil {
+			subtitle := rollback.Version()
+			if subtitle == "" {
+				subtitle = "Available"
+			}
+			addRow("Rollback", subtitle)
+		}
+	})
 }
