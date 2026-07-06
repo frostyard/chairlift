@@ -4,11 +4,12 @@ package app
 import (
 	"log"
 	"os"
+	"time"
 	"unsafe"
 
+	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
-	"github.com/frostyard/chairlift/internal/nbc"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/window"
 
@@ -80,7 +81,7 @@ func New() *Application {
 			app.dryRun = true
 			flatpak.SetDryRun(true)
 			homebrew.SetDryRun(true)
-			nbc.SetDryRun(true)
+			bootc.SetDryRun(true)
 			updex.SetDryRun(true)
 			break
 		}
@@ -97,6 +98,7 @@ func New() *Application {
 
 // onActivate is called when the application is activated
 func (a *Application) onActivate() {
+	activateStart := time.Now()
 	log.Println("ChairLift activated")
 
 	// Guard: reuse existing window if already created
@@ -110,6 +112,7 @@ func (a *Application) onActivate() {
 	a.window = win
 	a.AddWindow(&win.Window)
 	win.Present()
+	log.Printf("app: window presented in %s (since activate)", time.Since(activateStart))
 }
 
 // setupKeyboardShortcuts sets up application-wide keyboard shortcuts

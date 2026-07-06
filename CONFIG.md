@@ -27,18 +27,16 @@ page_name:
 ### System Page (`system_page`)
 
 - `system_info_group`: Operating system information from /etc/os-release
+- `bootc_status_group`: System status information from bootc (when available)
 - `health_group`: System health monitoring and performance tools
   - `app_id`: Application ID for the system monitoring tool (default: `io.missioncenter.MissionCenter`)
 
 ### Updates Page (`updates_page`)
 
-- `updates_status_group`: System-wide updates
-  - `actions`: Array of update scripts that can be executed
-    - `title`: Display name for the action
-    - `script`: Absolute path to the script to execute
-    - `sudo`: Boolean indicating if the script requires administrator privileges (uses pkexec)
+- `bootc_updates_group`: System-wide bootc updates
 - `flatpak_updates_group`: Available Flatpak application updates (user and system)
 - `brew_updates_group`: Homebrew package updates and outdated packages
+- `brew_trust_group`: Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); only shown when there is something to trust
 - `updates_settings_group`: Update preferences and settings
 
 ### Applications Page (`applications_page`)

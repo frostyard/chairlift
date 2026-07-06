@@ -2,7 +2,7 @@
 
 ## Purpose
 
-ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snow), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew packages, Flatpak/Snap applications, NBC bootc system updates, system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off.
+ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snow), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew packages, Flatpak/Snap applications, bootc system updates (staged via the snow `bootc-update-stage` script), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/config/    YAML config loading, feature group enablement
         ├── internal/homebrew/  Homebrew CLI wrapper (JSON output parsing)
         ├── internal/flatpak/   Flatpak CLI wrapper (tabular output parsing)
-        ├── internal/nbc/       NBC bootc wrapper (pkexec, streaming progress)
+        ├── internal/bootc/     bootc wrapper (status reads, pkexec stage script, line streaming)
         ├── internal/snap/      Snap wrapper (snapd REST API, not CLI)
         ├── internal/updex/     Updex feature manager (Go library reads, helper binary writes)
         └── internal/version/   Build metadata (ldflags injection)
@@ -27,7 +27,7 @@ internal/views/                 Page builders and event handlers (one file per p
 
 ### Dependency flow
 
-`cmd → app → window → views → {config, homebrew, flatpak, nbc, snap, updex}`
+`cmd → app → window → views → {config, homebrew, flatpak, bootc, snap, updex}`
 
 External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
 - `gobj` — GObject type registration and instance registry
@@ -47,8 +47,8 @@ The UI has six pages, each in its own file under `internal/views/`:
 |------|------|---------|
 | Applications | `applications_page.go` | Browse/install Flatpak (user+system), Snap, Homebrew packages; snap-store management |
 | Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts (executed via `exec.Command`/`pkexec`) |
-| Updates | `updates_page.go` | NBC system updates, Flatpak updates, Homebrew outdated packages |
-| System | `system_page.go` | OS info (`/etc/os-release`), NBC bootc status, health monitor launch |
+| Updates | `updates_page.go` | bootc staged system updates, Flatpak updates, Homebrew outdated packages, untrusted-tap trust prompts |
+| System | `system_page.go` | OS info (`/etc/os-release`), bootc deployment status, health monitor launch |
 | Features | `features_page.go` | Toggle system features via `updex` tool |
 | Help | `help_page.go` | Configurable links to website, issues, chat (opened via `xdg-open`) |
 
@@ -88,16 +88,16 @@ To avoid blocking startup on slow tool-availability checks, groups that depend o
 
 This applies to: `snapGroup`, `maintenanceBrewGroup`, `maintenanceFlatpakGroup`, `featuresGroup`/`featuresUnavailableGroup`. The Features page uses a dual-group approach — one for available features, one for "not available" — toggling visibility between them.
 
-### NBC boot gate
+### bootc boot gate
 
-NBC-related UI groups (system page's `nbc_status_group` and updates page's `nbc_updates_group`) are gated on `os.Stat("/run/nbc-booted")` existing — not on `nbc.IsInstalled()`. This means a system that has `nbc` installed but is not currently running as an NBC-booted system will not show those groups.
+bootc-related UI groups (system page's `bootc_status_group` and updates page's `bootc_updates_group`) are gated on `bootc.IsBootcBootedCached()`, which runs `bootc status --format json` once (via `sync.Once`) and reports true only when the parsed `status.booted` field is non-null. This is deliberately not a sentinel-file check: `/run/ostree-booted` is absent on snow's composefs-based deployments, so relying on it would hide the groups on every snow bootc host. `bootc status` itself exits 0 with a null `booted` entry on non-bootc hosts, so the gate must inspect the JSON body rather than the exit code.
 
 ### Dry-run mode
 
-The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`. Set once at startup in `app.New()` for homebrew, flatpak, nbc, and updex. Each wrapper handles dry-run differently:
+The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`. Set once at startup in `app.New()` for homebrew, flatpak, bootc, and updex. Each wrapper handles dry-run differently:
 
 - **Homebrew/Flatpak/Updex**: State-changing commands are skipped entirely (return mock/empty results)
-- **NBC**: Dry-run is delegated to the `nbc` binary itself via `--dry-run` flag — commands still execute but nbc performs no real changes
+- **bootc**: `StageUpdate` short-circuits before invoking pkexec: it logs the would-be command, emits a synthetic `EventMessage` + `EventComplete` pair on the progress channel, and returns — the stage script is never actually run
 - **Snap**: Defines `SetDryRun` but it is not called from `app.New()` (snap's `Install` does check `dryRun` internally)
 
 ### Configuration-driven UI visibility
@@ -111,31 +111,30 @@ Each wrapper in `internal/` follows a consistent shape:
 - `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`) for use from views during async startup
 - All four wrapper packages (homebrew, flatpak, snap, updex) implement both `IsInstalled()` and `IsInstalledCached()`
 - List/Search/Install/Uninstall/Update functions
-- Context-based timeouts (30s for Homebrew, 60s for Flatpak/Snap, 5min for updex, 30min for NBC)
+- Context-based timeouts (30s for Homebrew, 60s for Flatpak/Snap, 5min for updex, 30min for bootc)
 - Custom error types where needed
 
-### Streaming progress (NBC)
+### Streaming progress (bootc stage)
 
-NBC operations (update, download) use channel-based streaming:
-1. Caller creates a `chan ProgressEvent` and passes it to `nbc.Update(ctx, opts, progressCh)`
-2. The function streams events to the channel and closes it when done
-3. The view goroutine reads events and dispatches UI updates to the main thread
-4. Event types: `EventTypeStep`, `EventTypeProgress`, `EventTypeMessage`, `EventTypeWarning`, `EventTypeError`, `EventTypeComplete`
-5. ProgressEvent fields: `Type`, `Step`, `TotalSteps`, `StepName`, `Percent`, `Message`
+`bootc.StageUpdate(ctx, progressCh)` runs `pkexec /usr/libexec/bootc-update-stage`, streaming combined stdout+stderr line-by-line to the caller's channel and closing it when done:
+1. Caller creates a `chan bootc.ProgressEvent` and passes it to `StageUpdate`
+2. Each non-empty output line becomes an `EventMessage`; the channel is closed after either an `EventComplete` (success) or the function returning an error
+3. Event types: `EventMessage`, `EventError`, `EventComplete` — deliberately simpler than a step/percent model because the stage script's own output is unstructured log lines, not a structured progress protocol
+4. The view goroutine (`internal/views/updates_page.go`, `onBootcStageClicked`) reads events and dispatches UI updates to the main thread via `sgtk.RunOnMainThread`
 
-### Shared NBC progress UI helper
+**Why a stage script instead of `bootc upgrade`:** upstream `bootc upgrade`'s registry-transport pull currently fails on snow's composefs images. The snow-shipped `/usr/libexec/bootc-update-stage` script works around this: `podman pull` fetches the image into containers-storage (podman's pull path works where bootc's does not), then `bootc switch --transport containers-storage` stages the already-pulled image as the next boot deployment. This keeps snow's actual upgrade logic in one place (the snosi script) rather than duplicating pull/switch orchestration in ChairLift; ChairLift only invokes the script via pkexec and streams its output. The script is idempotent — it exits 0 without staging anything when the deployment is already current.
 
-The updates page uses `runNBCOperation()` (`internal/views/updates_page.go`) to consolidate progress UI handling for both Update and Download operations. It accepts an `nbcOperationFunc` (the signature shared by `nbc.Update` and `nbc.Download`) and `nbcOperationParams` that capture per-operation labels, messages, and callbacks. The helper creates a progress bar row, a log expander for detailed messages, handles all six event types with appropriate UI (icons for warnings/errors, timestamps for messages), and manages button state and toast notifications on completion. Individual operation handlers (`onNBCUpdateClicked`, `onNBCDownloadClicked`) simply call `runNBCOperation` with operation-specific parameters.
+### bootc progress UI (updates page)
 
-The system page also has a separate NBC update path: when `GetStatus()` returns a `StagedUpdate`, it shows an "Apply" button that triggers `nbc.Update(ctx, UpdateOptions{Auto: true}, progressCh)` with simpler toast-based progress feedback.
+`onBootcStageClicked()` (`internal/views/updates_page.go`) drives the "System Update" expander: it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes the `ProgressEvent` channel on a second goroutine — `EventMessage` lines are appended to a log expander with timestamps, `EventError` surfaces an error toast, and `EventComplete` re-queries `bootc.GetStatus` to refresh the staged/booted summary and re-enables the button. The system page has a separate, simpler bootc path: `loadBootcStatus` (gated on `IsBootcBootedCached()`) calls `bootc.GetStatus` to show the booted/staged/rollback deployment images, versions, and digests, with no staging controls of its own — staging happens on the Updates page.
 
 ### Update badge tracking
 
-The updates page tracks counts from NBC, Flatpak, and Homebrew separately using a `sync.Mutex`. The total is pushed to the window's sidebar badge via `ToastAdder.SetUpdateBadge()`.
+The updates page tracks counts from bootc, Flatpak, and Homebrew separately (`bootcUpdateCount`, `flatpakUpdateCount`, `brewUpdateCount` fields on `UserHome`) using a `sync.Mutex`. `bootcUpdateCount` is 1 when `bootc.GetStatus()` reports a staged deployment, 0 otherwise — it is not a count of available updates, just a boolean folded into the badge total. The total is pushed to the window's sidebar badge via `ToastAdder.SetUpdateBadge()`.
 
 ### Privileged operations
 
-NBC and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). NBC calls `pkexec nbc ...` directly, while updex delegates to a separate `chairlift-updex-helper` binary via `pkexec`. Polkit policy files are installed for both: `data/org.frostyard.ChairLift.nbc.policy` and `data/org.frostyard.ChairLift.updex.policy`.
+bootc staging and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), while updex delegates to a separate `chairlift-updex-helper` binary via `pkexec`. Polkit policy files are installed for both: `data/org.frostyard.ChairLift.bootc.policy` and `data/org.frostyard.ChairLift.updex.policy`. Homebrew tap trust (`brew trust`) is explicitly per-user and does *not* go through pkexec — see [package-managers.md](./package-managers.md).
 
 ### Maintenance action execution
 
@@ -190,11 +189,12 @@ page_name:
 | Page | Group | Controls |
 |------|-------|----------|
 | `system_page` | `system_info_group` | OS info from `/etc/os-release` |
-| `system_page` | `nbc_status_group` | NBC bootc status display (gated on `/run/nbc-booted`) |
+| `system_page` | `bootc_status_group` | bootc deployment status display (gated on `bootc.IsBootcBootedCached()`) |
 | `system_page` | `health_group` | System monitor launcher (configurable `app_id`, default: Mission Center) |
-| `updates_page` | `nbc_updates_group` | NBC bootc system updates — download + apply (gated on `/run/nbc-booted`) |
+| `updates_page` | `bootc_updates_group` | bootc system updates — stage via `bootc-update-stage`, apply on restart (gated on `bootc.IsBootcBootedCached()` and stage script availability) |
 | `updates_page` | `flatpak_updates_group` | Flatpak pending updates |
 | `updates_page` | `brew_updates_group` | Homebrew outdated packages |
+| `updates_page` | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); hidden unless there is something to trust |
 | `updates_page` | `updates_settings_group` | Update settings |
 | `applications_page` | `flatpak_user_group` | User Flatpak applications |
 | `applications_page` | `flatpak_system_group` | System Flatpak applications |
@@ -226,7 +226,7 @@ page_name:
 - Homebrew (optional)
 - Flatpak (optional)
 - Snap/snapd (optional)
-- NBC (`/usr/bin/nbc`) (optional; UI gated on `/run/nbc-booted` sentinel file)
+- `bootc` + `/usr/libexec/bootc-update-stage` (both optional; UI gated on `bootc.IsBootcBootedCached()`, i.e. `bootc status` reporting a non-null `booted` deployment — not on any sentinel file)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
 
 ### Key external Go dependencies
@@ -235,12 +235,13 @@ page_name:
 |--------|---------|
 | `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO) |
 | `github.com/frostyard/snowkit` | GObject registration, main-thread dispatch |
-| `github.com/frostyard/nbc` | NBC types (ProgressEvent, StatusOutput, etc.) |
-| `github.com/frostyard/updex` | Updex Go library for feature reads and helper binary |
+| `github.com/frostyard/updex` | Updex Go library for feature reads and helper binary (currently pinned to v1.2.3 in go.mod) |
 | `github.com/snapcore/snapd` | Snapd client library |
 | `gopkg.in/yaml.v3` | YAML config parsing |
 | `golang.org/x/text` | Title-casing OS release info keys |
 
+There is no separate Go client library dependency for bootc: status/stage types (`Status`, `Deployment`, `ProgressEvent`, etc.) are defined locally in `internal/bootc`, parsed directly from `bootc status --format json` and the stage script's line output.
+
 ## Subsystem Details
 
-- [Package Manager Wrappers](./package-managers.md) — Homebrew, Flatpak, Snap, NBC, and Updex wrapper details
+- [Package Manager Wrappers](./package-managers.md) — Homebrew (including tap trust), Flatpak, Snap, bootc, and Updex wrapper details

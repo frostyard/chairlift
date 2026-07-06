@@ -22,6 +22,7 @@
 - **Update & Upgrade**: Keep Homebrew up-to-date and upgrade outdated packages individually
 - **Pin Packages**: Pin packages to prevent accidental upgrades
 - **Curated Bundles**: Install pre-configured package bundles for common use cases
+- **Tap Trust Management**: Homebrew 6's per-tap trust model hides packages installed from untrusted taps; ChairLift detects them and lets you trust a tap (and resume its updates) with one click, without requiring root
 
 ### 🏥 System Health Monitoring
 
@@ -30,6 +31,7 @@
 
 ### 🔧 Updates & Maintenance
 
+- **System Updates**: On bootc-based systems, download and stage the next OS image update (applied on restart) and view booted/staged/rollback deployment status
 - **Homebrew Updates**: Check for and install package updates
 - **Outdated Packages**: View and upgrade packages that have newer versions available
 - **System Maintenance**: Keep your system running smoothly
@@ -40,26 +42,35 @@
 
 ### Building from Source
 
-ChairLift uses the Meson build system:
+ChairLift is written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO required):
 
 ```bash
 # Clone the repository
 git clone https://github.com/frostyard/chairlift.git
 cd chairlift
 
-# Build and install
-meson setup build
-meson compile -C build
-sudo meson install -C build
+# Build
+make build
+
+# Binaries are written to build/:
+#   build/chairlift                 the main application
+#   build/chairlift-updex-helper    privileged helper for updex feature writes
+
+# Install (binaries, polkit policies, icons, desktop file)
+sudo make install
 ```
+
+Other useful targets: `make dev` (CGO-enabled build with `-race` for development), `make fmt`, `make lint`, `make build-linux-amd64` / `make build-linux-arm64` (cross-compilation), `make uninstall`.
 
 ### Dependencies
 
-- Python 3.x
-- PyYAML (python3-yaml)
-- GTK4
-- libadwaita
-- Homebrew (for package management features)
+- Go (see `go.mod` for the toolchain version)
+- GTK 4 and libadwaita 1 (shared libraries, loaded at runtime by puregotk — no GTK dev headers or CGO needed to build)
+- Homebrew (optional, for package management features and tap trust)
+- Flatpak (optional)
+- Snap/snapd (optional)
+- `bootc` and the snow `/usr/libexec/bootc-update-stage` script (optional; enables staged system updates)
+- `updex` features configured on the system (optional; toggled via the Features page)
 - Mission Center (optional, for system performance monitoring)
 
 ---
@@ -75,7 +86,7 @@ chairlift
 ### Main Sections
 
 1. **System**: Monitor system health and performance
-2. **Updates**: Manage Homebrew updates and outdated packages
+2. **Updates**: Stage bootc system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, and trust Homebrew taps
 3. **Applications**: View installed packages, search for new ones, and install curated bundles
 4. **Maintenance**: System cleanup and maintenance tools (Homebrew, Flatpak, custom scripts)
 5. **Help**: Documentation and support resources (coming soon)
@@ -131,71 +142,36 @@ Configuration files are searched in the following locations (in order):
 
 ```
 chairlift/
-├── chairlift/           # Main application code
-│   ├── core/           # Core functionality (homebrew.py)
-│   ├── views/          # UI views (user_home.py)
-│   ├── gtk/            # GTK UI templates
-│   └── assets/         # Application assets
-├── data/               # Desktop files and icons
-├── po/                 # Translation files
-└── meson.build         # Build configuration
+├── cmd/
+│   ├── chairlift/               # Main application entry point
+│   └── chairlift-updex-helper/  # Privileged helper for updex writes (invoked via pkexec)
+├── internal/
+│   ├── app/       # GObject-registered Application (adw.Application subtype)
+│   ├── window/    # Main window: NavigationSplitView, sidebar, content stack
+│   ├── views/     # Page builders and event handlers (one file per page)
+│   ├── config/    # YAML config loading, feature group enablement
+│   ├── homebrew/  # Homebrew CLI wrapper (incl. tap trust)
+│   ├── flatpak/   # Flatpak CLI wrapper
+│   ├── bootc/     # bootc wrapper (status reads, pkexec stage script)
+│   ├── snap/      # Snap wrapper (snapd REST API)
+│   ├── updex/     # Updex feature manager
+│   └── version/   # Build metadata (ldflags injection)
+├── data/          # Desktop file, icons, polkit policies/rules
+└── Makefile       # Build configuration
 ```
 
 ### Key Components
 
-- **chairlift/core/homebrew.py**: Python library for Homebrew integration
+See [yeti/OVERVIEW.md](yeti/OVERVIEW.md) and [yeti/package-managers.md](yeti/package-managers.md) for detailed architecture notes (written for AI-assisted development, but equally useful as a deep-dive for humans).
 
-  - Package listing and searching
-  - Installation and removal
-  - Pin/unpin functionality
-  - Bundle management
-  - Update and upgrade operations
-
-- **chairlift/views/user_home.py**: Main UI implementation
-  - GTK4/Adwaita interface
-  - Async operations with threading
-  - Toast notifications for user feedback
+- **`internal/homebrew`**: Homebrew CLI wrapper — package listing/searching, install/uninstall, pin/unpin, bundles, updates, and Homebrew 6 tap-trust detection/management
+- **`internal/bootc`**: bootc status reads and pkexec-driven update staging via the snow `bootc-update-stage` script
+- **`internal/views`**: GTK4/Adwaita UI — async operations dispatched via `sgtk.RunOnMainThread`, toast notifications for user feedback
 
 ### Development Environment
 
-ChairLift includes a preconfigured development environment using Distrobox and Just for easy setup:
-
-#### Using Just
-
-[Just](https://github.com/casey/just) is a command runner that provides convenient shortcuts for common development tasks. Available commands:
-
-```bash
-just setup    # Create and configure the distrobox development container
-just enter    # Enter the development container
-just build    # Build the project with meson
-just local    # Build and install to ./install directory
-just run      # Run the application in development mode
-just clean    # Clean build artifacts
-just pot      # Generate translation template
-```
-
-#### Using Distrobox
-
-The project includes a `distrobox.ini` configuration that sets up a Debian Trixie container with all required dependencies. This ensures a consistent development environment across different host systems.
-
-To get started:
-
-```bash
-# Create the development container
-just setup
-
-# Enter the container
-just enter
-
-# Inside the container, build and run
-just build
-just run
-```
-
-The distrobox configuration automatically mounts:
-
-- `/home/linuxbrew` - for Homebrew integration testing
-- `/usr/share/snow/bundles` - for bundle management testing
+- **Build**: `make build` (see [Building from Source](#building-from-source) above)
+- **Containerized dev environment**: `distrobox.ini` describes a Debian Trixie container with the runtime and build dependencies; use `distrobox assemble create --file distrobox.ini` (or your preferred distrobox workflow) to create it, then `distrobox enter chairlift` and run `make build`/`make dev` inside. It mounts `/home/linuxbrew` (for Homebrew integration testing) and `/usr/share/snow/bundles` (for bundle management testing) from the host.
 
 ### Contributing
 

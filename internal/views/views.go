@@ -2,7 +2,9 @@
 package views
 
 import (
+	"log"
 	"sync"
+	"time"
 
 	"github.com/frostyard/chairlift/internal/config"
 
@@ -55,12 +57,15 @@ type UserHome struct {
 	snapStoreInstallRow    *adw.ActionRow
 	snapRows               []*adw.ActionRow // Store references for cleanup
 	searchResultRows       []*adw.ActionRow // Store references for cleanup
+	brewTrustGroup         *adw.PreferencesGroup
+	brewTrustRows          map[string]*adw.ActionRow
+	outdatedRows           []*adw.ActionRow // Store references for cleanup
 
-	// NBC update references
-	nbcUpdateBtn      *gtk.Button
-	nbcDownloadBtn    *gtk.Button
-	nbcUpdateExpander *adw.ExpanderRow
-	nbcCheckRow       *adw.ActionRow
+	// bootc update references
+	bootcStageExpander *adw.ExpanderRow
+	bootcStageBtn      *gtk.Button
+	bootcActivityRow   *adw.ActionRow
+	bootcLogExpander   *adw.ExpanderRow
 
 	// Features page references
 	featuresGroup            *adw.PreferencesGroup
@@ -73,7 +78,7 @@ type UserHome struct {
 	maintenanceFlatpakGroup *adw.PreferencesGroup
 
 	// Update badge tracking
-	nbcUpdateCount     int
+	bootcUpdateCount   int
 	flatpakUpdateCount int
 	brewUpdateCount    int
 	updateCountMu      sync.Mutex
@@ -81,6 +86,8 @@ type UserHome struct {
 
 // New creates a new UserHome views manager
 func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
+	start := time.Now()
+
 	uh := &UserHome{
 		config:     cfg,
 		toastAdder: toastAdder,
@@ -102,13 +109,15 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.buildFeaturesPage()
 	uh.buildHelpPage()
 
+	log.Printf("views: all pages built in %s", time.Since(start))
+
 	return uh
 }
 
 // updateBadgeCount updates the total update count and notifies the window
 func (uh *UserHome) updateBadgeCount() {
 	uh.updateCountMu.Lock()
-	total := uh.nbcUpdateCount + uh.flatpakUpdateCount + uh.brewUpdateCount
+	total := uh.bootcUpdateCount + uh.flatpakUpdateCount + uh.brewUpdateCount
 	uh.updateCountMu.Unlock()
 
 	sgtk.RunOnMainThread(func() {

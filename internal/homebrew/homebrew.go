@@ -75,6 +75,7 @@ var stateChangingCommands = map[string]bool{
 	"unpin":     true,
 	"bundle":    true,
 	"cleanup":   true,
+	"trust":     true,
 }
 
 // runBrewCommand executes a brew command and returns the output
@@ -99,6 +100,9 @@ func runBrewCommand(args ...string) (string, error) {
 			return "", &Error{Message: fmt.Sprintf("Command 'brew %s' timed out", strings.Join(args, " "))}
 		}
 		if _, ok := err.(*exec.ExitError); ok {
+			if isUntrustedTapMessage(stderr.String()) {
+				return "", &UntrustedTapError{Message: fmt.Sprintf("Brew command failed: %s", stderr.String())}
+			}
 			return "", &Error{Message: fmt.Sprintf("Brew command failed: %s", stderr.String())}
 		}
 		if execErr, ok := err.(*exec.Error); ok && execErr.Err == exec.ErrNotFound {

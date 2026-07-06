@@ -5,6 +5,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/frostyard/chairlift/internal/app"
 	"github.com/frostyard/chairlift/internal/version"
@@ -19,7 +20,9 @@ var (
 )
 
 func main() {
+	processStart := time.Now()
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	log.Println("main: process start")
 
 	// Set version info for use by the rest of the application
 	version.Version = buildVersion
@@ -29,6 +32,7 @@ func main() {
 
 	application := app.New()
 	defer application.Unref()
+	log.Printf("main: application created in %s", time.Since(processStart))
 
 	if code := application.Run(int32(len(os.Args)), os.Args); code > 0 {
 		os.Exit(int(code))

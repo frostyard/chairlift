@@ -93,17 +93,18 @@ func loadFromPath(path string) (*Config, error) {
 func defaultConfig() *Config {
 	return &Config{
 		SystemPage: PageConfig{
-			"system_info_group": GroupConfig{Enabled: true},
-			"nbc_status_group":  GroupConfig{Enabled: true},
+			"system_info_group":  GroupConfig{Enabled: true},
+			"bootc_status_group": GroupConfig{Enabled: true},
 			"health_group": GroupConfig{
 				Enabled: true,
 				AppID:   "io.missioncenter.MissionCenter",
 			},
 		},
 		UpdatesPage: PageConfig{
-			"nbc_updates_group":      GroupConfig{Enabled: true},
+			"bootc_updates_group":    GroupConfig{Enabled: true},
 			"flatpak_updates_group":  GroupConfig{Enabled: true},
 			"brew_updates_group":     GroupConfig{Enabled: true},
+			"brew_trust_group":       GroupConfig{Enabled: true},
 			"updates_settings_group": GroupConfig{Enabled: true},
 		},
 		ApplicationsPage: PageConfig{

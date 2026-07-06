@@ -7,7 +7,7 @@ ChairLift is a modern GTK4/Libadwaita system management tool originally designed
 - Homebrew package management
 - System health monitoring
 - Flatpak application management
-- NBC (bootc container) system updates
+- bootc container system updates
 - System updates and maintenance
 
 ## Architecture
@@ -27,7 +27,7 @@ ChairLift is a modern GTK4/Libadwaita system management tool originally designed
 
 3. **Toast Notifications**: User feedback is provided via `adw.Toast` notifications accessed through the `ToastAdder` interface
 
-4. **Dry-Run Mode**: All packages (homebrew, flatpak, nbc) support `--dry-run` flag to preview changes without modifying the system
+4. **Dry-Run Mode**: All packages (homebrew, flatpak, bootc, updex) support `--dry-run` flag to preview changes without modifying the system
 
 ### Project Structure
 
@@ -45,8 +45,9 @@ chairlift/
 │   │   └── flatpak.go        # Flatpak integration
 │   ├── homebrew/
 │   │   └── homebrew.go       # Homebrew integration
-│   ├── nbc/
-│   │   └── nbc.go            # NBC bootc integration
+│   ├── bootc/
+│   │   ├── bootc.go          # bootc status reads (unprivileged)
+│   │   └── stage.go          # Update staging via pkexec + stage script
 │   ├── views/
 │   │   └── userhome.go       # Page content and UI logic
 │   └── window/
@@ -218,18 +219,37 @@ updates, _ := flatpak.ListUpdates(true) // true = user, false = system
 err = flatpak.Update("com.app.Id", true)
 ```
 
-### NBC (internal/nbc)
+### bootc (internal/bootc)
 
 ```go
-ctx, cancel := nbc.DefaultContext()
+// Gate: only show bootc UI if the host is actually booted from a bootc
+// deployment. `bootc status` exits 0 with a null `status.booted` on
+// non-bootc hosts, so the gate is the field, not the exit code.
+if !bootc.IsBootcBootedCached() {
+    return
+}
+
+ctx, cancel := bootc.DefaultContext()
 defer cancel()
 
-status, err := nbc.GetStatus(ctx)
-updateCheck, err := nbc.CheckUpdate(ctx)
+status, err := bootc.GetStatus(ctx) // parses `bootc status --format json`
 
-// Update with progress callback
-progressCh := make(chan nbc.ProgressEvent)
-go nbc.Update(ctx, nbc.UpdateOptions{Auto: true}, progressCh)
+// Stage an update (podman pull + `bootc switch`, run via pkexec since
+// bootc's own registry-transport pull is broken on snow images) and
+// stream progress lines back on progressCh.
+progressCh := make(chan bootc.ProgressEvent)
+go bootc.StageUpdate(ctx, progressCh) // runs pkexec /usr/libexec/bootc-update-stage
+
+for event := range progressCh {
+    switch event.Type {
+    case bootc.EventMessage:
+        // append event.Message to a log view
+    case bootc.EventError:
+        // surface event.Message as an error toast
+    case bootc.EventComplete:
+        // refresh status; a staged deployment is now pending a reboot
+    }
+}
 ```
 
 ## Portability Guidelines

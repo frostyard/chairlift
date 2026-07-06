@@ -4,6 +4,7 @@ package window
 import (
 	"fmt"
 	"log"
+	"time"
 	"unsafe"
 
 	"github.com/frostyard/chairlift/internal/config"
@@ -64,17 +65,23 @@ func init() {
 		ClassInit: func(tc *gobject.TypeClass, reg *gobj.InstanceRegistry) {
 			objClass := (*gobject.ObjectClass)(unsafe.Pointer(tc))
 			objClass.OverrideConstructed(func(o *gobject.Object) {
+				windowStart := time.Now()
+
 				parentObjClass := (*gobject.ObjectClass)(unsafe.Pointer(tc.PeekParent()))
 				parentObjClass.GetConstructed()(o)
 
 				var parent adw.ApplicationWindow
 				o.Cast(&parent)
 
+				cfgStart := time.Now()
+				cfg := config.Load()
+				log.Printf("window: config loaded in %s", time.Since(cfgStart))
+
 				w := &Window{
 					ApplicationWindow: parent,
 					pages:             make(map[string]*adw.ToolbarView),
 					navRows:           make(map[string]*adw.ActionRow),
-					config:            config.Load(),
+					config:            cfg,
 				}
 
 				reg.Pin(o, unsafe.Pointer(w))
@@ -83,6 +90,8 @@ func init() {
 				w.SetTitle("ChairLift")
 				w.buildUI()
 				w.setupActions()
+
+				log.Printf("window: constructed in %s", time.Since(windowStart))
 			})
 		},
 	})
@@ -99,8 +108,11 @@ func New(app adw.Application) *Window {
 
 // buildUI constructs the window UI
 func (w *Window) buildUI() {
+	start := time.Now()
+
 	// Create views manager
 	w.views = views.New(w.config, w)
+	log.Printf("window: views built in %s", time.Since(start))
 
 	// Create the navigation split view
 	w.splitView = adw.NewNavigationSplitView()
