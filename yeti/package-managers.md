@@ -141,7 +141,7 @@ Unlike bootc's own dry-run flag (not used here), ChairLift's dry-run mode is han
 
 | Function | Command | Privilege | Timeout | Notes |
 |----------|---------|-----------|---------|-------|
-| `GetStatus(ctx)` | `bootc status --format json` | none | 30min (`DefaultContext`); system page/updates page use their own short-lived contexts | JSON parsed into `Status` |
+| `GetStatus(ctx)` | `bootc status --format json` | none | 30min (`DefaultContext`); views use the standard 30min context | JSON parsed into `Status` |
 | `IsBootcBooted(ctx)` / `IsBootcBootedCached()` | (calls `GetStatus`) | none | 5s (cached variant) | Boot gate; cached variant memoizes via `sync.Once` |
 | `StageUpdate(ctx, progressCh)` | `pkexec /usr/libexec/bootc-update-stage` | pkexec (`org.frostyard.ChairLift.bootc.stage`) | 30min (`DefaultContext`) | Streaming; idempotent; dry-run aware |
 | `StageScriptAvailable()` | `os.Stat(StageScriptPath)` | none | — | Used to hide the updates-page group when the script isn't installed |
