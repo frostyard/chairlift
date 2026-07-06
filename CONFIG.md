@@ -36,6 +36,7 @@ page_name:
 - `bootc_updates_group`: System-wide bootc updates
 - `flatpak_updates_group`: Available Flatpak application updates (user and system)
 - `brew_updates_group`: Homebrew package updates and outdated packages
+- `brew_trust_group`: Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); only shown when there is something to trust
 - `updates_settings_group`: Update preferences and settings
 
 ### Applications Page (`applications_page`)

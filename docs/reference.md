@@ -30,7 +30,7 @@ Groups with `enabled: false` are hidden from the UI. Missing entries default to 
 | Group | Key | Description |
 |-------|-----|-------------|
 | OS Info | `system_info_group` | Displays fields from `/etc/os-release` |
-| NBC Status | `nbc_status_group` | NBC bootc status (image, slot, staged updates) |
+| bootc Status | `bootc_status_group` | bootc deployment status (booted/staged/rollback image, version, digest); shown only when `bootc.IsBootcBootedCached()` reports a booted deployment |
 | Health | `health_group` | Launches a system monitor application |
 
 `health_group` supports:
@@ -41,9 +41,10 @@ Groups with `enabled: false` are hidden from the UI. Missing entries default to 
 
 | Group | Key | Description |
 |-------|-----|-------------|
-| NBC Updates | `nbc_updates_group` | Check, download, and apply NBC system updates |
+| bootc Updates | `bootc_updates_group` | Download and stage the next bootc system image update (applies on restart); shown only when bootc-booted and the `bootc-update-stage` script is present |
 | Flatpak Updates | `flatpak_updates_group` | Pending Flatpak application updates |
 | Homebrew Updates | `brew_updates_group` | Outdated Homebrew packages with upgrade buttons |
+| Untrusted Taps | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); trust a tap to resume its updates. Shown only when there is something to trust |
 | Settings | `updates_settings_group` | Update preferences |
 
 ### Applications Page (`applications_page`)

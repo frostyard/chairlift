@@ -36,6 +36,21 @@ The `stateChangingCommands` map includes: `install`, `uninstall`, `remove`, `upg
 
 Returns `Error` (wraps stderr message) or `NotFoundError` for missing Homebrew. Timeouts produce a specific error message.
 
+### Tap trust (Homebrew 6) (`internal/homebrew/trust.go`)
+
+Homebrew 6 introduced per-tap trust: formulae/casks from a tap that isn't marked trusted are invisible to normal `brew` operations. Critically, **`brew list`/`brew info` also refuse to load untrusted-tap formulae**, so there is no supported `brew` command that lists what's installed-but-untrusted — ChairLift has to reconstruct that set itself from on-disk state.
+
+**Detection (`ListUntrustedTaps`)** combines three sources:
+1. `brew tap-info --installed --json` — parsed for each tap's `name` and `trusted` flag (`parseUntrustedTapNames`); this is the only brew-provided signal, and it tells you *which taps* are untrusted but not *what's installed from them*.
+2. Cellar keg receipts (`installedFormulaeByTap`) — walks `<prefix>/Cellar/<formula>/<version>/INSTALL_RECEIPT.json` and reads `.source.tap`, since brew's own listing commands can't see these formulae. One receipt per keg is enough to attribute the formula to a tap.
+3. Caskroom metadata (`installedCasksByTap`) — walks `<prefix>/Caskroom/<token>/.metadata/*/*/Casks/*.json` and reads `.tap`. Glob results are lexically, not chronologically, ordered (`"9"` sorts after `"10"`), so the newest file is picked by `mtime`, not by glob order. Casks installed via the Homebrew API (no local `Casks/<token>.json`) are skipped — they belong to `homebrew/cask`, which is always trusted.
+
+Only untrusted taps with at least one installed formula or cask are returned (`UntrustedTap{Name, Formulae, Casks}`, package names fully qualified as `tap/name`, ready to pass straight to `brew trust`); taps with nothing installed aren't actionable and are dropped.
+
+**`TrustPackages(tap)`** runs `brew trust --formula <formulae...>` and/or `brew trust --cask <casks...>` for the given tap. This is a **per-user** operation (state lives in `~/.homebrew/trust.json`) — it does not use `pkexec` and does not require root, unlike bootc staging or updex writes.
+
+**`UntrustedTapError`** — `runBrewCommand` (`internal/homebrew/homebrew.go`) inspects failed commands' stderr for `"untrusted tap"` or `"taps are not trusted"` (`isUntrustedTapMessage`) and wraps the failure as `*UntrustedTapError` instead of the generic `Error`. Views type-switch on this to redirect users to the Untrusted Taps UI rather than showing raw brew output.
+
 ## Flatpak (`internal/flatpak/flatpak.go`)
 
 Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespace) output.
@@ -92,109 +107,71 @@ Uses the **snapd REST API** directly (via `github.com/snapcore/snapd` client lib
 - Handles `ErrNoSnapsInstalled` gracefully (returns empty list)
 - `SetDryRun` is defined but not called from `app.New()` — snap's `Install` checks `dryRun` internally
 
-## NBC (`internal/nbc/nbc.go`)
+## bootc (`internal/bootc/`)
 
-Wraps the `nbc` CLI for bootc (OSTree-based) system updates. The most complex wrapper due to streaming progress and privilege requirements.
+Wraps `bootc` for OSTree/composefs system updates, split across two files: `bootc.go` (unprivileged status reads) and `stage.go` (privileged update staging). Deliberately does not shell out to any separate CLI helper binary or Go client library — status parsing and stage-script invocation are both implemented directly against `os/exec`.
 
-### Execution modes
+### `GetStatus` (unprivileged)
 
-1. **Direct** (`runNbcCommandDirect`) — read-only queries (`nbc status`, `nbc check-update`, `nbc disk list`); always prepends `--json`; no pkexec
-2. **pkexec** (`runNbcCommand`) — privileged non-streaming operations (`pkexec nbc cache list`, `pkexec nbc validate`); always prepends `--json`
-3. **Streaming** (`runNbcCommandStreaming`) — privileged operations with line-by-line JSON progress output (`pkexec nbc update`, `pkexec nbc download`); always prepends `--json`
+`GetStatus(ctx)` runs `bootc status --format json` with **no** `pkexec` — this is a plain read, safe to call from any goroutine (`internal/bootc/bootc.go`). Output is unmarshaled into `Status{Spec, Status: {Booted, Staged, Rollback}}`, where each of `Booted`/`Staged`/`Rollback` is a `*Deployment` (nil-safe accessors: `ImageRef()`, `Version()`, `Timestamp()`, `Digest()`).
+
+### Boot gate semantics
+
+`bootc status` exits 0 with a null `booted` field on hosts that aren't running a bootc deployment at all — so the gate cannot be the exit code. `Status.Booted()` returns `s.Status.Booted != nil`. `IsBootcBooted(ctx)` calls `GetStatus` and returns that boolean (treating any error as "not booted"). `IsBootcBootedCached()` wraps it in a `sync.Once` with a 5s timeout, computing the result once and caching it for the lifetime of the process — this lets multiple view goroutines call it during async startup without triggering redundant `bootc` invocations. **Do not use `/run/ostree-booted`** as a substitute gate: it is absent on snow's composefs-based deployments, so checking for it would hide bootc UI on every snow host.
+
+### `StageUpdate` (privileged, streaming)
+
+`StageUpdate(ctx, progressCh)` (`internal/bootc/stage.go`) runs `pkexec /usr/libexec/bootc-update-stage`, merging stdout+stderr and streaming each trimmed non-empty line to `progressCh` as an `EventMessage`. `progressCh` is always closed before returning (`defer close`). On successful exit it sends a final `EventComplete`; on failure it returns an `Error` (including the last output line for context) or a `NotFoundError` if pkexec itself is missing. If the context is canceled/times out mid-stream, the child process is killed and reaped before returning `ctx.Err()`.
+
+**Why a stage script instead of `bootc upgrade`:** upstream `bootc upgrade`'s registry-transport pull fails on snow's composefs images. The stage script works around this by using `podman pull` (whose pull path works) to fetch the image into containers-storage, then running `bootc switch --transport containers-storage` to stage the already-pulled image — `podman` does the pull, `bootc` does the switch. This keeps the actual workaround logic in one place (the snow-shipped script, source of truth in the snosi project) instead of duplicating pull/switch orchestration inside ChairLift. The script is idempotent: it exits 0 without staging anything when the deployment is already current, so `StageUpdate` doubles as both "check for update" and "apply update".
+
+### Event types
+
+- `EventMessage` — one line of stage-script output
+- `EventError` — surfaced by the view layer when `StageUpdate` returns an error
+- `EventComplete` — sent once, after successful completion
+
+This is intentionally flatter than a step/percent progress model, because the stage script emits unstructured log lines, not a structured progress protocol.
 
 ### Dry-run behavior
 
-Unlike other wrappers, NBC does **not** skip execution in dry-run mode. Instead:
-- `runNbcCommand` and `runNbcCommandStreaming` append `--dry-run` to the args for state-changing commands, delegating dry-run behavior to the `nbc` binary itself
-- `Update()` and `Download()` also prepend their own `--dry-run` flag before calling the streaming runner
-
-### State-changing detection
-
-Two maps control this:
-- `stateChangingCommands`: `install`, `update`, `download`
-- `stateChangingCacheSubcommands`: `clear`, `remove` (checked when first arg is `cache`)
-
-### Key types
-
-Re-exported from `github.com/frostyard/nbc/pkg/types`:
-- **`StatusOutput`** — booted/staged image info, device, slots
-- **`UpdateCheck`** / **`UpdateCheckOutput`** — available update details
-- **`StagedUpdate`** — staged update in cache
-- **`ListOutput`** / **`DiskOutput`** / **`PartitionOutput`** — disk information
-- **`CacheListOutput`** / **`CachedImageMetadata`** — cached image details
-- **`DownloadOutput`** — download result
-- **`ValidateOutput`** — disk validation result
-- **`ProgressEvent`** — step, progress percentage, messages, warnings, errors
-
-Locally defined option structs:
-- **`UpdateOptions`** — Image, Device, Force, DownloadOnly, LocalImage, Auto, SkipPull, KernelArgs
-- **`DownloadOptions`** — Image, ForInstall, ForUpdate
-- **`InstallOptions`** — defined but no `Install()` function exists yet (Image, LocalImage, Device, Filesystem, Encrypt, Passphrase, KeyFile, TPM2, KernelArgs, RootPwdFile, SkipPull)
-
-### Event types for streaming
-
-- `EventTypeStep` — new operation phase
-- `EventTypeProgress` — percentage update
-- `EventTypeMessage` — informational log line
-- `EventTypeWarning` — non-fatal warning during operation
-- `EventTypeError` — error during operation
-- `EventTypeComplete` — operation finished
-
-### ProgressEvent fields
-
-| Field | Type | Used by |
-|-------|------|---------|
-| `Type` | `EventType` | All events — determines which case to handle |
-| `Step` | `int` | `EventTypeStep` — current step number |
-| `TotalSteps` | `int` | `EventTypeStep` — total number of steps |
-| `StepName` | `string` | `EventTypeStep` — human-readable step description |
-| `Percent` | `int` | `EventTypeProgress` — 0-100 completion percentage |
-| `Message` | `string` | All types — descriptive text (progress detail, log line, warning/error text, completion summary) |
+Unlike bootc's own dry-run flag (not used here), ChairLift's dry-run mode is handled entirely inside `StageUpdate`: if `dryRun` is set, it never invokes `pkexec` at all — it logs the command that would run, sends a synthetic `EventMessage` + `EventComplete`, closes the channel, and returns `nil`.
 
 ### Operations
 
-| Function | CLI command | Mode | Timeout | Notes |
-|----------|------------|------|---------|-------|
-| `GetStatus()` | `nbc status` | Direct | 30min | JSON parsed |
-| `CheckUpdate()` | `nbc check-update` | Direct | 30min | JSON parsed |
-| `ListDisks()` | `nbc disk list` | Direct | 30min | JSON parsed |
-| `ListCachedImages(cacheType)` | `pkexec nbc cache list [--install-images\|--update-images]` | pkexec | 30min | Requires elevated privileges |
-| `Update(ctx, opts, progressCh)` | `pkexec nbc update` | Streaming | 30min | Caller provides channel; closed when done |
-| `Download(ctx, opts, progressCh)` | `pkexec nbc download` | Streaming | 30min | Requires `ForInstall` or `ForUpdate` to be true |
-| `Validate(ctx, device)` | `pkexec nbc validate --device <device>` | pkexec | 30min | Errors are expected — tries to parse JSON error response |
-| `RemoveCachedImage(ctx, digest, cacheType)` | `pkexec nbc cache remove <digest> [--type <cacheType>]` | pkexec | 30min | State-changing |
-| `ClearCache(ctx, cacheType)` | `pkexec nbc cache clear [--install\|--update]` | pkexec | 30min | State-changing |
+| Function | Command | Privilege | Timeout | Notes |
+|----------|---------|-----------|---------|-------|
+| `GetStatus(ctx)` | `bootc status --format json` | none | 30min (`DefaultContext`); system page/updates page use their own short-lived contexts | JSON parsed into `Status` |
+| `IsBootcBooted(ctx)` / `IsBootcBootedCached()` | (calls `GetStatus`) | none | 5s (cached variant) | Boot gate; cached variant memoizes via `sync.Once` |
+| `StageUpdate(ctx, progressCh)` | `pkexec /usr/libexec/bootc-update-stage` | pkexec (`org.frostyard.ChairLift.bootc.stage`) | 30min (`DefaultContext`) | Streaming; idempotent; dry-run aware |
+| `StageScriptAvailable()` | `os.Stat(StageScriptPath)` | none | — | Used to hide the updates-page group when the script isn't installed |
 
 ### Streaming pattern
 
 ```go
-progressCh := make(chan nbc.ProgressEvent)
+progressCh := make(chan bootc.ProgressEvent)
 go func() {
-    err := nbc.Update(ctx, opts, progressCh)
+    err := bootc.StageUpdate(ctx, progressCh)
     // channel is closed when done
 }()
 for event := range progressCh {
     evt := event // capture for closure
     sgtk.RunOnMainThread(func() {
         switch evt.Type {
-        case nbc.EventTypeStep:
-            progressBar.SetFraction(float64(evt.Step) / float64(evt.TotalSteps))
-        case nbc.EventTypeProgress:
-            progressBar.SetFraction(float64(evt.Percent) / 100.0)
-        case nbc.EventTypeComplete:
-            // done
+        case bootc.EventMessage:
+            // append to log expander with timestamp
+        case bootc.EventError:
+            // show error toast
+        case bootc.EventComplete:
+            // re-query GetStatus to refresh staged/booted summary
         }
     })
 }
 ```
 
-### Shared progress UI helper (`internal/views/updates_page.go`)
+### Progress UI (`internal/views/updates_page.go`)
 
-The view layer consolidates NBC progress UI into a single `runNBCOperation()` method on `UserHome`. It accepts:
-- `nbcOperationFunc` — type alias for `func(ctx context.Context, progressCh chan<- nbc.ProgressEvent) error`, matching the signatures of `nbc.Update` and `nbc.Download`
-- `nbcOperationParams` — struct with operation-specific labels (`activeLabel`, `resetLabel`, `startSubtitle`, `completionMsg`, `successToast`, `failurePrefix`) and an optional `onFinished` callback
-
-The helper creates a progress bar row and a log expander inside the given `ExpanderRow`, spawns goroutines for the operation and event processing, handles all six event types with appropriate icons and formatting, and restores button state with success/failure toasts on completion. `onNBCUpdateClicked` and `onNBCDownloadClicked` are thin wrappers that call `runNBCOperation` with operation-specific parameters and options.
+`onBootcStageClicked()` drives the updates page's "System Update" expander directly (there is a single staging operation, so no shared cross-operation helper is needed) — it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes events on a second goroutine, restoring button state and showing a toast on completion. The system page's `loadBootcStatus()` is a separate, read-only path: it calls `bootc.GetStatus` to display the booted/staged/rollback deployment images, versions, and digests, with no staging controls — staging only happens from the Updates page.
 
 ## Updex (`internal/updex/updex.go`)
 
@@ -231,6 +208,6 @@ Every wrapper has `SetDryRun(bool)` and `IsDryRun() bool`. Behavior varies by wr
 |---------|-----------------|------------------------|
 | Homebrew | Skips state-changing commands, returns mock message | Yes |
 | Flatpak | Skips state-changing commands, returns mock message | Yes |
-| NBC | Passes `--dry-run` flag to nbc binary (commands still execute) | Yes |
+| bootc | `StageUpdate` never invokes pkexec; emits synthetic `EventMessage`+`EventComplete` and returns | Yes |
 | Updex | Skips helper execution, returns empty results | Yes |
 | Snap | Skips `Install`, returns mock changeID | No (possible oversight) |

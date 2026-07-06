@@ -1,6 +1,6 @@
 # ChairLift
 
-ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snow), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew packages, Flatpak and Snap applications, NBC bootc system updates, system features (via updex), and maintenance tasks.
+ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snow), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew packages, Flatpak and Snap applications, bootc system updates, system features (via updex), and maintenance tasks.
 
 The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on or off.
 
@@ -12,8 +12,8 @@ ChairLift organizes its functionality into six pages:
 |------|-------------|
 | **Applications** | Browse, search, install, and uninstall Flatpak (user and system), Snap, and Homebrew packages. Install curated Brewfile bundles. |
 | **Maintenance** | Run cleanup tasks for Homebrew and Flatpak, and execute custom maintenance scripts. |
-| **Updates** | Check and apply NBC system updates, Flatpak updates, and Homebrew package upgrades. |
-| **System** | View OS information, NBC bootc status, and launch a system health monitor. |
+| **Updates** | Stage bootc system updates, apply Flatpak updates, upgrade Homebrew packages, and trust Homebrew taps. |
+| **System** | View OS information, bootc deployment status, and launch a system health monitor. |
 | **Features** | Toggle system features managed by updex. |
 | **Help** | Links to the project website, issue tracker, and community chat. |
 
@@ -45,7 +45,7 @@ ChairLift adapts to what is available on the system. Groups for unavailable tool
 | Homebrew | Package management (formulae, casks, bundles) |
 | Flatpak | Application management and updates |
 | Snap / snapd | Snap package management |
-| NBC (`/usr/bin/nbc`) | Bootc system updates |
+| bootc + `/usr/libexec/bootc-update-stage` | Staged bootc system updates |
 | Updex | System feature toggles |
 
 ## Building
