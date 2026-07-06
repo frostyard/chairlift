@@ -56,11 +56,9 @@ type UserHome struct {
 	snapRows               []*adw.ActionRow // Store references for cleanup
 	searchResultRows       []*adw.ActionRow // Store references for cleanup
 
-	// NBC update references
-	nbcUpdateBtn      *gtk.Button
-	nbcDownloadBtn    *gtk.Button
-	nbcUpdateExpander *adw.ExpanderRow
-	nbcCheckRow       *adw.ActionRow
+	// bootc update references
+	bootcStageExpander *adw.ExpanderRow
+	bootcStageBtn      *gtk.Button
 
 	// Features page references
 	featuresGroup            *adw.PreferencesGroup
@@ -73,7 +71,7 @@ type UserHome struct {
 	maintenanceFlatpakGroup *adw.PreferencesGroup
 
 	// Update badge tracking
-	nbcUpdateCount     int
+	bootcUpdateCount   int
 	flatpakUpdateCount int
 	brewUpdateCount    int
 	updateCountMu      sync.Mutex
@@ -108,7 +106,7 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 // updateBadgeCount updates the total update count and notifies the window
 func (uh *UserHome) updateBadgeCount() {
 	uh.updateCountMu.Lock()
-	total := uh.nbcUpdateCount + uh.flatpakUpdateCount + uh.brewUpdateCount
+	total := uh.bootcUpdateCount + uh.flatpakUpdateCount + uh.brewUpdateCount
 	uh.updateCountMu.Unlock()
 
 	sgtk.RunOnMainThread(func() {
