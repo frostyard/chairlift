@@ -34,6 +34,22 @@ func TestParseUntrustedTapNamesMalformed(t *testing.T) {
 	}
 }
 
+// TestParseUntrustedTapNamesMissingField covers Homebrew versions older than
+// 6, whose `tap-info --installed --json` output has no "trusted" key at all
+// (rather than an explicit trusted: true/false). A missing key must not be
+// treated as untrusted, since brew trust doesn't even exist on those
+// versions and every tap would otherwise be misreported as untrusted.
+func TestParseUntrustedTapNamesMissingField(t *testing.T) {
+	const legacyJSON = `[{"name":"legacy/tap","installed":true}]`
+	names, err := parseUntrustedTapNames([]byte(legacyJSON))
+	if err != nil {
+		t.Fatalf("parseUntrustedTapNames: %v", err)
+	}
+	if len(names) != 0 {
+		t.Errorf("got %v, want empty result for tap-info without a trusted field", names)
+	}
+}
+
 // writeFile creates a file with parent dirs.
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()

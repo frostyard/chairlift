@@ -22,7 +22,7 @@ updates_page:
   brew_updates_group:
     enabled: false  # Hide Homebrew updates (not typically used on other distros)
   brew_trust_group:
-    enabled: true
+    enabled: false  # Hide Homebrew tap trust (not typically used on other distros)
   updates_settings_group:
     enabled: true  # Show update settings
 

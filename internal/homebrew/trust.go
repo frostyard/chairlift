@@ -18,18 +18,22 @@ type UntrustedTap struct {
 }
 
 // parseUntrustedTapNames extracts names of untrusted taps from
-// `brew tap-info --installed --json` output (Homebrew 6 adds "trusted").
+// `brew tap-info --installed --json` output. The "trusted" key was added in
+// Homebrew 6; older brew versions omit it entirely (and have no `brew
+// trust` command), so a nil/missing field must be treated as trusted rather
+// than defaulting to false, or every tap on pre-6 brew would be reported as
+// untrusted.
 func parseUntrustedTapNames(data []byte) ([]string, error) {
 	var taps []struct {
 		Name    string `json:"name"`
-		Trusted bool   `json:"trusted"`
+		Trusted *bool  `json:"trusted"`
 	}
 	if err := json.Unmarshal(data, &taps); err != nil {
 		return nil, &Error{Message: fmt.Sprintf("failed to parse tap-info JSON: %v", err)}
 	}
 	var names []string
 	for _, t := range taps {
-		if !t.Trusted {
+		if t.Trusted != nil && !*t.Trusted {
 			names = append(names, t.Name)
 		}
 	}
