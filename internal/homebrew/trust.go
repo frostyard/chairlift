@@ -94,7 +94,25 @@ func installedCasksByTap(caskroomDir string) map[string][]string {
 		if err != nil || len(matches) == 0 {
 			continue
 		}
-		data, err := os.ReadFile(matches[len(matches)-1]) // newest metadata last in sorted glob
+		// Glob order is lexical, not chronological (e.g. "9" sorts after
+		// "10"), so pick the metadata file with the most recent mtime
+		// instead of assuming the last match is newest.
+		var newest string
+		var newestModTime int64
+		for _, m := range matches {
+			info, err := os.Stat(m)
+			if err != nil {
+				continue
+			}
+			if mt := info.ModTime().UnixNano(); newest == "" || mt > newestModTime {
+				newest = m
+				newestModTime = mt
+			}
+		}
+		if newest == "" {
+			continue
+		}
+		data, err := os.ReadFile(newest)
 		if err != nil {
 			continue
 		}
