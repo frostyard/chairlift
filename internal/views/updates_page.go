@@ -224,6 +224,10 @@ func (uh *UserHome) loadOutdatedPackages() {
 		uh.updateBadgeCount()
 
 		sgtk.RunOnMainThread(func() {
+			for _, row := range uh.outdatedRows {
+				uh.outdatedExpander.Remove(&row.Widget)
+			}
+			uh.outdatedRows = nil
 			uh.outdatedExpander.SetSubtitle("Homebrew not installed")
 		})
 		return
@@ -237,6 +241,10 @@ func (uh *UserHome) loadOutdatedPackages() {
 		uh.updateBadgeCount()
 
 		sgtk.RunOnMainThread(func() {
+			for _, row := range uh.outdatedRows {
+				uh.outdatedExpander.Remove(&row.Widget)
+			}
+			uh.outdatedRows = nil
 			uh.outdatedExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 		})
 		return
