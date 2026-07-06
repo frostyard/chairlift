@@ -175,3 +175,41 @@ func ListUntrustedTaps() ([]UntrustedTap, error) {
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result, nil
 }
+
+// UntrustedTapError indicates a brew command failed because packages come
+// from untrusted taps (Homebrew 6 tap trust). Views should point users at
+// the Untrusted Taps UI instead of dumping raw brew output.
+type UntrustedTapError struct {
+	Message string
+}
+
+func (e *UntrustedTapError) Error() string {
+	return e.Message
+}
+
+// isUntrustedTapMessage reports whether brew output complains about
+// untrusted taps.
+func isUntrustedTapMessage(s string) bool {
+	if s == "" {
+		return false
+	}
+	return strings.Contains(s, "untrusted tap") || strings.Contains(s, "taps are not trusted")
+}
+
+// TrustPackages trusts every installed package from the given tap using
+// `brew trust`. Trust is per-user (~/.homebrew/trust.json); no root needed.
+func TrustPackages(tap UntrustedTap) error {
+	if len(tap.Formulae) > 0 {
+		args := append([]string{"trust", "--formula"}, tap.Formulae...)
+		if _, err := runBrewCommand(args...); err != nil {
+			return err
+		}
+	}
+	if len(tap.Casks) > 0 {
+		args := append([]string{"trust", "--cask"}, tap.Casks...)
+		if _, err := runBrewCommand(args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}

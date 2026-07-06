@@ -105,3 +105,32 @@ func TestInstalledCasksByTap(t *testing.T) {
 		t.Error("stale metadata (lexically last dir but chronologically older) should not win attribution")
 	}
 }
+
+func TestIsUntrustedTapMessage(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"Error: Refusing to load formula opencode from untrusted tap anomalyco/tap.", true},
+		{"Warning: The following taps are not trusted:\n  multica-ai/tap", true},
+		{"Error: No such formula", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := isUntrustedTapMessage(c.in); got != c.want {
+			t.Errorf("isUntrustedTapMessage(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestTrustPackagesDryRun(t *testing.T) {
+	SetDryRun(true)
+	defer SetDryRun(false)
+	err := TrustPackages(UntrustedTap{
+		Name:     "multica-ai/tap",
+		Formulae: []string{"multica-ai/tap/multica"},
+	})
+	if err != nil {
+		t.Fatalf("dry-run TrustPackages: %v", err)
+	}
+}
