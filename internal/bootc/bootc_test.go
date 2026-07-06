@@ -3,7 +3,7 @@ package bootc
 import "testing"
 
 // nonBootcJSON is real output captured from `bootc status --format json`
-// on a non-bootc (nbc-booted) host.
+// on a non-bootc (non-bootc-booted) host.
 const nonBootcJSON = `{"apiVersion":"org.containers.bootc/v1","kind":"BootcHost","metadata":{"name":"host"},"spec":{"bootOrder":"default","image":null},"status":{"booted":null,"rollback":null,"rollbackQueued":false,"staged":null,"type":null,"usrOverlay":null}}`
 
 // bootedStagedJSON follows the org.containers.bootc/v1 schema for a booted
