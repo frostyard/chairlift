@@ -59,6 +59,8 @@ type UserHome struct {
 	// bootc update references
 	bootcStageExpander *adw.ExpanderRow
 	bootcStageBtn      *gtk.Button
+	bootcActivityRow   *adw.ActionRow
+	bootcLogExpander   *adw.ExpanderRow
 
 	// Features page references
 	featuresGroup            *adw.PreferencesGroup

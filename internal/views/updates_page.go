@@ -326,6 +326,15 @@ func (uh *UserHome) onBootcStageClicked() {
 	expander.SetExpanded(true)
 	expander.SetSubtitle("Checking for updates...")
 
+	// Remove rows from any previous run before adding new ones, otherwise
+	// repeated clicks stack duplicate Progress/Details rows.
+	if uh.bootcActivityRow != nil {
+		expander.Remove(&uh.bootcActivityRow.Widget)
+	}
+	if uh.bootcLogExpander != nil {
+		expander.Remove(&uh.bootcLogExpander.Widget)
+	}
+
 	// Activity row with a spinner (the stage script emits no percentages,
 	// so progress is indeterminate).
 	activityRow := adw.NewActionRow()
@@ -335,11 +344,13 @@ func (uh *UserHome) onBootcStageClicked() {
 	spinner.Start()
 	activityRow.AddSuffix(&spinner.Widget)
 	expander.AddRow(&activityRow.Widget)
+	uh.bootcActivityRow = activityRow
 
 	logExpander := adw.NewExpanderRow()
 	logExpander.SetTitle("Details")
 	logExpander.SetSubtitle("View output")
 	expander.AddRow(&logExpander.Widget)
+	uh.bootcLogExpander = logExpander
 
 	go func() {
 		ctx, cancel := bootc.DefaultContext()
