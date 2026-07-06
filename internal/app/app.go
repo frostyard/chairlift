@@ -4,6 +4,7 @@ package app
 import (
 	"log"
 	"os"
+	"time"
 	"unsafe"
 
 	"github.com/frostyard/chairlift/internal/bootc"
@@ -97,6 +98,7 @@ func New() *Application {
 
 // onActivate is called when the application is activated
 func (a *Application) onActivate() {
+	activateStart := time.Now()
 	log.Println("ChairLift activated")
 
 	// Guard: reuse existing window if already created
@@ -110,6 +112,7 @@ func (a *Application) onActivate() {
 	a.window = win
 	a.AddWindow(&win.Window)
 	win.Present()
+	log.Printf("app: window presented in %s (since activate)", time.Since(activateStart))
 }
 
 // setupKeyboardShortcuts sets up application-wide keyboard shortcuts

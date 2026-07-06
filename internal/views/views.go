@@ -2,7 +2,9 @@
 package views
 
 import (
+	"log"
 	"sync"
+	"time"
 
 	"github.com/frostyard/chairlift/internal/config"
 
@@ -84,6 +86,8 @@ type UserHome struct {
 
 // New creates a new UserHome views manager
 func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
+	start := time.Now()
+
 	uh := &UserHome{
 		config:     cfg,
 		toastAdder: toastAdder,
@@ -104,6 +108,8 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.buildMaintenancePage()
 	uh.buildFeaturesPage()
 	uh.buildHelpPage()
+
+	log.Printf("views: all pages built in %s", time.Since(start))
 
 	return uh
 }
