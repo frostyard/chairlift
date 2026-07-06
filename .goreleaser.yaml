@@ -105,6 +105,10 @@ changelog:
 nfpms:
   - file_name_template: "{{ .ConventionalFileName }}"
     package_name: frostyard-chairlift
+    # Both build ids' binaries (chairlift, chairlift-updex-helper) are
+    # packaged automatically into bindir; do not add them as contents
+    # entries (build outputs live in dist/, not the repo root).
+    bindir: /usr/bin
     description: |-
       System management tool for bootc-based installations.
       Manage flatpaks, homebrew and system updates with a modern GTK4/Libadwaita interface.
@@ -130,11 +134,6 @@ nfpms:
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.bootc.policy
       - src: ./data/org.frostyard.ChairLift.bootc.rules
         dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.bootc.rules
-      # Updex helper binary
-      - src: ./chairlift-updex-helper
-        dst: /usr/bin/chairlift-updex-helper
-        file_info:
-          mode: 0755
       # PolicyKit policy and rules for updex
       - src: ./data/org.frostyard.ChairLift.updex.policy
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy
