@@ -86,6 +86,7 @@ func runStageStreaming(ctx context.Context, progressCh chan<- ProgressEvent, nam
 		case progressCh <- ProgressEvent{Type: EventMessage, Message: line}:
 		case <-ctx.Done():
 			_ = cmd.Process.Kill()
+			_ = cmd.Wait() // reap the killed child; error is expected here
 			return ctx.Err()
 		}
 	}
