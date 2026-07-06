@@ -28,8 +28,6 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/frankban/quicktest v1.2.2 h1:xfmOhhoH5fGPgbEAlhLpJH9p0z/0Qizio9osmvn9IUY=
 github.com/frankban/quicktest v1.2.2/go.mod h1:Qh/WofXFeiAFII1aEBu529AtJo6Zg2VHscnEsbBnJ20=
-github.com/frostyard/nbc v0.14.0 h1:LsLuMEXDDfjbCvI0SUnqTZ4x53elKlgf7t0p1Aefhlc=
-github.com/frostyard/nbc v0.14.0/go.mod h1:10VB3hCCdq0iWclievPXRS2YJ8wgs0cEwktJNEP8nj4=
 github.com/frostyard/snowkit v0.1.0 h1:SQVxfJ+76TC2mLcZ9OVjGfAILRMr19Ar6CQEeWBVtZ8=
 github.com/frostyard/snowkit v0.1.0/go.mod h1:Wm3EZbySuCbsAp+OJtA7KzZ1BFjuqvUCn3R1MkMKbDo=
 github.com/frostyard/std v0.1.0 h1:jLDSaAGoENNGY0rJkB87fG2NYPlO2GXhHdVXu89pqDE=

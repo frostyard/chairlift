@@ -4,7 +4,6 @@ go 1.26
 
 require (
 	codeberg.org/puregotk/puregotk v0.0.0-20260226083027-5647eb6a2bba
-	github.com/frostyard/nbc v0.14.0
 	github.com/frostyard/snowkit v0.1.0
 	github.com/frostyard/updex v1.2.0
 	github.com/snapcore/snapd v0.0.0-20260121163940-7314b8b629e5
