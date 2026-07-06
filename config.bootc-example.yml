@@ -21,6 +21,8 @@ updates_page:
     enabled: true  # Show system updates
   brew_updates_group:
     enabled: false  # Hide Homebrew updates (not typically used on other distros)
+  brew_trust_group:
+    enabled: true
   updates_settings_group:
     enabled: true  # Show update settings
 

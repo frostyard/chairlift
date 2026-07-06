@@ -55,6 +55,9 @@ type UserHome struct {
 	snapStoreInstallRow    *adw.ActionRow
 	snapRows               []*adw.ActionRow // Store references for cleanup
 	searchResultRows       []*adw.ActionRow // Store references for cleanup
+	brewTrustGroup         *adw.PreferencesGroup
+	brewTrustRows          map[string]*adw.ActionRow
+	outdatedRows           []*adw.ActionRow // Store references for cleanup
 
 	// bootc update references
 	bootcStageExpander *adw.ExpanderRow

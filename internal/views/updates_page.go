@@ -1,8 +1,10 @@
 package views
 
 import (
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -100,6 +102,117 @@ func (uh *UserHome) buildUpdatesPage() {
 		// Load outdated packages asynchronously
 		go uh.loadOutdatedPackages()
 	}
+
+	// Untrusted Homebrew Taps group - hidden unless untrusted taps with
+	// installed packages exist (Homebrew 6 tap trust).
+	if uh.config.IsGroupEnabled("updates_page", "brew_trust_group") {
+		uh.brewTrustGroup = adw.NewPreferencesGroup()
+		uh.brewTrustGroup.SetTitle("Untrusted Homebrew Taps")
+		uh.brewTrustGroup.SetDescription("Homebrew ignores packages from untrusted taps during upgrades. Trust a tap to resume updates for its packages.")
+		uh.brewTrustGroup.SetVisible(false)
+		page.Add(uh.brewTrustGroup)
+
+		go uh.loadUntrustedTaps()
+	}
+}
+
+// loadUntrustedTaps populates the Untrusted Taps group. Runs in a
+// goroutine; the group stays hidden when there is nothing actionable.
+func (uh *UserHome) loadUntrustedTaps() {
+	if !homebrew.IsInstalledCached() {
+		return
+	}
+
+	taps, err := homebrew.ListUntrustedTaps()
+	if err != nil {
+		log.Printf("untrusted tap check failed: %v", err)
+		return
+	}
+	if len(taps) == 0 {
+		return
+	}
+
+	sgtk.RunOnMainThread(func() {
+		uh.brewTrustRows = make(map[string]*adw.ActionRow)
+		for _, tap := range taps {
+			t := tap // capture
+			row := adw.NewActionRow()
+			row.SetTitle(t.Name)
+
+			packages := append(append([]string{}, t.Formulae...), t.Casks...)
+			// Show unqualified names in the subtitle for readability.
+			var short []string
+			for _, p := range packages {
+				if i := strings.LastIndex(p, "/"); i >= 0 {
+					short = append(short, p[i+1:])
+				} else {
+					short = append(short, p)
+				}
+			}
+			row.SetSubtitle(fmt.Sprintf("%d installed: %s", len(short), strings.Join(short, ", ")))
+
+			trustBtn := gtk.NewButtonWithLabel("Trust")
+			trustBtn.SetValign(gtk.AlignCenterValue)
+			btn := trustBtn
+			clickedCb := func(_ gtk.Button) {
+				uh.confirmTrustTap(t, btn)
+			}
+			trustBtn.ConnectClicked(&clickedCb)
+			row.AddSuffix(&trustBtn.Widget)
+
+			uh.brewTrustGroup.Add(&row.Widget)
+			uh.brewTrustRows[t.Name] = row
+		}
+		uh.brewTrustGroup.SetVisible(true)
+	})
+}
+
+// confirmTrustTap shows a confirmation dialog before trusting a tap's packages.
+func (uh *UserHome) confirmTrustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
+	dialog := adw.NewAlertDialog(
+		fmt.Sprintf("Trust packages from %s?", tap.Name),
+		"Trusting allows this tap's package definitions to run code during installs and upgrades. Only trust taps you recognize.",
+	)
+	dialog.AddResponse("cancel", "Cancel")
+	dialog.AddResponse("trust", "Trust")
+	dialog.SetResponseAppearance("trust", adw.ResponseSuggestedValue)
+
+	responseCb := func(_ adw.AlertDialog, response string) {
+		if response != "trust" {
+			return
+		}
+		button.SetSensitive(false)
+		button.SetLabel("Trusting...")
+		go uh.trustTap(tap, button)
+	}
+	dialog.ConnectResponse(&responseCb)
+	dialog.Present(&uh.updatesPrefsPage.Widget)
+}
+
+// trustTap runs brew trust and updates the UI on completion.
+func (uh *UserHome) trustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
+	err := homebrew.TrustPackages(tap)
+
+	sgtk.RunOnMainThread(func() {
+		if err != nil {
+			button.SetSensitive(true)
+			button.SetLabel("Trust")
+			uh.toastAdder.ShowErrorToast(fmt.Sprintf("Failed to trust %s: %v", tap.Name, err))
+			return
+		}
+
+		if row, ok := uh.brewTrustRows[tap.Name]; ok {
+			uh.brewTrustGroup.Remove(&row.Widget)
+			delete(uh.brewTrustRows, tap.Name)
+		}
+		if len(uh.brewTrustRows) == 0 {
+			uh.brewTrustGroup.SetVisible(false)
+		}
+		uh.toastAdder.ShowToast(fmt.Sprintf("Trusted %s. Its packages can update again.", tap.Name))
+
+		// Newly trusted packages may now appear as outdated.
+		go uh.loadOutdatedPackages()
+	})
 }
 
 // loadOutdatedPackages loads outdated Homebrew packages asynchronously
@@ -136,6 +249,11 @@ func (uh *UserHome) loadOutdatedPackages() {
 	uh.updateBadgeCount()
 
 	sgtk.RunOnMainThread(func() {
+		for _, row := range uh.outdatedRows {
+			uh.outdatedExpander.Remove(&row.Widget)
+		}
+		uh.outdatedRows = nil
+
 		uh.outdatedExpander.SetSubtitle(fmt.Sprintf("%d packages available", len(packages)))
 		for _, pkg := range packages {
 			row := adw.NewActionRow()
@@ -148,8 +266,13 @@ func (uh *UserHome) loadOutdatedPackages() {
 			clickedCb := func(btn gtk.Button) {
 				go func() {
 					if err := homebrew.Upgrade(pkgName); err != nil {
+						var trustErr *homebrew.UntrustedTapError
+						msg := fmt.Sprintf("Upgrade failed: %v", err)
+						if errors.As(err, &trustErr) {
+							msg = fmt.Sprintf("%s comes from an untrusted tap — see Untrusted Homebrew Taps below", pkgName)
+						}
 						sgtk.RunOnMainThread(func() {
-							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Upgrade failed: %v", err))
+							uh.toastAdder.ShowErrorToast(msg)
 						})
 						return
 					}
@@ -162,6 +285,7 @@ func (uh *UserHome) loadOutdatedPackages() {
 
 			row.AddSuffix(&upgradeBtn.Widget)
 			uh.outdatedExpander.AddRow(&row.Widget)
+			uh.outdatedRows = append(uh.outdatedRows, row)
 		}
 	})
 }

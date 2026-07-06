@@ -18,6 +18,8 @@ updates_page:
     enabled: true
   brew_updates_group:
     enabled: true
+  brew_trust_group:
+    enabled: true
   updates_settings_group:
     enabled: true
 
