@@ -54,7 +54,6 @@ Groups with `enabled: false` are hidden from the UI. Missing entries default to 
 | Installed Apps | `applications_installed_group` | Launcher for a Flatpak manager |
 | User Flatpak | `flatpak_user_group` | User-installed Flatpak applications |
 | System Flatpak | `flatpak_system_group` | System-wide Flatpak applications |
-| Snap | `snap_group` | Snap packages and Snap Store management |
 | Homebrew | `brew_group` | Installed Homebrew formulae and casks |
 | Brew Search | `brew_search_group` | Search and install Homebrew packages |
 | Brew Bundles | `brew_bundles_group` | Install packages from Brewfile bundles |

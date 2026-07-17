@@ -52,10 +52,6 @@ type UserHome struct {
 	flatpakSystemExpander  *adw.ExpanderRow
 	flatpakUpdatesExpander *adw.ExpanderRow
 	flatpakUpdateRows      []*adw.ActionRow // Store references for cleanup
-	snapExpander           *adw.ExpanderRow
-	snapStoreLinkRow       *adw.ActionRow
-	snapStoreInstallRow    *adw.ActionRow
-	snapRows               []*adw.ActionRow // Store references for cleanup
 	searchResultRows       []*adw.ActionRow // Store references for cleanup
 	brewTrustGroup         *adw.PreferencesGroup
 	brewTrustRows          map[string]*adw.ActionRow
@@ -73,7 +69,6 @@ type UserHome struct {
 	featureRows              map[string]*adw.ActionRow
 
 	// Groups with deferred visibility
-	snapGroup               *adw.PreferencesGroup
 	maintenanceBrewGroup    *adw.PreferencesGroup
 	maintenanceFlatpakGroup *adw.PreferencesGroup
 

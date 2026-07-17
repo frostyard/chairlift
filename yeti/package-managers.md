@@ -79,34 +79,6 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 `install`, `uninstall`, `remove`, `update`. When dry-run is active, these are skipped entirely.
 
-## Snap (`internal/snap/snap.go`)
-
-Uses the **snapd REST API** directly (via `github.com/snapcore/snapd` client library), not the `snap` CLI.
-
-### Key types
-
-- **`Application`** — name, ID, version, channel, confinement, developer, status
-
-### Operations
-
-| Function | Method | Timeout | Notes |
-|----------|--------|---------|-------|
-| `IsInstalled()` | `GET /v2/system-info` | 60s | Checks snapd availability |
-| `IsInstalledCached()` | Cached `IsInstalled()` | — | `sync.Once` |
-| `ListInstalledSnaps()` | `GET /v2/snaps` | 60s | API call |
-| `IsSnapInstalled(name)` | `GET /v2/snaps/<name>` | 60s | API call |
-| `Install(ctx, name)` | `POST /v2/snaps/<name>` | 60s | Returns changeID, async, dry-run aware |
-| `WaitForChange(ctx, changeID)` | Polls `GET /v2/changes/<id>` | — | Polls every 500ms until done/error |
-| `DefaultContext()` | — | 60s | Helper: returns context with default timeout |
-
-### Notable
-
-- Uses snapd socket at `/run/snapd.socket`
-- Snap install is async — returns a changeID that must be polled
-- Supports interactive polkit authentication
-- Handles `ErrNoSnapsInstalled` gracefully (returns empty list)
-- `SetDryRun` is defined but not called from `app.New()` — snap's `Install` checks `dryRun` internally
-
 ## bootc (`internal/bootc/`)
 
 Wraps `bootc` for OSTree/composefs system updates, split across two files: `bootc.go` (unprivileged status reads) and `stage.go` (privileged update staging). Deliberately does not shell out to any separate CLI helper binary or Go client library — status parsing and stage-script invocation are both implemented directly against `os/exec`.
@@ -210,4 +182,3 @@ Every wrapper has `SetDryRun(bool)` and `IsDryRun() bool`. Behavior varies by wr
 | Flatpak | Skips state-changing commands, returns mock message | Yes |
 | bootc | `StageUpdate` never invokes pkexec; emits synthetic `EventMessage`+`EventComplete` and returns | Yes |
 | Updex | Skips helper execution, returns empty results | Yes |
-| Snap | Skips `Install`, returns mock changeID | No (possible oversight) |
