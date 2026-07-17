@@ -68,7 +68,6 @@ Other useful targets: `make dev` (CGO-enabled build with `-race` for development
 - GTK 4 and libadwaita 1 (shared libraries, loaded at runtime by puregotk — no GTK dev headers or CGO needed to build)
 - Homebrew (optional, for package management features and tap trust)
 - Flatpak (optional)
-- Snap/snapd (optional)
 - `bootc` and the snow `/usr/libexec/bootc-update-stage` script (optional; enables staged system updates)
 - `updex` features configured on the system (optional; toggled via the Features page)
 - Mission Center (optional, for system performance monitoring)
@@ -153,7 +152,6 @@ chairlift/
 │   ├── homebrew/  # Homebrew CLI wrapper (incl. tap trust)
 │   ├── flatpak/   # Flatpak CLI wrapper
 │   ├── bootc/     # bootc wrapper (status reads, pkexec stage script)
-│   ├── snap/      # Snap wrapper (snapd REST API)
 │   ├── updex/     # Updex feature manager
 │   └── version/   # Build metadata (ldflags injection)
 ├── data/          # Desktop file, icons, polkit policies/rules

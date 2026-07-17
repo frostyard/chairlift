@@ -2,7 +2,7 @@
 
 ## Purpose
 
-ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snow), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew packages, Flatpak/Snap applications, bootc system updates (staged via the snow `bootc-update-stage` script), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off.
+ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snow), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, bootc system updates (staged via the snow `bootc-update-stage` script), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off.
 
 ## Architecture
 
@@ -20,14 +20,13 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/homebrew/  Homebrew CLI wrapper (JSON output parsing)
         ├── internal/flatpak/   Flatpak CLI wrapper (tabular output parsing)
         ├── internal/bootc/     bootc wrapper (status reads, pkexec stage script, line streaming)
-        ├── internal/snap/      Snap wrapper (snapd REST API, not CLI)
         ├── internal/updex/     Updex feature manager (Go library reads, helper binary writes)
         └── internal/version/   Build metadata (ldflags injection)
 ```
 
 ### Dependency flow
 
-`cmd → app → window → views → {config, homebrew, flatpak, bootc, snap, updex}`
+`cmd → app → window → views → {config, homebrew, flatpak, bootc, updex}`
 
 External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
 - `gobj` — GObject type registration and instance registry
@@ -45,7 +44,7 @@ The UI has six pages, each in its own file under `internal/views/`:
 
 | Page | File | Purpose |
 |------|------|---------|
-| Applications | `applications_page.go` | Browse/install Flatpak (user+system), Snap, Homebrew packages; snap-store management |
+| Applications | `applications_page.go` | Browse/install Flatpak (user+system) and Homebrew packages |
 | Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts (executed via `exec.Command`/`pkexec`) |
 | Updates | `updates_page.go` | bootc staged system updates, Flatpak updates, Homebrew outdated packages, untrusted-tap trust prompts |
 | System | `system_page.go` | OS info (`/etc/os-release`), bootc deployment status, health monitor launch |
@@ -79,14 +78,14 @@ go func() {
 
 ### Deferred visibility (async startup)
 
-To avoid blocking startup on slow tool-availability checks, groups that depend on optional tools (Snap, Homebrew, Flatpak, Updex) are built immediately with placeholder descriptions (e.g., "Checking Snap availability...") and then shown or hidden asynchronously. The pattern:
+To avoid blocking startup on slow tool-availability checks, groups that depend on optional tools (Homebrew, Flatpak, Updex) are built immediately with placeholder descriptions and then shown or hidden asynchronously. The pattern:
 
 1. Build the UI group unconditionally (if config-enabled), with a placeholder description
-2. Store a reference to the group on `UserHome` (e.g., `snapGroup`, `maintenanceBrewGroup`)
+2. Store a reference to the group on `UserHome` (e.g., `maintenanceBrewGroup`)
 3. Spawn a goroutine that calls `IsInstalledCached()` (see below)
 4. On the main thread, either hide the group (`SetVisible(false)`) or update its description
 
-This applies to: `snapGroup`, `maintenanceBrewGroup`, `maintenanceFlatpakGroup`, `featuresGroup`/`featuresUnavailableGroup`. The Features page uses a dual-group approach — one for available features, one for "not available" — toggling visibility between them.
+This applies to: `maintenanceBrewGroup`, `maintenanceFlatpakGroup`, `featuresGroup`/`featuresUnavailableGroup`. The Features page uses a dual-group approach — one for available features, one for "not available" — toggling visibility between them.
 
 ### bootc boot gate
 
@@ -98,7 +97,6 @@ The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(tru
 
 - **Homebrew/Flatpak/Updex**: State-changing commands are skipped entirely (return mock/empty results)
 - **bootc**: `StageUpdate` short-circuits before invoking pkexec: it logs the would-be command, emits a synthetic `EventMessage` + `EventComplete` pair on the progress channel, and returns — the stage script is never actually run
-- **Snap**: Defines `SetDryRun` but it is not called from `app.New()` (snap's `Install` does check `dryRun` internally)
 
 ### Configuration-driven UI visibility
 
@@ -109,9 +107,9 @@ Each preference group on every page checks `config.IsGroupEnabled(pageName, grou
 Each wrapper in `internal/` follows a consistent shape:
 - Module-level `dryRun` flag with `SetDryRun()`/`IsDryRun()`
 - `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`) for use from views during async startup
-- All four wrapper packages (homebrew, flatpak, snap, updex) implement both `IsInstalled()` and `IsInstalledCached()`
+- Homebrew, Flatpak, and Updex implement both `IsInstalled()` and `IsInstalledCached()`
 - List/Search/Install/Uninstall/Update functions
-- Context-based timeouts (30s for Homebrew, 60s for Flatpak/Snap, 5min for updex, 30min for bootc)
+- Context-based timeouts (30s for Homebrew, 60s for Flatpak, 5min for updex, 30min for bootc)
 - Custom error types where needed
 
 ### Streaming progress (bootc stage)
@@ -198,7 +196,6 @@ page_name:
 | `updates_page` | `updates_settings_group` | Update settings |
 | `applications_page` | `flatpak_user_group` | User Flatpak applications |
 | `applications_page` | `flatpak_system_group` | System Flatpak applications |
-| `applications_page` | `snap_group` | Snap package listing and snap-store management |
 | `applications_page` | `brew_group` | Homebrew formulae and casks |
 | `applications_page` | `brew_search_group` | Homebrew package search |
 | `applications_page` | `brew_bundles_group` | Config key exists but has no corresponding UI builder in current code |
@@ -225,7 +222,6 @@ page_name:
 - GTK 4 and libadwaita 1 (shared libraries loaded at runtime by puregotk)
 - Homebrew (optional)
 - Flatpak (optional)
-- Snap/snapd (optional)
 - `bootc` + `/usr/libexec/bootc-update-stage` (both optional; UI gated on `bootc.IsBootcBootedCached()`, i.e. `bootc status` reporting a non-null `booted` deployment — not on any sentinel file)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
 
@@ -236,7 +232,6 @@ page_name:
 | `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO) |
 | `github.com/frostyard/snowkit` | GObject registration, main-thread dispatch |
 | `github.com/frostyard/updex` | Updex Go library for feature reads and helper binary (currently pinned to v1.2.3 in go.mod) |
-| `github.com/snapcore/snapd` | Snapd client library |
 | `gopkg.in/yaml.v3` | YAML config parsing |
 | `golang.org/x/text` | Title-casing OS release info keys |
 
@@ -244,4 +239,4 @@ There is no separate Go client library dependency for bootc: status/stage types 
 
 ## Subsystem Details
 
-- [Package Manager Wrappers](./package-managers.md) — Homebrew (including tap trust), Flatpak, Snap, bootc, and Updex wrapper details
+- [Package Manager Wrappers](./package-managers.md) — Homebrew (including tap trust), Flatpak, bootc, and Updex wrapper details
