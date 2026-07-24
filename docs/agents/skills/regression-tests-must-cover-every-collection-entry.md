@@ -28,5 +28,8 @@ against the acceptance criterion "the nFPM layout is tested for consistency
 across all packages." The reviewer raised the identical objection across
 three consecutive revision rounds (medium, then medium, then escalated to
 high) because each revision left the single-index check in place instead of
-looping over `cfg.Nfpms`; the chunk exhausted its review-round budget and the
-run was terminated as failed without ever generalizing the loop.
+looping over `cfg.Nfpms`. The chunk only converged — generalizing to a
+`for i, nfpm := range cfg.Nfpms` loop with a per-entry `t.Run` — after
+burning all three rounds on the same feedback; treat "only checks the
+first/one instance" as a signal to generalize the loop bound on the *first*
+revision, not to patch around index 0 again.
