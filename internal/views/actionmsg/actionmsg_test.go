@@ -96,6 +96,86 @@ func TestCleanup(t *testing.T) {
 	}
 }
 
+// TestInstall covers both dry-run states for the Homebrew package-install
+// toast text.
+func TestInstall(t *testing.T) {
+	tests := []struct {
+		name         string
+		dryRun       bool
+		pkgName      string
+		wantExact    string
+		wantContains []string
+	}{
+		{
+			name:      "live run reports the package as installed",
+			dryRun:    false,
+			pkgName:   "ripgrep",
+			wantExact: "ripgrep installed",
+		},
+		{
+			name:         "dry-run previews without claiming an install happened",
+			dryRun:       true,
+			pkgName:      "ripgrep",
+			wantContains: []string{"[DRY-RUN]", "ripgrep", "no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Install(tt.dryRun, tt.pkgName)
+
+			if tt.wantExact != "" && got != tt.wantExact {
+				t.Errorf("Install(%v, %q) = %q, want %q", tt.dryRun, tt.pkgName, got, tt.wantExact)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("Install(%v, %q) = %q, want it to contain %q", tt.dryRun, tt.pkgName, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestUninstall covers both dry-run states for the Flatpak
+// application-uninstall toast text.
+func TestUninstall(t *testing.T) {
+	tests := []struct {
+		name         string
+		dryRun       bool
+		appID        string
+		wantExact    string
+		wantContains []string
+	}{
+		{
+			name:      "live run reports the app as uninstalled",
+			dryRun:    false,
+			appID:     "org.mozilla.firefox",
+			wantExact: "org.mozilla.firefox uninstalled",
+		},
+		{
+			name:         "dry-run previews without claiming an uninstall happened",
+			dryRun:       true,
+			appID:        "org.mozilla.firefox",
+			wantContains: []string{"[DRY-RUN]", "org.mozilla.firefox", "no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Uninstall(tt.dryRun, tt.appID)
+
+			if tt.wantExact != "" && got != tt.wantExact {
+				t.Errorf("Uninstall(%v, %q) = %q, want %q", tt.dryRun, tt.appID, got, tt.wantExact)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("Uninstall(%v, %q) = %q, want it to contain %q", tt.dryRun, tt.appID, got, want)
+				}
+			}
+		})
+	}
+}
+
 // TestMaintenanceScript covers both dry-run states for configured custom
 // maintenance scripts, asserting both the execution gate (Execute) and the
 // Toast text. Execute is the criterion that directly proves no
