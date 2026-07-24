@@ -176,6 +176,182 @@ func TestUninstall(t *testing.T) {
 	}
 }
 
+// TestUpgrade covers both dry-run states for the per-package Homebrew
+// upgrade toast text.
+func TestUpgrade(t *testing.T) {
+	tests := []struct {
+		name         string
+		dryRun       bool
+		pkgName      string
+		wantExact    string
+		wantContains []string
+	}{
+		{
+			name:      "live run reports the package as upgraded",
+			dryRun:    false,
+			pkgName:   "ripgrep",
+			wantExact: "ripgrep upgraded",
+		},
+		{
+			name:         "dry-run previews without claiming an upgrade happened",
+			dryRun:       true,
+			pkgName:      "ripgrep",
+			wantContains: []string{"[DRY-RUN]", "ripgrep", "no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Upgrade(tt.dryRun, tt.pkgName)
+
+			if tt.wantExact != "" && got != tt.wantExact {
+				t.Errorf("Upgrade(%v, %q) = %q, want %q", tt.dryRun, tt.pkgName, got, tt.wantExact)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("Upgrade(%v, %q) = %q, want it to contain %q", tt.dryRun, tt.pkgName, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestUpdate covers both dry-run states for the per-app Flatpak update toast
+// text.
+func TestUpdate(t *testing.T) {
+	tests := []struct {
+		name         string
+		dryRun       bool
+		appID        string
+		wantExact    string
+		wantContains []string
+	}{
+		{
+			name:      "live run reports the app as updated",
+			dryRun:    false,
+			appID:     "org.mozilla.firefox",
+			wantExact: "org.mozilla.firefox updated",
+		},
+		{
+			name:         "dry-run previews without claiming an update happened",
+			dryRun:       true,
+			appID:        "org.mozilla.firefox",
+			wantContains: []string{"[DRY-RUN]", "org.mozilla.firefox", "no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Update(tt.dryRun, tt.appID)
+
+			if tt.wantExact != "" && got != tt.wantExact {
+				t.Errorf("Update(%v, %q) = %q, want %q", tt.dryRun, tt.appID, got, tt.wantExact)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("Update(%v, %q) = %q, want it to contain %q", tt.dryRun, tt.appID, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestSelfUpdate covers both dry-run states for a package manager
+// self-update toast text (e.g. Homebrew's own `brew update`).
+func TestSelfUpdate(t *testing.T) {
+	tests := []struct {
+		name         string
+		dryRun       bool
+		tool         string
+		wantExact    string
+		wantContains []string
+	}{
+		{
+			name:      "live run reports fixed completion message",
+			dryRun:    false,
+			tool:      "Homebrew",
+			wantExact: "Homebrew updated successfully",
+		},
+		{
+			name:         "dry-run previews without claiming an update happened",
+			dryRun:       true,
+			tool:         "Homebrew",
+			wantContains: []string{"[DRY-RUN]", "Homebrew", "no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SelfUpdate(tt.dryRun, tt.tool)
+
+			if tt.wantExact != "" && got != tt.wantExact {
+				t.Errorf("SelfUpdate(%v, %q) = %q, want %q", tt.dryRun, tt.tool, got, tt.wantExact)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("SelfUpdate(%v, %q) = %q, want it to contain %q", tt.dryRun, tt.tool, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestTapTrust covers both dry-run states for Homebrew tap trust, asserting
+// both the UI-mutation gate (MutateUI) and the Toast text. MutateUI is the
+// criterion that directly proves the Untrusted Homebrew Taps UI does not
+// imply a tap was trusted (row removed, group hidden, refresh triggered)
+// after a dry-run click, since homebrew.TrustPackages's underlying `brew
+// trust` never actually runs under dry-run.
+func TestTapTrust(t *testing.T) {
+	tests := []struct {
+		name             string
+		dryRun           bool
+		tapName          string
+		wantMutateUI     bool
+		wantToast        string
+		wantToastContain []string
+	}{
+		{
+			name:         "live run trusts the tap and mutates the UI",
+			dryRun:       false,
+			tapName:      "some/tap",
+			wantMutateUI: true,
+			wantToast:    "Trusted some/tap. Its packages can update again.",
+		},
+		{
+			name:             "dry-run previews without mutating the UI",
+			dryRun:           true,
+			tapName:          "some/tap",
+			wantMutateUI:     false,
+			wantToastContain: []string{"some/tap", "no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TapTrust(tt.dryRun, tt.tapName)
+
+			if got.MutateUI != !tt.dryRun {
+				t.Errorf("TapTrust(%v, %q).MutateUI = %v, want %v", tt.dryRun, tt.tapName, got.MutateUI, !tt.dryRun)
+			}
+			if got.MutateUI != tt.wantMutateUI {
+				t.Errorf("TapTrust(%v, %q).MutateUI = %v, want %v", tt.dryRun, tt.tapName, got.MutateUI, tt.wantMutateUI)
+			}
+			if tt.wantToast != "" && got.Toast != tt.wantToast {
+				t.Errorf("TapTrust(%v, %q).Toast = %q, want %q", tt.dryRun, tt.tapName, got.Toast, tt.wantToast)
+			}
+			if tt.dryRun && !strings.Contains(got.Toast, "Preview") && !strings.Contains(got.Toast, "[DRY-RUN]") {
+				t.Errorf("TapTrust(%v, %q).Toast = %q, want it to contain %q or %q", tt.dryRun, tt.tapName, got.Toast, "Preview", "[DRY-RUN]")
+			}
+			for _, want := range tt.wantToastContain {
+				if !strings.Contains(got.Toast, want) {
+					t.Errorf("TapTrust(%v, %q).Toast = %q, want it to contain %q", tt.dryRun, tt.tapName, got.Toast, want)
+				}
+			}
+		})
+	}
+}
+
 // TestMaintenanceScript covers both dry-run states for configured custom
 // maintenance scripts, asserting both the execution gate (Execute) and the
 // Toast text. Execute is the criterion that directly proves no

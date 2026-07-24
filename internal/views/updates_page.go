@@ -11,6 +11,7 @@ import (
 	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/trustmsg"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
@@ -202,17 +203,27 @@ func (uh *UserHome) trustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
 			return
 		}
 
-		if row, ok := uh.brewTrustRows[tap.Name]; ok {
-			uh.brewTrustGroup.Remove(&row.Widget)
-			delete(uh.brewTrustRows, tap.Name)
-		}
-		if len(uh.brewTrustRows) == 0 {
-			uh.brewTrustGroup.SetVisible(false)
-		}
-		uh.toastAdder.ShowToast(fmt.Sprintf("Trusted %s. Its packages can update again.", tap.Name))
+		decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)
+		if decision.MutateUI {
+			if row, ok := uh.brewTrustRows[tap.Name]; ok {
+				uh.brewTrustGroup.Remove(&row.Widget)
+				delete(uh.brewTrustRows, tap.Name)
+			}
+			if len(uh.brewTrustRows) == 0 {
+				uh.brewTrustGroup.SetVisible(false)
+			}
+			uh.toastAdder.ShowToast(decision.Toast)
 
-		// Newly trusted packages may now appear as outdated.
-		go uh.loadOutdatedPackages()
+			// Newly trusted packages may now appear as outdated.
+			go uh.loadOutdatedPackages()
+		} else {
+			// Dry-run: nothing was actually trusted, so the row must not
+			// disappear from the Untrusted Taps list. Reset the button
+			// instead of leaving it stuck on "Trusting...".
+			button.SetSensitive(true)
+			button.SetLabel("Trust")
+			uh.toastAdder.ShowToast(decision.Toast)
+		}
 	})
 }
 
@@ -298,7 +309,7 @@ func (uh *UserHome) loadOutdatedPackages() {
 						return
 					}
 					sgtk.RunOnMainThread(func() {
-						uh.toastAdder.ShowToast(fmt.Sprintf("%s upgraded", pkgName))
+						uh.toastAdder.ShowToast(actionmsg.Upgrade(homebrew.IsDryRun(), pkgName))
 					})
 				}()
 			}
@@ -404,7 +415,7 @@ func (uh *UserHome) loadFlatpakUpdates() {
 						return
 					}
 					sgtk.RunOnMainThread(func() {
-						uh.toastAdder.ShowToast(fmt.Sprintf("%s updated", appID))
+						uh.toastAdder.ShowToast(actionmsg.Update(flatpak.IsDryRun(), appID))
 						// Refresh the updates list
 						go uh.loadFlatpakUpdates()
 					})
@@ -598,7 +609,7 @@ func (uh *UserHome) onUpdateHomebrewClicked() {
 			return
 		}
 		sgtk.RunOnMainThread(func() {
-			uh.toastAdder.ShowToast("Homebrew updated successfully")
+			uh.toastAdder.ShowToast(actionmsg.SelfUpdate(homebrew.IsDryRun(), "Homebrew"))
 		})
 	}()
 }
