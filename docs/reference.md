@@ -45,7 +45,6 @@ Groups with `enabled: false` are hidden from the UI. Missing entries default to 
 | Flatpak Updates | `flatpak_updates_group` | Pending Flatpak application updates |
 | Homebrew Updates | `brew_updates_group` | Outdated Homebrew packages with upgrade buttons |
 | Untrusted Taps | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); trust a tap to resume its updates. Shown only when there is something to trust |
-| Settings | `updates_settings_group` | Update preferences |
 
 ### Applications Page (`applications_page`)
 

@@ -242,7 +242,6 @@ page_name:
 | `updates_page` | `flatpak_updates_group` | Flatpak pending updates |
 | `updates_page` | `brew_updates_group` | Homebrew outdated packages |
 | `updates_page` | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); hidden unless there is something to trust |
-| `updates_page` | `updates_settings_group` | Update settings |
 | `applications_page` | `flatpak_user_group` | User Flatpak applications |
 | `applications_page` | `flatpak_system_group` | System Flatpak applications |
 | `applications_page` | `brew_group` | Homebrew formulae and casks |

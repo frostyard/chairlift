@@ -38,7 +38,6 @@ page_name:
 - `flatpak_updates_group`: Available Flatpak application updates (user and system)
 - `brew_updates_group`: Homebrew package updates and outdated packages
 - `brew_trust_group`: Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); only shown when there is something to trust
-- `updates_settings_group`: Update preferences and settings
 
 ### Applications Page (`applications_page`)
 
@@ -85,8 +84,6 @@ updates_page:
     enabled: true # Keep Flatpak updates
   brew_updates_group:
     enabled: false # Hide Homebrew updates
-  updates_settings_group:
-    enabled: true
 
 applications_page:
   applications_installed_group:

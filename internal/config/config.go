@@ -206,11 +206,10 @@ func defaultConfig() *Config {
 			},
 		},
 		UpdatesPage: PageConfig{
-			"bootc_updates_group":    GroupConfig{Enabled: true},
-			"flatpak_updates_group":  GroupConfig{Enabled: true},
-			"brew_updates_group":     GroupConfig{Enabled: true},
-			"brew_trust_group":       GroupConfig{Enabled: true},
-			"updates_settings_group": GroupConfig{Enabled: true},
+			"bootc_updates_group":   GroupConfig{Enabled: true},
+			"flatpak_updates_group": GroupConfig{Enabled: true},
+			"brew_updates_group":    GroupConfig{Enabled: true},
+			"brew_trust_group":      GroupConfig{Enabled: true},
 		},
 		ApplicationsPage: PageConfig{
 			"applications_installed_group": GroupConfig{
