@@ -11,6 +11,7 @@ import (
 	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/views/trustmsg"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -215,8 +216,16 @@ func (uh *UserHome) trustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
 	})
 }
 
-// loadOutdatedPackages loads outdated Homebrew packages asynchronously
+// loadOutdatedPackages loads outdated Homebrew packages asynchronously.
+// It is reachable from trustTap (a newly-trusted tap's packages may now be
+// outdated) as well as from buildUpdatesPage, so it must stay nil-safe
+// against brew_updates_group being disabled — trustTap only depends on
+// brew_trust_group and has no way to know whether outdatedExpander exists.
 func (uh *UserHome) loadOutdatedPackages() {
+	if uh.outdatedExpander == nil {
+		return
+	}
+
 	if !homebrew.IsInstalledCached() {
 		uh.updateCountMu.Lock()
 		uh.brewUpdateCount = 0
@@ -277,7 +286,11 @@ func (uh *UserHome) loadOutdatedPackages() {
 						var trustErr *homebrew.UntrustedTapError
 						msg := fmt.Sprintf("Upgrade failed: %v", err)
 						if errors.As(err, &trustErr) {
-							msg = fmt.Sprintf("%s comes from an untrusted tap — see Untrusted Homebrew Taps below", pkgName)
+							// uh.brewTrustGroup is only ever assigned once, in
+							// buildUpdatesPage on the main thread before this
+							// goroutine (or any goroutine) starts, so reading
+							// it here is race-free.
+							msg = trustmsg.UpgradeMessage(pkgName, uh.brewTrustGroup != nil)
 						}
 						sgtk.RunOnMainThread(func() {
 							uh.toastAdder.ShowErrorToast(msg)
