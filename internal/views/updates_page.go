@@ -11,6 +11,7 @@ import (
 	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/views/trustmsg"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -215,24 +216,6 @@ func (uh *UserHome) trustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
 	})
 }
 
-// untrustedTapUpgradeMessage builds the toast text shown when a Homebrew
-// upgrade fails with an *homebrew.UntrustedTapError. It is a standalone, pure
-// function (no widget access) so it stays table-driven-testable headlessly
-// per docs/agents/skills/gtk-headless-tests.md.
-//
-// When trustGroupAvailable is true, the Untrusted Homebrew Taps group exists
-// (brew_trust_group is enabled and uh.brewTrustGroup has been built) and the
-// message points the user there. When false — brew_trust_group disabled, or
-// not yet built — there is no "below" to see, so the message is
-// self-contained: it states the package cannot be upgraded until its tap is
-// trusted, without referencing any UI section.
-func untrustedTapUpgradeMessage(pkgName string, trustGroupAvailable bool) string {
-	if trustGroupAvailable {
-		return fmt.Sprintf("%s comes from an untrusted tap — see Untrusted Homebrew Taps below", pkgName)
-	}
-	return fmt.Sprintf("%s comes from an untrusted tap and cannot be upgraded until the tap is trusted", pkgName)
-}
-
 // loadOutdatedPackages loads outdated Homebrew packages asynchronously.
 // It is reachable from trustTap (a newly-trusted tap's packages may now be
 // outdated) as well as from buildUpdatesPage, so it must stay nil-safe
@@ -307,7 +290,7 @@ func (uh *UserHome) loadOutdatedPackages() {
 							// buildUpdatesPage on the main thread before this
 							// goroutine (or any goroutine) starts, so reading
 							// it here is race-free.
-							msg = untrustedTapUpgradeMessage(pkgName, uh.brewTrustGroup != nil)
+							msg = trustmsg.UpgradeMessage(pkgName, uh.brewTrustGroup != nil)
 						}
 						sgtk.RunOnMainThread(func() {
 							uh.toastAdder.ShowErrorToast(msg)
