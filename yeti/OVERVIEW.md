@@ -213,7 +213,7 @@ page_name:
 - **Dev build**: `make dev` builds with `CGO_ENABLED=1` and `-race` flag for race detection
 - **Version**: Set via ldflags by goreleaser (`buildVersion`, `buildCommit`, `buildDate`, `buildBy`)
 - **Semantic versioning**: Uses [svu](https://github.com/caarlos0/svu) via `make bump`
-- **CI**: GitHub Actions workflows for test, snapshot, and release (`.github/workflows/`)
+- **CI**: GitHub Actions workflows for test, snapshot, and release (`.github/workflows/`); snapshot publishers use the `chairlift-dev-release` concurrency group without in-progress cancellation so uploads to the rolling `dev` release cannot overlap. GitHub retains only the newest pending run in a concurrency group, so rapid pushes can skip intermediate snapshots while preserving the active upload and latest queued snapshot.
 - **Release**: GoReleaser config at `.goreleaser.yaml`
 - **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint), `make install`/`make uninstall` (system install including polkit policies, icons, and wrapper script), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
 

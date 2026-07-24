@@ -9,6 +9,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: chairlift-dev-release
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
