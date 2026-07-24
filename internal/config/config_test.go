@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"runtime"
 	"testing"
 )
 
@@ -374,4 +376,87 @@ func TestIsGroupEnabledMatchesExpectedForEveryGroup(t *testing.T) {
 			}
 		}
 	})
+}
+
+// repoRoot returns the absolute path to the repository root, computed from
+// this source file's own location rather than the test binary's working
+// directory. internal/config/config_test.go sits two directories below the
+// repo root (<root>/internal/config/config_test.go), the same depth as
+// internal/installcheck/installcheck.go, so the same runtime.Caller(0) +
+// triple filepath.Dir trick applies. This is not imported from
+// internal/installcheck to avoid adding a cross-package dependency for a
+// 3-line helper.
+func repoRoot() string {
+	_, thisFile, _, _ := runtime.Caller(0)
+	return filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
+}
+
+// TestUpdatesPageDefaultGroupSetIsExact asserts that defaultConfig()'s
+// updates_page group set is exactly the four groups the Updates page view
+// still builds. This is an exact-set equality check (length plus every
+// expected key present), not a single named-key absence lookup, so it fails
+// loudly whether a formerly-shipped, now-removed group is silently
+// re-added under its old name or under any new one.
+func TestUpdatesPageDefaultGroupSetIsExact(t *testing.T) {
+	want := map[string]bool{
+		"bootc_updates_group":   true,
+		"flatpak_updates_group": true,
+		"brew_updates_group":    true,
+		"brew_trust_group":      true,
+	}
+
+	got := defaultConfig().UpdatesPage
+	if len(got) != len(want) {
+		t.Fatalf("defaultConfig().UpdatesPage has %d groups, want %d: got keys %v", len(got), len(want), groupKeys(got))
+	}
+	for name := range want {
+		if _, ok := got[name]; !ok {
+			t.Errorf("defaultConfig().UpdatesPage: missing expected group %q; got keys %v", name, groupKeys(got))
+		}
+	}
+}
+
+func groupKeys(page PageConfig) []string {
+	keys := make([]string, 0, len(page))
+	for name := range page {
+		keys = append(keys, name)
+	}
+	return keys
+}
+
+// isGroupEnabledCallPattern matches config.IsGroupEnabled("updates_page",
+// "<name>") calls in Go source text, capturing the group-name argument.
+var isGroupEnabledCallPattern = regexp.MustCompile(`IsGroupEnabled\(\s*"updates_page"\s*,\s*"([^"]+)"\s*\)`)
+
+// TestUpdatesPageDefaultGroupsHaveBuilders reads internal/views/updates_page.go
+// as plain text (internal/config must never import internal/views or
+// puregotk, directly or transitively, per
+// docs/agents/skills/gtk-headless-tests.md) and asserts every group
+// defaultConfig() defines for updates_page is gated by a real
+// config.IsGroupEnabled("updates_page", ...) call in that view file. This is
+// the regression test that would have caught a group being
+// declared/defaulted/shipped/documented with no view ever checking it: a
+// group with no matching IsGroupEnabled call fails this test.
+func TestUpdatesPageDefaultGroupsHaveBuilders(t *testing.T) {
+	path := filepath.Join(repoRoot(), "internal", "views", "updates_page.go")
+	src, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+
+	matches := isGroupEnabledCallPattern.FindAllStringSubmatch(string(src), -1)
+	if len(matches) == 0 {
+		t.Fatalf("found zero IsGroupEnabled(\"updates_page\", ...) calls in %s; regex may no longer match the source", path)
+	}
+
+	gated := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		gated[m[1]] = true
+	}
+
+	for name := range defaultConfig().UpdatesPage {
+		if !gated[name] {
+			t.Errorf("defaultConfig().UpdatesPage group %q has no matching config.IsGroupEnabled(\"updates_page\", ...) call in %s", name, path)
+		}
+	}
 }
