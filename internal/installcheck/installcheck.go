@@ -37,14 +37,23 @@ func RepoRoot() string {
 // unmarshaling silently ignores every field not named here, so this struct
 // does not need to (and deliberately does not) mirror the whole schema.
 type GoreleaserConfig struct {
-	Nfpms []NfpmConfig `yaml:"nfpms"`
+	Metadata MetadataConfig `yaml:"metadata"`
+	Nfpms    []NfpmConfig   `yaml:"nfpms"`
+}
+
+// MetadataConfig is the subset of the top-level metadata: block relevant to
+// license consistency.
+type MetadataConfig struct {
+	License string `yaml:"license"`
 }
 
 // NfpmConfig is the subset of an nfpms[] entry relevant to install-location
-// consistency: where packaged binaries land (Bindir) and where explicitly
-// listed files (policy/rules, wrapper script, icons, ...) land (Contents).
+// and license consistency: where packaged binaries land (Bindir), where
+// explicitly listed files (policy/rules, wrapper script, icons, ...) land
+// (Contents), and the package's declared license (License).
 type NfpmConfig struct {
 	Bindir   string        `yaml:"bindir"`
+	License  string        `yaml:"license"`
 	Contents []NfpmContent `yaml:"contents"`
 }
 

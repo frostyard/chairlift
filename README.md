@@ -211,7 +211,7 @@ ChairLift is adapted from [Vanilla OS First Setup](https://github.com/Vanilla-OS
 
 ### License
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, version 3.
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version — SPDX identifier `GPL-3.0-or-later`. This matches the in-app About dialog's license selection and the license declared in packaged (deb/rpm/apk) metadata.
 
 See [LICENSE](LICENSE) for details.
 
