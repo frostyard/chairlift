@@ -40,6 +40,38 @@ type ActionConfig struct {
 	Sudo   bool   `yaml:"sudo"`
 }
 
+// rawConfig mirrors Config for YAML parsing, but every optional field is a
+// pointer so yaml.v3 can distinguish "key omitted" (nil) from "key present,
+// possibly with the zero value" (non-nil). It is never exposed outside this
+// file; loadFromPath merges it onto defaultConfig() to produce the *Config
+// callers see.
+type rawConfig struct {
+	SystemPage       rawPageConfig `yaml:"system_page"`
+	UpdatesPage      rawPageConfig `yaml:"updates_page"`
+	ApplicationsPage rawPageConfig `yaml:"applications_page"`
+	MaintenancePage  rawPageConfig `yaml:"maintenance_page"`
+	FeaturesPage     rawPageConfig `yaml:"features_page"`
+	HelpPage         rawPageConfig `yaml:"help_page"`
+}
+
+// rawPageConfig mirrors PageConfig for YAML parsing.
+type rawPageConfig map[string]rawGroupConfig
+
+// rawGroupConfig mirrors GroupConfig for YAML parsing. A nil field means the
+// key was absent (or explicitly null) in the source file and the merge keeps
+// defaultConfig()'s value; a non-nil field, including a pointer to an empty
+// string/slice, means the file set that field explicitly and it replaces the
+// default outright.
+type rawGroupConfig struct {
+	Enabled      *bool           `yaml:"enabled"`
+	AppID        *string         `yaml:"app_id"`
+	Actions      *[]ActionConfig `yaml:"actions"`
+	Website      *string         `yaml:"website"`
+	Issues       *string         `yaml:"issues"`
+	Chat         *string         `yaml:"chat"`
+	BundlesPaths *[]string       `yaml:"bundles_paths"`
+}
+
 // configPaths are the locations to search for the config file
 var configPaths = []string{
 	"/etc/chairlift/config.yml",
@@ -81,12 +113,85 @@ func loadFromPath(path string) (*Config, error) {
 		return nil, err
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	var raw rawConfig
+	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
 
-	return &cfg, nil
+	return mergeConfig(defaultConfig(), &raw), nil
+}
+
+// mergeConfig overlays raw (a parsed config file) onto def (defaultConfig())
+// page by page, returning a new *Config. Every optional field on every group
+// follows the same rule: omitted in raw -> keep def's value; present in raw
+// (including an explicit empty string/slice) -> use raw's value, replacing
+// def's outright.
+func mergeConfig(def *Config, raw *rawConfig) *Config {
+	return &Config{
+		SystemPage:       mergePage(def.SystemPage, raw.SystemPage),
+		UpdatesPage:      mergePage(def.UpdatesPage, raw.UpdatesPage),
+		ApplicationsPage: mergePage(def.ApplicationsPage, raw.ApplicationsPage),
+		MaintenancePage:  mergePage(def.MaintenancePage, raw.MaintenancePage),
+		FeaturesPage:     mergePage(def.FeaturesPage, raw.FeaturesPage),
+		HelpPage:         mergePage(def.HelpPage, raw.HelpPage),
+	}
+}
+
+// mergePage overlays raw onto def for a single page. Groups present only in
+// def are kept as-is; groups present only in raw (a group name unknown to
+// defaultConfig() for this page) start from a zero GroupConfig that defaults
+// Enabled to true, matching IsGroupEnabled's existing "missing group ->
+// enabled" fallback for the wholly-absent case. Groups present in both are
+// merged field by field.
+func mergePage(def PageConfig, raw rawPageConfig) PageConfig {
+	result := make(PageConfig, len(def))
+	for name, group := range def {
+		result[name] = group
+	}
+
+	for name, rawGroup := range raw {
+		base, ok := def[name]
+		if !ok {
+			// Unknown group: omitted `enabled` still resolves to true.
+			base = GroupConfig{Enabled: true}
+		}
+		result[name] = mergeGroup(base, rawGroup)
+	}
+
+	return result
+}
+
+// mergeGroup overlays raw onto def for a single group, field by field. Each
+// assignment is guarded by the corresponding raw pointer's nil-check: nil
+// means the file omitted (or explicitly nulled) that key, so def's value is
+// kept; non-nil means the file set the key, so raw's value replaces def's,
+// including an explicit empty string or empty slice.
+func mergeGroup(def GroupConfig, raw rawGroupConfig) GroupConfig {
+	result := def
+
+	if raw.Enabled != nil {
+		result.Enabled = *raw.Enabled
+	}
+	if raw.AppID != nil {
+		result.AppID = *raw.AppID
+	}
+	if raw.Actions != nil {
+		result.Actions = *raw.Actions
+	}
+	if raw.Website != nil {
+		result.Website = *raw.Website
+	}
+	if raw.Issues != nil {
+		result.Issues = *raw.Issues
+	}
+	if raw.Chat != nil {
+		result.Chat = *raw.Chat
+	}
+	if raw.BundlesPaths != nil {
+		result.BundlesPaths = *raw.BundlesPaths
+	}
+
+	return result
 }
 
 // defaultConfig returns the default configuration

@@ -113,6 +113,21 @@ Per-wrapper mechanics:
 
 Each preference group on every page checks `config.IsGroupEnabled(pageName, groupName)` before building its widgets. Groups default to enabled if not specified in config. The `maintenance_cleanup_group` defaults to disabled in the default config.
 
+`internal/config/config.go` builds the effective `*Config` by overlaying a
+parsed file onto `defaultConfig()` field by field, not by replacing it
+wholesale — `mergeConfig` walks each page, `mergePage` walks each group within
+a page, and `mergeGroup` walks each field within a group. The overlay is
+driven by `rawConfig`/`rawPageConfig`/`rawGroupConfig`, a pointer-typed mirror
+of `Config`/`PageConfig`/`GroupConfig` used only for YAML decoding: a `nil`
+pointer means the file omitted (or explicitly nulled) that key, so
+`defaultConfig()`'s value survives; a non-nil pointer means the file set that
+key — including to an empty string or empty slice — so it replaces the
+default outright. This is why `maintenance_cleanup_group` stays disabled
+overall (and keeps its default `actions` entry) when a config file mentions
+the group only to flip an unrelated field, and why `Load()` falling back to
+`defaultConfig()` when no file is found or the file is unreadable/invalid
+preserves that same per-group default — it is never "all features enabled."
+
 ### Package manager wrapper pattern
 
 Each wrapper in `internal/` follows a consistent shape:
