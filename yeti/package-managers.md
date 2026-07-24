@@ -257,8 +257,12 @@ turn "verified by inspection" into a real, gated check:
   output.
 - **`TestGoreleaserNfpmLayoutMatchesUsrPrefix`** parses the real, repo-root
   `.goreleaser.yaml` (not a fixture) with the already-vendored
-  `gopkg.in/yaml.v3` and asserts `nfpms[0].bindir` matches the directory of
-  `internal/updex.HelperPath`, and the updex/bootc policy+rules
+  `gopkg.in/yaml.v3` and, iterating **every** `nfpms[]` entry (not just
+  `nfpms[0]`, so adding or reordering a second package with the wrong layout
+  still fails — per
+  `docs/agents/skills/regression-tests-must-cover-every-collection-entry.md`),
+  asserts each entry's `bindir` matches the directory of
+  `internal/updex.HelperPath` and its updex/bootc policy+rules
   `contents[].dst` entries equal those same fixed polkit-1 paths.
 
 Both tests fail — not skip — if `internal/updex.HelperPath`, the Makefile's

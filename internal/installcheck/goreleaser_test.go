@@ -1,6 +1,7 @@
 package installcheck
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,12 +49,17 @@ func nfpmDst(t *testing.T, nfpm NfpmConfig, srcSuffix string) string {
 // and the fixed PolicyKit read locations, so a future edit to any one of
 // .goreleaser.yaml, internal/updex.HelperPath, or the polkit directories
 // fails this test instead of silently drifting.
+//
+// It iterates every nfpms[] entry rather than only nfpms[0]: the acceptance
+// criterion is a consistency invariant across the whole nFPM block, so adding
+// or reordering a second package with the wrong bindir or polkit destinations
+// must fail here too (per
+// docs/agents/skills/regression-tests-must-cover-every-collection-entry.md).
 func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 	cfg := loadGoreleaserConfig(t)
 	if len(cfg.Nfpms) == 0 {
 		t.Fatal(".goreleaser.yaml has no nfpms entries")
 	}
-	nfpm := cfg.Nfpms[0]
 
 	// nFPM auto-packages both build ids' binaries (chairlift,
 	// chairlift-updex-helper) into bindir, so bindir alone determines where
@@ -62,11 +68,9 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 	// against the PolicyKit policy's exec.path annotation — not just a
 	// hardcoded "/usr/bin" literal, so this fails if either side changes
 	// without the other.
-	if wantBindir := filepath.Dir(updex.HelperPath); nfpm.Bindir != wantBindir {
-		t.Errorf("nfpms[0].bindir = %q, want %q (must match the directory of internal/updex.HelperPath)", nfpm.Bindir, wantBindir)
-	}
+	wantBindir := filepath.Dir(updex.HelperPath)
 
-	tests := []struct {
+	contentChecks := []struct {
 		name      string
 		srcSuffix string
 		want      string
@@ -76,11 +80,20 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 		{"bootc policy", "org.frostyard.ChairLift.bootc.policy", filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.bootc.policy")},
 		{"bootc rules", "org.frostyard.ChairLift.bootc.rules", filepath.Join(polkitRulesDir, "org.frostyard.ChairLift.bootc.rules")},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := nfpmDst(t, nfpm, tt.srcSuffix)
-			if got != tt.want {
-				t.Errorf("nfpm contents dst for %s = %q, want %q (fixed PolicyKit read location)", tt.srcSuffix, got, tt.want)
+
+	for i, nfpm := range cfg.Nfpms {
+		t.Run(fmt.Sprintf("nfpms[%d]", i), func(t *testing.T) {
+			if nfpm.Bindir != wantBindir {
+				t.Errorf("nfpms[%d].bindir = %q, want %q (must match the directory of internal/updex.HelperPath)", i, nfpm.Bindir, wantBindir)
+			}
+
+			for _, cc := range contentChecks {
+				t.Run(cc.name, func(t *testing.T) {
+					got := nfpmDst(t, nfpm, cc.srcSuffix)
+					if got != cc.want {
+						t.Errorf("nfpms[%d] contents dst for %s = %q, want %q (fixed PolicyKit read location)", i, cc.srcSuffix, got, cc.want)
+					}
+				})
 			}
 		})
 	}
