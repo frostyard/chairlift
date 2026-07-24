@@ -43,6 +43,7 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
     mod_timestamp: "{{ .CommitTimestamp }}"
     flags:
       - -trimpath
@@ -58,6 +59,7 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
     mod_timestamp: "{{ .CommitTimestamp }}"
     flags:
       - -trimpath
@@ -69,6 +71,14 @@ archives:
   - files:
       - README.md
       - LICENSE
+      - config.yml
+      - data/chairlift-wrapper.sh
+      - data/org.frostyard.ChairLift.desktop
+      - data/icons/**/*
+      - data/org.frostyard.ChairLift.bootc.policy
+      - data/org.frostyard.ChairLift.bootc.rules
+      - data/org.frostyard.ChairLift.updex.policy
+      - data/org.frostyard.ChairLift.updex.rules
 
 
 checksum:
