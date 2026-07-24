@@ -16,7 +16,21 @@ import (
 )
 
 const (
-	helperCommand  = "chairlift-updex-helper"
+	// HelperPath is the fixed, absolute installed path of the privileged
+	// updex helper binary. It must match the
+	// org.freedesktop.policykit.exec.path annotation on all three actions in
+	// data/org.frostyard.ChairLift.updex.policy exactly: pkexec resolves the
+	// program it is about to run to an absolute path and compares it
+	// textually against that annotation to pick the matching
+	// org.frostyard.ChairLift.updex.* action (and its no-reprompt
+	// sudo-group rule in data/org.frostyard.ChairLift.updex.rules). A
+	// mismatch (e.g. a bare, $PATH-resolved name) makes pkexec silently fall
+	// back to the generic, more restrictive
+	// org.freedesktop.policykit.pkexec.run-program action instead. This
+	// constant is installed at $(PREFIX)/bin/chairlift-updex-helper by the
+	// Makefile, which requires PREFIX=/usr (the default) to match.
+	HelperPath = "/usr/bin/chairlift-updex-helper"
+
 	pkexecCommand  = "pkexec"
 	DefaultTimeout = 5 * time.Minute
 )
@@ -119,32 +133,40 @@ func CheckFeatures(ctx context.Context) ([]FeatureCheck, error) {
 
 // EnableFeature enables a feature for download
 func EnableFeature(ctx context.Context, name string) error {
-	_, _, err := runHelper(ctx, "enable-feature", name)
+	_, _, err := runHelper(ctx, pkexecCommand, "enable-feature", name)
 	return err
 }
 
 // DisableFeature disables a feature
 func DisableFeature(ctx context.Context, name string) error {
-	_, _, err := runHelper(ctx, "disable-feature", name)
+	_, _, err := runHelper(ctx, pkexecCommand, "disable-feature", name)
 	return err
 }
 
 // UpdateFeatures downloads enabled features
 func UpdateFeatures(ctx context.Context) error {
-	_, _, err := runHelper(ctx, "update")
+	_, _, err := runHelper(ctx, pkexecCommand, "update")
 	return err
 }
 
-// runHelper executes the chairlift-updex-helper via pkexec for privileged operations
-func runHelper(ctx context.Context, args ...string) (string, string, error) {
+// runHelper executes HelperPath via pkexec for privileged operations. pkexecPath
+// is the pkexec binary to invoke — always pkexecCommand in production, but an
+// explicit parameter (mirroring internal/bootc/stage.go's
+// runStageStreaming(ctx, ch, name, args...) pattern) so tests can substitute a
+// fake pkexec stand-in without invoking the real pkexec/polkit stack or
+// requiring root. HelperPath itself is never overridden: it is the fixed
+// absolute path that must match the policy's exec.path annotation, so tests
+// assert it by inspecting the fake pkexec's captured argv rather than by
+// substituting a different one in.
+func runHelper(ctx context.Context, pkexecPath string, args ...string) (string, string, error) {
 	if dryRun {
 		args = append(args, "--dry-run")
-		log.Printf("[DRY-RUN] would execute: pkexec %s %v", helperCommand, args)
+		log.Printf("[DRY-RUN] would execute: %s %s %v", pkexecPath, HelperPath, args)
 		return "", "", nil
 	}
 
-	fullArgs := append([]string{helperCommand}, args...)
-	cmd := exec.CommandContext(ctx, pkexecCommand, fullArgs...)
+	fullArgs := append([]string{HelperPath}, args...)
+	cmd := exec.CommandContext(ctx, pkexecPath, fullArgs...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

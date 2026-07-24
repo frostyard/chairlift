@@ -19,6 +19,11 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   `go vet`, gofmt check, lint, unit tests, race detector, build). Run it before
   pushing; green locally means green in CI. The mill's deep gate calls this
   exact target.
+- `make install`'s default `PREFIX` is `/usr` — the only prefix under which
+  the installed PolicyKit policy/rules files land where `polkitd` reads them
+  (`/usr/share/polkit-1/{actions,rules.d}`) and the updex helper's installed
+  path matches its fixed `pkexec` exec-path annotation (see the privilege
+  boundary invariant below).
 
 CI (`.github/workflows/test.yml`) filters tests with `-run "^Test[^I]"
 -skip "Integration"`. Names beginning `TestI…` or containing `Integration` are
@@ -36,10 +41,13 @@ An agent must not break these:
 - **Privilege boundary.** State-changing operations that require root go
   through `pkexec` (PolicyKit) with fixed, installed polkit policies and fixed
   helper binaries only: `pkexec /usr/libexec/bootc-update-stage` (action
-  `org.frostyard.ChairLift.bootc.stage`) and the `chairlift-updex-helper` binary
-  (action for updex writes). Homebrew tap trust (`brew trust`) is deliberately
-  per-user and does **not** use pkexec. Do not add arbitrary privileged command
-  execution, broaden what pkexec runs, or route new mutations around the fixed
+  `org.frostyard.ChairLift.bootc.stage`) and `pkexec /usr/bin/chairlift-updex-helper`
+  (`internal/updex.HelperPath`, action for updex writes) — always that fixed
+  absolute path, matching the `org.freedesktop.policykit.exec.path` annotation
+  in `data/org.frostyard.ChairLift.updex.policy`, never a bare/`$PATH`-resolved
+  name. Homebrew tap trust (`brew trust`) is deliberately per-user and does
+  **not** use pkexec. Do not add arbitrary privileged command execution,
+  broaden what pkexec runs, or route new mutations around the fixed
   helper/policy pair.
 - **GTK main-thread safety.** All external tool calls run in goroutines; every
   UI update marshals back to the GTK main thread via

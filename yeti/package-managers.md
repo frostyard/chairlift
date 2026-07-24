@@ -176,7 +176,7 @@ for event := range progressCh {
 
 ## Updex (`internal/updex/updex.go`)
 
-Manages system features (add-on software/configuration modules). Unlike other wrappers, updex does **not** shell out to a CLI for reads. It uses the `github.com/frostyard/updex/updex` Go library directly for read operations, with a singleton `*updexapi.Client`. Write operations that require root are delegated to the `chairlift-updex-helper` binary (at `cmd/chairlift-updex-helper/main.go`) via pkexec.
+Manages system features (add-on software/configuration modules). Unlike other wrappers, updex does **not** shell out to a CLI for reads. It uses the `github.com/frostyard/updex/updex` Go library directly for read operations, with a singleton `*updexapi.Client`. Write operations that require root are delegated via pkexec to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`, built from `cmd/chairlift-updex-helper/main.go`) — never a bare, `$PATH`-resolved name, since `pkexec` matches the resolved absolute path against `data/org.frostyard.ChairLift.updex.policy`'s `org.freedesktop.policykit.exec.path` annotation to select the right action; see [OVERVIEW.md](./OVERVIEW.md#privileged-operations) for the full rationale and the matching `PREFIX=/usr` Makefile requirement.
 
 ### Key types
 
@@ -193,9 +193,9 @@ Type aliases to `github.com/frostyard/updex/updex`:
 | `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
 | `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
 | `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Returns `[]FeatureCheck` |
-| `EnableFeature(name)` | `pkexec chairlift-updex-helper enable-feature <name>` | pkexec | 5min | State-changing |
-| `DisableFeature(name)` | `pkexec chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
-| `UpdateFeatures()` | `pkexec chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features |
+| `EnableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper enable-feature <name>` | pkexec | 5min | State-changing |
+| `DisableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
+| `UpdateFeatures()` | `pkexec /usr/bin/chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features |
 
 ### Helper binary (`cmd/chairlift-updex-helper/main.go`)
 
@@ -224,3 +224,55 @@ The Updates page's per-package Homebrew upgrade button, per-app Flatpak update b
 The Updates page's bootc "Check for Updates" stage button (`onBootcStageClicked`, `internal/views/updates_page.go`) follows the same `actionmsg` pattern, with one difference from the buttons above: unlike `Install`/`Upgrade`/etc., whose completion text is selected purely by `dryRun`, `BootcStage(dryRun, staged)` also takes the live `staged` result from the post-`wg.Wait()` `bootc.GetStatus()` re-read, because the non-dry-run branch still needs to pick between the "staged" and "up to date" strings. Under dry-run, `staged` is ignored entirely and a single preview string is returned instead — see "Dry-run behavior" under bootc above for why. The expander's `SetSubtitle` calls in the same code block are *not* routed through `actionmsg`; they keep reading live `GetStatus()` output unconditionally, since the subtitle is a persistent status display rather than a per-click completion claim.
 
 The Features page's per-feature switch (`onFeatureToggled`, `internal/views/features_page.go`) follows the same decision-struct pattern as maintenance-script execution and tap trust: on a successful `updex.EnableFeature`/`DisableFeature` call, `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` is computed once, and the switch's visual state is driven solely by `decision.Confirm` — `toggle.SetActive(enabled)` (confirming the flip) when `Confirm` is true, `toggle.SetActive(!enabled)` (reverting to the pre-click state) when it is false. Under dry-run, `updex.runHelper` returns before ever invoking pkexec, so nothing was actually toggled and the switch must not visually confirm a change that did not happen — this is the other "switch/list implies a state change after a preview" bug (the tap-trust row-removal case is the same pattern in Homebrew's Untrusted Taps list). The Update button (`onUpdateFeaturesClicked`) has no equivalent mutation to gate — its `SetSensitive`/`SetLabel` reset is unconditional in both modes — so its toast is a plain string, `actionmsg.FeatureUpdate(updex.IsDryRun())`.
+
+## Install-path consistency (`internal/installcheck`)
+
+Two installation paths ship this repository's privileged surface (the updex
+helper binary and both PolicyKit policy/rules pairs): a source `make install`
+(Makefile, `PREFIX` defaulting to `/usr`) and the packaged nFPM (deb/rpm/apk)
+layout goreleaser builds from `.goreleaser.yaml`. Both are hand-maintained
+text — a Makefile recipe and a YAML block — with no shared code path, so
+nothing stops them (or `internal/updex.HelperPath`, the fixed absolute path
+`pkexec` matches against the policy's `exec.path` annotation) from silently
+drifting apart again the way the Makefile's old `/usr/local` default drifted
+from the policy's `/usr/bin` in the bug this package now guards against.
+
+`internal/installcheck` holds two regression tests, not production code, that
+turn "verified by inspection" into a real, gated check:
+
+- **`TestMakefileInstallUsesUsrPrefix`** runs `make -n install
+  DESTDIR=<t.TempDir()>` — a dry run, so no compilation, no writes outside
+  the temp dir, and no root — once with no `PREFIX` override and once with
+  `PREFIX=/usr`, and asserts the printed `install -Dm...` lines place the
+  updex helper at `DESTDIR` + `internal/updex.HelperPath` and both
+  policy/rules pairs under `DESTDIR` + the fixed
+  `/usr/share/polkit-1/{actions,rules.d}` PolicyKit reads. It shells out to
+  the real `make` rather than parsing the Makefile textually because `make`
+  itself is the authority on what a given `PREFIX`/`DESTDIR` combination
+  actually resolves to (variable derivation, `$(DESTDIR)$(BINDIR)`
+  concatenation, recipe ordering) — a hand-rolled Makefile parser would just
+  be a second, divergence-prone implementation of `make`'s own substitution
+  rules, and would stop being a regression test for the exact thing that
+  broke (the *installed* path) the moment it disagreed with real `make`
+  output.
+- **`TestGoreleaserNfpmLayoutMatchesUsrPrefix`** parses the real, repo-root
+  `.goreleaser.yaml` (not a fixture) with the already-vendored
+  `gopkg.in/yaml.v3` and, iterating **every** `nfpms[]` entry (not just
+  `nfpms[0]`, so adding or reordering a second package with the wrong layout
+  still fails — per
+  `docs/agents/skills/regression-tests-must-cover-every-collection-entry.md`),
+  asserts each entry's `bindir` matches the directory of
+  `internal/updex.HelperPath` and its updex/bootc policy+rules
+  `contents[].dst` entries equal those same fixed polkit-1 paths.
+
+Both tests fail — not skip — if `internal/updex.HelperPath`, the Makefile's
+`PREFIX` default, or `.goreleaser.yaml`'s `nfpms` block change independently
+of one another; each was hand-verified during development by reverting one
+of the three at a time and confirming only the test(s) that source depends
+on turn red. The package imports no puregotk, directly or transitively, so it
+never trips `docs/agents/skills/gtk-headless-tests.md`'s constraint, and it
+lives under `internal/...` so `gates_chunk`, `make ci`, and CI's identical
+`go test ./internal/... -run "^Test[^I]" -skip "Integration"` filter all
+exercise it on every run, per
+`docs/agents/skills/gate-test-scope-is-internal-only.md` — not just the
+heavier, less-frequent `make ci` deep gate.

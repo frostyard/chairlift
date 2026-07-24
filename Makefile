@@ -8,7 +8,20 @@ HELPER_NAME=chairlift-updex-helper
 BUILD_DIR=build
 
 # Installation directories
-PREFIX ?= /usr/local
+#
+# PREFIX defaults to /usr, matching both the fixed absolute path pkexec
+# matches against PolicyKit's org.freedesktop.policykit.exec.path annotation
+# (data/org.frostyard.ChairLift.updex.policy, internal/updex.HelperPath) and
+# the layout .goreleaser.yaml's nFPM packages already install to. PolicyKit
+# itself only ever reads actions/rules from /usr/share/polkit-1/{actions,
+# rules.d} — it does not consult PREFIX or XDG_DATA_DIRS — so installing
+# under any other PREFIX means the .policy/.rules files land somewhere
+# polkit never looks. Override PREFIX for a non-privileged dev install (e.g.
+# `make install PREFIX=$$HOME/.local`), but understand that the
+# PolicyKit-authenticated updex helper path then no longer resolves to the
+# fixed exec.path annotation. DESTDIR (below) still layers under PREFIX
+# unchanged, for staged/packaged installs.
+PREFIX ?= /usr
 BINDIR = $(PREFIX)/bin
 DATADIR = $(PREFIX)/share
 ICONSDIR = $(DATADIR)/icons

@@ -60,6 +60,34 @@ make build
 sudo make install
 ```
 
+`/usr` is the **only** supported `PREFIX` for an installation that
+participates in PolicyKit authentication (`sudo make install` uses it by
+default — no need to pass `PREFIX` explicitly). PolicyKit's `polkitd` reads
+`.policy`/`.rules` files only from the fixed system directories
+`/usr/share/polkit-1/actions` and `/usr/share/polkit-1/rules.d`, and `pkexec`
+matches the updex helper it's asked to run against the absolute path
+`/usr/bin/chairlift-updex-helper` recorded in
+`data/org.frostyard.ChairLift.updex.policy`'s
+`org.freedesktop.policykit.exec.path` annotation. Installing under any other
+prefix places those files where polkit never looks, so the privileged
+updex and bootc-staging features silently stop working (or fall back to a
+more restrictive, always-reprompting authentication rule). This also matches
+the layout used by ChairLift's own `.goreleaser.yaml` packages, so a source
+install and a packaged install end up identical.
+
+`PREFIX` can still be overridden (e.g. `make install PREFIX=$HOME/.local`)
+for a non-privileged, non-PolicyKit-integrated install — but the updex
+helper and bootc staging will not resolve to the fixed exec-path annotation
+in that case.
+
+`DESTDIR` layers underneath `PREFIX` as usual, unchanged by any of the
+above, for staged/packaged installs (`make install DESTDIR=/path/to/stage
+PREFIX=/usr`) — this is what `.goreleaser.yaml`'s nFPM packaging uses.
+
+**Migrating from a prior `/usr/local` source install:** `PREFIX` used to
+default to `/usr/local`. Before reinstalling at the new `/usr` default,
+remove the old install with `sudo make uninstall PREFIX=/usr/local`.
+
 Other useful targets: `make dev` (CGO-enabled build with `-race` for development), `make fmt`, `make lint`, `make build-linux-amd64` / `make build-linux-arm64` (cross-compilation), `make uninstall`.
 
 ### Dependencies
