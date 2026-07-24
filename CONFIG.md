@@ -10,7 +10,8 @@ ChairLift searches for the configuration file in the following locations (in ord
 2. `/usr/share/chairlift/config.yml` (package maintainer defaults)
 3. `chairlift/config.yml` (development/source directory)
 
-If no configuration file is found, all features are enabled by default.
+If no configuration file is found, all features default to enabled, except
+`maintenance_cleanup_group`, which defaults to disabled.
 
 ## Configuration Format
 
@@ -52,7 +53,7 @@ page_name:
 
 ### Maintenance Page (`maintenance_page`)
 
-- `maintenance_cleanup_group`: System cleanup utilities
+- `maintenance_cleanup_group`: System cleanup utilities (disabled by default)
   - `actions`: Array of maintenance scripts that can be executed
     - `title`: Display name for the action
     - `script`: Absolute path to the script to execute
@@ -150,6 +151,17 @@ install -D -m 644 config.yml debian/tmp/etc/chairlift/config.yml
 ## Notes
 
 - Groups with `enabled: false` will be completely hidden from the UI
-- Missing entries default to `enabled: true`
-- Invalid or unreadable configuration files will fall back to all features enabled
+- A configuration file is applied as an overlay on top of the built-in
+  defaults, field by field, not as a full replacement:
+  - An omitted `enabled` key inherits that group's documented default
+    (`true` for every group except `maintenance_cleanup_group`, which
+    defaults to `false`)
+  - An omitted optional field (`app_id`, `website`, `issues`, `chat`,
+    `actions`, `bundles_paths`) inherits its documented default value
+  - An explicit empty list (e.g. `actions: []`) clears the field
+  - A non-empty list, or an explicitly set scalar value, replaces the
+    default outright
+- Invalid or unreadable configuration files fall back to the built-in
+  defaults in full (`maintenance_cleanup_group` stays disabled; every other
+  group stays enabled) — not "all features enabled"
 - Changes require restarting ChairLift to take effect
