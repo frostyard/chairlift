@@ -586,15 +586,14 @@ func (uh *UserHome) onBootcStageClicked() {
 				} else {
 					expander.SetSubtitle("Update staged — restart to apply")
 				}
-				uh.toastAdder.ShowToast("System update staged. Restart to apply.")
 			} else {
 				subtitle := "System is up to date"
 				if lastMessage != "" {
 					subtitle = lastMessage
 				}
 				expander.SetSubtitle(subtitle)
-				uh.toastAdder.ShowToast("System is up to date")
 			}
+			uh.toastAdder.ShowToast(actionmsg.BootcStage(bootc.IsDryRun(), staged))
 		})
 	}()
 }

@@ -2,8 +2,8 @@
 // gated by dry-run, the execution decision) for maintenance-page,
 // applications-page, and updates-page actions: Homebrew Brewfile dumps,
 // Homebrew/Flatpak cleanup, Homebrew package installs/upgrades/self-updates,
-// Flatpak application uninstalls/updates, Homebrew tap trust, and configured
-// custom maintenance scripts.
+// Flatpak application uninstalls/updates, Homebrew tap trust, bootc system
+// update staging, and configured custom maintenance scripts.
 //
 // It is deliberately free of any puregotk/GTK import, following the
 // internal/views/trustmsg pattern, so its logic can be unit-tested on a
@@ -13,10 +13,11 @@
 // packages. See docs/agents/skills/gtk-headless-tests.md.
 //
 // Functions whose result only selects display text (BundleDump, Cleanup,
-// Install, Uninstall, Upgrade, Update, SelfUpdate) return a plain string:
-// the state-changing/no-op decision for those actions is already made and
-// already tested inside their wrapper package (internal/homebrew,
-// internal/flatpak). Functions whose result gates a further decision that
+// Install, Uninstall, Upgrade, Update, SelfUpdate, BootcStage) return a
+// plain string: the state-changing/no-op decision for those actions is
+// already made and already tested inside their wrapper package
+// (internal/homebrew, internal/flatpak, internal/bootc). Functions whose
+// result gates a further decision that
 // has no wrapper package of its own to make it (MaintenanceScript, for
 // configured custom scripts) return a decision struct instead of a plain
 // string, precisely so the gated decision — not just the wording of the
@@ -116,6 +117,31 @@ func SelfUpdate(dryRun bool, tool string) string {
 		return fmt.Sprintf("[DRY-RUN] Preview: %s would be updated — no changes made", tool)
 	}
 	return fmt.Sprintf("%s updated successfully", tool)
+}
+
+// BootcStage returns the toast text for a click of the Updates page's
+// "Check for Updates" bootc stage button, after bootc.StageUpdate's
+// wg.Wait() returns. bootc.StageUpdate already gates the state-changing
+// part correctly: under dry-run it never invokes pkexec, emitting a
+// synthetic "[DRY-RUN] would run ..."/"Dry run complete" event pair
+// instead (internal/bootc/stage.go, tested in internal/bootc/stage_test.go).
+// But the handler's final toast used to be computed purely from a live
+// bootc.GetStatus() re-read, regardless of dryRun — so a dry-run click
+// could show "System update staged. Restart to apply." or "System is up to
+// date", either of which reads as a verified completion claim about a click
+// that, under dry-run, checked and changed nothing. When dryRun is true,
+// BootcStage returns a single, unambiguous preview string regardless of
+// staged, since staged reflects whatever bootc.GetStatus() reports about
+// real system state, not anything this click did. When dryRun is false, it
+// returns the existing staged/not-staged completion strings unchanged.
+func BootcStage(dryRun bool, staged bool) string {
+	if dryRun {
+		return "[DRY-RUN] Preview: no changes made — system state was not checked or modified by this click"
+	}
+	if staged {
+		return "System update staged. Restart to apply."
+	}
+	return "System is up to date"
 }
 
 // TapTrustDecision is the result of deciding whether trusting a Homebrew tap
