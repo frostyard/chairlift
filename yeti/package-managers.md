@@ -176,7 +176,7 @@ for event := range progressCh {
 
 ## Updex (`internal/updex/updex.go`)
 
-Manages system features (add-on software/configuration modules). Unlike other wrappers, updex does **not** shell out to a CLI for reads. It uses the `github.com/frostyard/updex/updex` Go library directly for read operations, with a singleton `*updexapi.Client`. Write operations that require root are delegated to the `chairlift-updex-helper` binary (at `cmd/chairlift-updex-helper/main.go`) via pkexec.
+Manages system features (add-on software/configuration modules). Unlike other wrappers, updex does **not** shell out to a CLI for reads. It uses the `github.com/frostyard/updex/updex` Go library directly for read operations, with a singleton `*updexapi.Client`. Write operations that require root are delegated via pkexec to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`, built from `cmd/chairlift-updex-helper/main.go`) — never a bare, `$PATH`-resolved name, since `pkexec` matches the resolved absolute path against `data/org.frostyard.ChairLift.updex.policy`'s `org.freedesktop.policykit.exec.path` annotation to select the right action; see [OVERVIEW.md](./OVERVIEW.md#privileged-operations) for the full rationale and the matching `PREFIX=/usr` Makefile requirement.
 
 ### Key types
 
@@ -193,9 +193,9 @@ Type aliases to `github.com/frostyard/updex/updex`:
 | `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
 | `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
 | `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Returns `[]FeatureCheck` |
-| `EnableFeature(name)` | `pkexec chairlift-updex-helper enable-feature <name>` | pkexec | 5min | State-changing |
-| `DisableFeature(name)` | `pkexec chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
-| `UpdateFeatures()` | `pkexec chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features |
+| `EnableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper enable-feature <name>` | pkexec | 5min | State-changing |
+| `DisableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
+| `UpdateFeatures()` | `pkexec /usr/bin/chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features |
 
 ### Helper binary (`cmd/chairlift-updex-helper/main.go`)
 
