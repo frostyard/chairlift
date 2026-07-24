@@ -276,3 +276,24 @@ lives under `internal/...` so `gates_chunk`, `make ci`, and CI's identical
 exercise it on every run, per
 `docs/agents/skills/gate-test-scope-is-internal-only.md` — not just the
 heavier, less-frequent `make ci` deep gate.
+
+A third regression test, **`TestGoreleaserLicenseIsGPL`**, guards a related
+but distinct drift: `.goreleaser.yaml` briefly declared `license: MIT` in
+both its top-level `metadata:` block and its `nfpms[]` entry's `license`
+field, while the project's actual license is GPLv3-or-later (`LICENSE`, and
+`internal/window/window.go`'s about dialog, which sets
+`gtk.LicenseGpl30Value` — puregotk's "GPL 3.0 or later" enum value, distinct
+from `LicenseGpl30OnlyValue`). Like the layout test above, it parses the
+real, repo-root `.goreleaser.yaml` via the shared `loadGoreleaserConfig`
+helper (no fixture) and asserts `cfg.Metadata.License` and, iterating
+**every** `nfpms[]` entry with a per-index `t.Run` (not just `nfpms[0]`, per
+`docs/agents/skills/regression-tests-must-cover-every-collection-entry.md`),
+each entry's `License` field equal the fixed SPDX identifier
+`GPL-3.0-or-later`. `GoreleaserConfig.Metadata` (`MetadataConfig.License`)
+and `NfpmConfig.License` (`internal/installcheck/installcheck.go`) exist
+specifically to give `yaml.Unmarshal` somewhere to put these two values;
+without those struct fields yaml.v3 silently drops them and the test would
+pass vacuously regardless of what the YAML says. This test exists so a
+future edit reintroducing MIT (or any other license) in either location —
+the exact regression that motivated it — fails the gate instead of shipping
+mislabeled deb/rpm/apk package metadata again.

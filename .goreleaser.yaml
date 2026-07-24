@@ -14,7 +14,7 @@ project_name: chairlift
 metadata:
   description: chairlift - modern GTK4/Libadwaita system management tool
   homepage: "https://github.com/frostyard/chairlift"
-  license: MIT
+  license: GPL-3.0-or-later
   maintainers:
     - "Brian Ketelsen <bketelsen@gmail.com>"
 
@@ -122,7 +122,7 @@ nfpms:
     description: |-
       System management tool for bootc-based installations.
       Manage flatpaks, homebrew and system updates with a modern GTK4/Libadwaita interface.
-    license: MIT
+    license: GPL-3.0-or-later
     contents:
       # Wrapper script
       - src: ./data/chairlift-wrapper.sh

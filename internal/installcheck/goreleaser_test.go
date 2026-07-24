@@ -11,6 +11,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// wantSPDXLicense is the SPDX identifier the project's actual license (GPLv3
+// text in LICENSE, gtk.LicenseGpl30Value — puregotk's "GPL 3.0 or later"
+// enum value — in internal/window/window.go's about dialog) resolves to.
+// .goreleaser.yaml's top-level metadata.license and every nfpms[] entry's
+// license must agree with this constant; see
+// yeti/package-managers.md's "Install-path consistency" section for the
+// MIT/GPL drift bug this guards against.
+const wantSPDXLicense = "GPL-3.0-or-later"
+
 // loadGoreleaserConfig parses the real, repo-root .goreleaser.yaml — not a
 // fixture or copy that could drift from the file goreleaser actually reads
 // — using the yaml.v3 dependency already vendored for internal/config.
@@ -94,6 +103,37 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 						t.Errorf("nfpms[%d] contents dst for %s = %q, want %q (fixed PolicyKit read location)", i, cc.srcSuffix, got, cc.want)
 					}
 				})
+			}
+		})
+	}
+}
+
+// TestGoreleaserLicenseIsGPL parses the real .goreleaser.yaml and asserts
+// both the top-level metadata.license and every nfpms[] entry's license
+// equal wantSPDXLicense, so a future edit reverting either field back to
+// MIT (or any other value) — as happened before this test was added — fails
+// this test instead of silently shipping mislabeled deb/rpm/apk packages.
+//
+// It iterates every nfpms[] entry rather than only nfpms[0]: per
+// docs/agents/skills/regression-tests-must-cover-every-collection-entry.md,
+// a consistency check that only special-cases the first entry stops
+// protecting anything the moment a second nfpms[] entry is added or
+// reordered with the wrong license.
+func TestGoreleaserLicenseIsGPL(t *testing.T) {
+	cfg := loadGoreleaserConfig(t)
+
+	if cfg.Metadata.License != wantSPDXLicense {
+		t.Errorf("metadata.license = %q, want %q", cfg.Metadata.License, wantSPDXLicense)
+	}
+
+	if len(cfg.Nfpms) == 0 {
+		t.Fatal(".goreleaser.yaml has no nfpms entries")
+	}
+
+	for i, nfpm := range cfg.Nfpms {
+		t.Run(fmt.Sprintf("nfpms[%d]", i), func(t *testing.T) {
+			if nfpm.License != wantSPDXLicense {
+				t.Errorf("nfpms[%d].license = %q, want %q", i, nfpm.License, wantSPDXLicense)
 			}
 		})
 	}
