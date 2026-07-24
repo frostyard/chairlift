@@ -21,6 +21,7 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/flatpak/   Flatpak CLI wrapper (tabular output parsing)
         ├── internal/bootc/     bootc wrapper (status reads, pkexec stage script, line streaming)
         ├── internal/updex/     Updex feature manager (Go library reads, helper binary writes)
+        ├── internal/updexhelper/ Puregotk-free argv-parsing/Options-building for cmd/chairlift-updex-helper
         └── internal/version/   Build metadata (ldflags injection)
 ```
 
@@ -98,6 +99,7 @@ The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(tru
 - **Homebrew/Flatpak/Updex**: State-changing commands are skipped entirely (return mock/empty results)
 - **bootc**: `StageUpdate` short-circuits before invoking pkexec: it logs the would-be command, emits a synthetic `EventMessage` + `EventComplete` pair on the progress channel, and returns — the stage script is never actually run. The Updates page's stage button reflects this: its completion toast is `actionmsg.BootcStage(bootc.IsDryRun(), staged)`, an explicit preview string under dry-run distinct from its normal "staged"/"up to date" toasts — the button's expander subtitle intentionally keeps showing live `bootc.GetStatus()` output in both modes (see "bootc progress UI" below)
 - **views (custom maintenance scripts)**: configured `actions` entries (config.yml) have no wrapper package of their own, so `internal/views` carries its own `SetDryRun`/`IsDryRun` (`internal/views/dryrun.go`). `runMaintenanceAction` (`internal/views/maintenance_page.go`) calls `actionmsg.MaintenanceScript(IsDryRun(), title)` once, before spawning its goroutine, to get a `ScriptDecision{Execute, Toast}`: when `Execute` is false no `exec.Cmd` is ever constructed (no `pkexec`, no direct script exec) — only a `[DRY-RUN] Would execute: ...` log line — and `Toast` is shown as-is. This makes the execution gate itself (not just the toast wording) the thing `internal/views/actionmsg`'s table-driven tests assert.
+- **Features page switch confirmation**: `onFeatureToggled` (`internal/views/features_page.go`) computes `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` once, after a successful `updex.EnableFeature`/`DisableFeature` call, and branches solely on `decision.Confirm` to decide whether the switch confirms the flip (`toggle.SetActive(enabled)`) or reverts to its pre-click state (`toggle.SetActive(!enabled)`) — since under dry-run `updex.runHelper` returns before invoking pkexec, so nothing was actually toggled. The helper binary itself (`cmd/chairlift-updex-helper`, dispatch logic extracted to `internal/updexhelper`) also honors `--dry-run` for its `update` subcommand now, matching `enable-feature`/`disable-feature`.
 
 ### Configuration-driven UI visibility
 

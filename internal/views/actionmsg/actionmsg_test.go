@@ -475,3 +475,118 @@ func TestMaintenanceScript(t *testing.T) {
 		})
 	}
 }
+
+// TestFeatureToggle covers both dry-run states and both enable/disable for
+// a feature switch toggle, asserting both the switch-confirmation gate
+// (Confirm) and the Toast text. Confirm is the criterion that directly
+// proves the switch does not visually imply a state change after a
+// dry-run preview, since updex.EnableFeature/DisableFeature's underlying
+// pkexec call never actually runs under dry-run.
+func TestFeatureToggle(t *testing.T) {
+	tests := []struct {
+		name         string
+		dryRun       bool
+		enable       bool
+		featName     string
+		wantConfirm  bool
+		wantToast    string
+		wantContains []string
+	}{
+		{
+			name:        "live enable confirms the switch",
+			dryRun:      false,
+			enable:      true,
+			featName:    "docker",
+			wantConfirm: true,
+			wantToast:   "docker enabled. Update to download, reboot to apply.",
+		},
+		{
+			name:        "live disable confirms the switch",
+			dryRun:      false,
+			enable:      false,
+			featName:    "docker",
+			wantConfirm: true,
+			wantToast:   "docker disabled. Update to apply, reboot to complete.",
+		},
+		{
+			name:         "dry-run enable previews without confirming the switch",
+			dryRun:       true,
+			enable:       true,
+			featName:     "docker",
+			wantConfirm:  false,
+			wantContains: []string{"docker", "enabled", "no changes made"},
+		},
+		{
+			name:         "dry-run disable previews without confirming the switch",
+			dryRun:       true,
+			enable:       false,
+			featName:     "docker",
+			wantConfirm:  false,
+			wantContains: []string{"docker", "disabled", "no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FeatureToggle(tt.dryRun, tt.enable, tt.featName)
+
+			if got.Confirm != !tt.dryRun {
+				t.Errorf("FeatureToggle(%v, %v, %q).Confirm = %v, want %v", tt.dryRun, tt.enable, tt.featName, got.Confirm, !tt.dryRun)
+			}
+			if got.Confirm != tt.wantConfirm {
+				t.Errorf("FeatureToggle(%v, %v, %q).Confirm = %v, want %v", tt.dryRun, tt.enable, tt.featName, got.Confirm, tt.wantConfirm)
+			}
+			if tt.wantToast != "" && got.Toast != tt.wantToast {
+				t.Errorf("FeatureToggle(%v, %v, %q).Toast = %q, want %q", tt.dryRun, tt.enable, tt.featName, got.Toast, tt.wantToast)
+			}
+			if tt.dryRun && !strings.Contains(got.Toast, "Preview") && !strings.Contains(got.Toast, "[DRY-RUN]") {
+				t.Errorf("FeatureToggle(%v, %v, %q).Toast = %q, want it to contain %q or %q", tt.dryRun, tt.enable, tt.featName, got.Toast, "Preview", "[DRY-RUN]")
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got.Toast, want) {
+					t.Errorf("FeatureToggle(%v, %v, %q).Toast = %q, want it to contain %q", tt.dryRun, tt.enable, tt.featName, got.Toast, want)
+				}
+			}
+		})
+	}
+}
+
+// TestFeatureUpdate covers both dry-run states for the Features page
+// "Update" button toast text.
+func TestFeatureUpdate(t *testing.T) {
+	tests := []struct {
+		name         string
+		dryRun       bool
+		wantExact    string
+		wantContains []string
+	}{
+		{
+			name:      "live run reports fixed completion message",
+			dryRun:    false,
+			wantExact: "Features updated. Changes apply after reboot.",
+		},
+		{
+			name:         "dry-run previews without claiming completion",
+			dryRun:       true,
+			wantContains: []string{"no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FeatureUpdate(tt.dryRun)
+
+			if tt.wantExact != "" && got != tt.wantExact {
+				t.Errorf("FeatureUpdate(%v) = %q, want %q", tt.dryRun, got, tt.wantExact)
+			}
+			if tt.dryRun && !strings.Contains(got, "Preview") && !strings.Contains(got, "[DRY-RUN]") {
+				t.Errorf("FeatureUpdate(%v) = %q, want it to contain %q or %q", tt.dryRun, got, "Preview", "[DRY-RUN]")
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("FeatureUpdate(%v) = %q, want it to contain %q", tt.dryRun, got, want)
+				}
+			}
+		})
+	}
+}

@@ -1,9 +1,10 @@
 // Package actionmsg builds the toast text (and, where the action itself is
 // gated by dry-run, the execution decision) for maintenance-page,
-// applications-page, and updates-page actions: Homebrew Brewfile dumps,
-// Homebrew/Flatpak cleanup, Homebrew package installs/upgrades/self-updates,
-// Flatpak application uninstalls/updates, Homebrew tap trust, bootc system
-// update staging, and configured custom maintenance scripts.
+// applications-page, updates-page, and features-page actions: Homebrew
+// Brewfile dumps, Homebrew/Flatpak cleanup, Homebrew package
+// installs/upgrades/self-updates, Flatpak application uninstalls/updates,
+// Homebrew tap trust, bootc system update staging, configured custom
+// maintenance scripts, and system feature toggles/updates.
 //
 // It is deliberately free of any puregotk/GTK import, following the
 // internal/views/trustmsg pattern, so its logic can be unit-tested on a
@@ -13,21 +14,23 @@
 // packages. See docs/agents/skills/gtk-headless-tests.md.
 //
 // Functions whose result only selects display text (BundleDump, Cleanup,
-// Install, Uninstall, Upgrade, Update, SelfUpdate, BootcStage) return a
-// plain string: the state-changing/no-op decision for those actions is
-// already made and already tested inside their wrapper package
-// (internal/homebrew, internal/flatpak, internal/bootc). Functions whose
-// result gates a further decision that
-// has no wrapper package of its own to make it (MaintenanceScript, for
-// configured custom scripts) return a decision struct instead of a plain
-// string, precisely so the gated decision — not just the wording of the
-// toast that follows it — is what a table-driven test in actionmsg_test.go
-// asserts. TapTrust also returns a decision struct even though
-// homebrew.TrustPackages already gates the underlying `brew trust` exec
-// itself: the thing that needs gating here is a second, UI-side decision —
-// whether the Untrusted Homebrew Taps view mutates (row removal, group
-// visibility, refresh) — which has no wrapper-package equivalent to decide
-// it, so TapTrustDecision.MutateUI is what actionmsg_test.go asserts on.
+// Install, Uninstall, Upgrade, Update, SelfUpdate, BootcStage, FeatureUpdate)
+// return a plain string: the state-changing/no-op decision for those actions
+// is already made and already tested inside their wrapper package
+// (internal/homebrew, internal/flatpak, internal/bootc, internal/updex).
+// Functions whose result gates a further decision that has no wrapper
+// package of its own to make it (MaintenanceScript, for configured custom
+// scripts) return a decision struct instead of a plain string, precisely so
+// the gated decision — not just the wording of the toast that follows it —
+// is what a table-driven test in actionmsg_test.go asserts. TapTrust and
+// FeatureToggle also return decision structs even though homebrew.
+// TrustPackages/updex.EnableFeature/DisableFeature already gate their
+// underlying exec/pkexec call itself: the thing that needs gating in each
+// case is a second, UI-side decision — whether the Untrusted Homebrew Taps
+// view mutates (row removal, group visibility, refresh), or whether a
+// feature's switch confirms its new visual state — which has no
+// wrapper-package equivalent to decide it, so TapTrustDecision.MutateUI and
+// FeatureToggleDecision.Confirm are what actionmsg_test.go asserts on.
 package actionmsg
 
 import "fmt"
@@ -217,4 +220,68 @@ func MaintenanceScript(dryRun bool, title string) ScriptDecision {
 		Execute: true,
 		Toast:   fmt.Sprintf("%s completed", title),
 	}
+}
+
+// FeatureToggleDecision is the result of deciding whether toggling a system
+// feature's switch (onFeatureToggled in internal/views/features_page.go,
+// following a successful updex.EnableFeature/DisableFeature call) should
+// confirm the switch's new visual state, and what toast to show for that
+// decision.
+type FeatureToggleDecision struct {
+	// Confirm is true when the feature was actually enabled/disabled
+	// (updex.runHelper invoked pkexec for real) and the switch should
+	// confirm the flip the user just made. It is exactly !dryRun — under
+	// dry-run, updex.runHelper returns nil before ever invoking pkexec, so
+	// nothing was actually toggled and the switch must not visually confirm
+	// a change that did not happen.
+	Confirm bool
+	// Toast is the completion message to show immediately.
+	Toast string
+}
+
+// FeatureToggle decides whether toggling a system feature's switch should
+// confirm its new state, and what toast to show. Confirm is exactly
+// !dryRun; the caller must not independently recompute that condition.
+// Under dry-run, updex.EnableFeature/DisableFeature's underlying pkexec call
+// is skipped entirely by updex.runHelper's own dry-run short-circuit, so
+// nothing was actually enabled or disabled — confirming the switch would
+// make it look toggled with no way to tell the user it did not really
+// change. This function is what actionmsg_test.go asserts on, precisely so
+// that decision — not just the wording of the toast that follows it — is
+// tested.
+func FeatureToggle(dryRun bool, enable bool, name string) FeatureToggleDecision {
+	if dryRun {
+		verb := "enabled"
+		if !enable {
+			verb = "disabled"
+		}
+		return FeatureToggleDecision{
+			Confirm: false,
+			Toast:   fmt.Sprintf("[DRY-RUN] Preview: %s would be %s — no changes made", name, verb),
+		}
+	}
+	if enable {
+		return FeatureToggleDecision{
+			Confirm: true,
+			Toast:   fmt.Sprintf("%s enabled. Update to download, reboot to apply.", name),
+		}
+	}
+	return FeatureToggleDecision{
+		Confirm: true,
+		Toast:   fmt.Sprintf("%s disabled. Update to apply, reboot to complete.", name),
+	}
+}
+
+// FeatureUpdate returns the toast text for the Features page's "Update"
+// button (onUpdateFeaturesClicked). The wrapper package (internal/updex)
+// already skips the state-changing update via updex.runHelper's own
+// dry-run short-circuit before pkexec, so this function only selects which
+// string to show: a preview when dryRun is true, or a fixed completion
+// message when the update actually ran. The button's own SetSensitive/
+// SetLabel reset is unconditional and unaffected by dryRun.
+func FeatureUpdate(dryRun bool) string {
+	if dryRun {
+		return "[DRY-RUN] Preview: features would be updated — no changes made"
+	}
+	return "Features updated. Changes apply after reboot."
 }
