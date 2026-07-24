@@ -21,6 +21,7 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/flatpak/   Flatpak CLI wrapper (tabular output parsing)
         ├── internal/bootc/     bootc wrapper (status reads, pkexec stage script, line streaming)
         ├── internal/updex/     Updex feature manager (Go library reads, helper binary writes)
+        ├── internal/updexhelper/ Puregotk-free argv-parsing/Options-building for cmd/chairlift-updex-helper
         └── internal/version/   Build metadata (ldflags injection)
 ```
 
@@ -93,10 +94,20 @@ bootc-related UI groups (system page's `bootc_status_group` and updates page's `
 
 ### Dry-run mode
 
-The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`. Set once at startup in `app.New()` for homebrew, flatpak, bootc, and updex. Each wrapper handles dry-run differently:
+The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, bootc, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
 
-- **Homebrew/Flatpak/Updex**: State-changing commands are skipped entirely (return mock/empty results)
-- **bootc**: `StageUpdate` short-circuits before invoking pkexec: it logs the would-be command, emits a synthetic `EventMessage` + `EventComplete` pair on the progress channel, and returns — the stage script is never actually run
+**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would *also* mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct — `ScriptDecision.Execute`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm` — returned by the same `internal/views/actionmsg` function that produces the toast. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on its bool for both the mutation *and* the toast, so a table-driven test asserting the bool also proves the mutation gate, and the toast and the gate can never drift apart (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). Sites with no second UI mutation to gate (install/uninstall/upgrade/update/self-update/cleanup/Brewfile-dump/bootc-stage/feature-update toasts) get a plain string function instead — there's nothing beyond the toast for a bool to gate there, so adding one would be dead weight.
+
+**Intentional exception:** bootc staging's completion **toast** is dry-run-aware (`actionmsg.BootcStage`), but its expander **subtitle** deliberately is not. The subtitle is a persistent status readout of live `bootc.GetStatus()` — what deployment is actually staged/booted right now — not a per-click completion claim, so it stays accurate and unchanged in both dry-run and live mode. Only the toast, which inherently answers "what did this click just do," needed dry-run-specific wording; there is no mutation left to gate once the subtitle is deliberately excluded, which is why `BootcStage` is string-only rather than a decision struct.
+
+Per-wrapper mechanics:
+
+- **Homebrew/Flatpak**: state-changing commands are skipped entirely at the wrapper layer (return mock/empty results); view toasts use the plain `actionmsg` string functions (`Install`, `Uninstall`, `Upgrade`, `Update`, `SelfUpdate`, `BundleDump`, `Cleanup`).
+- **Updex**: `EnableFeature`/`DisableFeature`/`UpdateFeatures` skip their `pkexec` call entirely under dry-run and return empty/nil results; the helper binary itself (`cmd/chairlift-updex-helper`, dispatch logic in `internal/updexhelper`) also honors `--dry-run` for `update`, matching `enable-feature`/`disable-feature`, as defense-in-depth even though it's unreachable from the wrapper today.
+- **bootc**: `StageUpdate` short-circuits before invoking pkexec: it logs the would-be command, emits a synthetic `EventMessage` + `EventComplete` pair on the progress channel, and returns — the stage script is never actually run (see the exception above for the toast/subtitle split).
+- **Homebrew tap trust**: `trustTap` (`internal/views/updates_page.go`) computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once, after a successful `homebrew.TrustPackages` call, and gates removing the tap's row, hiding the group, and refreshing outdated packages on `decision.MutateUI`.
+- **views (custom maintenance scripts)**: `runMaintenanceAction` (`internal/views/maintenance_page.go`) calls `actionmsg.MaintenanceScript(IsDryRun(), title)` once, before spawning its goroutine, to get a `ScriptDecision{Execute, Toast}`: when `Execute` is false no `exec.Cmd` is ever constructed (no `pkexec`, no direct script exec) — only a `[DRY-RUN] Would execute: ...` log line.
+- **Features page switch confirmation**: `onFeatureToggled` (`internal/views/features_page.go`) computes `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` once, after a successful `updex.EnableFeature`/`DisableFeature` call, and branches solely on `decision.Confirm` to decide whether the switch confirms the flip (`toggle.SetActive(enabled)`) or reverts to its pre-click state (`toggle.SetActive(!enabled)`).
 
 ### Configuration-driven UI visibility
 
@@ -124,7 +135,7 @@ Each wrapper in `internal/` follows a consistent shape:
 
 ### bootc progress UI (updates page)
 
-`onBootcStageClicked()` (`internal/views/updates_page.go`) drives the "System Update" expander: it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes the `ProgressEvent` channel on a second goroutine — `EventMessage` lines are appended to a log expander with timestamps, `EventError` surfaces an error toast, and `EventComplete` re-queries `bootc.GetStatus` to refresh the staged/booted summary and re-enables the button. The system page has a separate, simpler bootc path: `loadBootcStatus` (gated on `IsBootcBootedCached()`) calls `bootc.GetStatus` to show the booted/staged/rollback deployment images, versions, and digests, with no staging controls of its own — staging happens on the Updates page.
+`onBootcStageClicked()` (`internal/views/updates_page.go`) drives the "System Update" expander: it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes the `ProgressEvent` channel on a second goroutine — `EventMessage` lines are appended to a log expander with timestamps, `EventError` surfaces an error toast, and `EventComplete` re-queries `bootc.GetStatus` to refresh the staged/booted summary and re-enables the button. After `wg.Wait()` returns, the handler re-reads live `bootc.GetStatus()` and updates `uh.bootcUpdateCount`/`uh.updateBadgeCount()` unconditionally in both dry-run and live mode (this is a plain read, not a mutation, so it always reflects reality); it then sets `expander`'s subtitle from that same live read unconditionally as well, but shows `actionmsg.BootcStage(bootc.IsDryRun(), staged)` for the completion toast — an explicit preview string under dry-run rather than one of the "staged"/"up to date" strings that read as a verified completion claim about a click that, under dry-run, checked and changed nothing. The system page has a separate, simpler bootc path: `loadBootcStatus` (gated on `IsBootcBootedCached()`) calls `bootc.GetStatus` to show the booted/staged/rollback deployment images, versions, and digests, with no staging controls of its own — staging happens on the Updates page.
 
 ### Update badge tracking
 
@@ -137,9 +148,10 @@ bootc staging and updex require root for state-changing operations. They invoke 
 ### Maintenance action execution
 
 Configurable maintenance scripts (from `config.yml` `actions` entries) are executed via `runMaintenanceAction()` in `internal/views/maintenance_page.go`. The pattern:
-1. Button is disabled and label set to "Running..."
-2. A goroutine spawns the script via `exec.CommandContext` (5-minute timeout), using `pkexec` wrapper if `sudo: true`
-3. On completion, the main thread re-enables the button and shows a success/error toast
+1. `decision := actionmsg.MaintenanceScript(IsDryRun(), title)` is computed once, before the goroutine, from the views-level dry-run flag (see "Dry-run mode" above)
+2. Button is disabled and label set to "Running..."
+3. A goroutine checks `decision.Execute`: when true it spawns the script via `exec.CommandContext` (5-minute timeout), using `pkexec` wrapper if `sudo: true`, exactly as before; when false (dry-run) it constructs no `exec.Cmd` at all and just logs `[DRY-RUN] Would execute: ...`
+4. On completion, the main thread re-enables the button and shows `decision.Toast` (dry-run) or a success/error toast for the real run
 
 ### Keyboard shortcuts
 

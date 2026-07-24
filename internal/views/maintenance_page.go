@@ -10,6 +10,7 @@ import (
 
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/views/actionmsg"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -178,11 +179,7 @@ func (uh *UserHome) onBrewCleanupClicked(button *gtk.Button) {
 				return
 			}
 
-			if homebrew.IsDryRun() {
-				uh.toastAdder.ShowToast(output)
-			} else {
-				uh.toastAdder.ShowToast("Homebrew cleanup completed")
-			}
+			uh.toastAdder.ShowToast(actionmsg.Cleanup(homebrew.IsDryRun(), "Homebrew", output))
 		})
 	}()
 }
@@ -204,11 +201,7 @@ func (uh *UserHome) onFlatpakCleanupClicked(button *gtk.Button) {
 				return
 			}
 
-			if flatpak.IsDryRun() {
-				uh.toastAdder.ShowToast(output)
-			} else {
-				uh.toastAdder.ShowToast("Flatpak cleanup completed")
-			}
+			uh.toastAdder.ShowToast(actionmsg.Cleanup(flatpak.IsDryRun(), "Flatpak", output))
 		})
 	}()
 }
@@ -225,7 +218,7 @@ func (uh *UserHome) onBrewBundleDumpClicked() {
 			return
 		}
 		sgtk.RunOnMainThread(func() {
-			uh.toastAdder.ShowToast(fmt.Sprintf("Brewfile saved to %s", path))
+			uh.toastAdder.ShowToast(actionmsg.BundleDump(homebrew.IsDryRun(), path))
 		})
 	}()
 }
@@ -234,21 +227,33 @@ func (uh *UserHome) onBrewBundleDumpClicked() {
 func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool, button *gtk.Button) {
 	log.Printf("Running action: %s (script: %s, sudo: %v)", title, script, sudo)
 
+	decision := actionmsg.MaintenanceScript(IsDryRun(), title)
+
 	button.SetSensitive(false)
 	button.SetLabel("Running...")
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
+		var err error
 
-		var cmd *exec.Cmd
-		if sudo {
-			cmd = exec.CommandContext(ctx, "pkexec", script)
+		if decision.Execute {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			var cmd *exec.Cmd
+			if sudo {
+				cmd = exec.CommandContext(ctx, "pkexec", script)
+			} else {
+				cmd = exec.CommandContext(ctx, script)
+			}
+
+			err = cmd.Run()
 		} else {
-			cmd = exec.CommandContext(ctx, script)
+			cmdline := script
+			if sudo {
+				cmdline = "pkexec " + script
+			}
+			log.Printf("[DRY-RUN] Would execute: %s", cmdline)
 		}
-
-		err := cmd.Run()
 
 		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
@@ -259,7 +264,7 @@ func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool, button
 				return
 			}
 
-			uh.toastAdder.ShowToast(fmt.Sprintf("%s completed", title))
+			uh.toastAdder.ShowToast(decision.Toast)
 		})
 	}()
 }

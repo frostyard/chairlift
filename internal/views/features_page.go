@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/frostyard/chairlift/internal/updex"
+	"github.com/frostyard/chairlift/internal/views/actionmsg"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -185,14 +186,17 @@ func (uh *UserHome) onFeatureToggled(name string, enabled bool, toggle *gtk.Swit
 				return
 			}
 
-			// Confirm the visual state change
-			toggle.SetActive(enabled)
-
-			if enabled {
-				uh.toastAdder.ShowToast(fmt.Sprintf("%s enabled. Update to download, reboot to apply.", name))
+			decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)
+			if decision.Confirm {
+				// Confirm the visual state change
+				toggle.SetActive(enabled)
 			} else {
-				uh.toastAdder.ShowToast(fmt.Sprintf("%s disabled. Update to apply, reboot to complete.", name))
+				// Nothing actually changed under dry-run; revert to the
+				// pre-click state.
+				toggle.SetActive(!enabled)
 			}
+
+			uh.toastAdder.ShowToast(decision.Toast)
 		})
 	}()
 }
@@ -217,7 +221,7 @@ func (uh *UserHome) onUpdateFeaturesClicked(button *gtk.Button) {
 				return
 			}
 
-			uh.toastAdder.ShowToast("Features updated. Changes apply after reboot.")
+			uh.toastAdder.ShowToast(actionmsg.FeatureUpdate(updex.IsDryRun()))
 		})
 	}()
 }

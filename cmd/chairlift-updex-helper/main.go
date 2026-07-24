@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/frostyard/chairlift/internal/updexhelper"
 	"github.com/frostyard/updex/updex"
 )
 
@@ -24,36 +25,27 @@ func main() {
 	defer cancel()
 
 	client := updex.NewClient(updex.ClientConfig{})
-	dryRun := hasDryRunFlag()
+	dryRun := updexhelper.HasDryRunFlag(os.Args[2:])
 
 	switch os.Args[1] {
 	case "enable-feature":
 		if len(os.Args) < 3 {
 			fatal("usage: chairlift-updex-helper enable-feature <name> [--dry-run]")
 		}
-		result, err := client.EnableFeature(ctx, os.Args[2], updex.EnableFeatureOptions{DryRun: dryRun})
+		result, err := client.EnableFeature(ctx, os.Args[2], updexhelper.EnableOptions(dryRun))
 		outputJSON(result, err)
 	case "disable-feature":
 		if len(os.Args) < 3 {
 			fatal("usage: chairlift-updex-helper disable-feature <name> [--dry-run]")
 		}
-		result, err := client.DisableFeature(ctx, os.Args[2], updex.DisableFeatureOptions{DryRun: dryRun})
+		result, err := client.DisableFeature(ctx, os.Args[2], updexhelper.DisableOptions(dryRun))
 		outputJSON(result, err)
 	case "update":
-		results, err := client.UpdateFeatures(ctx, updex.UpdateFeaturesOptions{})
+		results, err := client.UpdateFeatures(ctx, updexhelper.UpdateOptions(dryRun))
 		outputJSON(results, err)
 	default:
 		fatal("unknown command: " + os.Args[1])
 	}
-}
-
-func hasDryRunFlag() bool {
-	for _, arg := range os.Args[2:] {
-		if arg == "--dry-run" {
-			return true
-		}
-	}
-	return false
 }
 
 func outputJSON(v any, err error) {

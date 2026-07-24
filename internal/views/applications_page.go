@@ -8,6 +8,7 @@ import (
 
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/views/actionmsg"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -255,7 +256,7 @@ func (uh *UserHome) loadFlatpakApplications() {
 								return
 							}
 							sgtk.RunOnMainThread(func() {
-								uh.toastAdder.ShowToast(fmt.Sprintf("%s uninstalled", appID))
+								uh.toastAdder.ShowToast(actionmsg.Uninstall(flatpak.IsDryRun(), appID))
 								// Refresh the list
 								go uh.loadFlatpakApplications()
 							})
@@ -307,7 +308,7 @@ func (uh *UserHome) loadFlatpakApplications() {
 								return
 							}
 							sgtk.RunOnMainThread(func() {
-								uh.toastAdder.ShowToast(fmt.Sprintf("%s uninstalled", appID))
+								uh.toastAdder.ShowToast(actionmsg.Uninstall(flatpak.IsDryRun(), appID))
 								// Refresh the list
 								go uh.loadFlatpakApplications()
 							})
@@ -371,7 +372,7 @@ func (uh *UserHome) onHomebrewSearch() {
 							return
 						}
 						sgtk.RunOnMainThread(func() {
-							uh.toastAdder.ShowToast(fmt.Sprintf("%s installed", pkgName))
+							uh.toastAdder.ShowToast(actionmsg.Install(homebrew.IsDryRun(), pkgName))
 						})
 					}()
 				}
