@@ -93,10 +93,11 @@ bootc-related UI groups (system page's `bootc_status_group` and updates page's `
 
 ### Dry-run mode
 
-The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`. Set once at startup in `app.New()` for homebrew, flatpak, bootc, and updex. Each wrapper handles dry-run differently:
+The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`. Set once at startup in `app.New()` for homebrew, flatpak, bootc, updex, and `internal/views` itself. Each handles dry-run differently:
 
 - **Homebrew/Flatpak/Updex**: State-changing commands are skipped entirely (return mock/empty results)
 - **bootc**: `StageUpdate` short-circuits before invoking pkexec: it logs the would-be command, emits a synthetic `EventMessage` + `EventComplete` pair on the progress channel, and returns — the stage script is never actually run
+- **views (custom maintenance scripts)**: configured `actions` entries (config.yml) have no wrapper package of their own, so `internal/views` carries its own `SetDryRun`/`IsDryRun` (`internal/views/dryrun.go`). `runMaintenanceAction` (`internal/views/maintenance_page.go`) calls `actionmsg.MaintenanceScript(IsDryRun(), title)` once, before spawning its goroutine, to get a `ScriptDecision{Execute, Toast}`: when `Execute` is false no `exec.Cmd` is ever constructed (no `pkexec`, no direct script exec) — only a `[DRY-RUN] Would execute: ...` log line — and `Toast` is shown as-is. This makes the execution gate itself (not just the toast wording) the thing `internal/views/actionmsg`'s table-driven tests assert.
 
 ### Configuration-driven UI visibility
 
@@ -137,9 +138,10 @@ bootc staging and updex require root for state-changing operations. They invoke 
 ### Maintenance action execution
 
 Configurable maintenance scripts (from `config.yml` `actions` entries) are executed via `runMaintenanceAction()` in `internal/views/maintenance_page.go`. The pattern:
-1. Button is disabled and label set to "Running..."
-2. A goroutine spawns the script via `exec.CommandContext` (5-minute timeout), using `pkexec` wrapper if `sudo: true`
-3. On completion, the main thread re-enables the button and shows a success/error toast
+1. `decision := actionmsg.MaintenanceScript(IsDryRun(), title)` is computed once, before the goroutine, from the views-level dry-run flag (see "Dry-run mode" above)
+2. Button is disabled and label set to "Running..."
+3. A goroutine checks `decision.Execute`: when true it spawns the script via `exec.CommandContext` (5-minute timeout), using `pkexec` wrapper if `sudo: true`, exactly as before; when false (dry-run) it constructs no `exec.Cmd` at all and just logs `[DRY-RUN] Would execute: ...`
+4. On completion, the main thread re-enables the button and shows `decision.Toast` (dry-run) or a success/error toast for the real run
 
 ### Keyboard shortcuts
 
