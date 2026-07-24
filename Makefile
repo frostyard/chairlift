@@ -113,6 +113,29 @@ uninstall:
 	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
 
+# One command mirrors CI — runs every gate .github/workflows/test.yml runs
+# (verify → lint → unit → race → build), in fail-fast order. If this is green
+# locally, CI is green. The mill's deep gate calls this exact target so agents
+# and CI can never disagree about what "passing" means.
+.PHONY: ci
+ci:
+	@echo "==> verify: go.mod is tidy"
+	$(GOMOD) tidy
+	git diff --exit-code go.mod go.sum
+	@echo "==> verify: go vet"
+	CGO_ENABLED=$(CGO_ENABLED) $(GOCMD) vet ./...
+	@echo "==> verify: gofmt"
+	test -z "$$(gofmt -l .)"
+	@echo "==> lint"
+	CGO_ENABLED=$(CGO_ENABLED) golangci-lint run
+	@echo "==> unit tests"
+	CGO_ENABLED=$(CGO_ENABLED) $(GOTEST) ./internal/... -run "^Test[^I]" -skip "Integration"
+	@echo "==> race detector"
+	CGO_ENABLED=1 $(GOTEST) -race -short ./internal/... -run "^Test[^I]" -skip "Integration"
+	@echo "==> build"
+	$(MAKE) build
+	@echo "==> CI mirror passed"
+
 bump: ## generate a new version with svu
 	@$(MAKE) build
 	@$(MAKE) test

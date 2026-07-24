@@ -1,0 +1,49 @@
+# Repository configuration for the mill (github.com/frostyard/mill).
+# Everything repo-specific lives here; the workflow and state machine are
+# generic. ChairLift is pure-Go (puregotk, no CGO) with no codegen step, so
+# every gate runs natively — there is no containerized gate.
+
+[gates]
+# Deterministic quality gates run after every chunk (in order, bash -c each).
+# All are baseline-green on a headless host. golangci-lint must be on PATH.
+chunk = [
+  "out=$(gofmt -l .); if [ -n \"$out\" ]; then echo \"gofmt needed: $out\"; exit 1; fi",
+  "CGO_ENABLED=0 go vet ./... 2>&1 | tail -c 4000; exit ${PIPESTATUS[0]}",
+  "CGO_ENABLED=0 golangci-lint run 2>&1 | tail -c 4000; exit ${PIPESTATUS[0]}",
+  "CGO_ENABLED=0 go build ./... 2>&1 | tail -c 4000; exit ${PIPESTATUS[0]}",
+  # Tests run under CI's exact filter. GTK/GLib is dlopen'd at runtime and is
+  # absent on the gate host, so tests must be headless — see
+  # docs/agents/skills/gtk-headless-tests.md.
+  "CGO_ENABLED=0 go test ./internal/... -run \"^Test[^I]\" -skip \"Integration\" 2>&1 | { grep -v '^ok ' || true; } | tail -c 6000; exit ${PIPESTATUS[0]}",
+]
+# Heavier final gate before the ship decision. `make ci` mirrors CI exactly
+# (tidy check, vet, gofmt, lint, unit tests, race detector, build), so local
+# green means CI green. mill.sh --no-deep skips this and re-runs chunk gates.
+deep = ["make ci"]
+
+[context]
+# Docs every agent must read before planning/implementing/reviewing.
+docs = ["AGENTS.md", "yeti/OVERVIEW.md", "yeti/package-managers.md"]
+# Durable lessons harvested from previous runs; read by all agents.
+skills_dir = "docs/agents/skills"
+
+[review]
+# Injected into the security reviewer's brief.
+security_invariants = """
+Privileged (root) operations must go only through pkexec (PolicyKit) with the
+fixed, installed polkit policies and fixed helper targets: the
+`/usr/libexec/bootc-update-stage` script (action
+org.frostyard.ChairLift.bootc.stage) and the `chairlift-updex-helper` binary.
+No change may add arbitrary privileged command execution, broaden what pkexec
+runs, invoke a shell/command built from untrusted or user-controlled input, or
+route a new state-changing operation around the fixed helper/policy pair.
+Homebrew tap trust is deliberately per-user and must not be given pkexec.
+"""
+
+[harvest]
+# The only paths the harvest step may modify; everything else is reverted.
+allowlist = ["docs/agents/skills/", "AGENTS.md"]
+
+[limits]
+# #57-class bugs are small and well-scoped; a handful of plan rounds converge.
+plan_rounds = 4
