@@ -59,7 +59,7 @@ The upgrade-failure toast text adapts to whether that UI is actually available: 
 
 ### View-layer toast and decision helpers (`internal/views/actionmsg`, `internal/views/trustmsg`)
 
-Two small, puregotk-free packages under `internal/views/` hold the text (and, at three call sites, the accompanying UI decision) that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
+Two of the three small, puregotk-free packages under `internal/views/` (the third is `internal/views/rowset`, documented in its own subsection below) hold the text (and, at three call sites, the accompanying UI decision) that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
 
 - **`internal/views/trustmsg`** (added for issue #57) — `UpgradeMessage(pkgName string, trustGroupAvailable bool) string`, the toast shown when a Homebrew upgrade fails with an `*homebrew.UntrustedTapError`; see "Tap trust" above.
 - **`internal/views/actionmsg`** (added for issue #56, this dry-run fix) — builds the toast text for every state-changing view action across the maintenance, applications, updates, and features pages, and, at the three call sites where the view also mutates a row/group/switch on success, the execute/mutate/confirm decision itself, so the same table-driven test in `actionmsg_test.go` that checks the toast also checks the gate (see "Dry-run mode" in [OVERVIEW.md](./OVERVIEW.md#dry-run-mode) for the general rule this implements). Exported surface, all added across this feature's chunks (c1-c5):
@@ -77,6 +77,19 @@ Two small, puregotk-free packages under `internal/views/` hold the text (and, at
   - `FeatureUpdate(dryRun bool) string` — Features page "Update" button toast (c5)
 
   The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`, `FeatureUpdate`) are correct as-is because the state-changing/no-op decision for those actions is already made and already tested one layer down, in the relevant wrapper package (`internal/homebrew`, `internal/flatpak`, `internal/bootc`, `internal/updex`) — there is nothing left for the view to gate beyond the toast wording. The three decision-struct functions exist because their call sites have no such wrapper-layer gate for the *second*, UI-side effect (script execution has no wrapper package at all; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip doesn't touch).
+
+### View-layer row bookkeeping (`internal/views/rowset`)
+
+`internal/views/rowset` is the third puregotk-free leaf package under `internal/views/`. It holds the clear-then-repopulate bookkeeping for rows a view adds to an expander, so a list that is reloaded does not accumulate stale rows from an earlier load. Like `actionmsg` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
+
+Exported surface:
+
+- `Tracker[T any]` — a generic, zero-value-ready value type holding the rows added since the last clear. It is generic and takes its removal action as a callback precisely so it never names a widget type, which is what keeps its dependency graph free of puregotk.
+- `Add(row T)` — records a row that has just been added to the container.
+- `Len() int` — how many rows are currently tracked.
+- `Clear(remove func(T))` — invokes the caller-supplied removal callback once per tracked row, in insertion order, then resets the slice to nil. A no-op on an empty or zero-value tracker.
+
+`Tracker` has no mutex, generation counter, or in-flight flag by design: GTK main-thread safety is a property of the call site, which keeps the clear-and-repopulate sequence inside a single `sgtk.RunOnMainThread` closure, so the tracker is only ever touched from the main thread. `rowset_test.go` drives several successive simulated loads (including an empty load after a non-empty one) against a fake, non-GTK container and asserts after every load that the container holds exactly that load's rows.
 
 ## Flatpak (`internal/flatpak/flatpak.go`)
 
