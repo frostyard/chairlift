@@ -16,9 +16,12 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
 - `make fmt` — `gofmt -s -w .`.
 - `make lint` — `golangci-lint run`.
 - `make ci` — **runs every gate CI runs, in CI's order** (go.mod tidy check,
-  `go vet`, gofmt check, lint, unit tests, race detector, build). Run it before
-  pushing; green locally means green in CI. The mill's deep gate calls this
-  exact target.
+  `go vet`, gofmt check, lint, unit tests, race detector, build). The build
+  step reproduces CI's `linux/amd64` + `linux/arm64` matrix into
+  `build/ci-linux-<arch>/`, then rebuilds natively, so a cross-arch-only
+  compile failure cannot pass locally and break CI. Run it before pushing;
+  green locally means green in CI. The mill's deep gate calls this exact
+  target.
 - `make install`'s default `PREFIX` is `/usr` — the only prefix under which
   the installed PolicyKit policy/rules files land where `polkitd` reads them
   (`/usr/share/polkit-1/{actions,rules.d}`) and the updex helper's installed

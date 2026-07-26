@@ -1,4 +1,5 @@
-# Repository configuration for the mill (github.com/frostyard/mill).
+# Repository configuration for the mill (the spec→PR harness; engine now lives
+# in github.com/frostyard/millhouse under engine/).
 # Everything repo-specific lives here; the workflow and state machine are
 # generic. ChairLift is pure-Go (puregotk, no CGO) with no codegen step, so
 # every gate runs natively — there is no containerized gate.
@@ -17,8 +18,9 @@ chunk = [
   "CGO_ENABLED=0 go test ./internal/... -run \"^Test[^I]\" -skip \"Integration\" 2>&1 | { grep -v '^ok ' || true; } | tail -c 6000; exit ${PIPESTATUS[0]}",
 ]
 # Heavier final gate before the ship decision. `make ci` mirrors CI exactly
-# (tidy check, vet, gofmt, lint, unit tests, race detector, build), so local
-# green means CI green. mill.sh --no-deep skips this and re-runs chunk gates.
+# (tidy check, vet, gofmt, lint, unit tests, race detector, and a build over
+# CI's linux/amd64 + linux/arm64 matrix), so local green means CI green.
+# mill.sh --no-deep skips this and re-runs chunk gates.
 deep = ["make ci"]
 
 [context]

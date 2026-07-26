@@ -52,9 +52,11 @@ tidy:
 build: build-app build-helper
 
 build-app:
+	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/chairlift
 
 build-helper:
+	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(HELPER_NAME) ./cmd/chairlift-updex-helper
 
 run: build
@@ -130,6 +132,11 @@ uninstall:
 # (verify → lint → unit → race → build), in fail-fast order. If this is green
 # locally, CI is green. The mill's deep gate calls this exact target so agents
 # and CI can never disagree about what "passing" means.
+#
+# The build step reproduces CI's GOOS/GOARCH matrix (linux/amd64 and
+# linux/arm64) into per-arch subdirectories, then rebuilds natively so
+# build/chairlift is left runnable on this host. A host-arch-only build would
+# let an arm64 compile failure pass locally and break CI.
 .PHONY: ci
 ci:
 	@echo "==> verify: go.mod is tidy"
@@ -146,6 +153,8 @@ ci:
 	@echo "==> race detector"
 	CGO_ENABLED=1 $(GOTEST) -race -short ./internal/... -run "^Test[^I]" -skip "Integration"
 	@echo "==> build"
+	GOOS=linux GOARCH=amd64 $(MAKE) build BUILD_DIR=$(BUILD_DIR)/ci-linux-amd64
+	GOOS=linux GOARCH=arm64 $(MAKE) build BUILD_DIR=$(BUILD_DIR)/ci-linux-arm64
 	$(MAKE) build
 	@echo "==> CI mirror passed"
 
