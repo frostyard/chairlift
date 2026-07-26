@@ -13,10 +13,15 @@ import (
 	"time"
 )
 
-var (
-	dryRun  = false
-	timeout = 30 * time.Second
+const (
+	// readTimeout bounds read-only brew commands (listing, searching, info).
+	readTimeout = 30 * time.Second
+	// mutationTimeout bounds state-changing brew commands, which may download
+	// and build packages and therefore need a far larger budget.
+	mutationTimeout = 30 * time.Minute
 )
+
+var dryRun = false
 
 // SetDryRun sets the dry-run mode
 func SetDryRun(mode bool) {
@@ -78,6 +83,15 @@ var stateChangingCommands = map[string]bool{
 	"trust":     true,
 }
 
+// commandTimeout returns the timeout class for a brew invocation: the
+// mutation timeout for state-changing commands, the read timeout otherwise.
+func commandTimeout(args []string) time.Duration {
+	if len(args) > 0 && stateChangingCommands[args[0]] {
+		return mutationTimeout
+	}
+	return readTimeout
+}
+
 // runBrewCommand executes a brew command and returns the output
 func runBrewCommand(args ...string) (string, error) {
 	if len(args) > 0 && stateChangingCommands[args[0]] && dryRun {
@@ -86,7 +100,7 @@ func runBrewCommand(args ...string) (string, error) {
 		return msg, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout(args))
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "brew", args...)

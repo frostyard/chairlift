@@ -12,10 +12,15 @@ import (
 	"time"
 )
 
-var (
-	dryRun  = false
-	timeout = 60 * time.Second
+const (
+	// readTimeout bounds read-only flatpak commands (listing, info, remotes).
+	readTimeout = 30 * time.Second
+	// mutationTimeout bounds state-changing flatpak commands, which may
+	// download large application images and therefore need a far larger budget.
+	mutationTimeout = 30 * time.Minute
 )
+
+var dryRun = false
 
 // SetDryRun sets the dry-run mode
 func SetDryRun(mode bool) {
@@ -65,6 +70,15 @@ var stateChangingCommands = map[string]bool{
 	"update":    true,
 }
 
+// commandTimeout returns the timeout class for a flatpak invocation: the
+// mutation timeout for state-changing commands, the read timeout otherwise.
+func commandTimeout(args []string) time.Duration {
+	if len(args) > 0 && stateChangingCommands[args[0]] {
+		return mutationTimeout
+	}
+	return readTimeout
+}
+
 // runFlatpakCommand executes a flatpak command and returns the output
 func runFlatpakCommand(args ...string) (string, error) {
 	if len(args) > 0 && stateChangingCommands[args[0]] && dryRun {
@@ -73,7 +87,7 @@ func runFlatpakCommand(args ...string) (string, error) {
 		return msg, nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout(args))
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "flatpak", args...)

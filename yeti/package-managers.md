@@ -1,6 +1,6 @@
 # Package Manager Wrappers
 
-Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts. All are called from `internal/views/` page builders. The cached availability check is important for the deferred-visibility startup pattern — multiple goroutines may check the same tool, and the result should only be computed once.
+Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts in two classes — 30s for read-only commands, 30m for state-changing ones, selected per invocation by each package's `commandTimeout(args)` helper from its `stateChangingCommands` map. All are called from `internal/views/` page builders. The cached availability check is important for the deferred-visibility startup pattern — multiple goroutines may check the same tool, and the result should only be computed once.
 
 ## Homebrew (`internal/homebrew/homebrew.go`)
 
@@ -19,18 +19,18 @@ Wraps the `brew` CLI. Uses JSON output (`--json=v2`) for structured data where a
 | `ListInstalledCasks()` | `brew info --installed --json=v2 --cask` | 30s | JSON parsed |
 | `ListOutdated()` | `brew outdated --json=v2` | 30s | JSON parsed; returns both formulae and casks |
 | `Search(query)` | `brew search --formula <query>` | 30s | Text output parsed; formula-only search |
-| `Install(name, isCask)` | `brew install [--cask] <name>` | 30s | State-changing, dry-run aware |
-| `Uninstall(name, isCask)` | `brew uninstall [--cask] <name>` | 30s | State-changing |
-| `Upgrade(name)` | `brew upgrade [<name>]` | 30s | State-changing; empty name upgrades all |
-| `Update()` | `brew update` | 30s | State-changing |
-| `Pin(name)` / `Unpin(name)` | `brew pin/unpin <name>` | 30s | State-changing |
-| `Cleanup()` | `brew cleanup` | 30s | State-changing; returns output string |
-| `BundleDump(path, force)` | `brew bundle dump [--file=<path>] [--force]` | 30s | State-changing; writes to file path |
-| `BundleInstall(path)` | `brew bundle install [--file=<path>]` | 30s | State-changing |
+| `Install(name, isCask)` | `brew install [--cask] <name>` | 30m | State-changing, dry-run aware |
+| `Uninstall(name, isCask)` | `brew uninstall [--cask] <name>` | 30m | State-changing |
+| `Upgrade(name)` | `brew upgrade [<name>]` | 30m | State-changing; empty name upgrades all |
+| `Update()` | `brew update` | 30m | State-changing |
+| `Pin(name)` / `Unpin(name)` | `brew pin/unpin <name>` | 30m | State-changing |
+| `Cleanup()` | `brew cleanup` | 30m | State-changing; returns output string |
+| `BundleDump(path, force)` | `brew bundle dump [--file=<path>] [--force]` | 30m | State-changing; writes to file path |
+| `BundleInstall(path)` | `brew bundle install [--file=<path>]` | 30m | State-changing |
 
 ### State-changing commands
 
-The `stateChangingCommands` map includes: `install`, `uninstall`, `remove`, `upgrade`, `update`, `pin`, `unpin`, `bundle`, `cleanup`. When dry-run is active, these are skipped entirely and return a mock message.
+The `stateChangingCommands` map has exactly ten keys: `install`, `uninstall`, `remove`, `upgrade`, `update`, `pin`, `unpin`, `bundle`, `cleanup`, `trust`. The map now drives two things. First, when dry-run is active these commands are skipped entirely and return a mock message. Second, `commandTimeout(args []string)` — a pure selector reading only `args` and this map — returns `mutationTimeout` (30 minutes) when `args[0]` is one of the ten keys and `readTimeout` (30 seconds) otherwise, including for empty args; `runBrewCommand` passes its result to `context.WithTimeout`. Read commands therefore keep the old 30-second budget while installs, upgrades and bundle operations — which download and build — get 30 minutes. `homebrew_test.go`'s `TestCommandTimeout` iterates the real map and asserts `len(stateChangingCommands) == 10`, so a newly added key cannot go untested.
 
 ### Error handling
 
@@ -49,7 +49,7 @@ Only untrusted taps with at least one installed formula or cask are returned (`U
 
 **`TrustPackages(tap)`** runs `brew trust --formula <formulae...>` and/or `brew trust --cask <casks...>` for the given tap. This is a **per-user** operation (state lives in `~/.homebrew/trust.json`) — it does not use `pkexec` and does not require root, unlike bootc staging or updex writes.
 
-Since `trust` is one of homebrew's `stateChangingCommands`, `TrustPackages` already no-ops under dry-run at the exec layer (see "Cross-cutting: dry-run" below). But `trustTap` (`internal/views/updates_page.go`) used to always mutate the Untrusted Homebrew Taps UI on a successful (nil-error) call — removing the tap's row, hiding the group when empty, and refreshing outdated packages — even when nothing was actually trusted. That made a dry-run click visually remove the tap from the Untrusted Taps list as if it were now trusted, with no way to undo it from the UI. `trustTap` now computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once in its success branch and gates all three UI mutations on `decision.MutateUI` (exactly `!dryRun`): when true, behavior is unchanged from before; when false, the row stays, the group stays visible, `loadOutdatedPackages` is not re-queried, and the click's button is reset (`SetSensitive(true)`, `SetLabel("Trust")`) instead of being left stuck on "Trusting...". `decision.Toast` — a preview string under dry-run, the same "Trusted %s. Its packages can update again." string otherwise — is shown in both states. This mirrors the `actionmsg.MaintenanceScript`/`ScriptDecision` pattern: the UI-mutation gate itself, not just the toast wording, is what `actionmsg_test.go` asserts.
+Because `brew trust --formula/--cask ...` has `args[0] == "trust"`, and `trust` is one of homebrew's ten `stateChangingCommands`, `TrustPackages` runs under the 30-minute mutation timeout rather than the 30-second read budget — trusting a tap can trigger substantial work — and, by the same map membership, already no-ops under dry-run at the exec layer (see "Cross-cutting: dry-run" below). But `trustTap` (`internal/views/updates_page.go`) used to always mutate the Untrusted Homebrew Taps UI on a successful (nil-error) call — removing the tap's row, hiding the group when empty, and refreshing outdated packages — even when nothing was actually trusted. That made a dry-run click visually remove the tap from the Untrusted Taps list as if it were now trusted, with no way to undo it from the UI. `trustTap` now computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once in its success branch and gates all three UI mutations on `decision.MutateUI` (exactly `!dryRun`): when true, behavior is unchanged from before; when false, the row stays, the group stays visible, `loadOutdatedPackages` is not re-queried, and the click's button is reset (`SetSensitive(true)`, `SetLabel("Trust")`) instead of being left stuck on "Trusting...". `decision.Toast` — a preview string under dry-run, the same "Trusted %s. Its packages can update again." string otherwise — is shown in both states. This mirrors the `actionmsg.MaintenanceScript`/`ScriptDecision` pattern: the UI-mutation gate itself, not just the toast wording, is what `actionmsg_test.go` asserts.
 
 **`UntrustedTapError`** — `runBrewCommand` (`internal/homebrew/homebrew.go`) inspects failed commands' stderr for `"untrusted tap"` or `"taps are not trusted"` (`isUntrustedTapMessage`) and wraps the failure as `*UntrustedTapError` instead of the generic `Error`. Views type-switch on this to redirect users to the Untrusted Taps UI rather than showing raw brew output.
 
@@ -153,19 +153,19 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 | Function | CLI command | Timeout | Notes |
 |----------|------------|---------|-------|
-| `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 60s | Tabular parsed |
-| `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 60s | Tabular parsed |
-| `ListUpdates(user)` | `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system]` | 60s | Separate calls for user/system; `--app` excludes runtimes |
-| `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 60s | State-changing |
-| `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 60s | State-changing |
-| `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 60s | State-changing; empty appID updates all |
-| `UninstallUnused()` | `flatpak uninstall --unused -y` | 60s | Maintenance cleanup |
-| `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 60s | Key-value parsed |
-| `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 60s | Lists configured remotes |
+| `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
+| `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
+| `ListUpdates(user)` | `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system]` | 30s | Separate calls for user/system; `--app` excludes runtimes |
+| `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 30m | State-changing |
+| `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 30m | State-changing |
+| `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
+| `UninstallUnused()` | `flatpak uninstall --unused -y` | 30m | Maintenance cleanup |
+| `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 30s | Key-value parsed |
+| `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 30s | Lists configured remotes |
 
 ### State-changing commands
 
-`install`, `uninstall`, `remove`, `update`. When dry-run is active, these are skipped entirely.
+`install`, `uninstall`, `remove`, `update` — exactly four keys. As in homebrew, the map selects both the dry-run skip (these are skipped entirely and return a mock message) and the timeout class: `commandTimeout(args []string)` returns `mutationTimeout` (30 minutes) when `args[0]` is one of the four keys and `readTimeout` (30 seconds) otherwise, including for empty args, and `runFlatpakCommand` passes it to `context.WithTimeout`. Flatpak's read budget matches homebrew's 30 seconds, so both wrappers agree. `flatpak_test.go`'s `TestCommandTimeout` iterates the real map and asserts `len(stateChangingCommands) == 4`.
 
 ### Update queries exclude runtimes
 

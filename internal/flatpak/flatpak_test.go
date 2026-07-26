@@ -3,6 +3,7 @@ package flatpak
 import (
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestUpdateListArgs(t *testing.T) {
@@ -111,5 +112,46 @@ func TestParseUpdateList(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCommandTimeout(t *testing.T) {
+	if len(stateChangingCommands) != 4 {
+		t.Fatalf("stateChangingCommands has %d entries, want 4: update this test when the map changes", len(stateChangingCommands))
+	}
+
+	for cmd := range stateChangingCommands {
+		t.Run("state-changing/"+cmd, func(t *testing.T) {
+			if got := commandTimeout([]string{cmd, "-y", "org.example.App"}); got != mutationTimeout {
+				t.Errorf("commandTimeout(%q) = %v, want %v", cmd, got, mutationTimeout)
+			}
+		})
+	}
+
+	readCases := []struct {
+		name string
+		args []string
+	}{
+		{name: "read/list", args: []string{"list", "--user", "--app"}},
+		{name: "read/remote-ls", args: []string{"remote-ls", "--updates", "--app"}},
+		{name: "read/info", args: []string{"info", "--show-metadata", "org.example.App"}},
+		{name: "empty args", args: nil},
+	}
+
+	for _, tc := range readCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := commandTimeout(tc.args); got != readTimeout {
+				t.Errorf("commandTimeout(%v) = %v, want %v", tc.args, got, readTimeout)
+			}
+		})
+	}
+}
+
+func TestTimeoutConstants(t *testing.T) {
+	if readTimeout != 30*time.Second {
+		t.Errorf("readTimeout = %v, want 30s", readTimeout)
+	}
+	if mutationTimeout != 30*time.Minute {
+		t.Errorf("mutationTimeout = %v, want 30m", mutationTimeout)
 	}
 }

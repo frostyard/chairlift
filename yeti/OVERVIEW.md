@@ -142,7 +142,7 @@ Each wrapper in `internal/` follows a consistent shape:
 - `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`) for use from views during async startup
 - Homebrew, Flatpak, and Updex implement both `IsInstalled()` and `IsInstalledCached()`
 - List/Search/Install/Uninstall/Update functions
-- Context-based timeouts (30s for Homebrew, 60s for Flatpak, 5min for updex, 30min for bootc)
+- Context-based timeouts. Homebrew and Flatpak both use a two-class model selected per invocation by an unexported `commandTimeout(args)` helper: 30s for read-only commands, 30m for state-changing ones (the keys of each package's `stateChangingCommands` map). updex uses 5min and bootc 30min.
 - Custom error types where needed
 
 ### Streaming progress (bootc stage)
