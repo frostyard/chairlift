@@ -59,7 +59,7 @@ The upgrade-failure toast text adapts to whether that UI is actually available: 
 
 ### View-layer toast and decision helpers (`internal/views/actionmsg`, `internal/views/trustmsg`)
 
-Two of the four small, puregotk-free packages under `internal/views/` (the others are `internal/views/rowset` and `internal/views/flatpakstatus`, each documented in its own subsection below) hold the text (and, at three call sites, the accompanying UI decision) that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
+Two of the five small, puregotk-free packages under `internal/views/` (the others are `internal/views/rowset`, `internal/views/flatpakstatus` and `internal/views/featurestatus`, each documented in its own subsection below) hold the text (and, at three call sites, the accompanying UI decision) that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
 
 - **`internal/views/trustmsg`** (added for issue #57) — `UpgradeMessage(pkgName string, trustGroupAvailable bool) string`, the toast shown when a Homebrew upgrade fails with an `*homebrew.UntrustedTapError`; see "Tap trust" above.
 - **`internal/views/actionmsg`** (added for issue #56, this dry-run fix) — builds the toast text for every state-changing view action across the maintenance, applications, updates, and features pages, and, at the three call sites where the view also mutates a row/group/switch on success, the execute/mutate/confirm decision itself, so the same table-driven test in `actionmsg_test.go` that checks the toast also checks the gate (see "Dry-run mode" in [OVERVIEW.md](./OVERVIEW.md#dry-run-mode) for the general rule this implements). Exported surface, all added across this feature's chunks (c1-c5):
@@ -80,7 +80,7 @@ Two of the four small, puregotk-free packages under `internal/views/` (the other
 
 ### View-layer row bookkeeping (`internal/views/rowset`)
 
-`internal/views/rowset` is one of the four puregotk-free leaf packages under `internal/views/`. It holds the clear-then-repopulate bookkeeping for rows a view adds to an expander, so a list that is reloaded does not accumulate stale rows from an earlier load. Like `actionmsg` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
+`internal/views/rowset` is one of the five puregotk-free leaf packages under `internal/views/` (its siblings are `internal/views/actionmsg`, `internal/views/trustmsg`, `internal/views/flatpakstatus` and `internal/views/featurestatus`). It holds the clear-then-repopulate bookkeeping for rows a view adds to an expander, so a list that is reloaded does not accumulate stale rows from an earlier load. Like `actionmsg` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
 
 Exported surface:
 
@@ -93,7 +93,7 @@ Exported surface:
 
 ### View-layer Flatpak update status (`internal/views/flatpakstatus`)
 
-`internal/views/flatpakstatus` is the fourth puregotk-free leaf package under `internal/views/`. It turns the outcome of the two Flatpak update queries — how many updates are known, and which of the user/system installations could not be checked — into the Flatpak updates expander's subtitle text plus whether the expander should be expandable. Like `actionmsg`, `trustmsg` and `rowset` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); like `rowset` it imports nothing at all outside the standard library (`fmt`).
+`internal/views/flatpakstatus` is the fourth of the five puregotk-free leaf packages under `internal/views/` (the fifth is `internal/views/featurestatus`, documented in the subsection below). It turns the outcome of the two Flatpak update queries — how many updates are known, and which of the user/system installations could not be checked — into the Flatpak updates expander's subtitle text plus whether the expander should be expandable. Like `actionmsg`, `trustmsg` and `rowset` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); like `rowset` it imports nothing at all outside the standard library (`fmt`).
 
 Exported surface:
 
@@ -107,6 +107,35 @@ The package is pure and holds no state, so it is safe to call from a worker goro
 `loadFlatpakUpdates` (`internal/views/updates_page.go`) is its only call site. It keeps both `flatpak.ListUpdates` errors as values — `userErr` and `systemErr`, still logged exactly as before via the two `log.Printf("Error loading {user,system} flatpak updates: %v", …)` lines — instead of dropping them once logged, and then calls `flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)` once on the worker goroutine, before entering `sgtk.RunOnMainThread`. Inside that closure (past the `if uh.flatpakUpdatesExpander == nil { return }` guard, which stays because `flatpak_updates_group` can be disabled and the expander then never gets built) the result is applied unconditionally: `SetSubtitle(result.Subtitle)` and `SetEnableExpansion(result.Expandable)` run on *every* path, including the zero-update path, and only the building of the per-update rows is skipped when there are none. The view holds no subtitle text and makes no decision of its own; the old hard-coded `"All applications are up to date"` and `fmt.Sprintf("%d updates available", …)` strings are gone from it.
 
 The practical consequence is that a total failure — both installations unqueryable — no longer renders as an all-up-to-date message: `allUpdates` is empty for the same reason it is empty when everything really is current, and only the retained errors distinguish the two, so the expander reads `Could not check for updates`. A partial failure is identified as partial rather than silently under-reported: the rows that were found are shown and expandable, with the subtitle naming the installation that could not be checked. The badge is deliberately left as a plain count — `uh.flatpakUpdateCount = len(allUpdates)` is unchanged and carries no error state — so a total failure shows a badge of `0` next to an honest subtitle rather than an invented number.
+
+### View-layer feature update status (`internal/views/featurestatus`)
+
+`internal/views/featurestatus` is the fifth puregotk-free leaf package under `internal/views/`. It owns every string and every decision the Features page's updex update check needs: a feature row's subtitle, whether that feature has an update, and the features group's description. Like `actionmsg`, `trustmsg`, `rowset` and `flatpakstatus` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`). Unlike them it imports one non-standard-library package, `internal/updex`, for the `CheckResult` type; that is safe because `internal/updex` is itself puregotk-free (`go list -deps ./internal/updex | grep -c puregotk` prints `0`), and `go list -deps ./internal/views/featurestatus | grep -c puregotk` prints `0` too.
+
+Exported surface:
+
+- `Status{Subtitle string; HasUpdate bool}` — the row state for one feature.
+- `Feature(name string, results []updex.CheckResult) (Status, bool)` — derives that state from *all* of the feature's components. Both halves come from a single call so the wording and the update decision cannot drift apart, the same reason `flatpakstatus.Subtitle` returns a `Result`. The second return value is `false` when `len(results) == 0`, telling the caller to leave the row's existing subtitle untouched and not to count the feature; putting that skip decision in the package is what makes the zero-components case table-testable at all.
+- `GroupDescription(totalFeatures, featuresWithUpdates int) string` — the group description after a check that completed.
+- `GroupDescriptionCheckFailed(totalFeatures int) string` — the group description when the check itself failed; it makes no claim about update state.
+
+**The ANY-component rule:** a feature has an update when **any** of its components reports one — not the first, not all. `Status.HasUpdate` is an OR across every element of `results`, and `featurestatus_test.go` asserts it by iterating every element of each case's slice rather than special-casing index 0, with cases placing the update first, last, in the middle, and in several components at once.
+
+**The feature-counting rule:** `featuresWithUpdates` is a count of **features**, not of components — a feature with three outdated components counts once. The package doc comment states this explicitly, since the description's first number is a feature count and its second must be one too or the sentence is incoherent.
+
+The five subtitle branches, for a feature named `<name>`:
+
+| Situation | Subtitle |
+|-----------|----------|
+| exactly one component has an update, non-empty `CurrentVersion` | `<name> — update available for <component> (v<cur> → v<new>)` |
+| exactly one component has an update, empty `CurrentVersion` | `<name> — update available for <component> (→ v<new>)` |
+| two or more components have updates | `<name> — updates available for <n> components` |
+| no updates, every component agrees on a non-empty `CurrentVersion` | `<name> — v<version>` |
+| no updates, components disagree or any `CurrentVersion` is empty | `<name> — up to date` |
+
+No branch emits a bare `v` with nothing after it, and no branch presents one component's version as the feature's version unless every component agrees on it. The group descriptions are `%d features available — update check failed`, `%d features available — all up to date`, `%d features available (1 update)` and `%d features available (%d updates)`; the leading `%d features available` fragment is reproduced verbatim from `loadFeatures`' own pre-check string, including its non-pluralized `features`, so only the update tail differs — which is also what makes a completed check that found nothing (`— all up to date`) visibly distinguishable from the pre-check state. `featurestatus_test.go` covers each branch as a table subtest and additionally asserts that the five subtitle branches are pairwise distinct for a fixed feature name, that no subtitle renders a bare `v`, and that the four group descriptions are distinct from each other and from the pre-check string.
+
+The package is pure and holds no state, so it is safe to call from a worker goroutine or from inside an `sgtk.RunOnMainThread` closure. It has no call site yet — wiring `checkFeatureUpdates` (`internal/views/features_page.go`) to it is a separate change.
 
 ## Flatpak (`internal/flatpak/flatpak.go`)
 
