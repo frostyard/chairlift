@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/frostyard/chairlift/internal/config"
+	"github.com/frostyard/chairlift/internal/views/rowset"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -51,8 +52,10 @@ type UserHome struct {
 	flatpakUserExpander    *adw.ExpanderRow
 	flatpakSystemExpander  *adw.ExpanderRow
 	flatpakUpdatesExpander *adw.ExpanderRow
-	flatpakUpdateRows      []*adw.ActionRow // Store references for cleanup
-	searchResultRows       []*adw.ActionRow // Store references for cleanup
+	flatpakUpdateRows      []*adw.ActionRow               // Store references for cleanup
+	flatpakUserRows        rowset.Tracker[*adw.ActionRow] // Store references for cleanup
+	flatpakSystemRows      rowset.Tracker[*adw.ActionRow] // Store references for cleanup
+	searchResultRows       []*adw.ActionRow               // Store references for cleanup
 	brewTrustGroup         *adw.PreferencesGroup
 	brewTrustRows          map[string]*adw.ActionRow
 	outdatedRows           []*adw.ActionRow // Store references for cleanup
