@@ -237,8 +237,9 @@ nothing stops them (or `internal/updex.HelperPath`, the fixed absolute path
 drifting apart again the way the Makefile's old `/usr/local` default drifted
 from the policy's `/usr/bin` in the bug this package now guards against.
 
-`internal/installcheck` holds two regression tests, not production code, that
-turn "verified by inspection" into a real, gated check:
+`internal/installcheck` holds five regression tests, not production code, that
+turn "verified by inspection" into a real, gated check. The first two guard the
+installed layout itself:
 
 - **`TestMakefileInstallUsesUsrPrefix`** runs `make -n install
   DESTDIR=<t.TempDir()>` — a dry run, so no compilation, no writes outside
