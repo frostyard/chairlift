@@ -12,6 +12,7 @@ import (
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
+	"github.com/frostyard/chairlift/internal/views/flatpakstatus"
 	"github.com/frostyard/chairlift/internal/views/trustmsg"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
@@ -341,21 +342,24 @@ func (uh *UserHome) loadFlatpakUpdates() {
 	// Collect updates from both user and system installations
 	var allUpdates []flatpak.UpdateInfo
 
-	// Load user updates
-	userUpdates, err := flatpak.ListUpdates(true)
-	if err != nil {
-		log.Printf("Error loading user flatpak updates: %v", err)
+	// Load user updates. The error is kept as a value, not just logged: the
+	// expander subtitle has to say that half the picture is missing.
+	userUpdates, userErr := flatpak.ListUpdates(true)
+	if userErr != nil {
+		log.Printf("Error loading user flatpak updates: %v", userErr)
 	} else {
 		allUpdates = append(allUpdates, userUpdates...)
 	}
 
 	// Load system updates
-	systemUpdates, err := flatpak.ListUpdates(false)
-	if err != nil {
-		log.Printf("Error loading system flatpak updates: %v", err)
+	systemUpdates, systemErr := flatpak.ListUpdates(false)
+	if systemErr != nil {
+		log.Printf("Error loading system flatpak updates: %v", systemErr)
 	} else {
 		allUpdates = append(allUpdates, systemUpdates...)
 	}
+
+	status := flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)
 
 	// Update the badge count
 	uh.updateCountMu.Lock()
@@ -374,14 +378,12 @@ func (uh *UserHome) loadFlatpakUpdates() {
 		}
 		uh.flatpakUpdateRows = nil
 
+		uh.flatpakUpdatesExpander.SetSubtitle(status.Subtitle)
+		uh.flatpakUpdatesExpander.SetEnableExpansion(status.Expandable)
+
 		if len(allUpdates) == 0 {
-			uh.flatpakUpdatesExpander.SetSubtitle("All applications are up to date")
-			uh.flatpakUpdatesExpander.SetEnableExpansion(false)
 			return
 		}
-
-		uh.flatpakUpdatesExpander.SetSubtitle(fmt.Sprintf("%d updates available", len(allUpdates)))
-		uh.flatpakUpdatesExpander.SetEnableExpansion(true)
 
 		for _, update := range allUpdates {
 			row := adw.NewActionRow()
