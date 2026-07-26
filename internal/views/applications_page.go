@@ -228,7 +228,11 @@ func (uh *UserHome) loadFlatpakApplications() {
 			})
 		} else {
 			sgtk.RunOnMainThread(func() {
+				// Clear rows added by a previous load before repopulating
+				uh.flatpakUserRows.Clear(func(r *adw.ActionRow) { uh.flatpakUserExpander.Remove(&r.Widget) })
+
 				uh.flatpakUserExpander.SetSubtitle(fmt.Sprintf("%d installed", len(userApps)))
+				uh.flatpakUserExpander.SetEnableExpansion(len(userApps) > 0)
 				for _, app := range userApps {
 					row := adw.NewActionRow()
 					row.SetTitle(app.Name)
@@ -266,6 +270,7 @@ func (uh *UserHome) loadFlatpakApplications() {
 
 					row.AddSuffix(&uninstallBtn.Widget)
 					uh.flatpakUserExpander.AddRow(&row.Widget)
+					uh.flatpakUserRows.Add(row)
 				}
 			})
 		}
@@ -280,7 +285,11 @@ func (uh *UserHome) loadFlatpakApplications() {
 			})
 		} else {
 			sgtk.RunOnMainThread(func() {
+				// Clear rows added by a previous load before repopulating
+				uh.flatpakSystemRows.Clear(func(r *adw.ActionRow) { uh.flatpakSystemExpander.Remove(&r.Widget) })
+
 				uh.flatpakSystemExpander.SetSubtitle(fmt.Sprintf("%d installed", len(systemApps)))
+				uh.flatpakSystemExpander.SetEnableExpansion(len(systemApps) > 0)
 				for _, app := range systemApps {
 					row := adw.NewActionRow()
 					row.SetTitle(app.Name)
@@ -318,6 +327,7 @@ func (uh *UserHome) loadFlatpakApplications() {
 
 					row.AddSuffix(&uninstallBtn.Widget)
 					uh.flatpakSystemExpander.AddRow(&row.Widget)
+					uh.flatpakSystemRows.Add(row)
 				}
 			})
 		}
