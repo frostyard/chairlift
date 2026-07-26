@@ -251,16 +251,22 @@ type UpdateInfo struct {
 	Installation  string `json:"installation"` // "user" or "system"
 }
 
-// ListUpdates returns available updates for Flatpak applications
-func ListUpdates(user bool) ([]UpdateInfo, error) {
-	args := []string{"remote-ls", "--updates", "--columns=name,application,version,branch,origin"}
+// updateListArgs builds the flatpak argument list used to query available
+// updates. "--app" restricts the query to applications so runtimes never
+// appear as updates.
+func updateListArgs(user bool) []string {
+	args := []string{"remote-ls", "--updates", "--app", "--columns=name,application,version,branch,origin"}
 	if user {
 		args = append(args, "--user")
 	} else {
 		args = append(args, "--system")
 	}
+	return args
+}
 
-	output, err := runFlatpakCommand(args...)
+// ListUpdates returns available updates for Flatpak applications
+func ListUpdates(user bool) ([]UpdateInfo, error) {
+	output, err := runFlatpakCommand(updateListArgs(user)...)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +274,7 @@ func ListUpdates(user bool) ([]UpdateInfo, error) {
 	return parseUpdateList(output, user)
 }
 
-// parseUpdateList parses the tabular output from flatpak remote-ls --updates
+// parseUpdateList parses the tabular output from the flatpak update query
 func parseUpdateList(output string, user bool) ([]UpdateInfo, error) {
 	var updates []UpdateInfo
 	lines := strings.Split(strings.TrimSpace(output), "\n")

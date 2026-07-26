@@ -59,7 +59,7 @@ The upgrade-failure toast text adapts to whether that UI is actually available: 
 
 ### View-layer toast and decision helpers (`internal/views/actionmsg`, `internal/views/trustmsg`)
 
-Two of the three small, puregotk-free packages under `internal/views/` (the third is `internal/views/rowset`, documented in its own subsection below) hold the text (and, at three call sites, the accompanying UI decision) that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
+Two of the four small, puregotk-free packages under `internal/views/` (the others are `internal/views/rowset` and `internal/views/flatpakstatus`, each documented in its own subsection below) hold the text (and, at three call sites, the accompanying UI decision) that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
 
 - **`internal/views/trustmsg`** (added for issue #57) — `UpgradeMessage(pkgName string, trustGroupAvailable bool) string`, the toast shown when a Homebrew upgrade fails with an `*homebrew.UntrustedTapError`; see "Tap trust" above.
 - **`internal/views/actionmsg`** (added for issue #56, this dry-run fix) — builds the toast text for every state-changing view action across the maintenance, applications, updates, and features pages, and, at the three call sites where the view also mutates a row/group/switch on success, the execute/mutate/confirm decision itself, so the same table-driven test in `actionmsg_test.go` that checks the toast also checks the gate (see "Dry-run mode" in [OVERVIEW.md](./OVERVIEW.md#dry-run-mode) for the general rule this implements). Exported surface, all added across this feature's chunks (c1-c5):
@@ -80,7 +80,7 @@ Two of the three small, puregotk-free packages under `internal/views/` (the thir
 
 ### View-layer row bookkeeping (`internal/views/rowset`)
 
-`internal/views/rowset` is the third puregotk-free leaf package under `internal/views/`. It holds the clear-then-repopulate bookkeeping for rows a view adds to an expander, so a list that is reloaded does not accumulate stale rows from an earlier load. Like `actionmsg` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
+`internal/views/rowset` is one of the four puregotk-free leaf packages under `internal/views/`. It holds the clear-then-repopulate bookkeeping for rows a view adds to an expander, so a list that is reloaded does not accumulate stale rows from an earlier load. Like `actionmsg` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
 
 Exported surface:
 
@@ -90,6 +90,23 @@ Exported surface:
 - `Clear(remove func(T))` — invokes the caller-supplied removal callback once per tracked row, in insertion order, then resets the slice to nil. A no-op on an empty or zero-value tracker.
 
 `Tracker` has no mutex, generation counter, or in-flight flag by design: GTK main-thread safety is a property of the call site, which keeps the clear-and-repopulate sequence inside a single `sgtk.RunOnMainThread` closure, so the tracker is only ever touched from the main thread. `rowset_test.go` drives several successive simulated loads (including an empty load after a non-empty one) against a fake, non-GTK container and asserts after every load that the container holds exactly that load's rows.
+
+### View-layer Flatpak update status (`internal/views/flatpakstatus`)
+
+`internal/views/flatpakstatus` is the fourth puregotk-free leaf package under `internal/views/`. It turns the outcome of the two Flatpak update queries — how many updates are known, and which of the user/system installations could not be checked — into the Flatpak updates expander's subtitle text plus whether the expander should be expandable. Like `actionmsg`, `trustmsg` and `rowset` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); like `rowset` it imports nothing at all outside the standard library (`fmt`).
+
+Exported surface:
+
+- `Result{Subtitle string; Expandable bool}` — the expander state for one update load.
+- `Subtitle(count int, userFailed, systemFailed bool) Result` — derives that state. Both halves come from a single call so the wording and the expansion decision cannot drift apart, the same reason `actionmsg` returns `ScriptDecision`/`TapTrustDecision`/`FeatureToggleDecision` structs. Failure is taken as two `bool`s rather than `error` values, which is what keeps the package free of any dependency on `internal/flatpak`.
+
+`Expandable` is `count > 0` in every case: a failed query never invents updates, so there is nothing to expand that the count does not already reflect, while the rows that *were* found in a partially failed load are real and stay reachable. The five distinguishable outcomes are: both queries ok with no updates → `All applications are up to date` (the only case that makes the up-to-date claim); both ok with updates → `1 update available` / `%d updates available`; exactly one query failed with no updates → `No updates found in the <ok> installation; the <failed> installation could not be checked`; exactly one failed with updates → the count followed by `; the <failed> installation could not be checked`; both failed → `Could not check for updates`, which makes no claim about update state at all. `<ok>`/`<failed>` are the literal words `user` and `system`. `flatpakstatus_test.go` has one subtest per row (with both the user-failed and system-failed variants of the one-failed rows), and additionally asserts that all the subtitles are pairwise distinct, that "up to date" appears in the first case and no other, and that singular and plural both read correctly.
+
+The package is pure and holds no state, so it is safe to call from a worker goroutine or from inside an `sgtk.RunOnMainThread` closure.
+
+`loadFlatpakUpdates` (`internal/views/updates_page.go`) is its only call site. It keeps both `flatpak.ListUpdates` errors as values — `userErr` and `systemErr`, still logged exactly as before via the two `log.Printf("Error loading {user,system} flatpak updates: %v", …)` lines — instead of dropping them once logged, and then calls `flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)` once on the worker goroutine, before entering `sgtk.RunOnMainThread`. Inside that closure (past the `if uh.flatpakUpdatesExpander == nil { return }` guard, which stays because `flatpak_updates_group` can be disabled and the expander then never gets built) the result is applied unconditionally: `SetSubtitle(result.Subtitle)` and `SetEnableExpansion(result.Expandable)` run on *every* path, including the zero-update path, and only the building of the per-update rows is skipped when there are none. The view holds no subtitle text and makes no decision of its own; the old hard-coded `"All applications are up to date"` and `fmt.Sprintf("%d updates available", …)` strings are gone from it.
+
+The practical consequence is that a total failure — both installations unqueryable — no longer renders as an all-up-to-date message: `allUpdates` is empty for the same reason it is empty when everything really is current, and only the retained errors distinguish the two, so the expander reads `Could not check for updates`. A partial failure is identified as partial rather than silently under-reported: the rows that were found are shown and expandable, with the subtitle naming the installation that could not be checked. The badge is deliberately left as a plain count — `uh.flatpakUpdateCount = len(allUpdates)` is unchanged and carries no error state — so a total failure shows a badge of `0` next to an honest subtitle rather than an invented number.
 
 ## Flatpak (`internal/flatpak/flatpak.go`)
 
@@ -107,7 +124,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 |----------|------------|---------|-------|
 | `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 60s | Tabular parsed |
 | `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 60s | Tabular parsed |
-| `ListUpdates(user)` | `flatpak remote-ls --updates --columns=name,application,version,branch,origin [--user\|--system]` | 60s | Separate calls for user/system |
+| `ListUpdates(user)` | `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system]` | 60s | Separate calls for user/system; `--app` excludes runtimes |
 | `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 60s | State-changing |
 | `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 60s | State-changing |
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 60s | State-changing; empty appID updates all |
@@ -118,6 +135,15 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 ### State-changing commands
 
 `install`, `uninstall`, `remove`, `update`. When dry-run is active, these are skipped entirely.
+
+### Update queries exclude runtimes
+
+`ListUpdates` builds its argument list with the unexported pure helper
+`updateListArgs(user bool) []string`, the only place the `remote-ls` command is
+spelled. It passes `--app` — matching the precedent set by `listApplications` —
+so runtimes and extensions are deliberately excluded from the results. Update
+rows and the sidebar update badge therefore only ever describe applications,
+which is what the user can act on from the applications page.
 
 ## bootc (`internal/bootc/`)
 

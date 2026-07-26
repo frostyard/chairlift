@@ -15,9 +15,10 @@ internal/app/app.go             GObject-registered Application (adw.Application 
 internal/window/window.go       Main window: NavigationSplitView, sidebar, content stack
         │
 internal/views/                 Page builders and event handlers (one file per page)
-        │                       ├── internal/views/actionmsg/ ┐ puregotk-free leaf packages:
-        │                       ├── internal/views/trustmsg/  │ toast/decision text and row
-        │                       └── internal/views/rowset/    ┘ bookkeeping, unit-tested headlessly
+        │                       ├── internal/views/actionmsg/     ┐ puregotk-free leaf packages:
+        │                       ├── internal/views/trustmsg/      │ toast/decision text, row
+        │                       ├── internal/views/rowset/        │ bookkeeping and expander
+        │                       └── internal/views/flatpakstatus/ ┘ status text, unit-tested headlessly
         │
         ├── internal/config/    YAML config loading, feature group enablement
         ├── internal/homebrew/  Homebrew CLI wrapper (JSON output parsing)
@@ -42,7 +43,7 @@ The `views.go` file defines the central `UserHome` struct that holds references 
 - `New(cfg, toastAdder)` — constructor that initializes `UserHome`
 - `ToastAdder` interface — `ShowToast(msg)`, `ShowErrorToast(msg)`, `SetUpdateBadge(count)` — implemented by Window
 
-`internal/views` imports puregotk, so it can never hold a `_test.go` (see `docs/agents/skills/gtk-headless-tests.md`). Decidable logic is therefore pushed down into three puregotk-free leaf packages beneath it — `internal/views/actionmsg` and `internal/views/trustmsg` (toast text and UI decisions, see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg)) and `internal/views/rowset` (clear-then-repopulate row bookkeeping, see [package-managers.md](./package-managers.md#view-layer-row-bookkeeping-internalviewsrowset)) — each table- or scenario-tested headlessly.
+`internal/views` imports puregotk, so it can never hold a `_test.go` (see `docs/agents/skills/gtk-headless-tests.md`). Decidable logic is therefore pushed down into four puregotk-free leaf packages beneath it — `internal/views/actionmsg` and `internal/views/trustmsg` (toast text and UI decisions, see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg)), `internal/views/rowset` (clear-then-repopulate row bookkeeping, see [package-managers.md](./package-managers.md#view-layer-row-bookkeeping-internalviewsrowset)) and `internal/views/flatpakstatus` (the Flatpak updates expander's subtitle text and expandable decision, applied by `loadFlatpakUpdates` from both retained `ListUpdates` errors, see [package-managers.md](./package-managers.md#view-layer-flatpak-update-status-internalviewsflatpakstatus)) — each table- or scenario-tested headlessly.
 
 ### Pages
 
