@@ -107,7 +107,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 |----------|------------|---------|-------|
 | `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 60s | Tabular parsed |
 | `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 60s | Tabular parsed |
-| `ListUpdates(user)` | `flatpak remote-ls --updates --columns=name,application,version,branch,origin [--user\|--system]` | 60s | Separate calls for user/system |
+| `ListUpdates(user)` | `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system]` | 60s | Separate calls for user/system; `--app` excludes runtimes |
 | `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 60s | State-changing |
 | `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 60s | State-changing |
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 60s | State-changing; empty appID updates all |
@@ -118,6 +118,15 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 ### State-changing commands
 
 `install`, `uninstall`, `remove`, `update`. When dry-run is active, these are skipped entirely.
+
+### Update queries exclude runtimes
+
+`ListUpdates` builds its argument list with the unexported pure helper
+`updateListArgs(user bool) []string`, the only place the `remote-ls` command is
+spelled. It passes `--app` — matching the precedent set by `listApplications` —
+so runtimes and extensions are deliberately excluded from the results. Update
+rows and the sidebar update badge therefore only ever describe applications,
+which is what the user can act on from the applications page.
 
 ## bootc (`internal/bootc/`)
 
