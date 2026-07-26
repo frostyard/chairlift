@@ -215,13 +215,39 @@ Wraps `bootc` for OSTree/composefs system updates, split across two files: `boot
 
 `GetStatus(ctx)` runs `bootc status --format json` with **no** `pkexec` — this is a plain read, safe to call from any goroutine (`internal/bootc/bootc.go`). Output is unmarshaled into `Status{Spec, Status: {Booted, Staged, Rollback}}`, where each of `Booted`/`Staged`/`Rollback` is a `*Deployment` (nil-safe accessors: `ImageRef()`, `Version()`, `Timestamp()`, `Digest()`).
 
+`GetStatus` is a one-line wrapper: `return getStatusFrom(ctx, bootcCommand)`. The unexported `getStatusFrom(ctx context.Context, name string) (*Status, error)` runs `<name> status --format json`, classifies the error, and parses the output. The executable name is a parameter purely so `bootc_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` on a host with no `bootc` installed — the same seam `runStageStreaming` gives staging and `runBrewCommandAt`/`runFlatpakCommandAt` give the two package-manager wrappers. The seam is unexported and its only production call site passes the fixed `bootcCommand` constant, so no caller-supplied or user-derived string can reach it.
+
+Failures classify into exactly four distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`, so a wrapped cause still classifies:
+
+| Condition | Result |
+|-----------|--------|
+| The context deadline expired | `*Error`, message `bootc status timed out`, unwrapping to `context.DeadlineExceeded` |
+| The context was cancelled by its owner | `*Error`, message `bootc status was canceled`, unwrapping to `context.Canceled` |
+| The command exited non-zero | `*Error`, message `bootc status failed (exit N): <stderr>`, unwrapping to the `*exec.ExitError` — matching neither context sentinel |
+| The executable is missing (`exec.ErrNotFound` for a bare name, `fs.ErrNotExist` for an explicit path) | `*NotFoundError` (`bootc not found`) |
+
+The deadline and cancellation messages differ, and neither surfaces as `signal: killed`: `exec.CommandContext` kills the child when the context ends, so the classified error replaces the raw wait error. `bootc.Error` carries an `Err error` field and an `Unwrap() error` method — matching `internal/homebrew` and `internal/flatpak` — so callers distinguish all four outcomes with `errors.Is`/`errors.As` while `Error` keeps its human-readable `Message`. `bootc_test.go` covers all four against fake scripts (plus the success parse), so the whole classification is exercised without a real `bootc` on the host.
+
 ### Boot gate semantics
 
 `bootc status` exits 0 with a null `booted` field on hosts that aren't running a bootc deployment at all — so the gate cannot be the exit code. `Status.Booted()` returns `s.Status.Booted != nil`. `IsBootcBooted(ctx)` calls `GetStatus` and returns that boolean (treating any error as "not booted"). `IsBootcBootedCached()` wraps it in a `sync.Once` with a 5s timeout, computing the result once and caching it for the lifetime of the process — this lets multiple view goroutines call it during async startup without triggering redundant `bootc` invocations. **Do not use `/run/ostree-booted`** as a substitute gate: it is absent on snow's composefs-based deployments, so checking for it would hide bootc UI on every snow host.
 
 ### `StageUpdate` (privileged, streaming)
 
-`StageUpdate(ctx, progressCh)` (`internal/bootc/stage.go`) runs `pkexec /usr/libexec/bootc-update-stage`, merging stdout+stderr and streaming each trimmed non-empty line to `progressCh` as an `EventMessage`. `progressCh` is always closed before returning (`defer close`). On successful exit it sends a final `EventComplete`; on failure it returns an `Error` (including the last output line for context) or a `NotFoundError` if pkexec itself is missing. If the context is canceled/times out mid-stream, the child process is killed and reaped before returning `ctx.Err()`.
+`StageUpdate(ctx, progressCh)` (`internal/bootc/stage.go`) runs `pkexec /usr/libexec/bootc-update-stage` via the unexported `runStageStreaming(ctx, progressCh, name, args...)` seam (which tests drive with a local fake script instead of `pkexec`), merging stdout+stderr and streaming each trimmed non-empty line to `progressCh` as an `EventMessage`. `progressCh` is always closed before returning (`defer close`). On successful exit it sends a final `EventComplete`.
+
+Failures classify into exactly four distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`:
+
+| Condition | Result |
+|-----------|--------|
+| The context deadline expired | `*Error`, message `Update staging timed out`, unwrapping to `context.DeadlineExceeded` |
+| The context was cancelled by its owner | `*Error`, message `Update staging was canceled`, unwrapping to `context.Canceled`; if cancellation instead wins the race inside the streaming `select`, the child is killed and reaped and the bare `ctx.Err()` (`context.Canceled`) is returned, which classifies identically |
+| The script exited non-zero | `*Error`, message `update staging failed (exit N): <last output line>`, unwrapping to the `*exec.ExitError` — matching neither context sentinel |
+| `pkexec` itself is missing | `*NotFoundError` (`pkexec not found`) |
+
+The deadline and cancellation messages differ, and neither surfaces as `signal: killed`. `stage_test.go` covers all of these against fake `#!/bin/sh` scripts, so no test needs a real `pkexec` or `bootc`.
+
+**Why bootc direct-kills instead of killing the process group:** on cancellation `runStageStreaming` calls `cmd.Process.Kill()` on the direct child only, and `internal/bootc` deliberately sets no `Setpgid`/`cmd.Cancel` process-group kill. The staging child runs under `pkexec` and is therefore root-owned, so this unprivileged process cannot signal it or its process group — a `syscall.Kill(-pid, SIGKILL)` would fail by design. That is the exception: the unprivileged `runBrewCommandAt` and `runFlatpakCommandAt` runners *do* kill the whole process group, because their children are owned by the same user. Making the privileged path group-killable would be a privilege-model change, not a runner change. `getStatusFrom` needs neither: `bootc status` is unprivileged and short-lived, and `exec.CommandContext`'s default kill of the direct child suffices.
 
 **Why a stage script instead of `bootc upgrade`:** upstream `bootc upgrade`'s registry-transport pull fails on snow's composefs images. The stage script works around this by using `podman pull` (whose pull path works) to fetch the image into containers-storage, then running `bootc switch --transport containers-storage` to stage the already-pulled image — `podman` does the pull, `bootc` does the switch. This keeps the actual workaround logic in one place (the snow-shipped script, source of truth in the snosi project) instead of duplicating pull/switch orchestration inside ChairLift. The script is idempotent: it exits 0 without staging anything when the deployment is already current, so `StageUpdate` doubles as both "check for update" and "apply update".
 

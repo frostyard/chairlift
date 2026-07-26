@@ -1,6 +1,13 @@
 package bootc
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
 
 // nonBootcJSON is real output captured from `bootc status --format json`
 // on a non-bootc (non-bootc-booted) host.
@@ -98,5 +105,120 @@ func TestDeploymentNilSafe(t *testing.T) {
 func TestParseStatusMalformed(t *testing.T) {
 	if _, err := parseStatus([]byte("not json")); err == nil {
 		t.Error("parseStatus(garbage) = nil error, want error")
+	}
+}
+
+// All getStatusFrom tests drive a fake #!/bin/sh script through the same seam
+// GetStatus uses in production, so none of them needs a real bootc binary.
+
+func TestGetStatusFromSuccess(t *testing.T) {
+	script := writeScript(t, "cat <<'JSON'\n"+bootedStagedJSON+"\nJSON\n")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	s, err := getStatusFrom(ctx, script)
+	if err != nil {
+		t.Fatalf("getStatusFrom: %v", err)
+	}
+	if !s.Booted() {
+		t.Errorf("Booted() = false, want true")
+	}
+	if got := s.Status.Staged.Version(); got != "20260706.0" {
+		t.Errorf("staged version = %q, want 20260706.0", got)
+	}
+}
+
+func TestGetStatusFromCommandFailure(t *testing.T) {
+	script := writeScript(t, "echo \"cannot read status\" >&2\nexit 3\n")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	s, err := getStatusFrom(ctx, script)
+	if err == nil {
+		t.Fatalf("getStatusFrom = %+v, nil error; want failure", s)
+	}
+	var bootcErr *Error
+	if !errors.As(err, &bootcErr) {
+		t.Fatalf("errors.As(*Error) = false; err = %T %v", err, err)
+	}
+	if !strings.Contains(bootcErr.Message, "exit 3") {
+		t.Errorf("message %q missing exit code", bootcErr.Message)
+	}
+	if !strings.Contains(bootcErr.Message, "cannot read status") {
+		t.Errorf("message %q missing stderr text", bootcErr.Message)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		t.Errorf("plain exit failure matches a context sentinel: %v", err)
+	}
+}
+
+func TestGetStatusFromMissingExecutable(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "no-such-bootc")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	_, err := getStatusFrom(ctx, missing)
+	var notFound *NotFoundError
+	if !errors.As(err, &notFound) {
+		t.Fatalf("errors.As(*NotFoundError) = false; err = %T %v", err, err)
+	}
+}
+
+func TestGetStatusFromDeadline(t *testing.T) {
+	// `exec sleep` replaces the shell, so the kill leaves no stray process.
+	script := writeScript(t, "exec sleep 30\n")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	t.Cleanup(cancel)
+
+	_, err := getStatusFrom(ctx, script)
+	if err == nil {
+		t.Fatal("getStatusFrom = nil error, want deadline failure")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("errors.Is(err, DeadlineExceeded) = false; err = %v", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Errorf("deadline error also matches context.Canceled: %v", err)
+	}
+	if strings.Contains(err.Error(), "signal: killed") {
+		t.Errorf("message leaks raw kill signal: %q", err.Error())
+	}
+}
+
+func TestGetStatusFromCanceled(t *testing.T) {
+	script := writeScript(t, "exec sleep 30\n")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := getStatusFrom(ctx, script)
+		done <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("getStatusFrom did not return")
+	}
+	if err == nil {
+		t.Fatal("getStatusFrom = nil error, want cancellation failure")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("errors.Is(err, Canceled) = false; err = %v", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("cancellation error also matches context.DeadlineExceeded: %v", err)
+	}
+	if strings.Contains(err.Error(), "signal: killed") {
+		t.Errorf("message leaks raw kill signal: %q", err.Error())
 	}
 }
