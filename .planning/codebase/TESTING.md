@@ -156,7 +156,10 @@ go tool cover -html=coverage.out -o coverage.html
 - Exclude integration tests by naming convention
 
 **Integration Tests:**
-- Naming convention: prefix with `TestIntegration` or include `Integration` in name
+- Naming convention: any name beginning `TestI` (not merely those beginning
+  `TestIntegr…`) or containing `Integration` is excluded by `-run "^Test[^I]" -skip "Integration"`;
+  those names are reserved for environment-dependent tests, so ordinary unit
+  tests must not use the `TestI` prefix
 - Skipped in CI unit test runs
 - Require external tools (nbc, flatpak, brew)
 
@@ -224,7 +227,7 @@ func TestContextCancellation(t *testing.T) {
 
 **Table-Driven Tests:**
 ```go
-func TestIsGroupEnabled(t *testing.T) {
+func TestGroupEnabledLookup(t *testing.T) {
     tests := []struct {
         name      string
         page      string
