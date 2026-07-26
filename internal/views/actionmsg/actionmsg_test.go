@@ -96,9 +96,9 @@ func TestCleanup(t *testing.T) {
 	}
 }
 
-// TestInstall covers both dry-run states for the Homebrew package-install
-// toast text.
-func TestInstall(t *testing.T) {
+// TestPackageInstallMessage covers both dry-run states for the Homebrew
+// package-install toast text.
+func TestPackageInstallMessage(t *testing.T) {
 	tests := []struct {
 		name         string
 		dryRun       bool

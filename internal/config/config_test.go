@@ -316,12 +316,12 @@ func TestNonEmptySliceOverlayReplacesDefaultContents(t *testing.T) {
 	})
 }
 
-// TestIsGroupEnabledMatchesExpectedForEveryGroup calls IsGroupEnabled for
+// TestGroupEnabledMatchesExpectedForEveryGroup calls IsGroupEnabled for
 // every (page, group) pair defaultConfig() defines, both for the
 // absent-file fallback config and for a partial-file config that overrides
 // several groups across different pages, asserting each result matches the
 // expected default/override. Looped, not sampled.
-func TestIsGroupEnabledMatchesExpectedForEveryGroup(t *testing.T) {
+func TestGroupEnabledMatchesExpectedForEveryGroup(t *testing.T) {
 	defPages := pagesOf(defaultConfig())
 
 	t.Run("absent file", func(t *testing.T) {
