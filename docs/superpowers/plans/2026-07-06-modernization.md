@@ -1222,7 +1222,7 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-func TestInstalledFormulaeByTap(t *testing.T) {
+func TestFormulaeGroupedByTap(t *testing.T) {
 	cellar := t.TempDir()
 	writeFile(t, filepath.Join(cellar, "multica", "0.3.19", "INSTALL_RECEIPT.json"),
 		`{"source": {"tap": "multica-ai/tap"}}`)
@@ -1242,7 +1242,7 @@ func TestInstalledFormulaeByTap(t *testing.T) {
 	}
 }
 
-func TestInstalledCasksByTap(t *testing.T) {
+func TestCasksGroupedByTap(t *testing.T) {
 	caskroom := t.TempDir()
 	writeFile(t, filepath.Join(caskroom, "somecask", ".metadata", "1.0", "20260101", "Casks", "somecask.json"),
 		`{"token": "somecask", "tap": "ublue-os/tap"}`)
@@ -1469,7 +1469,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - [ ] **Step 1: Write the failing tests (append to trust_test.go)**
 
 ```go
-func TestIsUntrustedTapMessage(t *testing.T) {
+func TestUntrustedTapMessageDetection(t *testing.T) {
 	cases := []struct {
 		in   string
 		want bool

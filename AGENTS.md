@@ -29,10 +29,15 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   boundary invariant below).
 
 CI (`.github/workflows/test.yml`) filters tests with `-run "^Test[^I]"
--skip "Integration"`. Names beginning `TestI…` or containing `Integration` are
-the escape hatch for tests that need a real environment and are **excluded from
-the standard run** — a skipped test protects nothing, so keep regression tests
-inside the standard filter (see the GTK-headless skill below).
+-skip "Integration"`. That filter excludes *any* test whose name begins `TestI`
+— not only `TestIntegration` — or contains `Integration` anywhere. Those names
+are reserved for tests that require a real environment (a live `brew`,
+`flatpak`, `bootc`, or GTK display). Ordinary unit tests must not use the
+`TestI` prefix: a test that trips the filter is never executed by `make ci` or
+by CI and therefore protects nothing. The accident is easy to make, because
+plain unit-test names such as `TestIsValid`, `TestInitConfig`, or `TestIndexOf`
+all start with `TestI` and would be silently skipped; name them so the first
+letter after `Test` is not `I` (see the GTK-headless skill below).
 
 There are no generated files and no codegen step; everything under version
 control is hand-written Go, YAML, and data assets.
