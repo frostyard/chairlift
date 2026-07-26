@@ -6,6 +6,7 @@ import (
 
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
+	"github.com/frostyard/chairlift/internal/views/featurestatus"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -140,27 +141,32 @@ func (uh *UserHome) checkFeatureUpdates(totalFeatures int) {
 	sgtk.RunOnMainThread(func() {
 		if err != nil {
 			log.Printf("Feature update check failed: %v", err)
+			if uh.featuresGroup != nil {
+				uh.featuresGroup.SetDescription(featurestatus.GroupDescriptionCheckFailed(totalFeatures))
+			}
 			return
 		}
 
 		updateCount := 0
 		for _, check := range checks {
 			row, ok := uh.featureRows[check.Feature]
-			if !ok || len(check.Results) == 0 {
+			if !ok {
 				continue
 			}
 
-			result := check.Results[0]
-			if result.UpdateAvailable {
-				row.SetSubtitle(fmt.Sprintf("%s — v%s → v%s available", check.Feature, result.CurrentVersion, result.NewestVersion))
+			status, ok := featurestatus.Feature(check.Feature, check.Results)
+			if !ok {
+				continue
+			}
+
+			row.SetSubtitle(status.Subtitle)
+			if status.HasUpdate {
 				updateCount++
-			} else {
-				row.SetSubtitle(fmt.Sprintf("%s — v%s", check.Feature, result.CurrentVersion))
 			}
 		}
 
-		if uh.featuresGroup != nil && updateCount > 0 {
-			uh.featuresGroup.SetDescription(fmt.Sprintf("%d features available (%d updates)", totalFeatures, updateCount))
+		if uh.featuresGroup != nil {
+			uh.featuresGroup.SetDescription(featurestatus.GroupDescription(totalFeatures, updateCount))
 		}
 	})
 }
