@@ -181,6 +181,23 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 `install`, `uninstall`, `remove`, `update` — exactly four keys. As in homebrew, the map selects both the dry-run skip (these are skipped entirely and return a mock message) and the timeout class: `commandTimeout(args []string)` returns `mutationTimeout` (30 minutes) when `args[0]` is one of the four keys and `readTimeout` (30 seconds) otherwise, including for empty args, and `runFlatpakCommand` passes it to `context.WithTimeout`. Flatpak's read budget matches homebrew's 30 seconds, so both wrappers agree. `flatpak_test.go`'s `TestCommandTimeout` iterates the real map and asserts `len(stateChangingCommands) == 4`.
 
+### Error handling
+
+`runFlatpakCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `runStageStreaming` gives `internal/bootc` and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
+
+`runFlatpakCommandAt` starts the command in its own process group (`cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}`) and sets `cmd.Cancel` to `syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)`, so flatpak's download helpers (download workers, ostree pulls) are killed with the command instead of being orphaned when only the direct child is signalled. `cmd.WaitDelay` (5s) bounds the wait, because those helpers inherit the stdout/stderr pipes and a straggler would otherwise hold `Wait` open indefinitely. `cmd.Run` still reaps the child.
+
+Failures classify into exactly four distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`, so a wrapped cause still classifies:
+
+| Condition | Result |
+|-----------|--------|
+| The context deadline expired (`commandTimeout(args)` elapsed) | `*Error`, message `Command '<exe> <args>' timed out`, unwrapping to `context.DeadlineExceeded` |
+| The context was cancelled by its owner | `*Error`, message `Command '<exe> <args>' was canceled`, unwrapping to `context.Canceled` |
+| The command exited non-zero | `*Error` carrying the stderr text ("Flatpak command failed: …"), unwrapping to the `*exec.ExitError` |
+| The executable is missing (`exec.ErrNotFound` for a bare name, `fs.ErrNotExist` for an explicit path) | `*NotFoundError` ("Flatpak not found…") |
+
+A deadline and a cancellation never produce the same message, and neither surfaces as `signal: killed` — the process is killed by ChairLift's own `Cancel` func, so the raw wait error is replaced by the classified one. `Error` carries an `Err error` field and an `Unwrap() error` method, so `errors.Is(err, context.DeadlineExceeded)` works for callers while `Error` keeps satisfying `error` and keeps its human-readable `Message`; nothing in the views switches on its concrete type. `internal/flatpak/runner_test.go` covers each outcome against a fake script, asserts the deadline and cancellation messages differ and contain no `signal: killed`, and `TestRunFlatpakCommandAtKillsProcessGroup` proves the process-group kill by having the fake script spawn a background `sleep`, recording its PID, and polling `syscall.Kill(pid, 0)` until it returns `ESRCH` — proving the helper is gone, not merely that the parent returned.
+
 ### Update queries exclude runtimes
 
 `ListUpdates` builds its argument list with the unexported pure helper
