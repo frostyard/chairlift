@@ -156,7 +156,7 @@ nfpms:
 
 release:
   footer: |
-    **Full Changelog**: https://github.com/bketelsen/{{ .ProjectName }}/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: {{ .Metadata.Homepage }}/compare/{{ .PreviousTag }}...{{ .Tag }}
 
     ---
 
