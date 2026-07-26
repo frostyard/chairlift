@@ -8,7 +8,9 @@ package bootc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os/exec"
 	"sync"
@@ -39,13 +41,21 @@ func DefaultContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), DefaultTimeout)
 }
 
-// Error represents a bootc-related error
+// Error represents a bootc-related error. Err, when non-nil, carries the
+// underlying cause (for example context.DeadlineExceeded or
+// context.Canceled) so callers can classify it with errors.Is.
 type Error struct {
 	Message string
+	Err     error
 }
 
 func (e *Error) Error() string {
 	return e.Message
+}
+
+// Unwrap exposes the underlying cause to errors.Is/errors.As.
+func (e *Error) Unwrap() error {
+	return e.Err
 }
 
 // NotFoundError is returned when bootc is not installed
@@ -143,19 +153,46 @@ func parseStatus(data []byte) (*Status, error) {
 
 // GetStatus returns the current bootc host status. Runs unprivileged.
 func GetStatus(ctx context.Context) (*Status, error) {
-	cmd := exec.CommandContext(ctx, bootcCommand, "status", "--format", "json")
+	return getStatusFrom(ctx, bootcCommand)
+}
+
+// getStatusFrom runs `<name> status --format json` under ctx and parses the
+// output. The executable name is a parameter purely so tests can drive a
+// local fake script without a real bootc on the host; GetStatus is the only
+// production caller and always passes the fixed bootcCommand constant, so no
+// caller-supplied or user-derived string can reach it.
+//
+// Failures classify into four mutually exclusive outcomes: deadline
+// (unwrapping to context.DeadlineExceeded), cancellation (unwrapping to
+// context.Canceled), a missing executable (*NotFoundError), and a non-zero
+// exit (*Error carrying the exit code and stderr, matching neither context
+// sentinel).
+func getStatusFrom(ctx context.Context, name string) (*Status, error) {
+	cmd := exec.CommandContext(ctx, name, "status", "--format", "json")
 	output, err := cmd.Output()
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return nil, &Error{Message: "bootc status timed out"}
+		// Classify the context outcome first: exec kills the child when the
+		// context ends, so the raw error would otherwise read
+		// "signal: killed".
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, &Error{Message: "bootc status timed out", Err: context.DeadlineExceeded}
 		}
-		if execErr, ok := err.(*exec.Error); ok && execErr.Err == exec.ErrNotFound {
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+			return nil, &Error{Message: "bootc status was canceled", Err: context.Canceled}
+		}
+		// exec.ErrNotFound covers a bare name missing from $PATH;
+		// fs.ErrNotExist covers an explicit path that does not exist.
+		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
 			return nil, &NotFoundError{Message: "bootc not found"}
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return nil, &Error{Message: fmt.Sprintf("bootc status failed (exit %d): %s", exitErr.ExitCode(), string(exitErr.Stderr))}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return nil, &Error{
+				Message: fmt.Sprintf("bootc status failed (exit %d): %s", exitErr.ExitCode(), string(exitErr.Stderr)),
+				Err:     err,
+			}
 		}
-		return nil, &Error{Message: err.Error()}
+		return nil, &Error{Message: err.Error(), Err: err}
 	}
 	return parseStatus(output)
 }

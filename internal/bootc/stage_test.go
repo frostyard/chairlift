@@ -2,8 +2,10 @@ package bootc
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -103,5 +105,113 @@ func TestStageUpdateDryRun(t *testing.T) {
 	}
 	if len(events) == 0 || events[len(events)-1].Type != EventComplete {
 		t.Errorf("dry-run should emit mock events ending in EventComplete; got %+v", events)
+	}
+}
+
+func TestRunStageStreamingDeadline(t *testing.T) {
+	// `exec sleep` replaces the shell, so killing the child kills the sleep
+	// too and no stray process survives the test.
+	script := writeScript(t, "exec sleep 30\n")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	t.Cleanup(cancel)
+
+	ch := make(chan ProgressEvent)
+	done := make(chan error, 1)
+	go func() { done <- runStageStreaming(ctx, ch, script) }()
+
+	collectEvents(ch)
+	err := waitErr(t, done)
+	if err == nil {
+		t.Fatal("runStageStreaming = nil error, want deadline failure")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("errors.Is(err, DeadlineExceeded) = false; err = %v", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Errorf("deadline error also matches context.Canceled: %v", err)
+	}
+	if strings.Contains(err.Error(), "signal: killed") {
+		t.Errorf("message leaks raw kill signal: %q", err.Error())
+	}
+}
+
+func TestRunStageStreamingCanceled(t *testing.T) {
+	script := writeScript(t, "echo \"pulling image\"\nexec sleep 30\n")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	ch := make(chan ProgressEvent)
+	done := make(chan error, 1)
+	go func() { done <- runStageStreaming(ctx, ch, script) }()
+
+	first, ok := <-ch
+	if !ok {
+		t.Fatal("channel closed before any progress event")
+	}
+	if first.Message != "pulling image" {
+		t.Fatalf("first event = %+v, want the streamed line", first)
+	}
+	cancel()
+	collectEvents(ch)
+
+	err := waitErr(t, done)
+	if err == nil {
+		t.Fatal("runStageStreaming = nil error, want cancellation failure")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("errors.Is(err, Canceled) = false; err = %v", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("cancellation error also matches context.DeadlineExceeded: %v", err)
+	}
+	if strings.Contains(err.Error(), "signal: killed") {
+		t.Errorf("message leaks raw kill signal: %q", err.Error())
+	}
+}
+
+func TestRunStageStreamingNonZeroExitIsNeitherContextOutcome(t *testing.T) {
+	script := writeScript(t, `echo "pulling image"
+echo "podman pull failed"
+exit 4`)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	t.Cleanup(cancel)
+
+	ch := make(chan ProgressEvent)
+	done := make(chan error, 1)
+	go func() { done <- runStageStreaming(ctx, ch, script) }()
+
+	collectEvents(ch)
+	err := waitErr(t, done)
+	if err == nil {
+		t.Fatal("runStageStreaming = nil error, want exit failure")
+	}
+	var bootcErr *Error
+	if !errors.As(err, &bootcErr) {
+		t.Fatalf("errors.As(*Error) = false; err = %T %v", err, err)
+	}
+	if !strings.Contains(bootcErr.Message, "exit 4") {
+		t.Errorf("message %q missing exit code", bootcErr.Message)
+	}
+	if !strings.Contains(bootcErr.Message, "podman pull failed") {
+		t.Errorf("message %q missing last output line", bootcErr.Message)
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		t.Errorf("plain exit failure matches a context sentinel: %v", err)
+	}
+}
+
+// waitErr returns the runner's error, failing the test rather than hanging if
+// the runner never returns.
+func waitErr(t *testing.T, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(30 * time.Second):
+		t.Fatal("runStageStreaming did not return")
+		return nil
 	}
 }

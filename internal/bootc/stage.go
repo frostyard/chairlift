@@ -3,6 +3,7 @@ package bootc
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -55,6 +56,13 @@ func StageUpdate(ctx context.Context, progressCh chan<- ProgressEvent) error {
 // runStageStreaming runs a command, streaming stdout+stderr lines to
 // progressCh. It closes progressCh before returning. Separated from
 // StageUpdate so tests can run a local fake script without pkexec.
+//
+// Failures classify into three mutually exclusive outcomes: deadline
+// (*Error unwrapping to context.DeadlineExceeded), cancellation (*Error
+// unwrapping to context.Canceled, or a bare context.Canceled when the stream
+// send loses the race), and a non-zero exit (*Error carrying the last output
+// line, matching neither context sentinel). A missing executable yields a
+// *NotFoundError.
 func runStageStreaming(ctx context.Context, progressCh chan<- ProgressEvent, name string, args ...string) error {
 	defer close(progressCh)
 
@@ -85,6 +93,11 @@ func runStageStreaming(ctx context.Context, progressCh chan<- ProgressEvent, nam
 		select {
 		case progressCh <- ProgressEvent{Type: EventMessage, Message: line}:
 		case <-ctx.Done():
+			// Direct kill of the child only, deliberately: StageUpdate runs
+			// through pkexec, so the child is root-owned and this
+			// unprivileged process cannot signal it as a process group the
+			// way the homebrew and flatpak runners do (making the privileged
+			// path group-killable is a privilege-model change).
 			_ = cmd.Process.Kill()
 			_ = cmd.Wait() // reap the killed child; error is expected here
 			return ctx.Err()
@@ -92,17 +105,24 @@ func runStageStreaming(ctx context.Context, progressCh chan<- ProgressEvent, nam
 	}
 
 	if err := cmd.Wait(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return &Error{Message: "Update staging timed out"}
+		// Classify the context outcome first: the child is killed when the
+		// context ends, so the raw wait error would otherwise read
+		// "signal: killed".
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+			return &Error{Message: "Update staging timed out", Err: context.DeadlineExceeded}
 		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+			return &Error{Message: "Update staging was canceled", Err: context.Canceled}
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			msg := fmt.Sprintf("update staging failed (exit %d)", exitErr.ExitCode())
 			if lastLine != "" {
 				msg += ": " + lastLine
 			}
-			return &Error{Message: msg}
+			return &Error{Message: msg, Err: err}
 		}
-		return &Error{Message: err.Error()}
+		return &Error{Message: err.Error(), Err: err}
 	}
 
 	progressCh <- ProgressEvent{Type: EventComplete, Message: "Staging complete"}

@@ -1,6 +1,6 @@
 # Package Manager Wrappers
 
-Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts. All are called from `internal/views/` page builders. The cached availability check is important for the deferred-visibility startup pattern — multiple goroutines may check the same tool, and the result should only be computed once.
+Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts in two classes — 30s for read-only commands, 30m for state-changing ones, selected per invocation by each package's `commandTimeout(args)` helper from its `stateChangingCommands` map. All are called from `internal/views/` page builders. The cached availability check is important for the deferred-visibility startup pattern — multiple goroutines may check the same tool, and the result should only be computed once.
 
 ## Homebrew (`internal/homebrew/homebrew.go`)
 
@@ -19,22 +19,36 @@ Wraps the `brew` CLI. Uses JSON output (`--json=v2`) for structured data where a
 | `ListInstalledCasks()` | `brew info --installed --json=v2 --cask` | 30s | JSON parsed |
 | `ListOutdated()` | `brew outdated --json=v2` | 30s | JSON parsed; returns both formulae and casks |
 | `Search(query)` | `brew search --formula <query>` | 30s | Text output parsed; formula-only search |
-| `Install(name, isCask)` | `brew install [--cask] <name>` | 30s | State-changing, dry-run aware |
-| `Uninstall(name, isCask)` | `brew uninstall [--cask] <name>` | 30s | State-changing |
-| `Upgrade(name)` | `brew upgrade [<name>]` | 30s | State-changing; empty name upgrades all |
-| `Update()` | `brew update` | 30s | State-changing |
-| `Pin(name)` / `Unpin(name)` | `brew pin/unpin <name>` | 30s | State-changing |
-| `Cleanup()` | `brew cleanup` | 30s | State-changing; returns output string |
-| `BundleDump(path, force)` | `brew bundle dump [--file=<path>] [--force]` | 30s | State-changing; writes to file path |
-| `BundleInstall(path)` | `brew bundle install [--file=<path>]` | 30s | State-changing |
+| `Install(name, isCask)` | `brew install [--cask] <name>` | 30m | State-changing, dry-run aware |
+| `Uninstall(name, isCask)` | `brew uninstall [--cask] <name>` | 30m | State-changing |
+| `Upgrade(name)` | `brew upgrade [<name>]` | 30m | State-changing; empty name upgrades all |
+| `Update()` | `brew update` | 30m | State-changing |
+| `Pin(name)` / `Unpin(name)` | `brew pin/unpin <name>` | 30m | State-changing |
+| `Cleanup()` | `brew cleanup` | 30m | State-changing; returns output string |
+| `BundleDump(path, force)` | `brew bundle dump [--file=<path>] [--force]` | 30m | State-changing; writes to file path |
+| `BundleInstall(path)` | `brew bundle install [--file=<path>]` | 30m | State-changing |
 
 ### State-changing commands
 
-The `stateChangingCommands` map includes: `install`, `uninstall`, `remove`, `upgrade`, `update`, `pin`, `unpin`, `bundle`, `cleanup`. When dry-run is active, these are skipped entirely and return a mock message.
+The `stateChangingCommands` map has exactly ten keys: `install`, `uninstall`, `remove`, `upgrade`, `update`, `pin`, `unpin`, `bundle`, `cleanup`, `trust`. The map now drives two things. First, when dry-run is active these commands are skipped entirely and return a mock message. Second, `commandTimeout(args []string)` — a pure selector reading only `args` and this map — returns `mutationTimeout` (30 minutes) when `args[0]` is one of the ten keys and `readTimeout` (30 seconds) otherwise, including for empty args; `runBrewCommand` passes its result to `context.WithTimeout`. Read commands therefore keep the old 30-second budget while installs, upgrades and bundle operations — which download and build — get 30 minutes. `homebrew_test.go`'s `TestCommandTimeout` iterates the real map and asserts `len(stateChangingCommands) == 10`, so a newly added key cannot go untested.
 
 ### Error handling
 
-Returns `Error` (wraps stderr message) or `NotFoundError` for missing Homebrew. Timeouts produce a specific error message.
+`runBrewCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"brew"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `runStageStreaming` gives `internal/bootc`. No exported function takes a `context.Context`: callers get deadlines, not cancellation.
+
+`runBrewCommandAt` starts the command in its own process group (`cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}`) and sets `cmd.Cancel` to `syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)`, so brew's helper processes (git, curl, download workers) are killed with the command instead of being orphaned when only the direct child is signalled. `cmd.WaitDelay` (5s) bounds the wait, because those helpers inherit the stdout/stderr pipes and a straggler would otherwise hold `Wait` open indefinitely. `cmd.Run` still reaps the child.
+
+Failures classify into exactly five distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`, so a wrapped cause still classifies:
+
+| Condition | Result |
+|-----------|--------|
+| The context deadline expired (`commandTimeout(args)` elapsed) | `*Error`, message `Command '<exe> <args>' timed out`, unwrapping to `context.DeadlineExceeded` |
+| The context was cancelled by its owner | `*Error`, message `Command '<exe> <args>' was canceled`, unwrapping to `context.Canceled` |
+| The command exited non-zero and its stderr matches `isUntrustedTapMessage` | `*UntrustedTapError` carrying the stderr text (see "Tap trust" below) |
+| The command exited non-zero otherwise | `*Error` carrying the stderr text, unwrapping to the `*exec.ExitError` |
+| The executable is missing (`exec.ErrNotFound` for a bare name, `fs.ErrNotExist` for an explicit path) | `*NotFoundError` ("Homebrew not found…") |
+
+A deadline and a cancellation never produce the same message, and neither surfaces as `signal: killed` — the process is killed by ChairLift's own `Cancel` func, so the raw wait error is replaced by the classified one. `Error` carries an `Err error` field and an `Unwrap() error` method, so `errors.Is(err, context.DeadlineExceeded)` works for callers while `Error` keeps satisfying `error` and keeps its human-readable `Message`; nothing in the views switches on its concrete type. `internal/homebrew/runner_test.go` covers each outcome against a fake script, asserts the deadline and cancellation messages differ and contain no `signal: killed`, and `TestRunBrewCommandAtKillsProcessGroup` proves the process-group kill by having the fake script spawn a background `sleep`, recording its PID, and polling `syscall.Kill(pid, 0)` until it returns `ESRCH` — proving the helper is gone, not merely that the parent returned.
 
 ### Tap trust (Homebrew 6) (`internal/homebrew/trust.go`)
 
@@ -49,9 +63,9 @@ Only untrusted taps with at least one installed formula or cask are returned (`U
 
 **`TrustPackages(tap)`** runs `brew trust --formula <formulae...>` and/or `brew trust --cask <casks...>` for the given tap. This is a **per-user** operation (state lives in `~/.homebrew/trust.json`) — it does not use `pkexec` and does not require root, unlike bootc staging or updex writes.
 
-Since `trust` is one of homebrew's `stateChangingCommands`, `TrustPackages` already no-ops under dry-run at the exec layer (see "Cross-cutting: dry-run" below). But `trustTap` (`internal/views/updates_page.go`) used to always mutate the Untrusted Homebrew Taps UI on a successful (nil-error) call — removing the tap's row, hiding the group when empty, and refreshing outdated packages — even when nothing was actually trusted. That made a dry-run click visually remove the tap from the Untrusted Taps list as if it were now trusted, with no way to undo it from the UI. `trustTap` now computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once in its success branch and gates all three UI mutations on `decision.MutateUI` (exactly `!dryRun`): when true, behavior is unchanged from before; when false, the row stays, the group stays visible, `loadOutdatedPackages` is not re-queried, and the click's button is reset (`SetSensitive(true)`, `SetLabel("Trust")`) instead of being left stuck on "Trusting...". `decision.Toast` — a preview string under dry-run, the same "Trusted %s. Its packages can update again." string otherwise — is shown in both states. This mirrors the `actionmsg.MaintenanceScript`/`ScriptDecision` pattern: the UI-mutation gate itself, not just the toast wording, is what `actionmsg_test.go` asserts.
+Because `brew trust --formula/--cask ...` has `args[0] == "trust"`, and `trust` is one of homebrew's ten `stateChangingCommands`, `TrustPackages` runs under the 30-minute mutation timeout rather than the 30-second read budget — trusting a tap can trigger substantial work — and, by the same map membership, already no-ops under dry-run at the exec layer (see "Cross-cutting: dry-run" below). But `trustTap` (`internal/views/updates_page.go`) used to always mutate the Untrusted Homebrew Taps UI on a successful (nil-error) call — removing the tap's row, hiding the group when empty, and refreshing outdated packages — even when nothing was actually trusted. That made a dry-run click visually remove the tap from the Untrusted Taps list as if it were now trusted, with no way to undo it from the UI. `trustTap` now computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once in its success branch and gates all three UI mutations on `decision.MutateUI` (exactly `!dryRun`): when true, behavior is unchanged from before; when false, the row stays, the group stays visible, `loadOutdatedPackages` is not re-queried, and the click's button is reset (`SetSensitive(true)`, `SetLabel("Trust")`) instead of being left stuck on "Trusting...". `decision.Toast` — a preview string under dry-run, the same "Trusted %s. Its packages can update again." string otherwise — is shown in both states. This mirrors the `actionmsg.MaintenanceScript`/`ScriptDecision` pattern: the UI-mutation gate itself, not just the toast wording, is what `actionmsg_test.go` asserts.
 
-**`UntrustedTapError`** — `runBrewCommand` (`internal/homebrew/homebrew.go`) inspects failed commands' stderr for `"untrusted tap"` or `"taps are not trusted"` (`isUntrustedTapMessage`) and wraps the failure as `*UntrustedTapError` instead of the generic `Error`. Views type-switch on this to redirect users to the Untrusted Taps UI rather than showing raw brew output.
+**`UntrustedTapError`** — `runBrewCommandAt` (`internal/homebrew/homebrew.go`) inspects failed commands' stderr for `"untrusted tap"` or `"taps are not trusted"` (`isUntrustedTapMessage`) and returns `*UntrustedTapError` instead of the generic `Error` — only on the non-zero-exit path, and only after the deadline and cancellation branches have been ruled out, so a timed-out or cancelled command is never misreported as a trust problem. The type is unchanged and unwrapped by the classification, so the one type-based dependency in the whole UI — `errors.As(err, &trustErr)` at `internal/views/updates_page.go:298-300` — keeps working and redirects users to the Untrusted Taps UI rather than showing raw brew output.
 
 The upgrade-failure toast text adapts to whether that UI is actually available: `trustmsg.UpgradeMessage(pkgName, trustGroupAvailable bool)` (`internal/views/trustmsg`, see "View-layer toast and decision helpers" below) is called from the outdated-packages row's upgrade click handler as `trustmsg.UpgradeMessage(pkgName, uh.brewTrustGroup != nil)`. `uh.brewTrustGroup` is only ever assigned once, in `buildUpdatesPage` on the main thread before any goroutine that could read it starts, so reading it from the upgrade goroutine is race-free. When the Untrusted Homebrew Taps group exists (`brew_trust_group` enabled and built), the message points there ("see Untrusted Homebrew Taps below"); when it doesn't (group disabled, or not yet built), the message is self-contained — it states the package can't be upgraded until its tap is trusted, with no reference to "below" or the section name, since there is nothing to point to.
 
@@ -153,19 +167,36 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 | Function | CLI command | Timeout | Notes |
 |----------|------------|---------|-------|
-| `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 60s | Tabular parsed |
-| `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 60s | Tabular parsed |
-| `ListUpdates(user)` | `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system]` | 60s | Separate calls for user/system; `--app` excludes runtimes |
-| `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 60s | State-changing |
-| `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 60s | State-changing |
-| `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 60s | State-changing; empty appID updates all |
-| `UninstallUnused()` | `flatpak uninstall --unused -y` | 60s | Maintenance cleanup |
-| `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 60s | Key-value parsed |
-| `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 60s | Lists configured remotes |
+| `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
+| `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
+| `ListUpdates(user)` | `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system]` | 30s | Separate calls for user/system; `--app` excludes runtimes |
+| `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 30m | State-changing |
+| `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 30m | State-changing |
+| `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
+| `UninstallUnused()` | `flatpak uninstall --unused -y` | 30m | Maintenance cleanup |
+| `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 30s | Key-value parsed |
+| `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 30s | Lists configured remotes |
 
 ### State-changing commands
 
-`install`, `uninstall`, `remove`, `update`. When dry-run is active, these are skipped entirely.
+`install`, `uninstall`, `remove`, `update` — exactly four keys. As in homebrew, the map selects both the dry-run skip (these are skipped entirely and return a mock message) and the timeout class: `commandTimeout(args []string)` returns `mutationTimeout` (30 minutes) when `args[0]` is one of the four keys and `readTimeout` (30 seconds) otherwise, including for empty args, and `runFlatpakCommand` passes it to `context.WithTimeout`. Flatpak's read budget matches homebrew's 30 seconds, so both wrappers agree. `flatpak_test.go`'s `TestCommandTimeout` iterates the real map and asserts `len(stateChangingCommands) == 4`.
+
+### Error handling
+
+`runFlatpakCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `runStageStreaming` gives `internal/bootc` and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
+
+`runFlatpakCommandAt` starts the command in its own process group (`cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}`) and sets `cmd.Cancel` to `syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)`, so flatpak's download helpers (download workers, ostree pulls) are killed with the command instead of being orphaned when only the direct child is signalled. `cmd.WaitDelay` (5s) bounds the wait, because those helpers inherit the stdout/stderr pipes and a straggler would otherwise hold `Wait` open indefinitely. `cmd.Run` still reaps the child.
+
+Failures classify into exactly four distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`, so a wrapped cause still classifies:
+
+| Condition | Result |
+|-----------|--------|
+| The context deadline expired (`commandTimeout(args)` elapsed) | `*Error`, message `Command '<exe> <args>' timed out`, unwrapping to `context.DeadlineExceeded` |
+| The context was cancelled by its owner | `*Error`, message `Command '<exe> <args>' was canceled`, unwrapping to `context.Canceled` |
+| The command exited non-zero | `*Error` carrying the stderr text ("Flatpak command failed: …"), unwrapping to the `*exec.ExitError` |
+| The executable is missing (`exec.ErrNotFound` for a bare name, `fs.ErrNotExist` for an explicit path) | `*NotFoundError` ("Flatpak not found…") |
+
+A deadline and a cancellation never produce the same message, and neither surfaces as `signal: killed` — the process is killed by ChairLift's own `Cancel` func, so the raw wait error is replaced by the classified one. `Error` carries an `Err error` field and an `Unwrap() error` method, so `errors.Is(err, context.DeadlineExceeded)` works for callers while `Error` keeps satisfying `error` and keeps its human-readable `Message`; nothing in the views switches on its concrete type. `internal/flatpak/runner_test.go` covers each outcome against a fake script, asserts the deadline and cancellation messages differ and contain no `signal: killed`, and `TestRunFlatpakCommandAtKillsProcessGroup` proves the process-group kill by having the fake script spawn a background `sleep`, recording its PID, and polling `syscall.Kill(pid, 0)` until it returns `ESRCH` — proving the helper is gone, not merely that the parent returned.
 
 ### Update queries exclude runtimes
 
@@ -184,13 +215,39 @@ Wraps `bootc` for OSTree/composefs system updates, split across two files: `boot
 
 `GetStatus(ctx)` runs `bootc status --format json` with **no** `pkexec` — this is a plain read, safe to call from any goroutine (`internal/bootc/bootc.go`). Output is unmarshaled into `Status{Spec, Status: {Booted, Staged, Rollback}}`, where each of `Booted`/`Staged`/`Rollback` is a `*Deployment` (nil-safe accessors: `ImageRef()`, `Version()`, `Timestamp()`, `Digest()`).
 
+`GetStatus` is a one-line wrapper: `return getStatusFrom(ctx, bootcCommand)`. The unexported `getStatusFrom(ctx context.Context, name string) (*Status, error)` runs `<name> status --format json`, classifies the error, and parses the output. The executable name is a parameter purely so `bootc_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` on a host with no `bootc` installed — the same seam `runStageStreaming` gives staging and `runBrewCommandAt`/`runFlatpakCommandAt` give the two package-manager wrappers. The seam is unexported and its only production call site passes the fixed `bootcCommand` constant, so no caller-supplied or user-derived string can reach it.
+
+Failures classify into exactly four distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`, so a wrapped cause still classifies:
+
+| Condition | Result |
+|-----------|--------|
+| The context deadline expired | `*Error`, message `bootc status timed out`, unwrapping to `context.DeadlineExceeded` |
+| The context was cancelled by its owner | `*Error`, message `bootc status was canceled`, unwrapping to `context.Canceled` |
+| The command exited non-zero | `*Error`, message `bootc status failed (exit N): <stderr>`, unwrapping to the `*exec.ExitError` — matching neither context sentinel |
+| The executable is missing (`exec.ErrNotFound` for a bare name, `fs.ErrNotExist` for an explicit path) | `*NotFoundError` (`bootc not found`) |
+
+The deadline and cancellation messages differ, and neither surfaces as `signal: killed`: `exec.CommandContext` kills the child when the context ends, so the classified error replaces the raw wait error. `bootc.Error` carries an `Err error` field and an `Unwrap() error` method — matching `internal/homebrew` and `internal/flatpak` — so callers distinguish all four outcomes with `errors.Is`/`errors.As` while `Error` keeps its human-readable `Message`. `bootc_test.go` covers all four against fake scripts (plus the success parse), so the whole classification is exercised without a real `bootc` on the host.
+
 ### Boot gate semantics
 
 `bootc status` exits 0 with a null `booted` field on hosts that aren't running a bootc deployment at all — so the gate cannot be the exit code. `Status.Booted()` returns `s.Status.Booted != nil`. `IsBootcBooted(ctx)` calls `GetStatus` and returns that boolean (treating any error as "not booted"). `IsBootcBootedCached()` wraps it in a `sync.Once` with a 5s timeout, computing the result once and caching it for the lifetime of the process — this lets multiple view goroutines call it during async startup without triggering redundant `bootc` invocations. **Do not use `/run/ostree-booted`** as a substitute gate: it is absent on snow's composefs-based deployments, so checking for it would hide bootc UI on every snow host.
 
 ### `StageUpdate` (privileged, streaming)
 
-`StageUpdate(ctx, progressCh)` (`internal/bootc/stage.go`) runs `pkexec /usr/libexec/bootc-update-stage`, merging stdout+stderr and streaming each trimmed non-empty line to `progressCh` as an `EventMessage`. `progressCh` is always closed before returning (`defer close`). On successful exit it sends a final `EventComplete`; on failure it returns an `Error` (including the last output line for context) or a `NotFoundError` if pkexec itself is missing. If the context is canceled/times out mid-stream, the child process is killed and reaped before returning `ctx.Err()`.
+`StageUpdate(ctx, progressCh)` (`internal/bootc/stage.go`) runs `pkexec /usr/libexec/bootc-update-stage` via the unexported `runStageStreaming(ctx, progressCh, name, args...)` seam (which tests drive with a local fake script instead of `pkexec`), merging stdout+stderr and streaming each trimmed non-empty line to `progressCh` as an `EventMessage`. `progressCh` is always closed before returning (`defer close`). On successful exit it sends a final `EventComplete`.
+
+Failures classify into exactly four distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`:
+
+| Condition | Result |
+|-----------|--------|
+| The context deadline expired | `*Error`, message `Update staging timed out`, unwrapping to `context.DeadlineExceeded` |
+| The context was cancelled by its owner | `*Error`, message `Update staging was canceled`, unwrapping to `context.Canceled`; if cancellation instead wins the race inside the streaming `select`, the child is killed and reaped and the bare `ctx.Err()` (`context.Canceled`) is returned, which classifies identically |
+| The script exited non-zero | `*Error`, message `update staging failed (exit N): <last output line>`, unwrapping to the `*exec.ExitError` — matching neither context sentinel |
+| `pkexec` itself is missing | `*NotFoundError` (`pkexec not found`) |
+
+The deadline and cancellation messages differ, and neither surfaces as `signal: killed`. `stage_test.go` covers all of these against fake `#!/bin/sh` scripts, so no test needs a real `pkexec` or `bootc`.
+
+**Why bootc direct-kills instead of killing the process group:** on cancellation `runStageStreaming` calls `cmd.Process.Kill()` on the direct child only, and `internal/bootc` deliberately sets no `Setpgid`/`cmd.Cancel` process-group kill. The staging child runs under `pkexec` and is therefore root-owned, so this unprivileged process cannot signal it or its process group — a `syscall.Kill(-pid, SIGKILL)` would fail by design. That is the exception: the unprivileged `runBrewCommandAt` and `runFlatpakCommandAt` runners *do* kill the whole process group, because their children are owned by the same user. Making the privileged path group-killable would be a privilege-model change, not a runner change. `getStatusFrom` needs neither: `bootc status` is unprivileged and short-lived, and `exec.CommandContext`'s default kill of the direct child suffices.
 
 **Why a stage script instead of `bootc upgrade`:** upstream `bootc upgrade`'s registry-transport pull fails on snow's composefs images. The stage script works around this by using `podman pull` (whose pull path works) to fetch the image into containers-storage, then running `bootc switch --transport containers-storage` to stage the already-pulled image — `podman` does the pull, `bootc` does the switch. This keeps the actual workaround logic in one place (the snow-shipped script, source of truth in the snosi project) instead of duplicating pull/switch orchestration inside ChairLift. The script is idempotent: it exits 0 without staging anything when the deployment is already current, so `StageUpdate` doubles as both "check for update" and "apply update".
 
