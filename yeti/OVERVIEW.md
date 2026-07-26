@@ -263,7 +263,7 @@ page_name:
 - **Version**: Set via ldflags by goreleaser (`buildVersion`, `buildCommit`, `buildDate`, `buildBy`)
 - **Semantic versioning**: Uses [svu](https://github.com/caarlos0/svu) via `make bump`
 - **CI**: GitHub Actions workflows for test, snapshot, and release (`.github/workflows/`); snapshot publishers use the `chairlift-dev-release` concurrency group without in-progress cancellation so uploads to the rolling `dev` release cannot overlap. GitHub retains only the newest pending run in a concurrency group, so rapid pushes can skip intermediate snapshots while preserving the active upload and latest queued snapshot.
-- **Release**: GoReleaser config at `.goreleaser.yaml`
+- **Release**: GoReleaser config at `.goreleaser.yaml`. Its `metadata.homepage` is the single source of truth for the repository URL and is consumed by `release.footer`, whose "Full Changelog" link is templated from `{{ .Metadata.Homepage }}` rather than a hardcoded owner; two static tests guard that pairing — see the "Install-path consistency (`internal/installcheck`)" section of [package-managers.md](./package-managers.md#install-path-consistency-internalinstallcheck)
 - **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint), `make install`/`make uninstall` (system install including polkit policies, icons, and wrapper script; default `PREFIX=/usr`, the only prefix that matches where polkit reads policy/rules files and the updex helper's fixed pkexec exec-path annotation — see "Privileged operations" above), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
 
 ### Runtime dependencies

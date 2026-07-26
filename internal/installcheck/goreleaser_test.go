@@ -12,13 +12,20 @@ import (
 )
 
 // wantSPDXLicense is the SPDX identifier the project's actual license (GPLv3
-// text in LICENSE, gtk.LicenseGpl30Value — puregotk's "GPL 3.0 or later"
+// text in LICENSE, gtk.LicenseGpl30Value — the GTK bindings' "GPL 3.0 or later"
 // enum value — in internal/window/window.go's about dialog) resolves to.
 // .goreleaser.yaml's top-level metadata.license and every nfpms[] entry's
 // license must agree with this constant; see
 // yeti/package-managers.md's "Install-path consistency" section for the
 // MIT/GPL drift bug this guards against.
 const wantSPDXLicense = "GPL-3.0-or-later"
+
+// wantHomepage is the repository URL .goreleaser.yaml's metadata.homepage must
+// declare. It is the single source of truth for the repository URL in that
+// file: release.footer's "Full Changelog" link derives from
+// {{ .Metadata.Homepage }} rather than repeating an owner literal, so a silent
+// edit here would silently redirect every generated release note.
+const wantHomepage = "https://github.com/frostyard/chairlift"
 
 // loadGoreleaserConfig parses the real, repo-root .goreleaser.yaml — not a
 // fixture or copy that could drift from the file goreleaser actually reads
@@ -136,5 +143,72 @@ func TestGoreleaserLicenseIsGPL(t *testing.T) {
 				t.Errorf("nfpms[%d].license = %q, want %q", i, nfpm.License, wantSPDXLicense)
 			}
 		})
+	}
+}
+
+// TestGoreleaserMetadataHomepageIsFrostyardRepo parses the real
+// .goreleaser.yaml and asserts metadata.homepage still names this
+// repository. The value became load-bearing when release.footer started
+// deriving its Full Changelog URL from {{ .Metadata.Homepage }}: a drifting
+// homepage now silently points every release note's changelog link at the
+// wrong repository, which this test catches instead.
+func TestGoreleaserMetadataHomepageIsFrostyardRepo(t *testing.T) {
+	cfg := loadGoreleaserConfig(t)
+
+	if cfg.Metadata.Homepage != wantHomepage {
+		t.Errorf("metadata.homepage = %q, want %q (single source of truth for the repository URL, consumed by release.footer)", cfg.Metadata.Homepage, wantHomepage)
+	}
+}
+
+// TestGoreleaserReleaseFooterUsesMetadataHomepage parses the real
+// .goreleaser.yaml and asserts release.footer's "Full Changelog" line builds
+// its URL from the {{ .Metadata.Homepage }} template variable rather than
+// from a hardcoded repository owner literal.
+//
+// The assertions are on the raw *template text* read from the YAML: the
+// footer is expanded by goreleaser at release time, and goreleaser (Pro) is
+// not installed on the gate host or in make ci, so nothing here renders the
+// template or shells out.
+//
+// It is deliberately non-vacuous: an absent or empty footer, or zero or more
+// than one "Full Changelog" line, is a t.Fatal rather than a silent pass.
+func TestGoreleaserReleaseFooterUsesMetadataHomepage(t *testing.T) {
+	cfg := loadGoreleaserConfig(t)
+
+	footer := cfg.Release.Footer
+	if strings.TrimSpace(footer) == "" {
+		t.Fatal("release.footer is absent or empty in .goreleaser.yaml")
+	}
+
+	var matches []string
+	for _, line := range strings.Split(footer, "\n") {
+		if strings.Contains(line, "Full Changelog") {
+			matches = append(matches, line)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("release.footer has %d lines containing %q, want exactly 1; footer:\n%s", len(matches), "Full Changelog", footer)
+	}
+	line := matches[0]
+
+	if !strings.Contains(line, "{{ .Metadata.Homepage }}") {
+		t.Errorf("Full Changelog line = %q, want it to derive its repository URL from the %q template variable", line, "{{ .Metadata.Homepage }}")
+	}
+	if !strings.Contains(line, "/compare/{{ .PreviousTag }}...{{ .Tag }}") {
+		t.Errorf("Full Changelog line = %q, want it to keep the %q suffix", line, "/compare/{{ .PreviousTag }}...{{ .Tag }}")
+	}
+	if strings.Contains(line, ".ProjectName") {
+		t.Errorf("Full Changelog line = %q, want no .ProjectName: metadata.homepage already ends in the repository name, so the two must not be concatenated", line)
+	}
+
+	// The footer must contain no repository URL literal at all. Asserting the
+	// absence of "github.com/" (rather than of the previous owner's name)
+	// also catches the URL being rewritten to a hardcoded current-owner
+	// literal, which would reintroduce the duplication this guards against —
+	// and it keeps the removed literal out of the tree, per
+	// docs/agents/skills/grep-removal-criteria-must-exclude-mill-and-tests.md.
+	// The surviving https://goreleaser.com/pro link is unaffected.
+	if strings.Contains(footer, "github.com/") {
+		t.Errorf("release.footer contains a hardcoded repository URL literal; it must reference {{ .Metadata.Homepage }} instead. footer:\n%s", footer)
 	}
 }
