@@ -5,11 +5,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -19,6 +22,11 @@ const (
 	// mutationTimeout bounds state-changing brew commands, which may download
 	// and build packages and therefore need a far larger budget.
 	mutationTimeout = 30 * time.Minute
+	// waitDelay bounds how long Wait blocks after the process group has been
+	// signalled. brew's helpers (git, curl, download workers) inherit the
+	// stdout/stderr pipes, so a straggler could otherwise hold Wait open
+	// forever even though the command itself is gone.
+	waitDelay = 5 * time.Second
 )
 
 var dryRun = false
@@ -34,13 +42,21 @@ func IsDryRun() bool {
 	return dryRun
 }
 
-// Error represents a Homebrew-related error
+// Error represents a Homebrew-related error. Err, when non-nil, carries the
+// underlying cause (for example context.DeadlineExceeded or
+// context.Canceled) so callers can classify it with errors.Is.
 type Error struct {
 	Message string
+	Err     error
 }
 
 func (e *Error) Error() string {
 	return e.Message
+}
+
+// Unwrap exposes the underlying cause to errors.Is/errors.As.
+func (e *Error) Unwrap() error {
+	return e.Err
 }
 
 // NotFoundError is returned when Homebrew is not installed
@@ -103,26 +119,63 @@ func runBrewCommand(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), commandTimeout(args))
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "brew", args...)
+	return runBrewCommandAt(ctx, "brew", args...)
+}
+
+// runBrewCommandAt runs exe with args under ctx and returns its stdout. The
+// executable and context are parameters so tests can drive a fake script and
+// control the deadline; runBrewCommand is the only production caller and
+// always passes "brew".
+//
+// The command runs in its own process group and cancellation signals the
+// whole group, so brew's helper processes (git, curl, download workers) die
+// with it rather than being orphaned. cmd.Run still reaps the child.
+func runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.WaitDelay = waitDelay
+
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return "", &Error{Message: fmt.Sprintf("Command 'brew %s' timed out", strings.Join(args, " "))}
+		display := exe
+		if len(args) > 0 {
+			display += " " + strings.Join(args, " ")
 		}
-		if _, ok := err.(*exec.ExitError); ok {
+		// Classify the context outcome first: the process was killed by our
+		// own Cancel func, so the raw error would otherwise read
+		// "signal: killed".
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+			return "", &Error{
+				Message: fmt.Sprintf("Command '%s' timed out", display),
+				Err:     context.DeadlineExceeded,
+			}
+		}
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+			return "", &Error{
+				Message: fmt.Sprintf("Command '%s' was canceled", display),
+				Err:     context.Canceled,
+			}
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			if isUntrustedTapMessage(stderr.String()) {
 				return "", &UntrustedTapError{Message: fmt.Sprintf("Brew command failed: %s", stderr.String())}
 			}
-			return "", &Error{Message: fmt.Sprintf("Brew command failed: %s", stderr.String())}
+			return "", &Error{Message: fmt.Sprintf("Brew command failed: %s", stderr.String()), Err: err}
 		}
-		if execErr, ok := err.(*exec.Error); ok && execErr.Err == exec.ErrNotFound {
+		// exec.ErrNotFound covers a bare name missing from $PATH;
+		// fs.ErrNotExist covers an explicit path that does not exist.
+		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
 			return "", &NotFoundError{Message: "Homebrew not found. Please install Homebrew first."}
 		}
-		return "", &Error{Message: err.Error()}
+		return "", &Error{Message: err.Error(), Err: err}
 	}
 
 	return stdout.String(), nil
