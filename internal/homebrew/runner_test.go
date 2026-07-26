@@ -212,18 +212,21 @@ exit 1`)
 // TestRunBrewCommandAtDeadlineAndCancelMessagesDiffer proves the two context
 // outcomes are distinguishable by message, not only by unwrapped cause.
 func TestRunBrewCommandAtDeadlineAndCancelMessagesDiffer(t *testing.T) {
-	deadlineScript := fakeBrew(t, `sleep 30`)
+	// Both runs use the same script path so the executable name embedded in
+	// each error is identical: any difference in the messages then comes from
+	// the classification itself, not from differing temporary paths.
+	script := fakeBrew(t, `sleep 30`)
+
 	deadlineCtx, deadlineCancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer deadlineCancel()
-	deadlineErr := awaitErr(t, runInBackground(deadlineCtx, deadlineScript, "update"))
+	deadlineErr := awaitErr(t, runInBackground(deadlineCtx, script, "update"))
 	if deadlineErr == nil {
 		t.Fatal("deadline run = nil error, want failure")
 	}
 
-	cancelScript := fakeBrew(t, `sleep 30`)
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	done := runInBackground(cancelCtx, cancelScript, "update")
+	done := runInBackground(cancelCtx, script, "update")
 	time.Sleep(100 * time.Millisecond)
 	cancel()
 
