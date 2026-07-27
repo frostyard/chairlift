@@ -135,6 +135,29 @@ the group only to flip an unrelated field, and why `Load()` falling back to
 `defaultConfig()` when no file is found or the file is unreadable/invalid
 preserves that same per-group default — it is never "all features enabled."
 
+**Structured load-error vocabulary (`internal/config/loaderror.go`).** A
+stable `ErrorKind` enumerates why loading/validating a config file could
+fail: `KindRead` ("read") for a filesystem/read failure (e.g. permission
+denied opening the file — distinct from "file does not exist", which
+`Load()` treats as absent-and-fall-back, not an error); `KindParseType`
+("parse/type") for a YAML syntax error or a value that decodes to the wrong
+Go type; and `KindSchema` ("schema") for a validator-detected shape failure
+found only after the document parsed successfully — e.g. an unknown key or a
+value of the right YAML kind but the wrong shape — which may legitimately
+carry a nil `Err` since shape inspection alone can detect the problem with
+no underlying cause to wrap. `LoadError.Error()` renders `Path`, the exact
+`Kind` string, `Detail`, and the cause (in that order, each only when
+non-empty/non-nil), so the three `Kind` literals above always appear
+verbatim in the message. `LoadError.Unwrap()` returns `Err` unchanged
+(nil when there is none), which is what lets `errors.Is`/`errors.As` see
+through a `*LoadError` to a wrapped sentinel or recover the original value
+from a `fmt.Errorf("%w", ...)` wrapper. As of this writing nothing
+constructs a `LoadError` yet — `Load()` and `loadFromPath()` are unchanged
+and still fall back to `defaultConfig()` on any read or parse failure, so
+there is no strict parsing and no fail-closed runtime behavior yet; this
+vocabulary exists so a later change can start returning `*LoadError` values
+without redefining what "read", "parse/type", and "schema" mean.
+
 ### Package manager wrapper pattern
 
 Each wrapper in `internal/` follows a consistent shape:
