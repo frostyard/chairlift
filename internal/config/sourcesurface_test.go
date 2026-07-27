@@ -40,6 +40,12 @@ import (
 //     directly. Every other new resolver helper this slice adds in a later
 //     chunk must be exercised only indirectly, through resolveEffective —
 //     it must not be added to this allowlist.
+//   - parseAndValidate is the single addition phase1c1's chunk c1 spec
+//     authorizes, spending that chunk's one frozen-allowlist entry per
+//     docs/agents/skills/frozen-allowlist-authorization-is-per-entry-not-per-chunk.md.
+//     No other new production helper c1 adds (validatorShapeError,
+//     validatorDecodeError, effectiveNodeLine) may be added here; they are
+//     exercised only indirectly, through parseAndValidate.
 var directCallAllowlist = map[string]bool{
 	"parseYAMLDocument": true,
 
@@ -62,6 +68,8 @@ var directCallAllowlist = map[string]bool{
 	"resolveEffective": true,
 
 	"effectiveKeyIdentity": true,
+
+	"parseAndValidate": true,
 }
 
 // packageGoFiles lists the *.go files directly in this package's directory

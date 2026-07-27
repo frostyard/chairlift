@@ -186,12 +186,14 @@ YAML document, with a fixed cardinality outcome per input shape:
   error and line in `Err`/`Detail`, just like a malformed first document
   would.
 
-As of this writing `parseYAMLDocument`, `validateSourceGraph`, and
-`resolveEffective` are not wired into `Load()` or `loadFromPath()` — both
-are unchanged and still fall back to `defaultConfig()` on any read or parse
-failure, so there is no strict parsing and no fail-closed runtime behavior
-yet, and `resolveEffective`'s output does not feed ChairLift's strict
-schema validation either. This is the first of several package-private
+As of this writing `parseYAMLDocument`, `validateSourceGraph`,
+`resolveEffective`, and `parseAndValidate` (the four-stage entry point tying
+them together, described below alongside the schema inventory) are not
+wired into `Load()` or `loadFromPath()` — both are unchanged and still fall
+back to `defaultConfig()` on any read or parse failure, so there is no
+strict parsing and no fail-closed runtime behavior yet, and neither
+`resolveEffective`'s nor `parseAndValidate`'s output feeds ChairLift's
+strict schema validation either. This is the first of several package-private
 capabilities (document parsing, reachable source-graph shape validation,
 merge-operand shape validation, duplicate-explicit-key detection, the
 memoized alias-hop bound and the memoized source-node path-visit bound
@@ -688,6 +690,63 @@ code path — neither `Load()`/`loadFromPath()` nor any runtime diagnostic —
 consumes this inventory yet, and this slice adds no strict parsing and no
 unknown-key rejection; `Load()` still falls back to `defaultConfig()` on any
 read or parse failure. The inventory exists for a later change to build on.
+
+**The four-stage validator entry point (`internal/config/validate.go`).**
+`parseAndValidate(path string, data []byte) (*rawConfig, *LoadError)` is the
+unexported entry point that ties together every validation capability
+described above into a single call: stage 1 is `parseYAMLDocument`
+(source.go); stage 2 is `resolveEffective` (effective.go), which itself runs
+`validateSourceGraph` (sourcegraph.go, including its `checkSourceGraphBounds`
+bounds pass, sourcebounds.go) before emitting an alias-free, merge-resolved
+effective document; stage 3 is this file's own document-level shape check;
+and stage 4 decodes an accepted mapping document into a `*rawConfig`. A
+stage 1 or stage 2 `*LoadError` is returned unchanged — `parseAndValidate`
+can never bypass parser, source-graph, or bounds validation by continuing
+past their errors.
+
+Once both prior stages succeed, stage 3 classifies the effective document by
+its top-level node shape into exactly one of these outcomes:
+
+- **Nil effective document** (the shared "empty or whitespace-only input"
+  result `parseYAMLDocument`/`resolveEffective` already return for that
+  case) — a non-nil, zero-valued `*rawConfig` (every page map nil/empty) and
+  no error. This is a usable no-op overlay, matching the "absent config"
+  semantics elsewhere in this package. Stage 4's `Decode` call never runs
+  for this outcome.
+- **Top-level null scalar** (YAML's `null`/`~`, or an absent value, which
+  yaml.v3 resolves to tag `!!null`) — treated identically to the nil-document
+  outcome above: a non-nil, zero-valued `*rawConfig`, no error, and no
+  `Decode` call.
+- **Top-level scalar that is not null, or a top-level sequence** — rejected
+  as `KindParseType` via the unexported `validatorShapeError`, which names
+  the actual shape found and a positive source line from the unexported
+  `effectiveNodeLine` (`n.Line`, clamped to `1` when yaml.v3 left it
+  non-positive, mirroring `effectiveOutputLimitError`'s own clamp). No
+  `Decode` call runs for this outcome either, since there is no mapping to
+  decode.
+- **Top-level mapping** — accepted structurally; stage 4 then calls the
+  effective document's `yaml.Node.Decode` into a `*rawConfig`. A `Decode`
+  failure here is classified `KindParseType` via the unexported
+  `validatorDecodeError`, with the yaml.v3 error's message in `Detail` and
+  the error itself preserved in `Err` — a defensive final step, since
+  `validateSourceGraph`/`resolveEffective` already prove the effective
+  document is well-formed by the time `Decode` runs, but any residual
+  decode failure is still classified rather than left unhandled.
+  Per-entry classification of page/group/action content within an accepted
+  mapping (unknown keys, wrong-shaped values, and so on) is out of
+  `parseAndValidate`'s scope as of this writing and starts at a later
+  chunk.
+
+Per the frozen `directCallAllowlist` in `sourcesurface_test.go`,
+`parseAndValidate` is the only addition this chunk's authorization spends;
+`validatorShapeError`, `validatorDecodeError`, and `effectiveNodeLine` are
+exercised only indirectly, through `parseAndValidate`, in `validate_test.go`.
+`parseAndValidate` itself is, like `parseYAMLDocument`, `validateSourceGraph`,
+and `resolveEffective` before it, still not wired into `Load()` or
+`loadFromPath()` — a `go/ast`-based test
+(`TestParseAndValidateStaysOutOfRuntimeLoad`) proves neither function's body
+references it, so this remains a standalone capability rather than a change
+in runtime behavior.
 
 ### Package manager wrapper pattern
 
