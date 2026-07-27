@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -372,12 +373,14 @@ func TestParseAndValidateQuotedMergeKeyIsSchemaError(t *testing.T) {
 // subtree must not produce a KindSchema "<<" error. resolveEffective's
 // merge-key handling consumes the bare merge key entirely before the
 // validator's per-entry walk ever sees it, so this document is simply
-// valid — the merge stays confined to system_page's own (unvalidated at
-// this chunk) group-level mapping, which the merge produces no unknown
-// top-level key from.
+// valid — the merge stays confined to system_page's own canonical group
+// map, which the merge produces no unknown key from. ("health_group" is
+// used, rather than an arbitrary name, because c3 now validates group
+// names too: an unrecognized group name would itself be a KindSchema
+// error, which is not what this test is proving.)
 func TestParseAndValidateBareMergeKeyNotSchemaError(t *testing.T) {
 	const path = "/etc/chairlift/config.yml"
-	const data = "system_page:\n  system_info_group: &g\n    enabled: true\n  other_group:\n    <<: *g\n"
+	const data = "system_page:\n  system_info_group: &g\n    enabled: true\n  health_group:\n    <<: *g\n"
 
 	_, err := parseAndValidate(path, []byte(data))
 	if err != nil {
@@ -430,4 +433,356 @@ func TestParseAndValidateEntryOrderConsequence(t *testing.T) {
 		_, err := parseAndValidate(path, []byte("system_page: 3\nnope: x\n"))
 		wantParseType(t, err, path)
 	})
+}
+
+// TestParseAndValidateUnknownGroupRejected confirms row 8: an unrecognized
+// group name is KindSchema, naming the offending name and its line.
+func TestParseAndValidateUnknownGroupRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  nope_group:\n    enabled: true\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantSchema(t, err, path)
+	if !strings.Contains(err.Detail, "nope_group") {
+		t.Fatalf("err.Detail = %q, want it to contain %q", err.Detail, "nope_group")
+	}
+	if !strings.Contains(err.Detail, "line 2") {
+		t.Fatalf("err.Detail = %q, want it to contain %q", err.Detail, "line 2")
+	}
+}
+
+// TestParseAndValidateKnownGroupNull confirms row 9: a known group with a
+// null value is a no-op, returning a nil error and a non-nil *rawConfig.
+func TestParseAndValidateKnownGroupNull(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if err != nil {
+		t.Fatalf("parseAndValidate(...) error = %v, want nil", err)
+	}
+	if raw == nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = nil, want non-nil")
+	}
+}
+
+// TestParseAndValidateKnownGroupWrongShape confirms row 10: a known group
+// with a scalar/sequence value is KindParseType with a positive line.
+func TestParseAndValidateKnownGroupWrongShape(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"scalar value", "system_page:\n  system_info_group: 3\n"},
+		{"sequence value", "system_page:\n  system_info_group:\n    - a\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantParseType(t, err, path)
+			if !strings.Contains(err.Detail, "line ") {
+				t.Fatalf("err.Detail = %q, want it to contain a positive line", err.Detail)
+			}
+		})
+	}
+}
+
+// TestParseAndValidateUnknownGroupFieldRejected confirms row 11: an
+// unrecognized field name is KindSchema, naming it and its line.
+func TestParseAndValidateUnknownGroupFieldRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n    nope_field: 1\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantSchema(t, err, path)
+	if !strings.Contains(err.Detail, "nope_field") {
+		t.Fatalf("err.Detail = %q, want it to contain %q", err.Detail, "nope_field")
+	}
+	if !strings.Contains(err.Detail, "line 3") {
+		t.Fatalf("err.Detail = %q, want it to contain %q", err.Detail, "line 3")
+	}
+}
+
+// TestParseAndValidateGroupFieldTypeMismatchRejected confirms row 15 for
+// non-"actions" fields: a value that cannot decode into the declared Go
+// type is KindParseType with a non-nil Err and a positive line (I4).
+func TestParseAndValidateGroupFieldTypeMismatchRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"bool field given a sequence", "system_page:\n  system_info_group:\n    enabled: [1, 2]\n"},
+		{"string field given a mapping", "system_page:\n  system_info_group:\n    app_id: {a: 1}\n"},
+		{"string slice field given a scalar", "system_page:\n  system_info_group:\n    bundles_paths: 5\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantParseType(t, err, path)
+			if err.Err == nil {
+				t.Fatalf("err.Err = nil, want yaml.v3's own type error")
+			}
+			if !strings.Contains(err.Detail, "line ") {
+				t.Fatalf("err.Detail = %q, want it to contain a positive line", err.Detail)
+			}
+		})
+	}
+}
+
+// TestParseAndValidateUnknownGroupPrecedesValueInspection confirms name
+// classification precedes value inspection at group level: all four value
+// shapes for an unrecognized group name return KindSchema.
+func TestParseAndValidateUnknownGroupPrecedesValueInspection(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"null value", "system_page:\n  nope_group:\n"},
+		{"scalar value", "system_page:\n  nope_group: 3\n"},
+		{"sequence value", "system_page:\n  nope_group: [a]\n"},
+		{"mapping value", "system_page:\n  nope_group: {k: 1}\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantSchema(t, err, path)
+		})
+	}
+}
+
+// TestParseAndValidateUnknownGroupFieldPrecedesValueInspection confirms the
+// same precedence rule one level down, for an unrecognized field name.
+func TestParseAndValidateUnknownGroupFieldPrecedesValueInspection(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"null value", "system_page:\n  system_info_group:\n    nope_field:\n"},
+		{"scalar value", "system_page:\n  system_info_group:\n    nope_field: 3\n"},
+		{"sequence value", "system_page:\n  system_info_group:\n    nope_field: [a]\n"},
+		{"mapping value", "system_page:\n  system_info_group:\n    nope_field: {k: 1}\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantSchema(t, err, path)
+		})
+	}
+}
+
+// TestParseAndValidateNonStringGroupKeyRejected confirms every non-!!str
+// key shape at group level is KindParseType, one level down from the page
+// case.
+func TestParseAndValidateNonStringGroupKeyRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"integer key", "system_page:\n  1: x\n"},
+		{"boolean key", "system_page:\n  true: x\n"},
+		{"null key", "system_page:\n  ~: x\n"},
+		{"custom-tagged scalar key", "system_page:\n  !custom foo: x\n"},
+		{"sequence key", "system_page:\n  ? [a]\n  : x\n"},
+		{"mapping key", "system_page:\n  ? {a: 1}\n  : x\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantParseType(t, err, path)
+		})
+	}
+}
+
+// TestParseAndValidateNonStringGroupFieldKeyRejected confirms every
+// non-!!str key shape at group-field level is KindParseType.
+func TestParseAndValidateNonStringGroupFieldKeyRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"integer key", "system_page:\n  system_info_group:\n    1: x\n"},
+		{"boolean key", "system_page:\n  system_info_group:\n    true: x\n"},
+		{"null key", "system_page:\n  system_info_group:\n    ~: x\n"},
+		{"custom-tagged scalar key", "system_page:\n  system_info_group:\n    !custom foo: x\n"},
+		{"sequence key", "system_page:\n  system_info_group:\n    ? [a]\n    : x\n"},
+		{"mapping key", "system_page:\n  system_info_group:\n    ? {a: 1}\n    : x\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantParseType(t, err, path)
+		})
+	}
+}
+
+// TestParseAndValidateAliasToNonStringGroupKeyRejected confirms an
+// alias-to-non-string group key is KindParseType, one level down from the
+// page case (O2), reporting the anchor's line (3), not the alias's (I6).
+func TestParseAndValidateAliasToNonStringGroupKeyRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n    enabled: &n true\n  *n: x\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantParseType(t, err, path)
+	if !strings.Contains(err.Detail, "line 3") {
+		t.Fatalf("err.Detail = %q, want it to contain %q (the anchor's line)", err.Detail, "line 3")
+	}
+}
+
+// TestParseAndValidateAliasToNonStringGroupFieldKeyRejected is the
+// group-field-level counterpart, with the alias key a sibling field name
+// within system_info_group's own mapping; the reported line is again 3.
+func TestParseAndValidateAliasToNonStringGroupFieldKeyRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n    enabled: &n true\n    *n: x\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantParseType(t, err, path)
+	if !strings.Contains(err.Detail, "line 3") {
+		t.Fatalf("err.Detail = %q, want it to contain %q (the anchor's line)", err.Detail, "line 3")
+	}
+}
+
+// TestParseAndValidateEveryCanonicalGroupAccepted iterates every group
+// SchemaGroups(page) returns, for every SchemaPages() page, and confirms
+// each is accepted with a null value (no canonical group is accidentally
+// rejected as unknown).
+func TestParseAndValidateEveryCanonicalGroupAccepted(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	pages, err := SchemaPages()
+	if err != nil {
+		t.Fatalf("SchemaPages() error = %v, want nil", err)
+	}
+
+	for _, page := range pages {
+		groups, err := SchemaGroups(page)
+		if err != nil {
+			t.Fatalf("SchemaGroups(%q) error = %v, want nil", page, err)
+		}
+		for _, group := range groups {
+			t.Run(page+"/"+group, func(t *testing.T) {
+				data := page + ":\n  " + group + ":\n"
+				raw, loadErr := parseAndValidate(path, []byte(data))
+				if loadErr != nil {
+					t.Fatalf("parseAndValidate(%q) error = %v, want nil", data, loadErr)
+				}
+				if raw == nil {
+					t.Fatalf("parseAndValidate(%q) rawConfig = nil, want non-nil", data)
+				}
+			})
+		}
+	}
+}
+
+// sampleYAMLValueForType returns a flow-style YAML literal decoding cleanly
+// into t (a rawGroupConfig field's declared, always-pointer Go type),
+// derived purely from t's reflect.Kind, never a field name.
+func sampleYAMLValueForType(t reflect.Type) string {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() {
+	case reflect.Bool:
+		return "true"
+	case reflect.String:
+		return `"x"`
+	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Struct {
+			// e.g. []ActionConfig: an empty sequence decodes cleanly and
+			// this chunk does not yet inspect actions' value (I5) anyway.
+			return "[]"
+		}
+		return `["x"]`
+	default:
+		return "null"
+	}
+}
+
+// TestParseAndValidateEveryGroupFieldAccepted iterates every name
+// SchemaGroupFields() returns and confirms each is accepted with a
+// type-correct value (no canonical field is accidentally unknown).
+func TestParseAndValidateEveryGroupFieldAccepted(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	fields, err := SchemaGroupFields()
+	if err != nil {
+		t.Fatalf("SchemaGroupFields() error = %v, want nil", err)
+	}
+	if len(fields) == 0 {
+		t.Fatalf("SchemaGroupFields() = %v, want at least one field", fields)
+	}
+
+	rt := reflect.TypeOf(rawGroupConfig{})
+	fieldTypes := make(map[string]reflect.Type, rt.NumField())
+	for i := 0; i < rt.NumField(); i++ {
+		f := rt.Field(i)
+		tag, ok := f.Tag.Lookup("yaml")
+		if !ok {
+			continue
+		}
+		if idx := strings.Index(tag, ","); idx >= 0 {
+			tag = tag[:idx]
+		}
+		fieldTypes[tag] = f.Type
+	}
+
+	for _, field := range fields {
+		fieldType, ok := fieldTypes[field]
+		if !ok {
+			t.Fatalf("no reflect.Type found for group field %q", field)
+		}
+		t.Run(field, func(t *testing.T) {
+			data := "system_page:\n  system_info_group:\n    " + field + ": " + sampleYAMLValueForType(fieldType) + "\n"
+			raw, loadErr := parseAndValidate(path, []byte(data))
+			if loadErr != nil {
+				t.Fatalf("parseAndValidate(%q) error = %v, want nil", data, loadErr)
+			}
+			if raw == nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = nil, want non-nil", data)
+			}
+		})
+	}
 }

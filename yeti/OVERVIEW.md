@@ -757,8 +757,53 @@ its top-level node shape into exactly one of these outcomes:
   - A known page's **non-null scalar or sequence** value is rejected as
     `KindParseType` via the unexported `validatorPageValueShapeError`,
     naming the page, the actual shape found, and a positive line.
-  - A known page's **mapping** value is accepted structurally; its own
-    entries (groups and fields) are classified starting at a later chunk.
+  - A known page's **mapping** value has its own entries — groups — classified
+    the same way, one schema level down, by `validateGroupEntries`:
+    - A non-`!!str` mapping key is rejected as `KindParseType` via
+      `validatorKeyShapeError`, exactly as at page level.
+    - A well-formed string key that is not one of `SchemaGroups(page)`'s
+      canonical group names for that page (schema.go, reflected off
+      `defaultConfig()` — never a literal list in validate.go) is rejected as
+      `KindSchema` via `validatorSchemaError`, naming the offending key and a
+      positive line, without descending into its value. (`SchemaGroups`
+      erroring — only possible for a page unknown to it, which cannot happen
+      once `page` has passed `SchemaPages()` — is still surfaced defensively
+      as `KindSchema` via the unexported `validatorSchemaGroupsError`.)
+    - A known group's **null** value is a no-op for that group; its
+      **non-null scalar or sequence** value is `KindParseType` via the
+      unexported `validatorGroupValueShapeError`, naming the group, shape,
+      and line.
+    - A known group's **mapping** value has its own entries — group fields —
+      classified by `validateGroupFieldEntries`, sourced from the unexported
+      `groupFieldTypes()` (reflection over `rawGroupConfig`'s yaml tags and
+      declared Go field types — never a literal list in validate.go, aside
+      from the literal name `"actions"` itself, needed for the special case
+      below):
+      - A non-`!!str` mapping key is rejected as `KindParseType`, exactly as
+        at page and group level; an unrecognized field name is rejected as
+        `KindSchema`, exactly as an unrecognized group name is.
+      - The special-cased `actions` field is recognized as a known name, but
+        **as of this commit its value is left uninspected by stage 3** — no
+        shape or type check runs on it here at all (interpretation I5: a
+        later slice adds `actions`'s own structural walk, because a generic
+        decode into `*[]ActionConfig` cannot produce the right errors —
+        yaml.v3 silently ignores an unknown struct field on decode and
+        silently decodes a null sequence entry into a zero `ActionConfig`).
+        Stage 4's whole-document decode (below) still incidentally rejects a
+        non-decodable `actions` value (e.g. a scalar or mapping) as
+        `KindParseType`, but it silently accepts a null action entry as a
+        zero `ActionConfig` and silently ignores an unknown action field —
+        those two gaps are exactly what the later slice's dedicated
+        `actions` walk closes.
+      - Every other known field's effective value node is decoded into a
+        fresh value of that field's declared Go type,
+        `reflect.New(fieldType).Interface()` (interpretation I4) — e.g.
+        `enabled`'s `*bool`, `bundles_paths`'s `*[]string`. A decode failure
+        (yaml.v3's own `*yaml.TypeError`, e.g. `enabled: [1, 2]` into
+        `*bool`) is classified `KindParseType` via the unexported
+        `validatorDecodeError`, with the yaml.v3 error's message in `Detail`
+        and the error itself preserved in `Err` — the same builder stage 4's
+        final `Decode` call uses.
 
   Once every entry passes, stage 4 calls the effective document's
   `yaml.Node.Decode` into a `*rawConfig`. A `Decode` failure here is
@@ -775,7 +820,10 @@ Per the frozen `directCallAllowlist` in `sourcesurface_test.go`,
 `validatorShapeError`, `validatorDecodeError`, `effectiveNodeLine`,
 `validatePageEntries`, `schemaKeyName`, `validatorSchemaError`,
 `validatorSchemaPagesError`, `validatorKeyShapeError`,
-`validatorPageValueShapeError`, and `describeNodeShape` are all exercised
+`validatorPageValueShapeError`, `describeNodeShape`,
+`validateGroupEntries`, `validatorSchemaGroupsError`,
+`validatorGroupValueShapeError`, `validateGroupFieldEntries`,
+`groupFieldTypes`, and `validatorGroupFieldTypesError` are all exercised
 only indirectly, through `parseAndValidate`, in `validate_test.go`.
 `parseAndValidate` itself is, like `parseYAMLDocument`, `validateSourceGraph`,
 and `resolveEffective` before it, still not wired into `Load()` or

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"reflect"
 
 	"gopkg.in/yaml.v3"
 )
@@ -46,10 +47,19 @@ import (
 //     page names is KindSchema (validatorSchemaError) without descending
 //     into its value; a known page's null value is a no-op for that page; a
 //     known page's non-null scalar or sequence value is KindParseType
-//     (validatorPageValueShapeError); and a known page's mapping value is
-//     accepted structurally (its own entries — groups and fields — are
-//     classified starting at a later chunk). Once every entry passes, stage
-//     4 decodes the effective document into a *rawConfig via
+//     (validatorPageValueShapeError); and a known page's mapping value has
+//     its own entries (groups) classified the same way, one level down, by
+//     validateGroupEntries, whose own known groups' mapping values have
+//     their entries (group fields) classified by validateGroupFieldEntries.
+//     A group or field name unknown to SchemaGroups/groupFieldTypes is
+//     KindSchema; a group's non-null scalar/sequence value is KindParseType
+//     (validatorGroupValueShapeError); a known non-"actions" field is
+//     decoded into a fresh value of its declared Go type
+//     (groupFieldTypes), a decode failure being KindParseType with the
+//     yaml.v3 error preserved in Err. "actions" is recognized as known but
+//     its value is left uninspected by this chunk (I5; a later chunk adds
+//     its own structural walk). Once every entry at every level passes,
+//     stage 4 decodes the effective document into a *rawConfig via
 //     yaml.Node.Decode.
 //
 // Stage 4 is a defensive final step (interpretation I4): validateSourceGraph
@@ -143,13 +153,146 @@ func validatePageEntries(path string, top *yaml.Node) *LoadError {
 		case yaml.SequenceNode:
 			return validatorPageValueShapeError(path, name, value)
 		case yaml.MappingNode:
-			continue // accepted structurally; entries classified from c3 on
+			if err := validateGroupEntries(path, name, value); err != nil {
+				return err
+			}
 		default:
 			return validatorPageValueShapeError(path, name, value)
 		}
 	}
 
 	return nil
+}
+
+// validateGroupEntries walks groupsNode's entries (groupsNode is a known
+// page's mapping value, so each entry is a group) exactly like
+// validatePageEntries does for pages, one schema level down: key shape via
+// schemaKeyName, then name membership against SchemaGroups(page)'s
+// canonical group names for this page (never a literal list here), then
+// value shape (null is a no-op; scalar/sequence is KindParseType; a mapping
+// descends into validateGroupFieldEntries). The first failing entry's error
+// is returned; nil means every entry passed. SchemaGroups can only fail for
+// a page name unknown to it, which cannot happen here since page was
+// already validated against SchemaPages(); that branch is still surfaced
+// defensively as KindSchema (validatorSchemaGroupsError).
+func validateGroupEntries(path, page string, groupsNode *yaml.Node) *LoadError {
+	groups, err := SchemaGroups(page)
+	if err != nil {
+		return validatorSchemaGroupsError(path, err)
+	}
+	known := make(map[string]bool, len(groups))
+	for _, group := range groups {
+		known[group] = true
+	}
+
+	for i := 0; i+1 < len(groupsNode.Content); i += 2 {
+		key := groupsNode.Content[i]
+		value := groupsNode.Content[i+1]
+
+		name, ok := schemaKeyName(key)
+		if !ok {
+			return validatorKeyShapeError(path, key)
+		}
+		if !known[name] {
+			return validatorSchemaError(path, key, name)
+		}
+
+		switch value.Kind {
+		case yaml.ScalarNode:
+			if value.Tag == "!!null" {
+				continue // known group with a null value: a no-op for that group
+			}
+			return validatorGroupValueShapeError(path, name, value)
+		case yaml.SequenceNode:
+			return validatorGroupValueShapeError(path, name, value)
+		case yaml.MappingNode:
+			if err := validateGroupFieldEntries(path, name, value); err != nil {
+				return err
+			}
+		default:
+			return validatorGroupValueShapeError(path, name, value)
+		}
+	}
+
+	return nil
+}
+
+// validateGroupFieldEntries walks fieldsNode's entries (fieldsNode is a
+// known group's mapping value, so each entry is a group field): key shape
+// via schemaKeyName, then name membership against groupFieldTypes()'s
+// canonical field names (never a literal list here, aside from the literal
+// "actions" itself). The special-cased "actions" name is recognized as
+// known but its value is deliberately left uninspected by this chunk (I5 —
+// a later chunk adds its own structural walk). Every other known field's
+// effective value node is decoded into a fresh value of its declared Go
+// type (reflect.New(fieldType).Interface(), I4); a decode failure is
+// KindParseType with the real yaml.v3 error preserved in Err
+// (validatorDecodeError, matching stage 4's own decode-failure handling).
+// The first failing entry's error is returned; nil means every entry
+// passed.
+func validateGroupFieldEntries(path, group string, fieldsNode *yaml.Node) *LoadError {
+	fieldTypes, err := groupFieldTypes()
+	if err != nil {
+		return validatorGroupFieldTypesError(path, err)
+	}
+
+	for i := 0; i+1 < len(fieldsNode.Content); i += 2 {
+		key := fieldsNode.Content[i]
+		value := fieldsNode.Content[i+1]
+
+		name, ok := schemaKeyName(key)
+		if !ok {
+			return validatorKeyShapeError(path, key)
+		}
+		fieldType, known := fieldTypes[name]
+		if !known {
+			return validatorSchemaError(path, key, name)
+		}
+		if name == "actions" {
+			continue // I5: actions' value is validated by a later chunk
+		}
+
+		target := reflect.New(fieldType)
+		if err := value.Decode(target.Interface()); err != nil {
+			return validatorDecodeError(path, err)
+		}
+	}
+
+	return nil
+}
+
+// groupFieldTypes reflects over rawGroupConfig's exported fields, returning
+// a freshly allocated map from each field's yaml tag name to its declared
+// Go type. It is the type-carrying counterpart to SchemaGroupFields
+// (schema.go), built by walking the same struct's fields so the two cannot
+// silently drift apart. It errors under the same conditions yamlFieldNames
+// does, which cannot happen for rawGroupConfig's canonical field list.
+func groupFieldTypes() (map[string]reflect.Type, error) {
+	t := reflect.TypeOf(rawGroupConfig{})
+	result := make(map[string]reflect.Type, t.NumField())
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.PkgPath != "" {
+			continue // unexported
+		}
+
+		tag, ok := field.Tag.Lookup("yaml")
+		if !ok || tag == "" || tag == "-" {
+			continue
+		}
+
+		name := yamlTagName(tag)
+		if name == "" {
+			return nil, fmt.Errorf("groupFieldTypes: field %s has a yaml tag with an empty name (%q)", field.Name, tag)
+		}
+		if _, dup := result[name]; dup {
+			return nil, fmt.Errorf("groupFieldTypes: duplicate yaml name %q (field %s)", name, field.Name)
+		}
+		result[name] = field.Type
+	}
+
+	return result, nil
 }
 
 // schemaKeyName implements the spec's name rule for a mapping key: key is a
@@ -199,6 +342,31 @@ func validatorSchemaPagesError(path string, err error) *LoadError {
 	}
 }
 
+// validatorSchemaGroupsError builds a KindSchema *LoadError wrapping a
+// SchemaGroups(page) error, matching validatorSchemaPagesError one level
+// down; SchemaGroups can only fail for a page unknown to it, which cannot
+// happen once page has passed SchemaPages() validation.
+func validatorSchemaGroupsError(path string, err error) *LoadError {
+	return &LoadError{
+		Path:   path,
+		Kind:   KindSchema,
+		Detail: fmt.Sprintf("could not determine canonical group names: %v", err),
+		Err:    err,
+	}
+}
+
+// validatorGroupFieldTypesError builds a KindSchema *LoadError wrapping a
+// groupFieldTypes error, matching validatorSchemaPagesError; it cannot
+// happen for rawGroupConfig's canonical, hand-maintained field list.
+func validatorGroupFieldTypesError(path string, err error) *LoadError {
+	return &LoadError{
+		Path:   path,
+		Kind:   KindSchema,
+		Detail: fmt.Sprintf("could not determine canonical group field types: %v", err),
+		Err:    err,
+	}
+}
+
 // validatorKeyShapeError builds a KindParseType *LoadError reporting that
 // key is not a YAML string (schemaKeyName's ("", false) result). Detail
 // names the actual node shape found and a positive source line
@@ -221,6 +389,18 @@ func validatorPageValueShapeError(path, page string, value *yaml.Node) *LoadErro
 	return sourceGraphError(path, fmt.Sprintf(
 		"page %q must be null or a YAML mapping, found %s (line %d)",
 		page, describeNodeShape(value), effectiveNodeLine(value),
+	))
+}
+
+// validatorGroupValueShapeError builds a KindParseType *LoadError reporting
+// that the known group named group has a value that is neither null nor a
+// mapping. Detail names the group, the actual node shape found, and a
+// positive source line, matching validatorPageValueShapeError one level
+// down.
+func validatorGroupValueShapeError(path, group string, value *yaml.Node) *LoadError {
+	return sourceGraphError(path, fmt.Sprintf(
+		"group %q must be null or a YAML mapping, found %s (line %d)",
+		group, describeNodeShape(value), effectiveNodeLine(value),
 	))
 }
 
