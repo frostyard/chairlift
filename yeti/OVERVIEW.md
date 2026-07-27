@@ -151,12 +151,46 @@ non-empty/non-nil), so the three `Kind` literals above always appear
 verbatim in the message. `LoadError.Unwrap()` returns `Err` unchanged
 (nil when there is none), which is what lets `errors.Is`/`errors.As` see
 through a `*LoadError` to a wrapped sentinel or recover the original value
-from a `fmt.Errorf("%w", ...)` wrapper. As of this writing nothing
-constructs a `LoadError` yet — `Load()` and `loadFromPath()` are unchanged
-and still fall back to `defaultConfig()` on any read or parse failure, so
-there is no strict parsing and no fail-closed runtime behavior yet; this
-vocabulary exists so a later change can start returning `*LoadError` values
-without redefining what "read", "parse/type", and "schema" mean.
+from a `fmt.Errorf("%w", ...)` wrapper.
+
+**Single-document YAML parsing (`internal/config/source.go`).** The
+unexported `parseYAMLDocument(path string, data []byte) (*yaml.Node,
+*LoadError)` is the first thing in this package that actually constructs a
+`LoadError`. It decodes `data` with `yaml.NewDecoder` and accepts exactly one
+YAML document, with a fixed cardinality outcome per input shape:
+
+- Empty input, and whitespace-only input, are both the valid empty result:
+  `(nil, nil)` — no document, no error. This matches `Load()`'s existing
+  "absent config" fallback semantics elsewhere in the package.
+- A single well-formed document returns its `*yaml.Node` (`Kind ==
+  yaml.DocumentNode`, one child under `Content`) and a nil `*LoadError`.
+- A malformed first document returns `(nil, err)` with `err.Kind ==
+  KindParseType`, `err.Path` copied verbatim, `err.Err` set to yaml.v3's own
+  parser error, and `err.Detail` set to that same error's message — which
+  yaml.v3 always renders as `"yaml: line N: ..."`, so the reported line is
+  visible in `Detail` without a second look at `Err`.
+- A trailing bare `---` is a second document, not a harmless end-of-stream
+  marker: yaml.v3 decodes it as a second, null document, and
+  `parseYAMLDocument` rejects it exactly like any other second document
+  (`KindParseType`, `Detail` naming its line) rather than accepting the
+  input as a single document.
+- Any other second document — well-formed or malformed — is rejected the
+  same way: a well-formed second document has no parser error to wrap, so
+  `Err` is left nil and `Detail` names that document's own starting line
+  instead; a malformed second document preserves *that* document's parser
+  error and line in `Err`/`Detail`, just like a malformed first document
+  would.
+
+As of this writing `parseYAMLDocument` is not wired into `Load()` or
+`loadFromPath()` — both are unchanged and still fall back to
+`defaultConfig()` on any read or parse failure, so there is no strict
+parsing and no fail-closed runtime behavior yet. This is the first of
+several package-private capabilities (document parsing now; source-graph
+validation in later changes) meant to eventually replace `loadFromPath()`'s
+current `yaml.Unmarshal` call with fail-closed, single-document, structurally
+validated loading — but none of that wiring exists yet, so `KindRead` and
+`KindSchema` still describe capabilities the package's vocabulary
+anticipates rather than ones any code path currently exercises.
 
 **Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
 and `SchemaGroups(page)` derive the authoritative list of page names and,
