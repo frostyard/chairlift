@@ -140,8 +140,13 @@ stable `ErrorKind` enumerates why loading/validating a config file could
 fail: `KindRead` ("read") for a filesystem/read failure (e.g. permission
 denied opening the file — distinct from "file does not exist", which
 `Load()` treats as absent-and-fall-back, not an error); `KindParseType`
-("parse/type") for a YAML syntax error or a value that decodes to the wrong
-Go type; and `KindSchema` ("schema") for a validator-detected shape failure
+("parse/type") for a YAML syntax error, a value that decodes to the wrong
+Go type, or a malformed source graph detected by pure shape/graph
+inspection after the YAML parsed successfully (an unsupported node shape,
+an alias with no target, an alias cycle, etc.) — like `KindSchema` below,
+that shape-inspection case may legitimately carry a nil `Err`, since there
+is no underlying parser error to wrap; and `KindSchema` ("schema") for a
+validator-detected shape failure
 found only after the document parsed successfully — e.g. an unknown key or a
 value of the right YAML kind but the wrong shape — which may legitimately
 carry a nil `Err` since shape inspection alone can detect the problem with
@@ -181,12 +186,14 @@ YAML document, with a fixed cardinality outcome per input shape:
   error and line in `Err`/`Detail`, just like a malformed first document
   would.
 
-As of this writing `parseYAMLDocument` is not wired into `Load()` or
-`loadFromPath()` — both are unchanged and still fall back to
-`defaultConfig()` on any read or parse failure, so there is no strict
-parsing and no fail-closed runtime behavior yet. This is the first of
-several package-private capabilities (document parsing now; source-graph
-validation in later changes) meant to eventually replace `loadFromPath()`'s
+As of this writing `parseYAMLDocument` and `validateSourceGraph` are not
+wired into `Load()` or `loadFromPath()` — both are unchanged and still fall
+back to `defaultConfig()` on any read or parse failure, so there is no
+strict parsing and no fail-closed runtime behavior yet. This is the first
+of several package-private capabilities (document parsing and reachable
+source-graph shape validation now; effective-merge construction,
+duplicate-key detection, and the alias-hop/path-visit bounds in later
+changes) meant to eventually replace `loadFromPath()`'s
 current `yaml.Unmarshal` call with fail-closed, single-document, structurally
 validated loading — but none of that wiring exists yet, so `KindRead` and
 `KindSchema` still describe capabilities the package's vocabulary
@@ -219,6 +226,45 @@ unit test (`TestMergeKeyRecognition`, `TestShortYAMLTagNormalization` in
 entry point, per
 `docs/agents/skills/helper-functions-need-direct-test-calls.md`; neither
 helper is wired into any call path yet — that wiring is later work.
+
+**Reachable source-graph shape validation
+(`internal/config/sourcegraph.go`).** `validateSourceGraph(path string, doc
+*yaml.Node) *LoadError` walks every node and content edge reachable from
+`doc` — through document content, mapping keys, mapping values, sequence
+entries, and alias targets, in each node's `Content` slice order — and
+rejects a malformed source graph as `KindParseType` rather than panicking,
+even against a synthetic `*yaml.Node` tree unreachable from real YAML text.
+`doc == nil` succeeds unconditionally: it is `parseYAMLDocument`'s valid
+empty-input result. Otherwise the checks are, in order:
+
+- the root must be a `yaml.DocumentNode` with exactly one non-nil child;
+- every reachable mapping must have an even number of content entries, and
+  neither a key nor a value in any key/value pair may be nil;
+- every reachable sequence must have no nil entries;
+- every reachable scalar must have no content children;
+- every reachable alias must have no content children and a non-nil
+  `Alias` target; and
+- every reachable node's `Kind` must be one of yaml.v3's five supported
+  kinds (an all-zero `Kind` or any other unsupported value is rejected).
+
+Node identity — the `*yaml.Node` pointer itself, not any decoded value —
+drives an unseen/visiting/done state map keyed on that pointer, so a node
+reached through several parents (a shared anchor aliased more than once, a
+scalar reused as several mapping values) is validated exactly once, and
+re-encountering a node still in the `visiting` state on the active
+depth-first path is rejected as an alias cycle (covering both a self cycle,
+where an anchored mapping's own value aliases back to itself, and a mutual
+cycle between two anchored mappings). Because pure shape/graph rejections
+have no underlying Go error to preserve, every `*LoadError` `validateSourceGraph`
+returns carries a nil `Err`; `LoadError.Error()` still renders the full
+`"config parse/type error: <path>: <detail>"` wording from `Path` and
+`Detail` alone. This slice covers structural well-formedness only:
+merge-operand shape (a merge value must be a mapping, an alias to a
+mapping, or a sequence of such), duplicate explicit keys inside a mapping,
+and the alias-hop/path-visit bounds are unimplemented as of this writing
+and are later work, so a self- or mutual-merge cycle and a malformed merge
+operand are not yet detected by this function. `validateSourceGraph` is not
+wired into any call path yet either.
 
 **Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
 and `SchemaGroups(page)` derive the authoritative list of page names and,

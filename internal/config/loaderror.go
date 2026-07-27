@@ -12,8 +12,13 @@ const (
 	// permissions error or an I/O failure other than "file does not
 	// exist").
 	KindRead ErrorKind = "read"
-	// KindParseType marks a failure to parse the file as YAML or to
-	// decode a value into its expected Go type.
+	// KindParseType marks a failure to parse the file as YAML, to decode
+	// a value into its expected Go type, or a malformed source graph
+	// (an unsupported node shape, an alias with no target, an alias
+	// cycle, etc.) found by pure shape inspection after the YAML parsed
+	// successfully. Like KindSchema, a KindParseType error detected
+	// purely by shape/graph inspection rather than surfaced from an
+	// underlying parser error may legitimately carry a nil Err.
 	KindParseType ErrorKind = "parse/type"
 	// KindSchema marks a failure detected by shape/semantic validation
 	// after the document parsed successfully — e.g. an unknown key or a

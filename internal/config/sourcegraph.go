@@ -46,3 +46,132 @@ func isMergeKey(n *yaml.Node) bool {
 	return n.Kind == yaml.ScalarNode && n.Value == "<<" &&
 		(n.Tag == "" || n.Tag == "!" || shortYAMLTag(n.Tag) == "!!merge")
 }
+
+// nodeState tracks a *yaml.Node's traversal progress by node identity (map
+// key is the pointer itself, not any decoded value) so that a node reached
+// through more than one parent is walked exactly once: unseen nodes are
+// absent from the map, visiting marks a node currently on the active
+// depth-first path (re-encountering one is an alias cycle), and done marks
+// a node that was already fully validated and whose result may be reused.
+type nodeState int
+
+const (
+	visiting nodeState = iota
+	done
+)
+
+// sourceGraphError builds a KindParseType *LoadError for a structural
+// defect found while validating a source graph. These are pure shape
+// rejections with no underlying Go error to preserve, so Err is left nil;
+// LoadError.Error() still renders the "config parse/type error: <path>:
+// <detail>" wording from Path and Detail alone.
+func sourceGraphError(path, detail string) *LoadError {
+	return &LoadError{Path: path, Kind: KindParseType, Detail: detail}
+}
+
+// validateSourceGraph walks every node and content edge reachable from doc
+// — through document content, mapping keys, mapping values, sequence
+// entries, and alias targets, in each node's Content slice order — and
+// rejects malformed source graphs as a KindParseType *LoadError without
+// panicking, even when doc is a synthetic *yaml.Node tree unreachable from
+// real YAML text.
+//
+// doc == nil succeeds: it is parseYAMLDocument's valid empty-input result.
+// Otherwise doc must be a yaml.DocumentNode with exactly one non-nil child;
+// every reachable mapping must have an even number of non-nil key/value
+// content entries; every reachable sequence must have only non-nil
+// entries; every reachable scalar must have no content children; every
+// reachable alias must have no content children and a non-nil Alias
+// target; and every reachable node's Kind must be one of the supported
+// yaml.v3 kinds. Node identity (not value equality) drives cycle
+// detection, so a node reachable through several parents is validated once
+// and re-encountering a node still on the active traversal path is
+// rejected as an alias cycle. This validation covers structural
+// well-formedness only: merge-operand shape, duplicate-key detection, and
+// the alias-hop/path-visit bounds are out of this function's scope.
+func validateSourceGraph(path string, doc *yaml.Node) *LoadError {
+	if doc == nil {
+		return nil
+	}
+	if doc.Kind != yaml.DocumentNode {
+		return sourceGraphError(path, "source document root is not a YAML document node")
+	}
+	if len(doc.Content) != 1 {
+		return sourceGraphError(path, "source document must contain exactly one top-level node")
+	}
+	if doc.Content[0] == nil {
+		return sourceGraphError(path, "source document top-level node is nil")
+	}
+
+	states := make(map[*yaml.Node]nodeState)
+	return walkSourceNode(path, doc.Content[0], states)
+}
+
+// walkSourceNode validates a single reachable node and, on success,
+// recurses into its content edges in Content slice order. states records
+// each node's traversal progress by pointer identity; a node absent from
+// states is unseen, one present with visiting is on the active
+// depth-first path (so re-encountering it is a cycle), and one present
+// with done was already fully validated.
+func walkSourceNode(path string, n *yaml.Node, states map[*yaml.Node]nodeState) *LoadError {
+	if n == nil {
+		return sourceGraphError(path, "source graph has a nil node")
+	}
+	if state, seen := states[n]; seen {
+		if state == visiting {
+			return sourceGraphError(path, "source graph contains an alias cycle")
+		}
+		return nil
+	}
+	states[n] = visiting
+
+	switch n.Kind {
+	case yaml.MappingNode:
+		if len(n.Content)%2 != 0 {
+			return sourceGraphError(path, "mapping node has an odd number of content entries")
+		}
+		for i := 0; i < len(n.Content); i += 2 {
+			key, value := n.Content[i], n.Content[i+1]
+			if key == nil {
+				return sourceGraphError(path, "mapping node has a nil key")
+			}
+			if value == nil {
+				return sourceGraphError(path, "mapping node has a nil value")
+			}
+			if err := walkSourceNode(path, key, states); err != nil {
+				return err
+			}
+			if err := walkSourceNode(path, value, states); err != nil {
+				return err
+			}
+		}
+	case yaml.SequenceNode:
+		for _, entry := range n.Content {
+			if entry == nil {
+				return sourceGraphError(path, "sequence node has a nil entry")
+			}
+			if err := walkSourceNode(path, entry, states); err != nil {
+				return err
+			}
+		}
+	case yaml.ScalarNode:
+		if len(n.Content) != 0 {
+			return sourceGraphError(path, "scalar node has unexpected content")
+		}
+	case yaml.AliasNode:
+		if len(n.Content) != 0 {
+			return sourceGraphError(path, "alias node has unexpected content")
+		}
+		if n.Alias == nil {
+			return sourceGraphError(path, "alias node has no target")
+		}
+		if err := walkSourceNode(path, n.Alias, states); err != nil {
+			return err
+		}
+	default:
+		return sourceGraphError(path, "source graph node has an unsupported kind")
+	}
+
+	states[n] = done
+	return nil
+}
