@@ -782,19 +782,37 @@ its top-level node shape into exactly one of these outcomes:
       - A non-`!!str` mapping key is rejected as `KindParseType`, exactly as
         at page and group level; an unrecognized field name is rejected as
         `KindSchema`, exactly as an unrecognized group name is.
-      - The special-cased `actions` field is recognized as a known name, but
-        **as of this commit its value is left uninspected by stage 3** — no
-        shape or type check runs on it here at all (interpretation I5: a
-        later slice adds `actions`'s own structural walk, because a generic
-        decode into `*[]ActionConfig` cannot produce the right errors —
-        yaml.v3 silently ignores an unknown struct field on decode and
-        silently decodes a null sequence entry into a zero `ActionConfig`).
-        Stage 4's whole-document decode (below) still incidentally rejects a
-        non-decodable `actions` value (e.g. a scalar or mapping) as
-        `KindParseType`, but it silently accepts a null action entry as a
-        zero `ActionConfig` and silently ignores an unknown action field —
-        those two gaps are exactly what the later slice's dedicated
-        `actions` walk closes.
+      - The special-cased `actions` field is recognized as a known name and
+        validated structurally by the unexported `validateActionsEntries`,
+        instead of by a generic decode into `*[]ActionConfig` (interpretation
+        I5, because yaml.v3 silently ignores an unknown struct field on
+        decode and silently decodes a null sequence entry into a zero
+        `ActionConfig`):
+        - Its value must be **null** (a no-op — no actions configured) or a
+          **sequence**; any other shape (a non-null scalar or a mapping) is
+          rejected as `KindParseType` via the unexported
+          `validatorActionsValueShapeError`, naming the actual shape found
+          and a positive line.
+        - Every sequence entry must be a YAML **mapping**; a **null** entry
+          is explicitly not accepted as a zero action, and a scalar or
+          sequence entry is likewise rejected — all as `KindParseType` via
+          the unexported `validatorActionEntryShapeError`.
+        - Each mapping entry's own fields are classified by the unexported
+          `validateActionFieldEntries`, one schema level down from a group's
+          fields and sourced from the unexported `actionFieldTypes()`
+          (reflection over `ActionConfig`'s yaml tags and declared Go field
+          types — never a literal list in validate.go): a non-`!!str`
+          mapping key is `KindParseType`, exactly as at page/group/group-field
+          level; an unrecognized action-field name (e.g. `SchemaActionFields()`
+          not listing it) is `KindSchema` via `validatorSchemaError`, naming
+          the offending key and a positive line, without descending into its
+          value; and a known field's effective value node is decoded into a
+          fresh value of its declared Go type
+          (`reflect.New(fieldType).Interface()`), a decode failure
+          (yaml.v3's own `*yaml.TypeError`, e.g. `sudo: {a: 1}` into `bool`)
+          classified `KindParseType` via `validatorDecodeError`, with the
+          yaml.v3 error's message in `Detail` and the error itself preserved
+          in `Err`.
       - Every other known field's effective value node is decoded into a
         fresh value of that field's declared Go type,
         `reflect.New(fieldType).Interface()` (interpretation I4) — e.g.
@@ -813,7 +831,13 @@ its top-level node shape into exactly one of these outcomes:
   `validateSourceGraph`/`resolveEffective` and the page-entry walk above
   already prove the effective document is well-formed by the time `Decode`
   runs, but any residual decode failure is still classified rather than
-  left unhandled.
+  left unhandled. Once every level's fields pass, an explicitly set zero
+  value survives the decode as set, not as omission: `enabled: false`,
+  `app_id: ""`, and `bundles_paths: []` all decode to non-nil pointers
+  (`*bool`, `*string`, `*[]string`) carrying `false`, `""`, and an empty
+  non-nil slice respectively — `rawGroupConfig`'s pointer fields exist
+  precisely so a merge onto `defaultConfig()` can tell "explicitly set to
+  the zero value" apart from "key absent."
 
 Per the frozen `directCallAllowlist` in `sourcesurface_test.go`,
 `parseAndValidate` is the only addition this slice's authorization spends;
@@ -823,7 +847,10 @@ Per the frozen `directCallAllowlist` in `sourcesurface_test.go`,
 `validatorPageValueShapeError`, `describeNodeShape`,
 `validateGroupEntries`, `validatorSchemaGroupsError`,
 `validatorGroupValueShapeError`, `validateGroupFieldEntries`,
-`groupFieldTypes`, and `validatorGroupFieldTypesError` are all exercised
+`groupFieldTypes`, `validatorGroupFieldTypesError`,
+`validateActionsEntries`, `validatorActionsValueShapeError`,
+`validatorActionEntryShapeError`, `validateActionFieldEntries`,
+`actionFieldTypes`, and `validatorActionFieldTypesError` are all exercised
 only indirectly, through `parseAndValidate`, in `validate_test.go`.
 `parseAndValidate` itself is, like `parseYAMLDocument`, `validateSourceGraph`,
 and `resolveEffective` before it, still not wired into `Load()` or

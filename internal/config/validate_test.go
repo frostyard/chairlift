@@ -1,12 +1,15 @@
 package config
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"reflect"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // wantSchema fails the test unless err is a non-nil *LoadError with
@@ -782,6 +785,412 @@ func TestParseAndValidateEveryGroupFieldAccepted(t *testing.T) {
 			}
 			if raw == nil {
 				t.Fatalf("parseAndValidate(%q) rawConfig = nil, want non-nil", data)
+			}
+		})
+	}
+}
+
+// TestParseAndValidateActionsValueWrongShape confirms row 12: a known
+// "actions" field's value that is neither null nor a sequence (a scalar or
+// a mapping) is KindParseType, with Path copied and a positive line named
+// in Detail. A null "actions" value is confirmed separately as a no-op.
+func TestParseAndValidateActionsValueWrongShape(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"scalar value", "system_page:\n  system_info_group:\n    actions: 5\n"},
+		{"mapping value", "system_page:\n  system_info_group:\n    actions:\n      k: 1\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantParseType(t, err, path)
+			if !strings.Contains(err.Detail, "line ") {
+				t.Fatalf("err.Detail = %q, want it to contain a positive line", err.Detail)
+			}
+		})
+	}
+
+	t.Run("null value", func(t *testing.T) {
+		const data = "system_page:\n  system_info_group:\n    actions:\n"
+		raw, err := parseAndValidate(path, []byte(data))
+		if err != nil {
+			t.Fatalf("parseAndValidate(...) error = %v, want nil", err)
+		}
+		if raw == nil {
+			t.Fatalf("parseAndValidate(...) rawConfig = nil, want non-nil")
+		}
+	})
+}
+
+// TestParseAndValidateActionEntryWrongShape confirms row 13: every
+// "actions" sequence entry must be a YAML mapping. A null entry is
+// explicitly not accepted as a zero action — a separate assertion confirms
+// the returned *rawConfig is nil for it, not merely that an error is
+// returned — and a scalar entry and a sequence entry are likewise rejected.
+// All three are KindParseType.
+func TestParseAndValidateActionEntryWrongShape(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	t.Run("null entry", func(t *testing.T) {
+		const data = "system_page:\n  system_info_group:\n    actions:\n      - ~\n"
+		raw, err := parseAndValidate(path, []byte(data))
+		if raw != nil {
+			t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil (a null action entry is not a zero action)", raw)
+		}
+		wantParseType(t, err, path)
+	})
+	t.Run("scalar entry", func(t *testing.T) {
+		const data = "system_page:\n  system_info_group:\n    actions:\n      - 5\n"
+		raw, err := parseAndValidate(path, []byte(data))
+		if raw != nil {
+			t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+		}
+		wantParseType(t, err, path)
+	})
+	t.Run("sequence entry", func(t *testing.T) {
+		const data = "system_page:\n  system_info_group:\n    actions:\n      - [a]\n"
+		raw, err := parseAndValidate(path, []byte(data))
+		if raw != nil {
+			t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+		}
+		wantParseType(t, err, path)
+	})
+}
+
+// TestParseAndValidateUnknownActionFieldRejected confirms row 14: an
+// unrecognized action field name is KindSchema with Detail containing the
+// offending name and a positive line — proving the structural actions walk
+// catches what yaml.v3's Node.Decode silently ignores (I5).
+func TestParseAndValidateUnknownActionFieldRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n    actions:\n      - bogus: 1\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantSchema(t, err, path)
+	if !strings.Contains(err.Detail, "bogus") {
+		t.Fatalf("err.Detail = %q, want it to contain %q", err.Detail, "bogus")
+	}
+	if !strings.Contains(err.Detail, "line ") {
+		t.Fatalf("err.Detail = %q, want it to contain a positive line", err.Detail)
+	}
+}
+
+// TestParseAndValidateUnknownActionFieldPrecedesValueInspection confirms
+// unknown-action-field classification precedes value inspection: all four
+// value shapes (null, scalar, sequence, mapping) under key "bogus" return
+// KindSchema, never KindParseType.
+func TestParseAndValidateUnknownActionFieldPrecedesValueInspection(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"null value", "system_page:\n  system_info_group:\n    actions:\n      - bogus:\n"},
+		{"scalar value", "system_page:\n  system_info_group:\n    actions:\n      - bogus: 3\n"},
+		{"sequence value", "system_page:\n  system_info_group:\n    actions:\n      - bogus: [a]\n"},
+		{"mapping value", "system_page:\n  system_info_group:\n    actions:\n      - bogus: {k: 1}\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantSchema(t, err, path)
+		})
+	}
+}
+
+// TestParseAndValidateActionFieldTypeMismatchRejected confirms row 15 for
+// action fields: a value that cannot decode into the declared Go type is
+// KindParseType with a non-nil Err.
+func TestParseAndValidateActionFieldTypeMismatchRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n    actions:\n      - sudo: {a: 1}\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantParseType(t, err, path)
+	if err.Err == nil {
+		t.Fatalf("err.Err = nil, want yaml.v3's own type error")
+	}
+}
+
+// TestParseAndValidateNonStringActionFieldKeyRejected confirms every
+// non-!!str key shape at action-field level is KindParseType, matching the
+// page/group/group-field cases one schema level down.
+func TestParseAndValidateNonStringActionFieldKeyRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"integer key", "system_page:\n  system_info_group:\n    actions:\n      - 1: x\n"},
+		{"boolean key", "system_page:\n  system_info_group:\n    actions:\n      - true: x\n"},
+		{"null key", "system_page:\n  system_info_group:\n    actions:\n      - ~: x\n"},
+		{"custom-tagged scalar key", "system_page:\n  system_info_group:\n    actions:\n      - !custom foo: x\n"},
+		{"sequence key", "system_page:\n  system_info_group:\n    actions:\n      - ? [a]\n        : x\n"},
+		{"mapping key", "system_page:\n  system_info_group:\n    actions:\n      - ? {a: 1}\n        : x\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantParseType(t, err, path)
+		})
+	}
+}
+
+// TestParseAndValidateAliasToNonStringActionFieldKeyRejected confirms an
+// alias-to-non-string key inside an action entry is KindParseType, one
+// schema level down from the group-field case (O2). The anchor is
+// introduced on a structurally valid action field ("sudo") in that same
+// entry so the entry's own valid field does not pre-empt the alias-key
+// failure (I3); the reported line is the anchor's own line (4), not the
+// alias's.
+func TestParseAndValidateAliasToNonStringActionFieldKeyRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n    actions:\n      - sudo: &n true\n        *n: x\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantParseType(t, err, path)
+	if !strings.Contains(err.Detail, "line 4") {
+		t.Fatalf("err.Detail = %q, want it to contain %q (the anchor's line)", err.Detail, "line 4")
+	}
+}
+
+// TestParseAndValidateEveryActionFieldAccepted iterates every name
+// SchemaActionFields() returns and confirms each is accepted with a
+// type-correct value (no canonical action field is accidentally unknown).
+func TestParseAndValidateEveryActionFieldAccepted(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	fields, err := SchemaActionFields()
+	if err != nil {
+		t.Fatalf("SchemaActionFields() error = %v, want nil", err)
+	}
+	if len(fields) == 0 {
+		t.Fatalf("SchemaActionFields() = %v, want at least one field", fields)
+	}
+
+	at := reflect.TypeOf(ActionConfig{})
+	fieldTypes := make(map[string]reflect.Type, at.NumField())
+	for i := 0; i < at.NumField(); i++ {
+		f := at.Field(i)
+		tag, ok := f.Tag.Lookup("yaml")
+		if !ok {
+			continue
+		}
+		if idx := strings.Index(tag, ","); idx >= 0 {
+			tag = tag[:idx]
+		}
+		fieldTypes[tag] = f.Type
+	}
+
+	for _, field := range fields {
+		fieldType, ok := fieldTypes[field]
+		if !ok {
+			t.Fatalf("no reflect.Type found for action field %q", field)
+		}
+		t.Run(field, func(t *testing.T) {
+			data := "system_page:\n  system_info_group:\n    actions:\n      - " + field + ": " + sampleYAMLValueForType(fieldType) + "\n"
+			raw, loadErr := parseAndValidate(path, []byte(data))
+			if loadErr != nil {
+				t.Fatalf("parseAndValidate(%q) error = %v, want nil", data, loadErr)
+			}
+			if raw == nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = nil, want non-nil", data)
+			}
+		})
+	}
+}
+
+// TestParseAndValidateTypeErrorRegression is the errors.As(..., *yaml.TypeError)
+// regression: a group-field type failure and an action-field type failure
+// must both surface yaml.v3's own *yaml.TypeError, reachable through
+// *LoadError.Unwrap.
+func TestParseAndValidateTypeErrorRegression(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	t.Run("group field", func(t *testing.T) {
+		const data = "system_page:\n  system_info_group:\n    enabled: [1, 2]\n"
+		_, loadErr := parseAndValidate(path, []byte(data))
+		wantParseType(t, loadErr, path)
+
+		var typeErr *yaml.TypeError
+		if !errors.As(error(loadErr), &typeErr) {
+			t.Fatalf("errors.As(loadErr, &typeErr) = false, want true (loadErr = %v)", loadErr)
+		}
+	})
+
+	t.Run("action field", func(t *testing.T) {
+		const data = "system_page:\n  system_info_group:\n    actions:\n      - sudo: [1, 2]\n"
+		_, loadErr := parseAndValidate(path, []byte(data))
+		wantParseType(t, loadErr, path)
+
+		var typeErr *yaml.TypeError
+		if !errors.As(error(loadErr), &typeErr) {
+			t.Fatalf("errors.As(loadErr, &typeErr) = false, want true (loadErr = %v)", loadErr)
+		}
+	})
+}
+
+// TestParseAndValidateExplicitZeroPreserved confirms row 16's explicit-zero
+// preservation: a valid document setting enabled: false, app_id: "" and
+// bundles_paths: [] decodes to a *rawConfig whose Enabled, AppID and
+// BundlesPaths pointers are all non-nil, carrying false, "" and an empty
+// non-nil slice respectively — proving these are preserved as explicitly
+// set values, not converted to omission.
+func TestParseAndValidateExplicitZeroPreserved(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n    enabled: false\n    app_id: \"\"\n    bundles_paths: []\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if err != nil {
+		t.Fatalf("parseAndValidate(...) error = %v, want nil", err)
+	}
+	if raw == nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = nil, want non-nil")
+	}
+	group, ok := raw.SystemPage["system_info_group"]
+	if !ok {
+		t.Fatalf("raw.SystemPage[%q] missing", "system_info_group")
+	}
+
+	if group.Enabled == nil {
+		t.Fatalf("group.Enabled = nil, want a non-nil *bool")
+	}
+	if *group.Enabled != false {
+		t.Fatalf("*group.Enabled = %v, want false", *group.Enabled)
+	}
+
+	if group.AppID == nil {
+		t.Fatalf("group.AppID = nil, want a non-nil *string")
+	}
+	if *group.AppID != "" {
+		t.Fatalf("*group.AppID = %q, want %q", *group.AppID, "")
+	}
+
+	if group.BundlesPaths == nil {
+		t.Fatalf("group.BundlesPaths = nil, want a non-nil *[]string")
+	}
+	if *group.BundlesPaths == nil {
+		t.Fatalf("*group.BundlesPaths = nil, want a non-nil empty slice")
+	}
+	if len(*group.BundlesPaths) != 0 {
+		t.Fatalf("*group.BundlesPaths = %v, want empty", *group.BundlesPaths)
+	}
+}
+
+// TestParseAndValidatePathSchemaName covers the O1 matrix's schema-name
+// category: err.Path equals the path argument for every level where an
+// unknown name can arise — page, group, group field, action field. There is
+// no schema-name subtest at document level (a document has no name) or at
+// action-entry level (a sequence entry has no name either), matching the
+// plan.md matrix.
+func TestParseAndValidatePathSchemaName(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"unknown page", "not_a_page: 1\n"},
+		{"unknown group", "system_page:\n  nope_group:\n    enabled: true\n"},
+		{"unknown group field", "system_page:\n  system_info_group:\n    nope_field: 1\n"},
+		{"unknown action field", "system_page:\n  system_info_group:\n    actions:\n      - bogus: 1\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseAndValidate(path, []byte(tt.data))
+			if err == nil {
+				t.Fatalf("parseAndValidate(%q) error = nil, want non-nil", tt.data)
+			}
+			if err.Path != path {
+				t.Fatalf("err.Path = %q, want %q", err.Path, path)
+			}
+		})
+	}
+}
+
+// TestParseAndValidatePathValidatorShape covers the O1 matrix's
+// validator-created-shape category: err.Path equals the path argument, and
+// Detail contains a positive line, for every level a shape failure can
+// arise at — document (a top-level sequence), page value, group value,
+// actions value, and a null action entry.
+func TestParseAndValidatePathValidatorShape(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"document (top-level sequence)", "- a\n- b\n"},
+		{"page value (scalar)", "system_page: 3\n"},
+		{"group value (scalar)", "system_page:\n  system_info_group: 3\n"},
+		{"actions value (scalar)", "system_page:\n  system_info_group:\n    actions: 5\n"},
+		{"null action entry", "system_page:\n  system_info_group:\n    actions:\n      - ~\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseAndValidate(path, []byte(tt.data))
+			if err == nil {
+				t.Fatalf("parseAndValidate(%q) error = nil, want non-nil", tt.data)
+			}
+			if err.Path != path {
+				t.Fatalf("err.Path = %q, want %q", err.Path, path)
+			}
+			if !strings.Contains(err.Detail, "line ") {
+				t.Fatalf("err.Detail = %q, want it to contain a positive line", err.Detail)
+			}
+		})
+	}
+}
+
+// TestParseAndValidatePathDeclaredType covers the O1 matrix's
+// declared-Go-type category: err.Path equals the path argument for a
+// group-field type failure and an action-field type failure. There is no
+// declared-type subtest at page, group, or action-entry level — none of
+// those has a single declared Go field type to decode into (a page/group is
+// validated field by field, and a sequence entry has no declared type of
+// its own) — matching the plan.md matrix.
+func TestParseAndValidatePathDeclaredType(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"group field", "system_page:\n  system_info_group:\n    enabled: [1, 2]\n"},
+		{"action field", "system_page:\n  system_info_group:\n    actions:\n      - sudo: {a: 1}\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseAndValidate(path, []byte(tt.data))
+			if err == nil {
+				t.Fatalf("parseAndValidate(%q) error = nil, want non-nil", tt.data)
+			}
+			if err.Path != path {
+				t.Fatalf("err.Path = %q, want %q", err.Path, path)
 			}
 		})
 	}

@@ -54,13 +54,21 @@ import (
 //     A group or field name unknown to SchemaGroups/groupFieldTypes is
 //     KindSchema; a group's non-null scalar/sequence value is KindParseType
 //     (validatorGroupValueShapeError); a known non-"actions" field is
-//     decoded into a fresh value of its declared Go type
-//     (groupFieldTypes), a decode failure being KindParseType with the
-//     yaml.v3 error preserved in Err. "actions" is recognized as known but
-//     its value is left uninspected by this chunk (I5; a later chunk adds
-//     its own structural walk). Once every entry at every level passes,
-//     stage 4 decodes the effective document into a *rawConfig via
-//     yaml.Node.Decode.
+//     decoded into a fresh value of its declared Go type (groupFieldTypes),
+//     a decode failure being KindParseType with the yaml.v3 error preserved
+//     in Err. "actions" is recognized as known but is validated structurally
+//     instead of by a generic decode (I5): its value must be null (a no-op)
+//     or a sequence, else KindParseType (validatorActionsValueShapeError);
+//     every sequence entry must be a YAML mapping — a null entry is
+//     explicitly not a zero action — else KindParseType
+//     (validatorActionEntryShapeError); and each action entry's own fields
+//     are classified exactly like a group's fields, one level down, by
+//     validateActionFieldEntries: key shape and name membership against
+//     SchemaActionFields()/actionFieldTypes (sourced from ActionConfig),
+//     then a known field decoded into a fresh value of its declared Go type,
+//     a decode failure being KindParseType with the yaml.v3 error preserved
+//     in Err. Once every entry at every level passes, stage 4 decodes the
+//     effective document into a *rawConfig via yaml.Node.Decode.
 //
 // Stage 4 is a defensive final step (interpretation I4): validateSourceGraph
 // and resolveEffective already prove the effective document is a
@@ -221,9 +229,9 @@ func validateGroupEntries(path, page string, groupsNode *yaml.Node) *LoadError {
 // known group's mapping value, so each entry is a group field): key shape
 // via schemaKeyName, then name membership against groupFieldTypes()'s
 // canonical field names (never a literal list here, aside from the literal
-// "actions" itself). The special-cased "actions" name is recognized as
-// known but its value is deliberately left uninspected by this chunk (I5 —
-// a later chunk adds its own structural walk). Every other known field's
+// "actions" itself). The special-cased "actions" name is recognized as known
+// but is validated structurally by validateActionsEntries (I5) instead of by
+// a generic decode into its declared Go type. Every other known field's
 // effective value node is decoded into a fresh value of its declared Go
 // type (reflect.New(fieldType).Interface(), I4); a decode failure is
 // KindParseType with the real yaml.v3 error preserved in Err
@@ -249,7 +257,10 @@ func validateGroupFieldEntries(path, group string, fieldsNode *yaml.Node) *LoadE
 			return validatorSchemaError(path, key, name)
 		}
 		if name == "actions" {
-			continue // I5: actions' value is validated by a later chunk
+			if err := validateActionsEntries(path, value); err != nil {
+				return err
+			}
+			continue
 		}
 
 		target := reflect.New(fieldType)
@@ -259,6 +270,104 @@ func validateGroupFieldEntries(path, group string, fieldsNode *yaml.Node) *LoadE
 	}
 
 	return nil
+}
+
+// validateActionsEntries implements the structural walk for a known
+// "actions" field's value (I5): null is a no-op, a sequence has every entry
+// validated by validateActionFieldEntries, and any other shape (non-null
+// scalar or mapping) is KindParseType. This is deliberately not a generic
+// decode into []ActionConfig — yaml.v3 would silently accept a null entry
+// as a zero ActionConfig and silently ignore an unknown action field.
+func validateActionsEntries(path string, actionsNode *yaml.Node) *LoadError {
+	switch actionsNode.Kind {
+	case yaml.ScalarNode:
+		if actionsNode.Tag == "!!null" {
+			return nil // no actions configured: a no-op
+		}
+		return validatorActionsValueShapeError(path, actionsNode)
+	case yaml.SequenceNode:
+		for _, entry := range actionsNode.Content {
+			if entry.Kind != yaml.MappingNode {
+				// A null entry is explicitly not a zero action: it must
+				// be a mapping, like every other non-mapping shape.
+				return validatorActionEntryShapeError(path, entry)
+			}
+			if err := validateActionFieldEntries(path, entry); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return validatorActionsValueShapeError(path, actionsNode)
+	}
+}
+
+// validateActionFieldEntries walks entryNode's entries (one action-sequence
+// entry, already confirmed to be a mapping): key shape via schemaKeyName,
+// name membership against actionFieldTypes()'s canonical names (from
+// ActionConfig, I7), then a known field's value decoded into
+// reflect.New(fieldType), a decode failure being KindParseType with the
+// real yaml.v3 error preserved (I4) — matching validateGroupFieldEntries'
+// non-"actions" handling one level down. The first failing entry's error is
+// returned; nil means every entry passed.
+func validateActionFieldEntries(path string, entryNode *yaml.Node) *LoadError {
+	fieldTypes, err := actionFieldTypes()
+	if err != nil {
+		return validatorActionFieldTypesError(path, err)
+	}
+
+	for i := 0; i+1 < len(entryNode.Content); i += 2 {
+		key := entryNode.Content[i]
+		value := entryNode.Content[i+1]
+
+		name, ok := schemaKeyName(key)
+		if !ok {
+			return validatorKeyShapeError(path, key)
+		}
+		fieldType, known := fieldTypes[name]
+		if !known {
+			return validatorSchemaError(path, key, name)
+		}
+
+		target := reflect.New(fieldType)
+		if err := value.Decode(target.Interface()); err != nil {
+			return validatorDecodeError(path, err)
+		}
+	}
+
+	return nil
+}
+
+// actionFieldTypes reflects over ActionConfig's exported fields, returning
+// a freshly allocated map from each field's yaml tag name to its declared
+// Go type — the type-carrying counterpart to SchemaActionFields (schema.go),
+// matching groupFieldTypes one schema level down.
+func actionFieldTypes() (map[string]reflect.Type, error) {
+	t := reflect.TypeOf(ActionConfig{})
+	result := make(map[string]reflect.Type, t.NumField())
+
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		if field.PkgPath != "" {
+			continue // unexported
+		}
+
+		tag, ok := field.Tag.Lookup("yaml")
+		if !ok || tag == "" || tag == "-" {
+			continue
+		}
+
+		name := yamlTagName(tag)
+		if name == "" {
+			return nil, fmt.Errorf("actionFieldTypes: field %s has a yaml tag with an empty name (%q)", field.Name, tag)
+		}
+		if _, dup := result[name]; dup {
+			return nil, fmt.Errorf("actionFieldTypes: duplicate yaml name %q (field %s)", name, field.Name)
+		}
+		result[name] = field.Type
+	}
+
+	return result, nil
 }
 
 // groupFieldTypes reflects over rawGroupConfig's exported fields, returning
@@ -365,6 +474,43 @@ func validatorGroupFieldTypesError(path string, err error) *LoadError {
 		Detail: fmt.Sprintf("could not determine canonical group field types: %v", err),
 		Err:    err,
 	}
+}
+
+// validatorActionFieldTypesError builds a KindSchema *LoadError wrapping an
+// actionFieldTypes error, matching validatorGroupFieldTypesError one schema
+// level down; it cannot happen for ActionConfig's canonical, hand-maintained
+// field list.
+func validatorActionFieldTypesError(path string, err error) *LoadError {
+	return &LoadError{
+		Path:   path,
+		Kind:   KindSchema,
+		Detail: fmt.Sprintf("could not determine canonical action field types: %v", err),
+		Err:    err,
+	}
+}
+
+// validatorActionsValueShapeError builds a KindParseType *LoadError
+// reporting that a known "actions" field's value is neither null nor a
+// sequence (i.e. a non-null scalar or a mapping). Detail names the actual
+// node shape found and a positive source line, matching
+// validatorGroupValueShapeError's pattern one schema level down.
+func validatorActionsValueShapeError(path string, value *yaml.Node) *LoadError {
+	return sourceGraphError(path, fmt.Sprintf(
+		"field %q must be null or a YAML sequence, found %s (line %d)",
+		"actions", describeNodeShape(value), effectiveNodeLine(value),
+	))
+}
+
+// validatorActionEntryShapeError builds a KindParseType *LoadError
+// reporting that an "actions" sequence entry is not a YAML mapping. A null
+// entry is deliberately included here (not treated as a zero action):
+// entry's own actual node shape (including "a YAML scalar (!!null)" for a
+// null entry) and a positive source line are named in Detail.
+func validatorActionEntryShapeError(path string, entry *yaml.Node) *LoadError {
+	return sourceGraphError(path, fmt.Sprintf(
+		"action entry must be a YAML mapping, found %s (line %d)",
+		describeNodeShape(entry), effectiveNodeLine(entry),
+	))
 }
 
 // validatorKeyShapeError builds a KindParseType *LoadError reporting that
