@@ -232,14 +232,125 @@ func checkAliasHopLimit(path string, inv *sourceInventory, lines map[*yaml.Node]
 	return nil
 }
 
+// maxSourcePathVisits is the maximum number of source-node visits
+// pathVisitCount accepts on any single root-to-leaf path. Every encountered
+// node — the root, a mapping, a sequence, a scalar, an alias node, or an
+// alias target — contributes exactly one visit; "key", "value", and "alias
+// target" only identify which child node is traversed next and add no
+// separate charge, so a scalar used as a mapping key counts once, not once
+// for being a scalar plus once for being a key. Exactly maxSourcePathVisits
+// succeeds; maxSourcePathVisits+1 fails.
+const maxSourcePathVisits = 128
+
+// pathVisitCount is the memoized path-visit DP: visits(n) = 1 +
+// max(visits(child)) over every content edge reachable directly from n (a
+// document's or mapping's or sequence's Content entries, or an alias node's
+// single Alias target), and visits(n) = 1 for a node with no such edges (a
+// scalar, or an alias whose target is nil — already rejected earlier by
+// walkSourceNode on any graph reaching this pass, but handled defensively
+// here too). A mapping's key and value entries are both ordinary Content
+// children and so are both considered — proving keys count toward the
+// bound exactly like values do, and exactly once each. memo is keyed by
+// node identity and shared across calls for the same graph, so a node
+// reachable through many parents (the compact alias-sharing DAG the
+// timeout test exercises) is computed once rather than once per path,
+// keeping this DP linear in the graph's node and edge count.
+func pathVisitCount(n *yaml.Node, memo map[*yaml.Node]int) int {
+	if n == nil {
+		return 0
+	}
+	if v, ok := memo[n]; ok {
+		return v
+	}
+	deepest := 0
+	switch n.Kind {
+	case yaml.MappingNode, yaml.SequenceNode:
+		for _, child := range n.Content {
+			if v := pathVisitCount(child, memo); v > deepest {
+				deepest = v
+			}
+		}
+	case yaml.AliasNode:
+		deepest = pathVisitCount(n.Alias, memo)
+	}
+	v := 1 + deepest
+	memo[n] = v
+	return v
+}
+
+// checkSourcePathVisitLimit rejects a source graph containing a
+// root-to-leaf path exceeding maxSourcePathVisits, naming the limit and
+// reporting lines[n] (see attributeSourceLines) as the error's source
+// line for the offending node n it identifies.
+//
+// pathVisitCount is monotonically non-decreasing from any node toward the
+// root — a parent's count is always at least one more than its deepest
+// child's — so once one node's path-visit count exceeds the limit, every
+// one of its ancestors up to the graph's root does too; reporting the
+// first over-limit node found in mere discovery order would therefore
+// almost always report the root itself (discovered before any
+// descendant), which carries no useful attribution. Instead this walks
+// inv.nodes in discovery order looking for the *boundary*: a node whose
+// own count exceeds maxSourcePathVisits but whose every direct child (if
+// any) does not — the exact point along an offending path where the count
+// first crosses the limit. That boundary node is what a bounds-limit
+// error should name, and it is deterministic even when more than one
+// branch independently crosses the boundary, since discovery order breaks
+// the tie. Because the DP is memoized, wide siblings sharing one deep
+// target are each checked once and do not accumulate a global count.
+func checkSourcePathVisitLimit(path string, inv *sourceInventory, lines map[*yaml.Node]int) *LoadError {
+	memo := make(map[*yaml.Node]int, len(inv.nodes))
+	for _, n := range inv.nodes {
+		pathVisitCount(n, memo)
+	}
+
+	children := make(map[*yaml.Node][]*yaml.Node, len(inv.nodes))
+	for _, e := range inv.edges {
+		children[e.parent] = append(children[e.parent], e.child)
+	}
+
+	for _, n := range inv.nodes {
+		if memo[n] <= maxSourcePathVisits {
+			continue
+		}
+		boundary := true
+		for _, c := range children[n] {
+			if memo[c] > maxSourcePathVisits {
+				boundary = false
+				break
+			}
+		}
+		if !boundary {
+			continue
+		}
+		line := lines[n]
+		if line <= 0 {
+			line = 1
+		}
+		detail := fmt.Sprintf(
+			"source graph exceeds the maximum of %d source-node path visits (line %d)",
+			maxSourcePathVisits, line,
+		)
+		return sourceGraphError(path, detail)
+	}
+	return nil
+}
+
 // checkSourceGraphBounds is this package's single post-acyclicity source-graph
 // bounds pass: it collects the reachable inventory, attributes a source line to
 // every reachable node, and rejects a graph exceeding maxAliasHops
-// consecutive alias hops. It must only ever be called on a root already
-// proven acyclic by walkSourceNode — collectSourceInventory and
-// aliasHopCount both assume that and would not terminate otherwise.
+// consecutive alias hops or maxSourcePathVisits source-node visits on any
+// root-to-leaf path — checking the alias-hop bound first, so a graph
+// violating both limits deterministically reports the alias-hop error and
+// never evaluates the path-visit pass. It must only ever be called on a
+// root already proven acyclic by walkSourceNode — collectSourceInventory,
+// aliasHopCount, and pathVisitCount all assume that and would not
+// terminate otherwise.
 func checkSourceGraphBounds(path string, root *yaml.Node) *LoadError {
 	inv := collectSourceInventory(root)
 	lines := attributeSourceLines(inv)
-	return checkAliasHopLimit(path, inv, lines)
+	if err := checkAliasHopLimit(path, inv, lines); err != nil {
+		return err
+	}
+	return checkSourcePathVisitLimit(path, inv, lines)
 }

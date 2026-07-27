@@ -289,3 +289,278 @@ func TestValidateSourceGraphAliasSharingDAGTerminatesLinearly(t *testing.T) {
 		t.Fatalf("validateSourceGraph(compact alias-sharing DAG) = %v, want nil", err)
 	}
 }
+
+// buildSourceVisitChainWithLeaf wraps leaf in wraps nested one-entry
+// mapping levels, each contributing exactly one path visit (the mapping
+// node itself; its scalar key is a shallower sibling branch that never
+// wins the DP's max). The returned head node's pathVisitCount is
+// wraps + pathVisitCount(leaf).
+func buildSourceVisitChainWithLeaf(wraps int, leaf *yaml.Node) *yaml.Node {
+	node := leaf
+	for i := 0; i < wraps; i++ {
+		node = newSourceMappingNode(newSourceScalarNode("k"), node)
+	}
+	return node
+}
+
+// buildSourceVisitChain returns a chain of nested one-entry mappings ending
+// in an ordinary scalar leaf whose total path-visit count is exactly
+// depth: depth-1 wrapping mappings, each contributing one visit, plus the
+// leaf scalar's own single visit.
+func buildSourceVisitChain(depth int) *yaml.Node {
+	return buildSourceVisitChainWithLeaf(depth-1, newSourceScalarNode("leaf"))
+}
+
+// buildSourceVisitKeyChain returns a chain of nested mappings, each
+// wrapping the previous level as its own KEY (not its value) with a
+// shallow scalar value sibling, ending in leaf. Its total path-visit count
+// is exactly wraps + pathVisitCount(leaf), proving the DP must consider
+// mapping keys (not only values) to compute the deepest path, since the
+// value branch alone never grows past 2.
+func buildSourceVisitKeyChain(wraps int, leaf *yaml.Node) *yaml.Node {
+	node := leaf
+	for i := 0; i < wraps; i++ {
+		node = newSourceMappingNode(node, newSourceScalarNode("v"))
+	}
+	return node
+}
+
+// TestValidateSourceGraphPathVisitBoundary confirms the 128/129
+// source-node path-visit boundary exactly: a chain of exactly 128 visits
+// succeeds, and a chain of 129 fails as KindParseType, naming the
+// path-visit limit, the literal "128", and a positive "line N" — even
+// though every synthesized node in the chain has Line == 0, so the
+// reported line must come from the deterministic fallback. Every level of
+// the chain is a mapping with a plain scalar key, so this also proves a
+// scalar used as a mapping key counts exactly once, not twice: a
+// double-counting implementation would report a different (larger) total
+// and reject the exactly-128 case that this test requires to succeed.
+func TestValidateSourceGraphPathVisitBoundary(t *testing.T) {
+	const path = "/etc/chairlift/path-visit-boundary.yml"
+
+	t.Run("exactly 128 visits succeeds", func(t *testing.T) {
+		doc := newSourceDocNode(buildSourceVisitChain(128))
+		if err := validateSourceGraph(path, doc); err != nil {
+			t.Fatalf("validateSourceGraph(128-visit chain) = %v, want nil", err)
+		}
+	})
+
+	t.Run("129 visits fails", func(t *testing.T) {
+		doc := newSourceDocNode(buildSourceVisitChain(129))
+		err := validateSourceGraph(path, doc)
+		wantParseType(t, err, path)
+
+		if err.Err != nil {
+			t.Fatalf("err.Err = %v, want nil", err.Err)
+		}
+		if !strings.Contains(err.Detail, "path visit") && !strings.Contains(err.Detail, "path-node visit") {
+			t.Fatalf("err.Detail = %q, want wording identifying the source-node path-visit limit", err.Detail)
+		}
+		if !strings.Contains(err.Detail, "128") {
+			t.Fatalf("err.Detail = %q, want the literal %q", err.Detail, "128")
+		}
+		if got := sourceDetailLine(t, err); got != 1 {
+			t.Fatalf("attributed line = %d, want 1 (wholly synthetic fallback)", got)
+		}
+	})
+}
+
+// TestValidateSourceGraphPathVisitAliasCounts confirms an alias node plus
+// its target contributes two path visits, not one: two graphs identical
+// in wrap-depth differ only in whether the deepest leaf is a direct scalar
+// child or an alias node targeting that same scalar, and the substitution
+// alone flips the result across the 128 boundary.
+func TestValidateSourceGraphPathVisitAliasCounts(t *testing.T) {
+	const path = "/etc/chairlift/path-visit-alias-counts.yml"
+	const wraps = 127
+
+	direct := buildSourceVisitChainWithLeaf(wraps, newSourceScalarNode("leaf"))
+	if err := validateSourceGraph(path, newSourceDocNode(direct)); err != nil {
+		t.Fatalf("validateSourceGraph(direct scalar leaf, %d wraps = 128 visits) = %v, want nil", wraps, err)
+	}
+
+	aliasedLeaf := newSourceAliasNode(newSourceScalarNode("leaf"))
+	aliased := buildSourceVisitChainWithLeaf(wraps, aliasedLeaf)
+	err := validateSourceGraph(path, newSourceDocNode(aliased))
+	wantParseType(t, err, path)
+	if !strings.Contains(err.Detail, "128") {
+		t.Fatalf("err.Detail = %q, want the literal %q", err.Detail, "128")
+	}
+}
+
+// TestValidateSourceGraphPathVisitKeyAccounting confirms mapping keys
+// count toward the path-visit bound: a chain of nested mappings whose
+// depth lives entirely in the KEY position (each level's value is a
+// shallow sibling scalar) crosses the 128 boundary exactly like the
+// value-position chain in TestValidateSourceGraphPathVisitBoundary does,
+// which is only possible if the DP considers key children, not only value
+// children.
+func TestValidateSourceGraphPathVisitKeyAccounting(t *testing.T) {
+	const path = "/etc/chairlift/path-visit-key-accounting.yml"
+
+	t.Run("127 key-position wraps (128 visits) succeeds", func(t *testing.T) {
+		doc := newSourceDocNode(buildSourceVisitKeyChain(127, newSourceScalarNode("leaf")))
+		if err := validateSourceGraph(path, doc); err != nil {
+			t.Fatalf("validateSourceGraph(127-deep key chain) = %v, want nil", err)
+		}
+	})
+
+	t.Run("128 key-position wraps (129 visits) fails", func(t *testing.T) {
+		doc := newSourceDocNode(buildSourceVisitKeyChain(128, newSourceScalarNode("leaf")))
+		err := validateSourceGraph(path, doc)
+		wantParseType(t, err, path)
+		if !strings.Contains(err.Detail, "128") {
+			t.Fatalf("err.Detail = %q, want the literal %q", err.Detail, "128")
+		}
+	})
+}
+
+// TestValidateSourceGraphPathVisitWideSiblingsShareDeepTarget confirms
+// path visits do not accumulate globally: 200 sibling sequence entries all
+// alias the same deep (but within-bound) shared subtree. If path-visit
+// checking wrongly summed visits across siblings instead of memoizing by
+// node identity, this would spuriously reject; instead it must succeed.
+func TestValidateSourceGraphPathVisitWideSiblingsShareDeepTarget(t *testing.T) {
+	shared := buildSourceVisitChain(100)
+	entries := make([]*yaml.Node, 0, 200)
+	for i := 0; i < 200; i++ {
+		entries = append(entries, newSourceAliasNode(shared))
+	}
+	doc := newSourceDocNode(newSourceSequenceNode(entries...))
+
+	if err := validateSourceGraph("p", doc); err != nil {
+		t.Fatalf("validateSourceGraph(200 wide siblings sharing a deep target) = %v, want nil", err)
+	}
+}
+
+// TestValidateSourceGraphPathVisitAttributionEqualDistanceTieBreak is the
+// mandatory equal-distance tie-break case, observed end-to-end through a
+// path-visit-limit error: the offending (over-limit, Line == 0) node is a
+// single shared *yaml.Node reachable via two paths of the SAME minimum
+// distance (two content edges) below two different positive-line
+// ancestors, A and B. Per interpretation 11's tie-break, the winner is the
+// ancestor active on the DFS stack at the node's first deterministic
+// depth-first encounter — which is whichever of A's or B's branch the
+// walk reaches first, i.e. whichever is ordered first in the root
+// mapping's Content. This is asserted both ways: swapping the Content
+// order flips which ancestor's line is reported.
+func TestValidateSourceGraphPathVisitAttributionEqualDistanceTieBreak(t *testing.T) {
+	const path = "/etc/chairlift/path-visit-equal-distance-tie.yml"
+
+	build := func(aFirst bool) *yaml.Node {
+		offending := buildSourceVisitChain(129) // shared node, Line == 0, over the limit on its own
+
+		// Path through A: two content edges from ancestorA to offending.
+		midA := newSourceMappingNode(newSourceScalarNode("mid-a"), offending)
+		ancestorA := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Line:    50,
+			Content: []*yaml.Node{newSourceScalarNode("a0"), midA},
+		}
+
+		// Path through B: also two content edges, to the same shared
+		// offending node — an equal minimum distance to A's path.
+		midB := newSourceMappingNode(newSourceScalarNode("mid-b"), offending)
+		ancestorB := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Line:    60,
+			Content: []*yaml.Node{newSourceScalarNode("b0"), midB},
+		}
+
+		var root *yaml.Node
+		if aFirst {
+			root = newSourceMappingNode(
+				newSourceScalarNode("first"), ancestorA,
+				newSourceScalarNode("second"), ancestorB,
+			)
+		} else {
+			root = newSourceMappingNode(
+				newSourceScalarNode("first"), ancestorB,
+				newSourceScalarNode("second"), ancestorA,
+			)
+		}
+		return newSourceDocNode(root)
+	}
+
+	t.Run("A ordered first in Content reports A's line", func(t *testing.T) {
+		err := validateSourceGraph(path, build(true))
+		wantParseType(t, err, path)
+		if got := sourceDetailLine(t, err); got != 50 {
+			t.Fatalf("attributed line = %d, want 50 (A, discovered first at equal distance)", got)
+		}
+	})
+
+	t.Run("B ordered first in Content reports B's line", func(t *testing.T) {
+		err := validateSourceGraph(path, build(false))
+		wantParseType(t, err, path)
+		if got := sourceDetailLine(t, err); got != 60 {
+			t.Fatalf("attributed line = %d, want 60 (B, discovered first at equal distance)", got)
+		}
+	})
+}
+
+// TestValidateSourceGraphPathVisitAttributionAliasEdge confirms alias
+// edges participate in attribution distance: the offending (over-limit,
+// Line == 0) node is reachable both deep in ordinary content (distance 3
+// from a positive-line ancestor) and, via an alias edge, one content edge
+// below a different positive-line ancestor at distance 2. The nearer
+// (alias-mediated) line must be reported.
+func TestValidateSourceGraphPathVisitAttributionAliasEdge(t *testing.T) {
+	const path = "/etc/chairlift/path-visit-alias-edge.yml"
+
+	offending := buildSourceVisitChain(129) // shared node, Line == 0, over the limit on its own
+
+	// Deep, alias-free path: distance 3 from a positive-line ancestor.
+	deepMid2 := newSourceMappingNode(newSourceScalarNode("mid2-key"), offending)
+	deepMid1 := newSourceMappingNode(newSourceScalarNode("mid1-key"), deepMid2)
+	deepFar := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Line:    500,
+		Content: []*yaml.Node{newSourceScalarNode("far-key"), deepMid1},
+	}
+
+	// Near path: an alias edge puts the same offending node at distance
+	// 2 from a different, nearer positive-line ancestor.
+	aliasNear := newSourceAliasNode(offending)
+	nearAncestor := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Line:    3,
+		Content: []*yaml.Node{newSourceScalarNode("near-key"), aliasNear},
+	}
+
+	root := newSourceMappingNode(
+		newSourceScalarNode("deep"), deepFar,
+		newSourceScalarNode("near"), nearAncestor,
+	)
+	doc := newSourceDocNode(root)
+
+	err := validateSourceGraph(path, doc)
+	wantParseType(t, err, path)
+	if got := sourceDetailLine(t, err); got != 3 {
+		t.Fatalf("attributed line = %d, want 3 (the nearer ancestor reached via the alias edge)", got)
+	}
+}
+
+// TestValidateSourceGraphBothBoundsViolatedReportsAliasHopDeterministically
+// confirms a graph violating both the alias-hop bound and the path-visit
+// bound returns a single, deterministic KindParseType error naming the
+// alias-hop limit (checked first by checkSourceGraphBounds) rather than
+// panicking or somehow reporting twice: 70 consecutive alias hops (over
+// the 64 limit) wrapped in 60 further ordinary-content levels (pushing the
+// total path-visit count to 131, over the 128 limit) still yields exactly
+// one error, and it is the alias-hop one.
+func TestValidateSourceGraphBothBoundsViolatedReportsAliasHopDeterministically(t *testing.T) {
+	const path = "/etc/chairlift/both-bounds-violated.yml"
+
+	aliasChain := buildSourceAliasChain(70)                  // 70 alias hops, 71 path visits on its own
+	wrapped := buildSourceVisitChainWithLeaf(60, aliasChain) // + 60 more visits = 131
+
+	err := validateSourceGraph(path, newSourceDocNode(wrapped))
+	wantParseType(t, err, path)
+	if !strings.Contains(err.Detail, "consecutive") || !strings.Contains(err.Detail, "alias hop") {
+		t.Fatalf("err.Detail = %q, want wording identifying the consecutive alias-hop limit (checked first)", err.Detail)
+	}
+	if strings.Contains(err.Detail, "path visit") {
+		t.Fatalf("err.Detail = %q, want only the alias-hop limit named, not the path-visit limit too", err.Detail)
+	}
+}
