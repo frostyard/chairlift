@@ -135,6 +135,71 @@ the group only to flip an unrelated field, and why `Load()` falling back to
 `defaultConfig()` when no file is found or the file is unreadable/invalid
 preserves that same per-group default — it is never "all features enabled."
 
+**Structured load-error vocabulary (`internal/config/loaderror.go`).** A
+stable `ErrorKind` enumerates why loading/validating a config file could
+fail: `KindRead` ("read") for a filesystem/read failure (e.g. permission
+denied opening the file — distinct from "file does not exist", which
+`Load()` treats as absent-and-fall-back, not an error); `KindParseType`
+("parse/type") for a YAML syntax error or a value that decodes to the wrong
+Go type; and `KindSchema` ("schema") for a validator-detected shape failure
+found only after the document parsed successfully — e.g. an unknown key or a
+value of the right YAML kind but the wrong shape — which may legitimately
+carry a nil `Err` since shape inspection alone can detect the problem with
+no underlying cause to wrap. `LoadError.Error()` renders `Path`, the exact
+`Kind` string, `Detail`, and the cause (in that order, each only when
+non-empty/non-nil), so the three `Kind` literals above always appear
+verbatim in the message. `LoadError.Unwrap()` returns `Err` unchanged
+(nil when there is none), which is what lets `errors.Is`/`errors.As` see
+through a `*LoadError` to a wrapped sentinel or recover the original value
+from a `fmt.Errorf("%w", ...)` wrapper. As of this writing nothing
+constructs a `LoadError` yet — `Load()` and `loadFromPath()` are unchanged
+and still fall back to `defaultConfig()` on any read or parse failure, so
+there is no strict parsing and no fail-closed runtime behavior yet; this
+vocabulary exists so a later change can start returning `*LoadError` values
+without redefining what "read", "parse/type", and "schema" mean.
+
+**Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
+and `SchemaGroups(page)` derive the authoritative list of page names and,
+per page, group names by reflection — never by a second hand-maintained
+list — so the inventory cannot drift from the types it describes. Page names
+come from the `yaml` struct tags on `Config`'s exported fields (via the
+unexported `yamlFieldNames` helper, in struct declaration order); group names
+for a page come from that page's map key set in `defaultConfig()` (via the
+unexported `schemaPageGroups` helper, sorted lexicographically for a stable
+API since map iteration order is not deterministic). `rawConfig` is *not* a
+schema authority here — it is `Config`'s pointer-typed YAML-decoding mirror
+(see above), and a dedicated reflection test
+(`TestRawConfigMatchesConfigFields`) proves its exported fields, field order,
+and yaml tag names match `Config`'s exactly, so it stays a provably-in-sync
+mirror rather than a second source of truth per
+`docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md`.
+Both exported functions return a freshly allocated slice (and `SchemaGroups`
+an error for a page name outside `SchemaPages()`) on every call, so a caller
+mutating a returned slice cannot affect a later call. An empty or duplicate
+page/group name is reported as a returned `error`, never a panic, `log.Fatal`,
+or `os.Exit`, so failures stay deterministic and assertable from tests.
+
+`SchemaGroupFields()` and `SchemaActionFields()` extend the same inventory to
+field names, reusing `yamlFieldNames` — no second tag-parsing rule.
+`SchemaGroupFields()` reads `rawGroupConfig`'s yaml tags, in struct
+declaration order, because `rawGroupConfig` (not `GroupConfig`) is what
+yaml.v3 actually decodes a group into; `GroupConfig` remains the semantic
+authority, and a dedicated reflection test
+(`TestRawGroupConfigMatchesGroupConfigFields`) holds the two to each other —
+same field count, same names and yaml tags per index, and each
+`rawGroupConfig` field type equal to `GroupConfig`'s or exactly a pointer to
+it (ignoring only that pointer-vs-value difference and `omitempty`) — so
+`rawGroupConfig` cannot silently drift from `GroupConfig` per
+`docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md`.
+`SchemaActionFields()` reads `ActionConfig`'s yaml tags directly, since
+`ActionConfig` has no raw/pointer mirror. Both return a freshly allocated
+slice on every call and report an empty or duplicate field name as an error,
+never a panic, `log.Fatal`, or `os.Exit`. As of this writing no production
+code path — neither `Load()`/`loadFromPath()` nor any runtime diagnostic —
+consumes this inventory yet, and this slice adds no strict parsing and no
+unknown-key rejection; `Load()` still falls back to `defaultConfig()` on any
+read or parse failure. The inventory exists for a later change to build on.
+
 ### Package manager wrapper pattern
 
 Each wrapper in `internal/` follows a consistent shape:

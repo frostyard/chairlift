@@ -429,8 +429,8 @@ func groupKeys(page PageConfig) []string {
 var isGroupEnabledCallPattern = regexp.MustCompile(`IsGroupEnabled\(\s*"updates_page"\s*,\s*"([^"]+)"\s*\)`)
 
 // TestUpdatesPageDefaultGroupsHaveBuilders reads internal/views/updates_page.go
-// as plain text (internal/config must never import internal/views or
-// puregotk, directly or transitively, per
+// as plain text (internal/config must never import internal/views or the
+// GTK bindings package, directly or transitively, per
 // docs/agents/skills/gtk-headless-tests.md) and asserts every group
 // defaultConfig() defines for updates_page is gated by a real
 // config.IsGroupEnabled("updates_page", ...) call in that view file. This is
