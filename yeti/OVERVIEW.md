@@ -196,9 +196,8 @@ capabilities (document parsing, reachable source-graph shape validation,
 merge-operand shape validation, duplicate-explicit-key detection, the
 memoized alias-hop bound and the memoized source-node path-visit bound
 (both with all-paths line attribution), and now a validate-first
-alias/anchor-resolving, merge-precedence-resolving emitter — complete
-except for the post-alias key-identity-collision rule and a small set of
-bounded-work regressions the next chunk still owes) meant to
+alias/anchor-resolving, merge-precedence-resolving, bounded-output emitter
+with its own post-alias key-identity-collision rule) meant to
 eventually replace `loadFromPath()`'s current `yaml.Unmarshal` call with
 fail-closed, single-document, structurally validated loading — but none of
 that wiring exists yet, so `KindRead` and `KindSchema` still describe
@@ -372,7 +371,16 @@ counterpart, not a reuse of it: `sourceKeyID` intentionally omits `Tag` to
 reproduce yaml.v3's own duplicate-key guard exactly, while
 `effectiveKeyIdentity` intentionally includes it because merge-precedence
 resolution must not let a `!!str "1"` entry silently discard or be
-discarded by an `!!int 1` entry from another merge source.
+discarded by an `!!int 1` entry from another merge source. A complex key's
+identity is used only to decide *precedence* — which candidate wins, and
+whether two explicit complex keys collide (see below) — never to compute
+it: a *winning* complex key is still fully resolved and emitted
+structurally, alias-free, by `emitEffectiveNode` like any other node
+(charged against `maxEffectiveOutputNodes` like everything else it
+emits), while a *losing* complex key (impossible for two candidates to
+tie on, since distinct complex-key nodes always have distinct pointers,
+but reachable when the complex key belongs to a losing merge candidate's
+value) is never dereferenced, resolved, or emitted at all.
 
 **Validate-first, alias-resolving effective emitter
 (`internal/config/effective.go`).** `resolveEffective(path string, doc
@@ -508,28 +516,46 @@ the source nodes for winning entries, so `emitEffectiveNode` never clones,
 and never charges against `maxEffectiveOutputNodes`, anything a merge
 discarded.
 
-The post-alias key-identity-collision rule and a small set of
-bounded-work regressions are deliberately deferred to the next chunk: until
-then, two *explicit* keys that happen to collide under
-`effectiveKeyIdentity` only after alias dereferencing (for example, one
-written as a literal scalar and the other as an alias to that exact same
-scalar) are deduplicated by the same first-candidate rule as any other
-collision, and no test in this slice asserts that specific edge case's
-behavior.
+The post-alias key-identity-collision rule is layered on top of, not a
+replacement for, `checkDuplicateMappingKeys`'s tag-blind `Kind`+`Value`
+duplicate-key validation above, which `validateSourceGraph` still runs
+first, unchanged: `effectiveEntriesWithMemo` additionally scans each
+mapping's own retained explicit entries (the same entries its first pass
+collects) for two whose `effectiveKeyIdentity` compare equal *after* alias
+dereferencing — catching, for example, a literal scalar key and an alias
+key targeting an anchored scalar with the same resolved tag and value,
+which `checkDuplicateMappingKeys` cannot catch because the alias node's
+own `Kind` and `Value` differ from its target's. Finding such a pair sets
+`effectiveEmitState.collided` and records the *later* key (in source
+`Content` order) as `collisionKey`, aborting the whole `resolveEffective`
+call — exactly like a node-budget overflow aborts it — without
+inventorying or emitting anything further; `resolveEffective` then returns
+`effectiveIdentityCollisionError(path, doc, st.collisionKey)`, a
+`KindParseType` `*LoadError` with a nil `Err` and a `Detail` reusing the
+same `collectSourceInventory`/`attributeSourceLines` line-attribution pair
+(own line, else nearest positive-line ancestor over all paths, else `1`)
+as the output-limit error above. The rule applies only to two *explicit*
+keys of one source mapping: an inherited merge candidate colliding with an
+explicit key of the same identity is ordinary suppression (the existing
+first-candidate dedup pass), not this error, since only an explicit
+key can ever be the "other side" of a genuine ambiguity about which of two
+literally-written keys in the same mapping was meant.
 
 `emitEffectiveNode`, `dereferenceAliasTarget`/`emitNodeMetadata`, the
-`effectiveEmitState` counter type, `effectiveOutputLimitError`,
-`effectiveEntry`, `effectiveMergeMemo`, `effectiveEntriesWithMemo`, and
-`mergeOperandMappings`/`mergeOperandMapping` are all unexported helpers
-reachable only from `resolveEffective`; per the frozen `directCallAllowlist`
-in `sourcesurface_test.go`, no `_test.go` file names any of them directly —
-`effective_test.go`, `effectivebound_test.go`, and `effectivemerge_test.go`
-exercise them only through `resolveEffective` itself, alongside
-`resolveEffective` and `effectiveKeyIdentity`, the two additions that
-allowlist authorizes. `resolveEffective` itself is still not wired into
-`Load()`, `loadFromPath()`, or ChairLift's strict schema validation — it
-remains a standalone capability, like `parseYAMLDocument` and
-`validateSourceGraph` before it.
+`effectiveEmitState` counter/collision-tracking type,
+`effectiveOutputLimitError`, `effectiveIdentityCollisionError`,
+`effectiveEntry`, `effectiveMergeMemo`, `effectiveEntriesWithMemo`,
+`explicitKeyCollision`, and `mergeOperandMappings`/`mergeOperandMapping`
+are all unexported helpers reachable only from `resolveEffective`; per the
+frozen `directCallAllowlist` in `sourcesurface_test.go`, no `_test.go` file
+names any of them directly — `effective_test.go`, `effectivebound_test.go`,
+`effectivemerge_test.go`, and `effectiveidentity_test.go` exercise them
+only through `resolveEffective` itself, alongside `resolveEffective` and
+`effectiveKeyIdentity`, the two additions that allowlist authorizes.
+`resolveEffective` itself is still not yet wired into `Load()`,
+`loadFromPath()`, or ChairLift's strict schema validation — it remains a
+standalone capability, like `parseYAMLDocument` and `validateSourceGraph`
+before it.
 
 **Reachable inventory, all-paths line attribution, and the 64
 consecutive-alias-hop and 128-source-node-path-visit bounds

@@ -63,21 +63,36 @@ type effectiveMergeMemo map[*yaml.Node][]effectiveEntry
 // node reached only as a merge operand deep inside another mapping's
 // inventory is inventoried at most once per top-level emitted mapping
 // that reaches it, not once per parent within that recursion.
-func effectiveEntries(m *yaml.Node) []effectiveEntry {
-	return effectiveEntriesWithMemo(m, make(effectiveMergeMemo))
+//
+// It also threads st (effective.go's effectiveEmitState) through the
+// recursion so an effective-identity collision between two of m's own
+// explicit keys — or between two explicit keys of any mapping reached as
+// a merge operand within this recursion — is detected and recorded on st
+// exactly like emitEffectiveNode's own node-budget overflow, aborting the
+// rest of the inventory computation without inventorying or emitting
+// anything further.
+func effectiveEntries(m *yaml.Node, st *effectiveEmitState) []effectiveEntry {
+	return effectiveEntriesWithMemo(m, make(effectiveMergeMemo), st)
 }
 
 // effectiveEntriesWithMemo is effectiveEntries' real implementation,
 // threading a shared memo across recursive merge-operand lookups so a
 // mapping node's inventory is computed at most once per top-level
 // effectiveEntries call no matter how many operands or aliases reach it
-// within that call's recursion.
-func effectiveEntriesWithMemo(m *yaml.Node, memo effectiveMergeMemo) []effectiveEntry {
-	if m == nil {
+// within that call's recursion, and threading st so an identity collision
+// discovered anywhere in that recursion halts the whole computation.
+func effectiveEntriesWithMemo(m *yaml.Node, memo effectiveMergeMemo, st *effectiveEmitState) []effectiveEntry {
+	if m == nil || st.collided {
 		return nil
 	}
 	if cached, ok := memo[m]; ok {
 		return cached
+	}
+
+	if laterKey, ok := explicitKeyCollision(m); ok {
+		st.collided = true
+		st.collisionKey = laterKey
+		return nil
 	}
 
 	var candidates []effectiveEntry
@@ -105,7 +120,10 @@ func effectiveEntriesWithMemo(m *yaml.Node, memo effectiveMergeMemo) []effective
 			continue
 		}
 		for _, operand := range mergeOperandMappings(value) {
-			candidates = append(candidates, effectiveEntriesWithMemo(operand, memo)...)
+			candidates = append(candidates, effectiveEntriesWithMemo(operand, memo, st)...)
+			if st.collided {
+				return nil
+			}
 		}
 	}
 
@@ -121,6 +139,39 @@ func effectiveEntriesWithMemo(m *yaml.Node, memo effectiveMergeMemo) []effective
 
 	memo[m] = result
 	return result
+}
+
+// explicitKeyCollision scans m's retained explicit entries (source
+// Content order, excluding recognized merge directives, exactly the same
+// entries effectiveEntriesWithMemo's pass 1 collects) for two whose
+// effectiveKeyIdentity compare equal, returning the SECOND (later) key
+// node of the first such pair found, and true. This is a post-alias rule:
+// sourcegraph.go's checkDuplicateMappingKeys already rejects two explicit
+// keys with the same tag-blind Kind+Value before resolveEffective is ever
+// reached, but does not catch two explicit keys whose Kind and Value
+// differ syntactically yet dereference (through one or more aliases) to
+// the same effectiveKeyIdentity — e.g. a direct scalar key and an alias
+// key targeting an anchored scalar with the same resolved tag and value.
+//
+// It reports nothing about a collision between an explicit key and a
+// merge-inherited candidate of the same identity: that case is ordinary
+// suppression, handled by effectiveEntriesWithMemo's dedup loop below,
+// not this error condition, since only two EXPLICIT keys of one source
+// mapping are ever compared here.
+func explicitKeyCollision(m *yaml.Node) (*yaml.Node, bool) {
+	seen := make(map[effectiveKeyID]bool)
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		key := m.Content[i]
+		if isMergeKey(key) {
+			continue
+		}
+		id := effectiveKeyIdentity(key)
+		if seen[id] {
+			return key, true
+		}
+		seen[id] = true
+	}
+	return nil, false
 }
 
 // mergeOperandMappings returns, in left-to-right order, the underlying

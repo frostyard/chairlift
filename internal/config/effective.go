@@ -74,18 +74,30 @@ func resolveEffective(path string, doc *yaml.Node) (*yaml.Node, *LoadError) {
 	if st.overflowed {
 		return nil, effectiveOutputLimitError(path, doc, st.overflowNode)
 	}
+	if st.collided {
+		return nil, effectiveIdentityCollisionError(path, doc, st.collisionKey)
+	}
 	return out, nil
 }
 
-// effectiveEmitState tracks emitEffectiveNode's per-call node budget: count
-// is the number of nodes allocated so far, and overflowed/overflowNode
-// record the first node whose emission would exceed
-// maxEffectiveOutputNodes, so the recursion can unwind without doing any
-// further allocation or descending into any further Content.
+// effectiveEmitState tracks emitEffectiveNode's per-call node budget and
+// its per-call identity-collision detection: count is the number of nodes
+// allocated so far, and overflowed/overflowNode record the first node
+// whose emission would exceed maxEffectiveOutputNodes, so the recursion
+// can unwind without doing any further allocation or descending into any
+// further Content. collided/collisionKey record, similarly, the first
+// pair of explicit keys of one source mapping found to normalize to the
+// same effectiveKeyIdentity (effectivemerge.go's explicitKeyCollision),
+// so the recursion can unwind without inventorying or emitting any
+// further mapping. Both conditions are terminal for the whole
+// resolveEffective call once set: emitEffectiveNode checks both before
+// doing any further work.
 type effectiveEmitState struct {
 	count        int
 	overflowed   bool
 	overflowNode *yaml.Node
+	collided     bool
+	collisionKey *yaml.Node
 }
 
 // emitEffectiveNode dereferences n through dereferenceAliasTarget and
@@ -110,7 +122,7 @@ type effectiveEmitState struct {
 // further work, so an oversized or exponential expansion is bounded by the
 // budget rather than run to completion.
 func emitEffectiveNode(n *yaml.Node, st *effectiveEmitState) *yaml.Node {
-	if st.overflowed {
+	if st.overflowed || st.collided {
 		return nil
 	}
 	target := dereferenceAliasTarget(n)
@@ -122,7 +134,10 @@ func emitEffectiveNode(n *yaml.Node, st *effectiveEmitState) *yaml.Node {
 	}
 	out := emitNodeMetadata(target)
 	if target.Kind == yaml.MappingNode {
-		entries := effectiveEntries(target)
+		entries := effectiveEntries(target, st)
+		if st.collided {
+			return nil
+		}
 		if len(entries) == 0 {
 			return out
 		}
@@ -174,6 +189,40 @@ func effectiveOutputLimitError(path string, doc *yaml.Node, overflowNode *yaml.N
 	detail := fmt.Sprintf(
 		"effective output exceeds the maximum of %d emitted nodes (line %d)",
 		maxEffectiveOutputNodes, line,
+	)
+	return sourceGraphError(path, detail)
+}
+
+// effectiveIdentityCollisionError builds the KindParseType *LoadError
+// resolveEffective returns when two EXPLICIT keys of the same source
+// mapping normalize to the same effectiveKeyIdentity after alias
+// dereferencing (effectivemerge.go's explicitKeyCollision). This is a
+// separate, post-alias rule layered on top of — not a replacement for —
+// sourcegraph.go's tag-blind Kind+Value duplicate-key validation
+// (checkDuplicateMappingKeys), which validateSourceGraph already runs
+// first and unchanged: that check alone does not catch, for example, an
+// alias key and a direct scalar key that dereference to the same
+// effectiveKeyIdentity, since the alias node's own Kind and Value differ
+// from its target's. It applies only to two explicit keys of one source
+// mapping; an inherited merge candidate colliding with an explicit key is
+// ordinary suppression (effectiveEntriesWithMemo's dedup pass), not this
+// error.
+//
+// Like effectiveOutputLimitError, it reuses collectSourceInventory and
+// attributeSourceLines on the validated source document doc so the
+// reported line for laterKey (the second of the two colliding keys,
+// found in source Content order) is always positive: laterKey's own
+// line, else its nearest positive-line ancestor over all paths, else 1.
+func effectiveIdentityCollisionError(path string, doc *yaml.Node, laterKey *yaml.Node) *LoadError {
+	inv := collectSourceInventory(doc)
+	lines := attributeSourceLines(inv)
+	line := lines[laterKey]
+	if line <= 0 {
+		line = 1
+	}
+	detail := fmt.Sprintf(
+		"mapping key collides with another explicit key of the same mapping after alias resolution (line %d)",
+		line,
 	)
 	return sourceGraphError(path, detail)
 }

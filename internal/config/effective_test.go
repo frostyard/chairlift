@@ -104,9 +104,14 @@ func walkEffectiveNodes(n *yaml.Node, visit func(*yaml.Node)) {
 // yaml.AliasNode.
 func TestResolveEffectiveOutputHasNoAnchorsOrAliases(t *testing.T) {
 	anchoredKey := &yaml.Node{Kind: yaml.ScalarNode, Anchor: "k", Value: "anchored-key"}
+	anchoredKeyTarget := &yaml.Node{Kind: yaml.ScalarNode, Anchor: "k2", Value: "aliased-key"}
 	anchoredValue := &yaml.Node{Kind: yaml.MappingNode, Anchor: "v", Content: []*yaml.Node{scalarNode("inner"), scalarNode("value")}}
 
-	aliasKey := &yaml.Node{Kind: yaml.AliasNode, Alias: anchoredKey}
+	// aliasKey targets a distinct anchored scalar (not anchoredKey) so its
+	// effectiveKeyIdentity does not collide with anchoredKey's: this test
+	// exercises alias-in-key-position metadata copying, not the separate
+	// effective-identity collision rule (see effectiveidentity_test.go).
+	aliasKey := &yaml.Node{Kind: yaml.AliasNode, Alias: anchoredKeyTarget}
 	aliasValue := &yaml.Node{Kind: yaml.AliasNode, Alias: anchoredValue}
 
 	root := &yaml.Node{
