@@ -196,8 +196,9 @@ capabilities (document parsing, reachable source-graph shape validation,
 merge-operand shape validation, duplicate-explicit-key detection, the
 memoized alias-hop bound and the memoized source-node path-visit bound
 (both with all-paths line attribution), and now a validate-first
-alias/anchor-resolving emitter whose merge precedence and final output
-shape are still being built out across the next two chunks) meant to
+alias/anchor-resolving, merge-precedence-resolving emitter — complete
+except for the post-alias key-identity-collision rule and a small set of
+bounded-work regressions the next chunk still owes) meant to
 eventually replace `loadFromPath()`'s current `yaml.Unmarshal` call with
 fail-closed, single-document, structurally validated loading — but none of
 that wiring exists yet, so `KindRead` and `KindSchema` still describe
@@ -210,8 +211,9 @@ path currently exercises.
 of two unexported predicates from `gopkg.in/yaml.v3` v3.0.1 itself —
 `decode.go:isMerge` and `resolve.go:shortTag` — rather than reimplementations
 from a description of YAML merge-key semantics, so this package's own
-merge-key walk (a later change) recognizes exactly the same nodes yaml.v3's
-own decoder would treat as a merge key, node for node. `isMergeKey` reports
+merge-key walk (`effectiveEntries`, described below) recognizes exactly the
+same nodes yaml.v3's own decoder would treat as a merge key, node for node.
+`isMergeKey` reports
 true only for a `yaml.ScalarNode` whose `Value` is exactly `"<<"` and whose
 `Tag` is one of: absent (`""`, the implicit/unresolved tag), the bare
 non-specific tag (`"!"`), the short merge tag (`"!!merge"`), or its canonical
@@ -339,8 +341,8 @@ blow up the way the pairwise loop would.
 **Effective (merge-precedence) key identity
 (`internal/config/effectivekeys.go`).** A separate, standalone helper,
 `effectiveKeyIdentity`, computes a comparable `effectiveKeyID` for a mapping
-key node — the identity a later merge-precedence resolver
-(`resolveEffective`, not implemented in this slice yet) needs to decide
+key node — the identity the merge-precedence resolver `effectiveEntries`
+(`internal/config/effectivemerge.go`, described below) uses to decide
 whether two keys from different merge sources are "the same key" and must
 therefore resolve to one effective value rather than two. It is
 deliberately a different type and a different comparison from
@@ -402,6 +404,16 @@ through more than one alias becomes more than one independent fresh copy in
 the result, and each such copy is charged separately against the
 `maxEffectiveOutputNodes` budget described just below.
 
+For a mapping node specifically, `emitEffectiveNode` does not copy the
+target's raw `Content` — it emits `effectiveEntries(target)`'s winning
+entries instead (`internal/config/effectivemerge.go`, described in the next
+section), so only a winning key and its winning value are ever resolved and
+charged against the budget; a losing merge candidate's value is never
+cloned. A recognized `<<` merge key is therefore never itself emitted as a
+key, and the result contains no recognized merge directive and no
+`yaml.AliasNode` anywhere, at any depth — including inside a retained
+mapping key's own subtree or a retained value's own nested merge.
+
 `resolveEffective`'s emit path is bounded by the unexported `const
 maxEffectiveOutputNodes = 100000`: every retained document, mapping,
 sequence, key and value node counts exactly once toward it, mirroring
@@ -433,27 +445,91 @@ node's own line when positive, otherwise its nearest positive-line ancestor
 over all root-reachable paths, otherwise `1` for a wholly synthetic graph
 with no line metadata anywhere, so the reported line is always positive.
 
-This chunk deliberately leaves two things unfinished, both authorized by
-the spec and tracked forward: a recognized `<<` merge key (`isMergeKey`)
-is still emitted as an ordinary mapping entry with its operand value
-resolved like any other value, rather than being consumed by
-merge-precedence resolution (`TestResolveEffectiveMergeDirectiveRetainedForNow`
-pins this down and is one of the tests a later chunk must update when real
-merge precedence lands); and `resolveEffective` is not wired into `Load()`,
-`loadFromPath()`, or ChairLift's strict schema validation — it is a
-standalone, still-unwired capability like `parseYAMLDocument` and
-`validateSourceGraph` before it. A `!!str`-tagged `"<<"` key and a
-`!!merge`-tagged scalar whose `Value` isn't literally `"<<"` both survive
-as ordinary effective keys today and are expected to keep doing so once
-merge precedence is implemented, since `isMergeKey` never recognizes either
-shape. `emitEffectiveNode`, `dereferenceAliasTarget`/`emitNodeMetadata`, the
-`effectiveEmitState` counter type, and `effectiveOutputLimitError` are all
-unexported helpers reachable only from `resolveEffective`; per the frozen
-`directCallAllowlist` in `sourcesurface_test.go`, no `_test.go` file names
-any of them directly — `effective_test.go` and `effectivebound_test.go`
+**Merge precedence, memoized candidate inventory, merge-free output
+(`internal/config/effectivemerge.go`).** `effectiveEntries(m *yaml.Node)
+[]effectiveEntry` computes a mapping node's complete, ordered, deduplicated
+inventory of winning entries — the real, yaml.v3-compatible merge-precedence
+result `emitEffectiveNode`'s mapping branch emits from, replacing the
+earlier chunk's interim "retain the `<<` key as an ordinary entry" behavior.
+An `effectiveEntry` is an `{id effectiveKeyID, key, value *yaml.Node}`
+triple: `id` is the candidate's `effectiveKeyIdentity` (`effectivekeys.go`),
+used to decide whether two candidates from different sources are "the same
+key"; `key` and `value` are the source nodes for that candidate, not yet
+copied.
+
+The inventory is built in two passes, then deduplicated once: first, every
+retained explicit entry, in `m`'s source `Content` order, skipping any
+recognized merge directive (`isMergeKey`); second, every inherited
+candidate, discovered by merge directives in source `Content` order, each
+directive's sequence operands left to right (`mergeOperandMappings`
+unwraps a direct mapping, or an alias's *immediate* target, matching
+`validateMergeOperand`'s already-accepted shapes), and each operand
+mapping's own `effectiveEntries` computed recursively — so a merge nested
+inside a merge operand is fully flattened before its candidates are
+considered here. The combined candidate list is then deduplicated by
+`effectiveKeyIdentity`, keeping the *first* candidate for each identity.
+Because explicit entries are always listed first, this yields
+explicit-over-merged precedence; because merge candidates are discovered in
+directive-then-sequence-then-recursive order, it yields
+earlier-sequence-operand-over-later precedence; and because the explicit
+pass runs unconditionally before the merge pass regardless of where the
+`<<` directive appears in `m`'s `Content`, an explicit key suppresses a
+matching inherited candidate whether the directive comes before or after
+that explicit key in the source. This matches `gopkg.in/yaml.v3` v3.0.1
+`decode.go`'s `decoder.mapping`/`decoder.merge` behavior exactly:
+`mapping` decodes explicit entries first and skips `isMerge` keys, then
+`merge` seeds its `mergedFields` set from every explicit parent key before
+consuming operands in `Content` order and marking each merged key as
+consumed — with nested merges inheriting that accumulated set rather than
+resetting it, which is why `effectiveEntries`' own recursive calls flatten
+rather than re-seed.
+
+The emitted mapping's key order is therefore fully deterministic: retained
+explicit entries in source `Content` order, then inherited winners in
+merge-candidate discovery order (directives in `Content` order, sequence
+operands first to last, each operand's own effective entry order) —
+running the same fixture through `resolveEffective` twice yields identical
+order both times.
+
+`effectiveEntries` delegates to the unexported `effectiveEntriesWithMemo`,
+threading an `effectiveMergeMemo` (`map[*yaml.Node][]effectiveEntry`) keyed
+by mapping-node pointer identity through the recursion described above,
+scoped to that one `effectiveEntries` call: a mapping node reached as a
+merge operand through more than one parent, or through more than one alias
+to the same anchor, within that recursion has its candidate inventory
+computed once and reused rather than recomputed once per parent —
+`TestResolveEffectiveSharedOperandInventoriedOnce`'s 40-level doubling merge
+chain (mirroring `buildSourceSharingDAG`'s construction, but merging via
+`<<: [*prev, *prev]` at each level instead of plain aliasing) would need on
+the order of `2^40` recursive computations without this memo and completes
+in well under a bounded timeout with it. A losing candidate's value is
+never resolved by this pass either — `effectiveEntries` only ever returns
+the source nodes for winning entries, so `emitEffectiveNode` never clones,
+and never charges against `maxEffectiveOutputNodes`, anything a merge
+discarded.
+
+The post-alias key-identity-collision rule and a small set of
+bounded-work regressions are deliberately deferred to the next chunk: until
+then, two *explicit* keys that happen to collide under
+`effectiveKeyIdentity` only after alias dereferencing (for example, one
+written as a literal scalar and the other as an alias to that exact same
+scalar) are deduplicated by the same first-candidate rule as any other
+collision, and no test in this slice asserts that specific edge case's
+behavior.
+
+`emitEffectiveNode`, `dereferenceAliasTarget`/`emitNodeMetadata`, the
+`effectiveEmitState` counter type, `effectiveOutputLimitError`,
+`effectiveEntry`, `effectiveMergeMemo`, `effectiveEntriesWithMemo`, and
+`mergeOperandMappings`/`mergeOperandMapping` are all unexported helpers
+reachable only from `resolveEffective`; per the frozen `directCallAllowlist`
+in `sourcesurface_test.go`, no `_test.go` file names any of them directly —
+`effective_test.go`, `effectivebound_test.go`, and `effectivemerge_test.go`
 exercise them only through `resolveEffective` itself, alongside
 `resolveEffective` and `effectiveKeyIdentity`, the two additions that
-allowlist authorizes.
+allowlist authorizes. `resolveEffective` itself is still not wired into
+`Load()`, `loadFromPath()`, or ChairLift's strict schema validation — it
+remains a standalone capability, like `parseYAMLDocument` and
+`validateSourceGraph` before it.
 
 **Reachable inventory, all-paths line attribution, and the 64
 consecutive-alias-hop and 128-source-node-path-visit bounds

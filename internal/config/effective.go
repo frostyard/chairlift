@@ -44,11 +44,16 @@ const maxEffectiveOutputNodes = 100000
 // result must be alias-free, a target reached through more than one alias
 // becomes more than one independent fresh copy.
 //
-// This is an interim result, authorized by the spec for this chunk: a
-// recognized "<<" merge key (isMergeKey) is emitted as an ordinary mapping
-// entry with its operand value resolved like any other value, rather than
-// being consumed by merge-precedence resolution. A later chunk replaces
-// this with the real merge-precedence result.
+// A mapping node's Content is not copied verbatim: it is replaced by its
+// effective entries (effectiveEntries, effectivemerge.go), so only winning
+// keys and winning values — explicit-over-merged, earlier-sequence-operand-
+// over-later, in effectiveEntries' documented deterministic order — are
+// ever resolved and emitted. A losing candidate's value is never cloned
+// and never charged against maxEffectiveOutputNodes below. A recognized
+// "<<" merge key is therefore never itself emitted as a key, and the
+// result contains no recognized merge directive anywhere, including
+// within a retained mapping key's own subtree or a retained value's own
+// nested merge.
 //
 // The emit path is bounded by maxEffectiveOutputNodes: if emitting doc
 // would allocate more than that many nodes (an exponential alias
@@ -86,7 +91,14 @@ type effectiveEmitState struct {
 // emitEffectiveNode dereferences n through dereferenceAliasTarget and
 // returns a fresh copy of the resulting non-alias node: its metadata via
 // emitNodeMetadata, plus its Content recursively emitted in the same
-// order. It assumes n comes from a graph validateSourceGraph has already
+// order — except for a mapping node, whose emitted entries come from
+// effectiveEntries instead of its raw Content, so only winning keys and
+// values are ever resolved (see resolveEffective's doc comment).
+// effectiveEntries' own memo (effectivemerge.go) is scoped to that one
+// call and its recursion into merge operands, so a mapping node reached
+// as a merge operand through several parents or aliases within the same
+// mapping's inventory computation is inventoried once, not once per
+// parent. It assumes n comes from a graph validateSourceGraph has already
 // proven acyclic and well-formed, so it never needs its own cycle guard.
 //
 // Before allocating anything for the dereferenced target, it increments
@@ -109,6 +121,25 @@ func emitEffectiveNode(n *yaml.Node, st *effectiveEmitState) *yaml.Node {
 		return nil
 	}
 	out := emitNodeMetadata(target)
+	if target.Kind == yaml.MappingNode {
+		entries := effectiveEntries(target)
+		if len(entries) == 0 {
+			return out
+		}
+		out.Content = make([]*yaml.Node, 0, len(entries)*2)
+		for _, e := range entries {
+			keyOut := emitEffectiveNode(e.key, st)
+			if st.overflowed {
+				return nil
+			}
+			valOut := emitEffectiveNode(e.value, st)
+			if st.overflowed {
+				return nil
+			}
+			out.Content = append(out.Content, keyOut, valOut)
+		}
+		return out
+	}
 	if len(target.Content) == 0 {
 		return out
 	}

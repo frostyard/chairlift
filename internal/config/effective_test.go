@@ -280,42 +280,6 @@ func TestResolveEffectiveAliasExpansionCopiesTargetMetadata(t *testing.T) {
 	assertTargetMetadata(t, outRoot.Content[4])
 }
 
-// TestResolveEffectiveMergeDirectiveRetainedForNow documents the
-// authorized interim state for this chunk: a recognized "<<" merge
-// directive is still present in resolveEffective's result as an ordinary
-// key, with its operand value resolved like any other value. This is
-// replaced by real merge-precedence resolution in a later chunk, which
-// must also update this test (see
-// docs/agents/skills/cross-chunk-test-contracts-must-be-tracked-forward.md).
-func TestResolveEffectiveMergeDirectiveRetainedForNow(t *testing.T) {
-	operand := simpleMapping("from-merge", "value")
-	root := &yaml.Node{
-		Kind:    yaml.MappingNode,
-		Content: []*yaml.Node{mergeKeyNode(), operand, scalarNode("own-key"), scalarNode("own-value")},
-	}
-
-	out, err := resolveEffective("merge.yml", docOf(root))
-	if err != nil {
-		t.Fatalf("resolveEffective returned unexpected error: %v", err)
-	}
-
-	outRoot := out.Content[0]
-	if len(outRoot.Content) != 4 {
-		t.Fatalf("len(outRoot.Content) = %d, want 4 (merge key retained as an ordinary entry)", len(outRoot.Content))
-	}
-	if outRoot.Content[0].Value != "<<" {
-		t.Fatalf("outRoot.Content[0].Value = %q, want \"<<\"", outRoot.Content[0].Value)
-	}
-	mergeValue := outRoot.Content[1]
-	if mergeValue.Kind != yaml.MappingNode || len(mergeValue.Content) != 2 ||
-		mergeValue.Content[0].Value != "from-merge" || mergeValue.Content[1].Value != "value" {
-		t.Fatalf("merge operand not resolved as an ordinary value: %+v", mergeValue)
-	}
-	if outRoot.Content[2].Value != "own-key" || outRoot.Content[3].Value != "own-value" {
-		t.Fatalf("own-key/own-value entry missing or altered: %+v/%+v", outRoot.Content[2], outRoot.Content[3])
-	}
-}
-
 // TestResolveEffectiveQuotedMergeKeyIsOrdinary confirms a !!str-tagged
 // "<<" key and a merge-tagged scalar whose value is not "<<" both survive
 // as ordinary effective keys — a contract unaffected by merge-precedence
