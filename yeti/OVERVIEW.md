@@ -140,8 +140,13 @@ stable `ErrorKind` enumerates why loading/validating a config file could
 fail: `KindRead` ("read") for a filesystem/read failure (e.g. permission
 denied opening the file — distinct from "file does not exist", which
 `Load()` treats as absent-and-fall-back, not an error); `KindParseType`
-("parse/type") for a YAML syntax error or a value that decodes to the wrong
-Go type; and `KindSchema` ("schema") for a validator-detected shape failure
+("parse/type") for a YAML syntax error, a value that decodes to the wrong
+Go type, or a malformed source graph detected by pure shape/graph
+inspection after the YAML parsed successfully (an unsupported node shape,
+an alias with no target, an alias cycle, etc.) — like `KindSchema` below,
+that shape-inspection case may legitimately carry a nil `Err`, since there
+is no underlying parser error to wrap; and `KindSchema` ("schema") for a
+validator-detected shape failure
 found only after the document parsed successfully — e.g. an unknown key or a
 value of the right YAML kind but the wrong shape — which may legitimately
 carry a nil `Err` since shape inspection alone can detect the problem with
@@ -151,12 +156,268 @@ non-empty/non-nil), so the three `Kind` literals above always appear
 verbatim in the message. `LoadError.Unwrap()` returns `Err` unchanged
 (nil when there is none), which is what lets `errors.Is`/`errors.As` see
 through a `*LoadError` to a wrapped sentinel or recover the original value
-from a `fmt.Errorf("%w", ...)` wrapper. As of this writing nothing
-constructs a `LoadError` yet — `Load()` and `loadFromPath()` are unchanged
-and still fall back to `defaultConfig()` on any read or parse failure, so
-there is no strict parsing and no fail-closed runtime behavior yet; this
-vocabulary exists so a later change can start returning `*LoadError` values
-without redefining what "read", "parse/type", and "schema" mean.
+from a `fmt.Errorf("%w", ...)` wrapper.
+
+**Single-document YAML parsing (`internal/config/source.go`).** The
+unexported `parseYAMLDocument(path string, data []byte) (*yaml.Node,
+*LoadError)` is the first thing in this package that actually constructs a
+`LoadError`. It decodes `data` with `yaml.NewDecoder` and accepts exactly one
+YAML document, with a fixed cardinality outcome per input shape:
+
+- Empty input, and whitespace-only input, are both the valid empty result:
+  `(nil, nil)` — no document, no error. This matches `Load()`'s existing
+  "absent config" fallback semantics elsewhere in the package.
+- A single well-formed document returns its `*yaml.Node` (`Kind ==
+  yaml.DocumentNode`, one child under `Content`) and a nil `*LoadError`.
+- A malformed first document returns `(nil, err)` with `err.Kind ==
+  KindParseType`, `err.Path` copied verbatim, `err.Err` set to yaml.v3's own
+  parser error, and `err.Detail` set to that same error's message — which
+  yaml.v3 always renders as `"yaml: line N: ..."`, so the reported line is
+  visible in `Detail` without a second look at `Err`.
+- A trailing bare `---` is a second document, not a harmless end-of-stream
+  marker: yaml.v3 decodes it as a second, null document, and
+  `parseYAMLDocument` rejects it exactly like any other second document
+  (`KindParseType`, `Detail` naming its line) rather than accepting the
+  input as a single document.
+- Any other second document — well-formed or malformed — is rejected the
+  same way: a well-formed second document has no parser error to wrap, so
+  `Err` is left nil and `Detail` names that document's own starting line
+  instead; a malformed second document preserves *that* document's parser
+  error and line in `Err`/`Detail`, just like a malformed first document
+  would.
+
+As of this writing `parseYAMLDocument` and `validateSourceGraph` are not
+wired into `Load()` or `loadFromPath()` — both are unchanged and still fall
+back to `defaultConfig()` on any read or parse failure, so there is no
+strict parsing and no fail-closed runtime behavior yet. This is the first
+of several package-private capabilities (document parsing, reachable
+source-graph shape validation, merge-operand shape validation,
+duplicate-explicit-key detection, the memoized alias-hop bound and the
+memoized source-node path-visit bound, both with all-paths line
+attribution, now; effective-merge construction in a later change) meant to eventually replace
+`loadFromPath()`'s current `yaml.Unmarshal` call with fail-closed,
+single-document, structurally validated loading — but none of that wiring
+exists yet, so `KindRead` and `KindSchema` still describe capabilities the
+package's vocabulary anticipates rather than ones any code path currently
+exercises.
+
+**Exact merge-key recognition and tag normalization
+(`internal/config/sourcegraph.go`).** `isMergeKey(n *yaml.Node) bool` and
+`shortYAMLTag(tag string) string` are deliberate behaviorally exact reproductions
+of two unexported predicates from `gopkg.in/yaml.v3` v3.0.1 itself —
+`decode.go:isMerge` and `resolve.go:shortTag` — rather than reimplementations
+from a description of YAML merge-key semantics, so this package's own
+merge-key walk (a later change) recognizes exactly the same nodes yaml.v3's
+own decoder would treat as a merge key, node for node. `isMergeKey` reports
+true only for a `yaml.ScalarNode` whose `Value` is exactly `"<<"` and whose
+`Tag` is one of: absent (`""`, the implicit/unresolved tag), the bare
+non-specific tag (`"!"`), the short merge tag (`"!!merge"`), or its canonical
+long form (`"tag:yaml.org,2002:merge"`) — the last two both recognized via
+`shortYAMLTag`. A quoted `"<<"` (explicitly tagged `"!!str"`) is therefore an
+ordinary key, not a merge key, and so is a merge-tagged scalar whose `Value`
+isn't literally `"<<"`; non-scalar nodes (mapping, sequence, alias) and a nil
+`*yaml.Node` are never merge keys either — `isMergeKey` is nil-safe rather
+than panicking. `shortYAMLTag` rewrites a canonical `"tag:yaml.org,2002:xxx"`
+tag to yaml.v3's short `"!!xxx"` form and returns any tag without that prefix
+unchanged (including the empty tag, `"!"`, an already-short `"!!xxx"` tag, a
+custom `"!xxx"` tag, and a long tag under a different authority such as
+`"tag:example.com,2020:merge"`). These are the only two unexported helpers in
+this package's source-graph slice that the spec singles out for a direct
+unit test (`TestMergeKeyRecognition`, `TestShortYAMLTagNormalization` in
+`sourcegraph_test.go`) rather than only exercising them through an exported
+entry point, per
+`docs/agents/skills/helper-functions-need-direct-test-calls.md`; neither
+helper is wired into any call path yet — that wiring is later work.
+
+**Reachable source-graph shape validation
+(`internal/config/sourcegraph.go`).** `validateSourceGraph(path string, doc
+*yaml.Node) *LoadError` walks every node and content edge reachable from
+`doc` — through document content, mapping keys, mapping values, sequence
+entries, and alias targets, in each node's `Content` slice order — and
+rejects a malformed source graph as `KindParseType` rather than panicking,
+even against a synthetic `*yaml.Node` tree unreachable from real YAML text.
+`doc == nil` succeeds unconditionally: it is `parseYAMLDocument`'s valid
+empty-input result. Otherwise the checks are, in order:
+
+- the root must be a `yaml.DocumentNode` with exactly one non-nil child;
+- every reachable mapping must have an even number of content entries, and
+  neither a key nor a value in any key/value pair may be nil;
+- every reachable sequence must have no nil entries;
+- every reachable scalar must have no content children;
+- every reachable alias must have no content children and a non-nil
+  `Alias` target; and
+- every reachable node's `Kind` must be one of yaml.v3's five supported
+  kinds (an all-zero `Kind` or any other unsupported value is rejected).
+
+Node identity — the `*yaml.Node` pointer itself, not any decoded value —
+drives an unseen/visiting/done state map keyed on that pointer, so a node
+reached through several parents (a shared anchor aliased more than once, a
+scalar reused as several mapping values) is validated exactly once, and
+re-encountering a node still in the `visiting` state on the active
+depth-first path is rejected as an alias cycle (covering both a self cycle,
+where an anchored mapping's own value aliases back to itself, and a mutual
+cycle between two anchored mappings). Because pure shape/graph rejections
+have no underlying Go error to preserve, every `*LoadError` `validateSourceGraph`
+returns carries a nil `Err`; `LoadError.Error()` still renders the full
+`"config parse/type error: <path>: <detail>"` wording from `Path` and
+`Detail` alone. A self merge (`&a {<<: *a}`) and a mutual merge cycle
+between two anchored mappings are both rejected too, but as a byproduct of
+the same generic alias-cycle rule above rather than merge-specific code: the
+merge operand's alias is still in the `visiting` state by the time any
+merge-shape check would run, so the cycle rule fires first. Every reachable
+mapping's explicit keys must also be pairwise unique (see the duplicate-key
+paragraph below); the memoized 64-consecutive-alias-hop bound and the
+memoized 128-source-node-path-visit bound, both described below, now run
+as a second pass once these checks prove the graph acyclic.
+`validateSourceGraph` is not wired into any call path yet either.
+
+**Merge-operand shape validation (`internal/config/sourcegraph.go`).**
+Layered onto the traversal above: every mapping entry whose key
+`isMergeKey` reports true additionally has its value checked as a merge
+operand by `validateMergeOperand`, reproducing `gopkg.in/yaml.v3` v3.0.1
+`decode.go`'s `merge`/`failWantMap` rule exactly rather than accepting any
+value ordinary YAML content would allow. A merge operand is accepted only
+as one of: a `yaml.MappingNode` literal; a `yaml.AliasNode` whose
+*immediate* `Alias` target is a `yaml.MappingNode`; or a `yaml.SequenceNode`
+each of whose entries is itself one of the two prior shapes. Everything
+else is rejected as `KindParseType` — a scalar operand, an alias to a
+sequence or a scalar, a sequence containing a scalar or a nested sequence,
+and a sequence containing an alias to a non-mapping all fail
+(`isMergeOperandMapping` is the single-alias-hop predicate both the direct
+and sequence-entry checks share). The immediate-target rule produces a
+deliberate asymmetry: an alias-to-alias-to-mapping chain is perfectly valid
+as an *ordinary* mapping value (the generic traversal above only requires a
+non-nil `Alias` target of any kind) but is rejected as a merge operand,
+because yaml.v3 itself only unwraps one alias hop before deciding a merge
+value is not a mapping. All four of `isMergeKey`'s recognized tag forms —
+implicit, `"!"`, `"!!merge"`, and the canonical long tag — trigger this
+check identically; a quoted `"<<"` key (tagged `"!!str"`) does not, so it
+may hold any otherwise-valid value, including a bare scalar. Merge operands
+are validated wherever the traversal reaches them — inside a complex
+mapping key's own subtree (complex keys are traversed like any other node
+but are not otherwise classified in this slice), and in a mapping entry a
+later, still-unimplemented merge-precedence pass would go on to discard in
+favor of a later `<<` entry — because this function proves every reachable
+node well-formed, not just the nodes an eventual effective-merge result
+would keep
+(`docs/agents/skills/discarded-merge-branches-still-need-validation.md`).
+
+**Duplicate explicit-key detection (`internal/config/sourcegraph.go`).**
+Every reachable mapping's explicit keys must be pairwise unique under
+`sourceKeyID{Kind, Value}` identity — a repeated key rejects the whole
+graph as `KindParseType`, naming the duplicated key's value and, when the
+parser recorded a positive line for it, that line. The identity
+deliberately compares only `Kind` and `Value`, reproducing `gopkg.in/yaml.v3`
+v3.0.1 `decode.go`'s own `uniqueKeys` predicate (inside `decoder.mapping`)
+exactly rather than the tag-aware key identity
+`docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md`
+requires elsewhere in this package for merge/dedup purposes — that rule is
+about a different, not-yet-implemented concern (merge-precedence identity)
+and does not apply here, because yaml.v3's own duplicate-key guard never
+looks at `Tag` either. Two surprising consequences follow directly: two
+`<<` merge-key entries in the same mapping collide as duplicates regardless
+of which of `isMergeKey`'s four accepted tag forms each carries (an
+implicit `<<` and one explicitly tagged `!!merge` are still "the same key"),
+and a bare `1` (yaml.v3 resolves it to `!!int`) collides with an explicitly
+quoted `"1"` (`!!str`) even though their `Tag`s differ, because neither
+`Kind` nor `Value` distinguishes them. Detection is per-mapping, not
+global — the same key value recurring in a sibling mapping, or in a nested
+mapping reachable through it, is never a duplicate — and it runs on every
+reachable mapping regardless of how it is reached: directly, as a merge
+operand's value, through an alias target, or inside a complex mapping key's
+own subtree. The implementation is one `map[sourceKeyID]struct{}` per
+mapping, sized from `len(n.Content)/2`, filled by a single linear pass over
+key indices — deliberately not yaml.v3's own nested-loop `uniqueKeys`
+comparison, which is pairwise (`O(k^2)` per mapping). This package's version
+is `O(k)` per mapping and `O(V+E)` over the whole graph, so a mapping with
+tens of thousands of keys does not make the validator's own running time
+blow up the way the pairwise loop would.
+
+**Reachable inventory, all-paths line attribution, and the 64
+consecutive-alias-hop and 128-source-node-path-visit bounds
+(`internal/config/sourcebounds.go`).** Once
+`walkSourceNode`'s traversal and every check above have proven a source
+graph acyclic and well-formed, `validateSourceGraph`'s single call to
+`checkSourceGraphBounds` runs a second, purely additive pass — it never
+runs on a graph that failed an earlier check, so a cyclic or otherwise
+malformed graph still surfaces its original error (an alias cycle, a
+malformed merge operand, a duplicate key) rather than a bounds error.
+`collectSourceInventory` walks the already-proven-acyclic graph exactly
+once per unique node, in `Content` slice order, recording every reachable
+node in discovery order, every parent→child content edge reachable in the
+graph — including a second edge into a node reached through more than one
+parent, not just the edge the walk happened to follow first — and each
+node's first-encounter active nearest positive-line ancestor.
+
+`attributeSourceLines` gives every reachable node a source line to report
+in a bounds-limit error: a node's own `Line` when positive; otherwise the
+line of a positive-line ancestor at the minimum number of content edges
+from it over *all* root-reachable paths, not merely the path the traversal
+happened to discover it by first; otherwise `1`, the deterministic
+fallback for a wholly synthetic graph with no line metadata anywhere. This
+is a multi-source breadth-first search in the parent→child direction,
+seeded with every reachable positive-line node at distance zero attributing
+its own line and relaxing each edge `parent→child` with
+`(dist(parent)+1, line(parent))`; because it walks `collectSourceInventory`'s
+already-deduplicated node and edge lists, it visits each at most once and
+is `O(V+E)`, so it never re-expands a shared subgraph once per path — the
+same discipline that keeps a compact alias-sharing DAG linear rather than
+exponential. When two positive-line ancestors tie at the same minimum
+distance to a node, the node's first-encounter active ancestor wins if it
+is one of the tied candidates; otherwise the candidate reached through the
+parent with the lower discovery index wins. An alias edge participates in
+this distance exactly like an ordinary content edge, so a node reachable
+one alias hop below a positive-line ancestor can out-distance — and so
+out-rank — a farther positive-line ancestor reached only through ordinary
+content.
+
+The alias-hop bound itself is a memoized dynamic program over node
+identity: `hops(n) = 1 + hops(n.Alias)` for a `yaml.AliasNode`, and `0` for
+every other kind, so descending from any non-alias node into ordinary
+content always resets the count for that child path — which is why more
+than 64 independent, shallow sibling aliases to the same anchored target
+all succeed even though there are far more than 64 of them in the graph.
+`aliasHopCount` memoizes by node pointer, so a node reachable through many
+parents is computed once rather than once per path. `checkAliasHopLimit`
+rejects the first node (in discovery order) whose `aliasHopCount` exceeds
+64 as `KindParseType`, naming the 64-hop limit and reporting
+`attributeSourceLines`' line for that node; exactly 64 consecutive hops
+succeeds and 65 fails.
+
+The 128-source-node-path-visit bound is a second, separate memoized
+dynamic program over node identity: `pathVisitCount(n) = 1 +
+max(pathVisitCount(child))` over every content edge reachable directly
+from `n` — a document's, mapping's, or sequence's `Content` entries, or an
+alias node's single `Alias` target — and `1` for a node with no such
+children (an ordinary scalar). Every encountered node, including a
+mapping's own key nodes, contributes exactly one visit; "key", "value",
+and "alias target" only name which child is traversed next and add no
+separate charge, so a scalar used as a mapping key counts once, not once
+for being a scalar plus once for being a key, and an alias node plus its
+target contribute two visits together, not one. `pathVisitCount` memoizes
+by node pointer exactly like `aliasHopCount`, so wide siblings that all
+share one deep target are each checked once and do not accumulate a
+global count, and a compact alias-sharing DAG is evaluated in time linear
+in its node and edge count rather than once per exponentially-many
+root-to-leaf paths.
+
+Because `pathVisitCount` is monotonically non-decreasing from any node
+toward the root, once one node's count exceeds 128 every one of its
+ancestors up to the graph's root does too; `checkSourcePathVisitLimit`
+therefore does not report the first over-limit node found in discovery
+order (which would almost always be the root itself, carrying no useful
+attribution) but instead walks `inv.nodes` in discovery order for the
+*boundary* node — one whose own count exceeds 128 but whose every direct
+child does not, i.e. the exact point along an offending path where the
+count first crosses the limit — and reports `attributeSourceLines`' line
+for that node, naming the 128-visit limit; this stays deterministic even
+when more than one branch independently crosses the boundary, since
+discovery order breaks the tie. Exactly 128 source-node visits on a
+root-to-leaf path succeeds and 129 fails. When a graph violates both
+bounds, `checkSourceGraphBounds` checks the alias-hop bound first, so the
+alias-hop error is reported and the path-visit pass never runs. Every
+error either pass returns has a nil `Err`, like every other
+`validateSourceGraph` rejection.
 
 **Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
 and `SchemaGroups(page)` derive the authoritative list of page names and,
