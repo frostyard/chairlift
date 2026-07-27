@@ -158,6 +158,30 @@ there is no strict parsing and no fail-closed runtime behavior yet; this
 vocabulary exists so a later change can start returning `*LoadError` values
 without redefining what "read", "parse/type", and "schema" mean.
 
+**Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
+and `SchemaGroups(page)` derive the authoritative list of page names and,
+per page, group names by reflection — never by a second hand-maintained
+list — so the inventory cannot drift from the types it describes. Page names
+come from the `yaml` struct tags on `Config`'s exported fields (via the
+unexported `yamlFieldNames` helper, in struct declaration order); group names
+for a page come from that page's map key set in `defaultConfig()` (via the
+unexported `schemaPageGroups` helper, sorted lexicographically for a stable
+API since map iteration order is not deterministic). `rawConfig` is *not* a
+schema authority here — it is `Config`'s pointer-typed YAML-decoding mirror
+(see above), and a dedicated reflection test
+(`TestRawConfigMatchesConfigFields`) proves its exported fields, field order,
+and yaml tag names match `Config`'s exactly, so it stays a provably-in-sync
+mirror rather than a second source of truth per
+`docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md`.
+Both exported functions return a freshly allocated slice (and `SchemaGroups`
+an error for a page name outside `SchemaPages()`) on every call, so a caller
+mutating a returned slice cannot affect a later call. An empty or duplicate
+page/group name is reported as a returned `error`, never a panic, `log.Fatal`,
+or `os.Exit`, so failures stay deterministic and assertable from tests. As of
+this writing no production code path — neither `Load()`/`loadFromPath()` nor
+any runtime diagnostic — consumes this inventory yet; it exists for a later
+change to build on.
+
 ### Package manager wrapper pattern
 
 Each wrapper in `internal/` follows a consistent shape:
