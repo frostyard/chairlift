@@ -191,9 +191,10 @@ wired into `Load()` or `loadFromPath()` — both are unchanged and still fall
 back to `defaultConfig()` on any read or parse failure, so there is no
 strict parsing and no fail-closed runtime behavior yet. This is the first
 of several package-private capabilities (document parsing, reachable
-source-graph shape validation, merge-operand shape validation, and
-duplicate-explicit-key detection now; effective-merge construction and the
-alias-hop/path-visit bounds in later changes) meant to eventually replace
+source-graph shape validation, merge-operand shape validation,
+duplicate-explicit-key detection, the memoized alias-hop bound with
+all-paths line attribution now; effective-merge construction and the
+128-source-node-visit bound in later changes) meant to eventually replace
 `loadFromPath()`'s current `yaml.Unmarshal` call with fail-closed,
 single-document, structurally validated loading — but none of that wiring
 exists yet, so `KindRead` and `KindSchema` still describe capabilities the
@@ -265,8 +266,10 @@ the same generic alias-cycle rule above rather than merge-specific code: the
 merge operand's alias is still in the `visiting` state by the time any
 merge-shape check would run, so the cycle rule fires first. Every reachable
 mapping's explicit keys must also be pairwise unique (see the duplicate-key
-paragraph below); the alias-hop/path-visit bounds remain unimplemented as of
-this writing and are later work. `validateSourceGraph` is not wired into any
+paragraph below); the memoized 64-consecutive-alias-hop bound described
+below now runs as a second pass once these checks prove the graph acyclic,
+and the 128-source-node-visit bound remains unimplemented as of this
+writing and is later work. `validateSourceGraph` is not wired into any
 call path yet either.
 
 **Merge-operand shape validation (`internal/config/sourcegraph.go`).**
@@ -330,6 +333,54 @@ comparison, which is pairwise (`O(k^2)` per mapping). This package's version
 is `O(k)` per mapping and `O(V+E)` over the whole graph, so a mapping with
 tens of thousands of keys does not make the validator's own running time
 blow up the way the pairwise loop would.
+
+**Reachable inventory, all-paths line attribution, and the 64
+consecutive-alias-hop bound (`internal/config/sourcebounds.go`).** Once
+`walkSourceNode`'s traversal and every check above have proven a source
+graph acyclic and well-formed, `validateSourceGraph`'s single call to
+`checkSourceGraphBounds` runs a second, purely additive pass — it never
+runs on a graph that failed an earlier check, so a cyclic or otherwise
+malformed graph still surfaces its original error (an alias cycle, a
+malformed merge operand, a duplicate key) rather than a bounds error.
+`collectSourceInventory` walks the already-proven-acyclic graph exactly
+once per unique node, in `Content` slice order, recording every reachable
+node in discovery order, every parent→child content edge reachable in the
+graph — including a second edge into a node reached through more than one
+parent, not just the edge the walk happened to follow first — and each
+node's first-encounter active nearest positive-line ancestor.
+
+`attributeSourceLines` gives every reachable node a source line to report
+in a bounds-limit error: a node's own `Line` when positive; otherwise the
+line of a positive-line ancestor at the minimum number of content edges
+from it over *all* root-reachable paths, not merely the path the traversal
+happened to discover it by first; otherwise `1`, the deterministic
+fallback for a wholly synthetic graph with no line metadata anywhere. This
+is a multi-source breadth-first search in the parent→child direction,
+seeded with every reachable positive-line node at distance zero attributing
+its own line and relaxing each edge `parent→child` with
+`(dist(parent)+1, line(parent))`; because it walks `collectSourceInventory`'s
+already-deduplicated node and edge lists, it visits each at most once and
+is `O(V+E)`, so it never re-expands a shared subgraph once per path — the
+same discipline that keeps a compact alias-sharing DAG linear rather than
+exponential. When two positive-line ancestors tie at the same minimum
+distance to a node, the node's first-encounter active ancestor wins if it
+is one of the tied candidates; otherwise the candidate reached through the
+parent with the lower discovery index wins.
+
+The alias-hop bound itself is a memoized dynamic program over node
+identity: `hops(n) = 1 + hops(n.Alias)` for a `yaml.AliasNode`, and `0` for
+every other kind, so descending from any non-alias node into ordinary
+content always resets the count for that child path — which is why more
+than 64 independent, shallow sibling aliases to the same anchored target
+all succeed even though there are far more than 64 of them in the graph.
+`aliasHopCount` memoizes by node pointer, so a node reachable through many
+parents is computed once rather than once per path. `checkAliasHopLimit`
+rejects the first node (in discovery order) whose `aliasHopCount` exceeds
+64 as `KindParseType`, naming the 64-hop limit and reporting
+`attributeSourceLines`' line for that node; exactly 64 consecutive hops
+succeeds and 65 fails. Every error this pass returns has a nil `Err`, like
+every other `validateSourceGraph` rejection. The 128-source-node-visit
+bound is separate, unimplemented work.
 
 **Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
 and `SchemaGroups(page)` derive the authoritative list of page names and,

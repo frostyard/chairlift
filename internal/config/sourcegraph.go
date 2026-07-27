@@ -96,9 +96,11 @@ func sourceGraphError(path, detail string) *LoadError {
 // mapping's explicit keys must also be pairwise unique under sourceKeyID
 // identity (checkDuplicateMappingKeys), checked per mapping rather than
 // globally, so the same key value may recur in a sibling or nested mapping
-// without conflict. This validation covers structural well-formedness,
-// merge-operand shape, and duplicate-key detection; the alias-hop/path-visit
-// bounds are out of this function's scope.
+// without conflict. Once every reachable node passes those checks and the
+// graph is thereby proven acyclic, checkSourceGraphBounds (sourcebounds.go)
+// runs as a second pass rejecting a graph exceeding the maximum of 64
+// consecutive alias hops; the maximum-128-source-node-visits bound is out
+// of this function's scope as of this writing.
 func validateSourceGraph(path string, doc *yaml.Node) *LoadError {
 	if doc == nil {
 		return nil
@@ -114,7 +116,10 @@ func validateSourceGraph(path string, doc *yaml.Node) *LoadError {
 	}
 
 	states := make(map[*yaml.Node]nodeState)
-	return walkSourceNode(path, doc.Content[0], states)
+	if err := walkSourceNode(path, doc.Content[0], states); err != nil {
+		return err
+	}
+	return checkSourceGraphBounds(path, doc.Content[0])
 }
 
 // walkSourceNode validates a single reachable node and, on success,
