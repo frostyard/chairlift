@@ -246,6 +246,314 @@ func TestValidateSourceGraphNilErrRenders(t *testing.T) {
 	}
 }
 
+// mergeKeyNode builds a well-formed implicit-tag "<<" merge key scalar
+// node, for use as a mapping key in merge-operand source-graph tests.
+func mergeKeyNode() *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Value: "<<"}
+}
+
+// simpleMapping builds a one-entry well-formed yaml.MappingNode, used as a
+// merge operand's mapping-shaped filler content.
+func simpleMapping(key, value string) *yaml.Node {
+	return &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalarNode(key), scalarNode(value)}}
+}
+
+// TestValidateSourceGraphMergeOperandAccepted covers every merge-operand
+// shape yaml.v3 v3.0.1 accepts: a mapping literal; an alias to a mapping;
+// a sequence of aliases to mappings; and a sequence mixing an inline
+// mapping with an alias to a mapping.
+func TestValidateSourceGraphMergeOperandAccepted(t *testing.T) {
+	anchoredA := &yaml.Node{Kind: yaml.MappingNode, Anchor: "a", Content: []*yaml.Node{scalarNode("ka"), scalarNode("va")}}
+	anchoredB := &yaml.Node{Kind: yaml.MappingNode, Anchor: "b", Content: []*yaml.Node{scalarNode("kb"), scalarNode("vb")}}
+
+	tests := []struct {
+		name  string
+		value *yaml.Node
+	}{
+		{
+			name:  "mapping literal",
+			value: simpleMapping("k", "v"),
+		},
+		{
+			name:  "alias to a mapping",
+			value: &yaml.Node{Kind: yaml.AliasNode, Alias: anchoredA},
+		},
+		{
+			name: "sequence of two aliases both to mappings",
+			value: &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+				{Kind: yaml.AliasNode, Alias: anchoredA},
+				{Kind: yaml.AliasNode, Alias: anchoredB},
+			}},
+		},
+		{
+			name: "sequence mixing an inline mapping and an alias to a mapping",
+			value: &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+				simpleMapping("k", "v"),
+				{Kind: yaml.AliasNode, Alias: anchoredA},
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := &yaml.Node{
+				Kind:    yaml.MappingNode,
+				Content: []*yaml.Node{mergeKeyNode(), tt.value, scalarNode("anchors"), &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{anchoredA, anchoredB}}},
+			}
+			doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+			if err := validateSourceGraph("p", doc); err != nil {
+				t.Fatalf("validateSourceGraph(merge operand %s) = %v, want nil", tt.name, err)
+			}
+		})
+	}
+}
+
+// TestValidateSourceGraphMergeOperandRejected covers every merge-operand
+// shape yaml.v3 v3.0.1 rejects, each its own case returning KindParseType
+// with Path copied: a scalar operand; an alias to a sequence; an alias to
+// a scalar; an alias whose immediate target is itself an AliasNode that
+// ultimately resolves to a mapping (the immediate-target-only rule); a
+// sequence containing a scalar; a sequence containing a sequence; and a
+// sequence containing an alias to a non-mapping.
+func TestValidateSourceGraphMergeOperandRejected(t *testing.T) {
+	const path = "/etc/chairlift/merge-rejected.yml"
+
+	anchoredMapping := &yaml.Node{Kind: yaml.MappingNode, Anchor: "m", Content: []*yaml.Node{scalarNode("k"), scalarNode("v")}}
+	anchoredSeq := &yaml.Node{Kind: yaml.SequenceNode, Anchor: "s", Content: []*yaml.Node{scalarNode("item")}}
+	anchoredScalar := &yaml.Node{Kind: yaml.ScalarNode, Anchor: "sc", Value: "scalar-anchor"}
+	// aliasToMapping is itself anchored, so a second alias can target it
+	// (an alias-to-alias) rather than the mapping directly.
+	aliasToMapping := &yaml.Node{Kind: yaml.AliasNode, Anchor: "alias-to-mapping", Alias: anchoredMapping}
+
+	tests := []struct {
+		name  string
+		value *yaml.Node
+	}{
+		{
+			name:  "scalar operand",
+			value: scalarNode("5"),
+		},
+		{
+			name:  "alias to a sequence",
+			value: &yaml.Node{Kind: yaml.AliasNode, Alias: anchoredSeq},
+		},
+		{
+			name:  "alias to a scalar",
+			value: &yaml.Node{Kind: yaml.AliasNode, Alias: anchoredScalar},
+		},
+		{
+			name:  "alias whose immediate target is itself an alias that ultimately resolves to a mapping",
+			value: &yaml.Node{Kind: yaml.AliasNode, Alias: aliasToMapping},
+		},
+		{
+			name: "sequence containing a scalar",
+			value: &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+				simpleMapping("k", "v"), scalarNode("not a mapping"),
+			}},
+		},
+		{
+			name: "sequence containing a sequence",
+			value: &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+				simpleMapping("k", "v"),
+				{Kind: yaml.SequenceNode, Content: []*yaml.Node{scalarNode("nested")}},
+			}},
+		},
+		{
+			name: "sequence containing an alias to a non-mapping",
+			value: &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+				simpleMapping("k", "v"),
+				{Kind: yaml.AliasNode, Alias: anchoredScalar},
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := &yaml.Node{
+				Kind: yaml.MappingNode,
+				Content: []*yaml.Node{
+					mergeKeyNode(), tt.value,
+					scalarNode("anchors"), &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+						anchoredMapping, anchoredSeq, anchoredScalar, aliasToMapping,
+					}},
+				},
+			}
+			doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+			wantParseType(t, validateSourceGraph(path, doc), path)
+		})
+	}
+}
+
+// TestValidateSourceGraphMergeAliasChainAsymmetry pins the immediate-target
+// rule's asymmetry: an alias-to-alias-to-mapping chain is well-formed
+// ordinary YAML content when it is an ordinary mapping value (returns nil),
+// but is a malformed merge operand when the same chain is used as a "<<"
+// value (returns KindParseType), because yaml.v3 v3.0.1 only unwraps one
+// alias hop for a merge operand.
+func TestValidateSourceGraphMergeAliasChainAsymmetry(t *testing.T) {
+	buildChain := func() (mapping, innerAlias, outerAlias *yaml.Node) {
+		mapping = &yaml.Node{Kind: yaml.MappingNode, Anchor: "target", Content: []*yaml.Node{scalarNode("k"), scalarNode("v")}}
+		innerAlias = &yaml.Node{Kind: yaml.AliasNode, Anchor: "inner", Alias: mapping}
+		outerAlias = &yaml.Node{Kind: yaml.AliasNode, Alias: innerAlias}
+		return
+	}
+
+	t.Run("as an ordinary mapping value", func(t *testing.T) {
+		mapping, innerAlias, outerAlias := buildChain()
+		root := &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				scalarNode("target"), mapping,
+				scalarNode("inner"), innerAlias,
+				scalarNode("ordinary"), outerAlias,
+			},
+		}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		if err := validateSourceGraph("p", doc); err != nil {
+			t.Fatalf("validateSourceGraph(alias chain as ordinary value) = %v, want nil", err)
+		}
+	})
+
+	t.Run("as a merge operand", func(t *testing.T) {
+		const path = "/etc/chairlift/merge-chain.yml"
+		mapping, innerAlias, outerAlias := buildChain()
+		root := &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				scalarNode("target"), mapping,
+				scalarNode("inner"), innerAlias,
+				mergeKeyNode(), outerAlias,
+			},
+		}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		wantParseType(t, validateSourceGraph(path, doc), path)
+	})
+}
+
+// TestValidateSourceGraphMergeCycles confirms &a {<<: *a} (a self merge)
+// and a mutual merge cycle between two anchored mappings each return
+// KindParseType and the test terminates rather than hanging: c3's generic
+// visiting-state alias-cycle rule catches the merge operand's alias before
+// any merge-specific code inspects its shape.
+func TestValidateSourceGraphMergeCycles(t *testing.T) {
+	const path = "/etc/chairlift/merge-cycles.yml"
+
+	t.Run("self merge", func(t *testing.T) {
+		self := &yaml.Node{Kind: yaml.MappingNode, Anchor: "a"}
+		selfAlias := &yaml.Node{Kind: yaml.AliasNode, Alias: self}
+		self.Content = []*yaml.Node{mergeKeyNode(), selfAlias}
+
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{self}}
+		wantParseType(t, validateSourceGraph(path, doc), path)
+	})
+
+	t.Run("mutual merge cycle", func(t *testing.T) {
+		m1 := &yaml.Node{Kind: yaml.MappingNode, Anchor: "m1"}
+		m2 := &yaml.Node{Kind: yaml.MappingNode, Anchor: "m2"}
+		aliasToM2 := &yaml.Node{Kind: yaml.AliasNode, Alias: m2}
+		aliasToM1 := &yaml.Node{Kind: yaml.AliasNode, Alias: m1}
+		m1.Content = []*yaml.Node{mergeKeyNode(), aliasToM2}
+		m2.Content = []*yaml.Node{mergeKeyNode(), aliasToM1}
+
+		root := &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{m1, m2}}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		wantParseType(t, validateSourceGraph(path, doc), path)
+	})
+}
+
+// TestValidateSourceGraphMergeKeyTagForms confirms all four merge-key tag
+// forms from c2 (implicit, "!", "!!merge", the canonical long tag) trigger
+// merge-operand validation — each rejecting an invalid scalar operand as
+// KindParseType — and that a quoted "<<" key (tagged "!!str") does not
+// trigger it, so a quoted "<<" key with a scalar value validates cleanly.
+func TestValidateSourceGraphMergeKeyTagForms(t *testing.T) {
+	const path = "/etc/chairlift/merge-tags.yml"
+
+	tagCases := []struct {
+		name string
+		tag  string
+	}{
+		{name: "implicit tag", tag: ""},
+		{name: "bare non-specific tag", tag: "!"},
+		{name: "short merge tag", tag: "!!merge"},
+		{name: "canonical long merge tag", tag: "tag:yaml.org,2002:merge"},
+	}
+
+	for _, tt := range tagCases {
+		t.Run(tt.name, func(t *testing.T) {
+			key := &yaml.Node{Kind: yaml.ScalarNode, Value: "<<", Tag: tt.tag}
+			root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{key, scalarNode("not-a-mapping")}}
+			doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+			wantParseType(t, validateSourceGraph(path, doc), path)
+		})
+	}
+
+	t.Run("quoted << key does not trigger merge validation", func(t *testing.T) {
+		key := &yaml.Node{Kind: yaml.ScalarNode, Value: "<<", Tag: "!!str"}
+		root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{key, scalarNode("just a string value")}}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		if err := validateSourceGraph("p", doc); err != nil {
+			t.Fatalf("validateSourceGraph(quoted << key with scalar value) = %v, want nil", err)
+		}
+	})
+}
+
+// TestValidateSourceGraphMergeInComplexKey confirms a malformed merge
+// operand nested inside a complex mapping key's own subtree returns
+// KindParseType, and that an otherwise well-formed complex mapping key
+// validates cleanly: complex keys are traversed but not classified in this
+// slice.
+func TestValidateSourceGraphMergeInComplexKey(t *testing.T) {
+	t.Run("malformed merge operand inside a complex key", func(t *testing.T) {
+		const path = "/etc/chairlift/complex-key-bad-merge.yml"
+		complexKey := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Content: []*yaml.Node{mergeKeyNode(), scalarNode("not-a-mapping")},
+		}
+		root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{complexKey, scalarNode("value")}}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		wantParseType(t, validateSourceGraph(path, doc), path)
+	})
+
+	t.Run("well-formed complex key", func(t *testing.T) {
+		complexKey := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Content: []*yaml.Node{scalarNode("nested"), scalarNode("key-value")},
+		}
+		root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{complexKey, scalarNode("value")}}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		if err := validateSourceGraph("p", doc); err != nil {
+			t.Fatalf("validateSourceGraph(well-formed complex key) = %v, want nil", err)
+		}
+	})
+}
+
+// TestValidateSourceGraphMergeDiscardedBranchStillValidated confirms a
+// malformed merge operand in a mapping entry that a later merge-precedence
+// pass would discard (an earlier "<<" source overridden by a later one)
+// still returns KindParseType: this slice validates every reachable entry,
+// not just the one an effective-merge pass would keep
+// (docs/agents/skills/discarded-merge-branches-still-need-validation.md).
+func TestValidateSourceGraphMergeDiscardedBranchStillValidated(t *testing.T) {
+	const path = "/etc/chairlift/merge-discarded.yml"
+
+	// The first "<<" entry (which real merge precedence would discard in
+	// favor of the second, later "<<" entry) has a malformed scalar
+	// operand; the second is a well-formed mapping. Duplicate merge-key
+	// detection is not part of this slice (c5), so this graph reaches the
+	// malformed operand before any duplicate-key check could short-circuit
+	// it.
+	root := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			mergeKeyNode(), scalarNode("malformed-and-discarded"),
+			mergeKeyNode(), simpleMapping("winner-key", "winner-value"),
+		},
+	}
+	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+	wantParseType(t, validateSourceGraph(path, doc), path)
+}
+
 // TestMergeKeyRecognition exercises isMergeKey directly against
 // gopkg.in/yaml.v3 v3.0.1 decode.go:isMerge's exact predicate: a
 // yaml.ScalarNode with Value "<<" and a Tag that is either absent, the bare

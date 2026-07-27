@@ -86,9 +86,15 @@ func sourceGraphError(path, detail string) *LoadError {
 // yaml.v3 kinds. Node identity (not value equality) drives cycle
 // detection, so a node reachable through several parents is validated once
 // and re-encountering a node still on the active traversal path is
-// rejected as an alias cycle. This validation covers structural
-// well-formedness only: merge-operand shape, duplicate-key detection, and
-// the alias-hop/path-visit bounds are out of this function's scope.
+// rejected as an alias cycle. Every mapping entry whose key is a merge key
+// (isMergeKey) additionally has its value validated as a merge operand
+// (validateMergeOperand): a mapping, an alias whose immediate target is a
+// mapping, or a sequence of those, checked wherever such an entry is
+// reachable — including a branch a later merge-precedence pass would
+// discard, and inside a complex mapping key's own subtree. This validation
+// covers structural well-formedness and merge-operand shape; duplicate-key
+// detection and the alias-hop/path-visit bounds are out of this function's
+// scope.
 func validateSourceGraph(path string, doc *yaml.Node) *LoadError {
 	if doc == nil {
 		return nil
@@ -144,6 +150,11 @@ func walkSourceNode(path string, n *yaml.Node, states map[*yaml.Node]nodeState) 
 			if err := walkSourceNode(path, value, states); err != nil {
 				return err
 			}
+			if isMergeKey(key) {
+				if err := validateMergeOperand(path, value); err != nil {
+					return err
+				}
+			}
 		}
 	case yaml.SequenceNode:
 		for _, entry := range n.Content {
@@ -174,4 +185,47 @@ func walkSourceNode(path string, n *yaml.Node, states map[*yaml.Node]nodeState) 
 
 	states[n] = done
 	return nil
+}
+
+// validateMergeOperand rejects a "<<" merge key's value unless it has one
+// of the shapes gopkg.in/yaml.v3 v3.0.1 decode.go's merge/failWantMap logic
+// accepts: a MappingNode; an AliasNode whose immediate Alias target is a
+// MappingNode (an alias-to-alias-to-mapping chain is well-formed ordinary
+// YAML content but is rejected here, because yaml.v3 unwraps only one alias
+// hop for a merge operand); or a SequenceNode each of whose entries is
+// itself one of the two prior shapes. Everything else — a scalar, an alias
+// to a sequence or scalar, or a sequence containing a non-mapping entry —
+// is a KindParseType error. value's own structural well-formedness (nil
+// entries, unsupported kinds, cycles) has already been proven by the
+// caller's walkSourceNode call before this runs, so only operand shape is
+// checked here.
+func validateMergeOperand(path string, value *yaml.Node) *LoadError {
+	if isMergeOperandMapping(value) {
+		return nil
+	}
+	if value != nil && value.Kind == yaml.SequenceNode {
+		for _, entry := range value.Content {
+			if !isMergeOperandMapping(entry) {
+				return sourceGraphError(path, "merge key sequence entry is not a mapping or an alias to a mapping")
+			}
+		}
+		return nil
+	}
+	return sourceGraphError(path, "merge key value must be a mapping, an alias to a mapping, or a sequence of those")
+}
+
+// isMergeOperandMapping reports whether n is directly a yaml.MappingNode or
+// a yaml.AliasNode whose immediate Alias target is a yaml.MappingNode. It
+// deliberately follows at most one alias hop: an alias-to-alias-to-mapping
+// chain returns false here even though it is a valid ordinary YAML value,
+// reproducing yaml.v3 v3.0.1's merge-operand rule exactly (interpretation:
+// merge alias operands use the immediate target only).
+func isMergeOperandMapping(n *yaml.Node) bool {
+	if n == nil {
+		return false
+	}
+	if n.Kind == yaml.MappingNode {
+		return true
+	}
+	return n.Kind == yaml.AliasNode && n.Alias != nil && n.Alias.Kind == yaml.MappingNode
 }

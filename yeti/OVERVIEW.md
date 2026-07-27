@@ -190,14 +190,15 @@ As of this writing `parseYAMLDocument` and `validateSourceGraph` are not
 wired into `Load()` or `loadFromPath()` — both are unchanged and still fall
 back to `defaultConfig()` on any read or parse failure, so there is no
 strict parsing and no fail-closed runtime behavior yet. This is the first
-of several package-private capabilities (document parsing and reachable
-source-graph shape validation now; effective-merge construction,
-duplicate-key detection, and the alias-hop/path-visit bounds in later
-changes) meant to eventually replace `loadFromPath()`'s
-current `yaml.Unmarshal` call with fail-closed, single-document, structurally
-validated loading — but none of that wiring exists yet, so `KindRead` and
-`KindSchema` still describe capabilities the package's vocabulary
-anticipates rather than ones any code path currently exercises.
+of several package-private capabilities (document parsing, reachable
+source-graph shape validation, and merge-operand shape validation now;
+effective-merge construction, duplicate-key detection, and the
+alias-hop/path-visit bounds in later changes) meant to eventually replace
+`loadFromPath()`'s current `yaml.Unmarshal` call with fail-closed,
+single-document, structurally validated loading — but none of that wiring
+exists yet, so `KindRead` and `KindSchema` still describe capabilities the
+package's vocabulary anticipates rather than ones any code path currently
+exercises.
 
 **Exact merge-key recognition and tag normalization
 (`internal/config/sourcegraph.go`).** `isMergeKey(n *yaml.Node) bool` and
@@ -258,13 +259,47 @@ cycle between two anchored mappings). Because pure shape/graph rejections
 have no underlying Go error to preserve, every `*LoadError` `validateSourceGraph`
 returns carries a nil `Err`; `LoadError.Error()` still renders the full
 `"config parse/type error: <path>: <detail>"` wording from `Path` and
-`Detail` alone. This slice covers structural well-formedness only:
-merge-operand shape (a merge value must be a mapping, an alias to a
-mapping, or a sequence of such), duplicate explicit keys inside a mapping,
-and the alias-hop/path-visit bounds are unimplemented as of this writing
-and are later work, so a self- or mutual-merge cycle and a malformed merge
-operand are not yet detected by this function. `validateSourceGraph` is not
-wired into any call path yet either.
+`Detail` alone. A self merge (`&a {<<: *a}`) and a mutual merge cycle
+between two anchored mappings are both rejected too, but as a byproduct of
+the same generic alias-cycle rule above rather than merge-specific code: the
+merge operand's alias is still in the `visiting` state by the time any
+merge-shape check would run, so the cycle rule fires first. Duplicate
+explicit keys inside a mapping and the alias-hop/path-visit bounds remain
+unimplemented as of this writing and are later work. `validateSourceGraph`
+is not wired into any call path yet either.
+
+**Merge-operand shape validation (`internal/config/sourcegraph.go`).**
+Layered onto the traversal above: every mapping entry whose key
+`isMergeKey` reports true additionally has its value checked as a merge
+operand by `validateMergeOperand`, reproducing `gopkg.in/yaml.v3` v3.0.1
+`decode.go`'s `merge`/`failWantMap` rule exactly rather than accepting any
+value ordinary YAML content would allow. A merge operand is accepted only
+as one of: a `yaml.MappingNode` literal; a `yaml.AliasNode` whose
+*immediate* `Alias` target is a `yaml.MappingNode`; or a `yaml.SequenceNode`
+each of whose entries is itself one of the two prior shapes. Everything
+else is rejected as `KindParseType` — a scalar operand, an alias to a
+sequence or a scalar, a sequence containing a scalar or a nested sequence,
+and a sequence containing an alias to a non-mapping all fail
+(`isMergeOperandMapping` is the single-alias-hop predicate both the direct
+and sequence-entry checks share). The immediate-target rule produces a
+deliberate asymmetry: an alias-to-alias-to-mapping chain is perfectly valid
+as an *ordinary* mapping value (the generic traversal above only requires a
+non-nil `Alias` target of any kind) but is rejected as a merge operand,
+because yaml.v3 itself only unwraps one alias hop before deciding a merge
+value is not a mapping. All four of `isMergeKey`'s recognized tag forms —
+implicit, `"!"`, `"!!merge"`, and the canonical long tag — trigger this
+check identically; a quoted `"<<"` key (tagged `"!!str"`) does not, so it
+may hold any otherwise-valid value, including a bare scalar. Merge operands
+are validated wherever the traversal reaches them — inside a complex
+mapping key's own subtree (complex keys are traversed like any other node
+but are not otherwise classified in this slice), and in a mapping entry a
+later, still-unimplemented merge-precedence pass would go on to discard in
+favor of a later `<<` entry — because this function proves every reachable
+node well-formed, not just the nodes an eventual effective-merge result
+would keep
+(`docs/agents/skills/discarded-merge-branches-still-need-validation.md`).
+Duplicate explicit keys inside a mapping and the alias-hop/path-visit
+bounds remain unimplemented as of this writing and are later work.
 
 **Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
 and `SchemaGroups(page)` derive the authoritative list of page names and,
