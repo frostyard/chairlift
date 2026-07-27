@@ -399,8 +399,39 @@ chain to the non-alias target first, and the emitted node carries that
 whether the alias appears in mapping value position or as a mapping key.
 Because the output must stay alias-free, a single source node reached
 through more than one alias becomes more than one independent fresh copy in
-the result; the per-emission budget that keeps that expansion from being
-unbounded is added in a later chunk, not this one.
+the result, and each such copy is charged separately against the
+`maxEffectiveOutputNodes` budget described just below.
+
+`resolveEffective`'s emit path is bounded by the unexported `const
+maxEffectiveOutputNodes = 100000`: every retained document, mapping,
+sequence, key and value node counts exactly once toward it, mirroring
+`sourcebounds.go`'s `pathVisitCount` accounting rule that "key", "value" and
+"alias target" only name which child is traversed next and add no separate
+charge, and each independent copy an expanded alias produces is charged
+separately (an alias node itself is never charged, since it is dereferenced
+to its target before the budget check runs). The check happens in
+`emitEffectiveNode`'s first statements for each node — incrementing and
+comparing a per-call counter *before* allocating a `*yaml.Node` for that
+node or recursing into its `Content` — so the 100,001st attempted emission
+fails before its own allocation and before any of its descendants are ever
+visited, which is what makes an exponential alias expansion (a compact,
+small source graph whose alias-free output would otherwise need on the
+order of `2^n` nodes) abort at the boundary rather than run to completion.
+Once the budget is exceeded on any call, every other pending call in the
+same `resolveEffective` invocation also returns immediately without further
+allocation or recursion. Exactly `maxEffectiveOutputNodes` emitted nodes
+succeeds; `maxEffectiveOutputNodes`+1 fails. On overflow `resolveEffective`
+returns a nil tree and a `KindParseType` `*LoadError` with `Path` copied
+from the `path` argument, a nil `Err`, and a `Detail` naming the
+100,000-node bound and a source line for the node whose emission would have
+crossed it. That line comes from reusing `sourcebounds.go`'s existing
+`collectSourceInventory` and `attributeSourceLines` pair on the validated
+source document — the same all-paths line attribution
+(`checkSourceGraphBounds` uses it too) rather than a second, separate line-
+attribution implementation — computed once per `resolveEffective` call: a
+node's own line when positive, otherwise its nearest positive-line ancestor
+over all root-reachable paths, otherwise `1` for a wholly synthetic graph
+with no line metadata anywhere, so the reported line is always positive.
 
 This chunk deliberately leaves two things unfinished, both authorized by
 the spec and tracked forward: a recognized `<<` merge key (`isMergeKey`)
@@ -415,12 +446,14 @@ standalone, still-unwired capability like `parseYAMLDocument` and
 `!!merge`-tagged scalar whose `Value` isn't literally `"<<"` both survive
 as ordinary effective keys today and are expected to keep doing so once
 merge precedence is implemented, since `isMergeKey` never recognizes either
-shape. `emitEffectiveNode` and `dereferenceAliasTarget`/`emitNodeMetadata`
-are unexported helpers reachable only from `resolveEffective` in this same
-chunk; per the frozen `directCallAllowlist` in `sourcesurface_test.go`, no
-`_test.go` file names them directly — `effective_test.go` exercises them
-only through `resolveEffective` itself, alongside `resolveEffective` and
-`effectiveKeyIdentity`, the two additions that allowlist authorizes.
+shape. `emitEffectiveNode`, `dereferenceAliasTarget`/`emitNodeMetadata`, the
+`effectiveEmitState` counter type, and `effectiveOutputLimitError` are all
+unexported helpers reachable only from `resolveEffective`; per the frozen
+`directCallAllowlist` in `sourcesurface_test.go`, no `_test.go` file names
+any of them directly — `effective_test.go` and `effectivebound_test.go`
+exercise them only through `resolveEffective` itself, alongside
+`resolveEffective` and `effectiveKeyIdentity`, the two additions that
+allowlist authorizes.
 
 **Reachable inventory, all-paths line attribution, and the 64
 consecutive-alias-hop and 128-source-node-path-visit bounds
