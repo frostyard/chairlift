@@ -1,7 +1,12 @@
 package config
 
 import (
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -653,4 +658,284 @@ func TestShortYAMLTagNormalization(t *testing.T) {
 			}
 		})
 	}
+}
+
+// duplicateKeyLinePattern extracts the "line N" phrase checkDuplicateMappingKeys
+// embeds in a duplicate-key error's Detail when the parser recorded a
+// positive line for the repeated key.
+var duplicateKeyLinePattern = regexp.MustCompile(`line (\d+)`)
+
+// mergeKeyNodeWithTag builds a "<<" scalar merge-key node carrying an
+// explicit tag, for combining differently-tagged merge keys in
+// duplicate-key tests: sourceKeyID compares only Kind and Value, so two
+// "<<" keys collide as duplicates regardless of which of isMergeKey's four
+// accepted tag forms each one carries.
+func mergeKeyNodeWithTag(tag string) *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Value: "<<", Tag: tag}
+}
+
+// TestValidateSourceGraphDuplicateExplicitKey confirms a real, parsed
+// mapping with two "a:" keys is rejected as KindParseType, with Path
+// copied and a Detail that names the duplicated key's value and contains a
+// positive "line N" — using parseYAMLDocument (not a synthetic node) so
+// the key's Line field is the parser's own, genuinely positive line.
+func TestValidateSourceGraphDuplicateExplicitKey(t *testing.T) {
+	const path = "/etc/chairlift/dup.yml"
+	doc, perr := parseYAMLDocument(path, []byte("a: 1\nb: 2\na: 3\n"))
+	if perr != nil {
+		t.Fatalf("parseYAMLDocument(%q) = %v, want nil", path, perr)
+	}
+
+	err := validateSourceGraph(path, doc)
+	wantParseType(t, err, path)
+
+	if !strings.Contains(err.Detail, `"a"`) {
+		t.Fatalf("err.Detail = %q, want it to name the duplicated key %q", err.Detail, "a")
+	}
+	m := duplicateKeyLinePattern.FindStringSubmatch(err.Detail)
+	if m == nil {
+		t.Fatalf("err.Detail = %q, want it to contain a %q phrase", err.Detail, "line N")
+	}
+	line, convErr := strconv.Atoi(m[1])
+	if convErr != nil || line <= 0 {
+		t.Fatalf("err.Detail = %q parsed line %q, want a positive line number", err.Detail, m[1])
+	}
+}
+
+// TestValidateSourceGraphDuplicateMergeKeys confirms two "<<" mapping
+// entries are rejected as duplicates in each of the three tag combinations
+// the spec calls out: implicit + implicit, implicit + "!!merge", and
+// implicit + the canonical long merge tag. sourceKeyID identity never
+// looks at Tag, so all three combinations collide identically even though
+// isMergeKey treats all four tag forms as equally valid merge keys.
+func TestValidateSourceGraphDuplicateMergeKeys(t *testing.T) {
+	tagCombos := []struct {
+		name string
+		tagA string
+		tagB string
+	}{
+		{name: "implicit + implicit", tagA: "", tagB: ""},
+		{name: "implicit + !!merge", tagA: "", tagB: "!!merge"},
+		{name: "implicit + tag:yaml.org,2002:merge", tagA: "", tagB: "tag:yaml.org,2002:merge"},
+	}
+
+	for _, tt := range tagCombos {
+		t.Run(tt.name, func(t *testing.T) {
+			const path = "/etc/chairlift/dup-merge.yml"
+			root := &yaml.Node{
+				Kind: yaml.MappingNode,
+				Content: []*yaml.Node{
+					mergeKeyNodeWithTag(tt.tagA), simpleMapping("ka", "va"),
+					mergeKeyNodeWithTag(tt.tagB), simpleMapping("kb", "vb"),
+				},
+			}
+			doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+			wantParseType(t, validateSourceGraph(path, doc), path)
+		})
+	}
+}
+
+// TestValidateSourceGraphDuplicateBareAndQuotedIntKey confirms a bare `1`
+// and a quoted "1" are rejected as duplicates even though yaml.v3 resolves
+// them to different Tags (!!int vs !!str): sourceKeyID identity compares
+// only Kind and Value, so the differing Tag doesn't save them. Real,
+// parsed YAML (not synthetic nodes) proves the Tags genuinely differ, the
+// same way the yaml.v3 decoder itself would resolve them.
+func TestValidateSourceGraphDuplicateBareAndQuotedIntKey(t *testing.T) {
+	const path = "/etc/chairlift/dup-int-str.yml"
+	doc, perr := parseYAMLDocument(path, []byte("1: a\n\"1\": b\n"))
+	if perr != nil {
+		t.Fatalf("parseYAMLDocument(%q) = %v, want nil", path, perr)
+	}
+	wantParseType(t, validateSourceGraph(path, doc), path)
+}
+
+// TestValidateSourceGraphDuplicateKeysArePerMappingNotGlobal confirms a
+// key value shared by two different mappings — a sibling and, separately,
+// a parent/nested pair — is not a duplicate: the seen-key set is scoped to
+// a single mapping's own Content, not shared across the whole graph.
+func TestValidateSourceGraphDuplicateKeysArePerMappingNotGlobal(t *testing.T) {
+	t.Run("sibling mappings sharing a key", func(t *testing.T) {
+		siblingA := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalarNode("1"), scalarNode("va")}}
+		siblingB := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalarNode("1"), scalarNode("vb")}}
+		root := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Content: []*yaml.Node{scalarNode("s1"), siblingA, scalarNode("s2"), siblingB},
+		}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		if err := validateSourceGraph("p", doc); err != nil {
+			t.Fatalf("sibling mappings sharing key %q = %v, want nil", "1", err)
+		}
+	})
+
+	t.Run("nested mapping sharing a key with its parent", func(t *testing.T) {
+		nested := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalarNode("1"), scalarNode("nested-value")}}
+		root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalarNode("1"), nested}}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		if err := validateSourceGraph("p", doc); err != nil {
+			t.Fatalf("nested mapping sharing key %q with parent = %v, want nil", "1", err)
+		}
+	})
+}
+
+// TestValidateSourceGraphDuplicateKeysRequireSameKind confirms a scalar
+// key and an alias-node key whose Value happens to equal the scalar's
+// Value are not duplicates: sourceKeyID also requires equal Kind, and a
+// yaml.AliasNode's own Value is its anchor name, not its target's value.
+func TestValidateSourceGraphDuplicateKeysRequireSameKind(t *testing.T) {
+	target := scalarNode("target-value")
+	aliasKey := &yaml.Node{Kind: yaml.AliasNode, Value: "x", Alias: target}
+	root := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			scalarNode("x"), scalarNode("v1"),
+			aliasKey, scalarNode("v2"),
+		},
+	}
+	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+	if err := validateSourceGraph("p", doc); err != nil {
+		t.Fatalf("scalar key %q and alias key with equal Value = %v, want nil", "x", err)
+	}
+}
+
+// TestValidateSourceGraphDuplicateKeysReachableViaMergeOperand confirms a
+// duplicate pair inside a mapping reachable only as a "<<" merge operand's
+// value is rejected.
+func TestValidateSourceGraphDuplicateKeysReachableViaMergeOperand(t *testing.T) {
+	const path = "/etc/chairlift/dup-via-merge-operand.yml"
+	operand := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Content: []*yaml.Node{scalarNode("dup"), scalarNode("v1"), scalarNode("dup"), scalarNode("v2")},
+	}
+	root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{mergeKeyNode(), operand}}
+	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+	wantParseType(t, validateSourceGraph(path, doc), path)
+}
+
+// TestValidateSourceGraphDuplicateKeysReachableViaAliasTarget confirms a
+// duplicate pair inside a mapping reachable only by following an alias
+// node's target (not through any merge key) is rejected.
+func TestValidateSourceGraphDuplicateKeysReachableViaAliasTarget(t *testing.T) {
+	const path = "/etc/chairlift/dup-via-alias.yml"
+	dupMapping := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Content: []*yaml.Node{scalarNode("dup"), scalarNode("v1"), scalarNode("dup"), scalarNode("v2")},
+	}
+	alias := &yaml.Node{Kind: yaml.AliasNode, Value: "a", Alias: dupMapping}
+	root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalarNode("k"), alias}}
+	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+	wantParseType(t, validateSourceGraph(path, doc), path)
+}
+
+// TestValidateSourceGraphDuplicateKeysReachableInComplexKeySubtree confirms
+// a duplicate pair inside a complex (mapping-shaped) key's own subtree is
+// rejected, even though the complex key itself is just an ordinary,
+// unclassified mapping-node key of its parent.
+func TestValidateSourceGraphDuplicateKeysReachableInComplexKeySubtree(t *testing.T) {
+	const path = "/etc/chairlift/dup-in-complex-key.yml"
+	complexKey := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Content: []*yaml.Node{scalarNode("dup"), scalarNode("v1"), scalarNode("dup"), scalarNode("v2")},
+	}
+	root := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{complexKey, scalarNode("value")}}
+	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+	wantParseType(t, validateSourceGraph(path, doc), path)
+}
+
+// TestValidateSourceGraphDuplicateKeysSharedMappingCheckedOnce confirms a
+// mapping node reachable through two different parent entries is checked
+// exactly once: a genuine duplicate inside it still yields a single error,
+// and a well-formed shared mapping referenced twice yields nil rather than
+// a false duplicate manufactured by revisiting it.
+func TestValidateSourceGraphDuplicateKeysSharedMappingCheckedOnce(t *testing.T) {
+	t.Run("genuine duplicate in a mapping shared by two parents", func(t *testing.T) {
+		const path = "/etc/chairlift/dup-shared.yml"
+		shared := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Content: []*yaml.Node{scalarNode("dup"), scalarNode("v1"), scalarNode("dup"), scalarNode("v2")},
+		}
+		root := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Content: []*yaml.Node{scalarNode("first"), shared, scalarNode("second"), shared},
+		}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		wantParseType(t, validateSourceGraph(path, doc), path)
+	})
+
+	t.Run("well-formed mapping shared by two parents", func(t *testing.T) {
+		shared := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{scalarNode("a"), scalarNode("va")}}
+		root := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Content: []*yaml.Node{scalarNode("first"), shared, scalarNode("second"), shared},
+		}
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+		if err := validateSourceGraph("p", doc); err != nil {
+			t.Fatalf("well-formed mapping shared by two parents = %v, want nil", err)
+		}
+	})
+}
+
+// buildDistinctKeyMapping builds a yaml.MappingNode with n distinct scalar
+// keys "k0".."k(n-1)", each mapped to a fixed scalar value, for the timed
+// duplicate-key-detection regression tests below.
+func buildDistinctKeyMapping(n int) *yaml.Node {
+	content := make([]*yaml.Node, 0, n*2)
+	for i := 0; i < n; i++ {
+		content = append(content, scalarNode(fmt.Sprintf("k%d", i)), scalarNode("v"))
+	}
+	return &yaml.Node{Kind: yaml.MappingNode, Content: content}
+}
+
+// TestValidateSourceGraphDuplicateKeyDetectionIsLinear is the discriminating
+// regression the O(k) map-based design (interpretation 12) needs and a
+// pairwise O(k^2) implementation cannot pass: a 100,000-distinct-key mapping
+// and a 100,000-key mapping whose last two keys collide must each resolve
+// within a five-second budget. A pairwise implementation needs on the order
+// of 5*10^9 comparisons for either case and would not return within budget.
+// Each subtest runs validateSourceGraph in a goroutine and races it against
+// an explicit time.Timer via select, so a hang fails the test rather than
+// blocking the suite.
+func TestValidateSourceGraphDuplicateKeyDetectionIsLinear(t *testing.T) {
+	const numKeys = 100000
+	const budget = 5 * time.Second
+
+	t.Run("100000 distinct keys returns nil", func(t *testing.T) {
+		root := buildDistinctKeyMapping(numKeys)
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+
+		result := make(chan *LoadError, 1)
+		go func() { result <- validateSourceGraph("p", doc) }()
+
+		timer := time.NewTimer(budget)
+		defer timer.Stop()
+		select {
+		case err := <-result:
+			if err != nil {
+				t.Fatalf("validateSourceGraph(100000 distinct keys) = %v, want nil", err)
+			}
+		case <-timer.C:
+			t.Fatalf("validateSourceGraph did not return within %s for 100000 distinct keys", budget)
+		}
+	})
+
+	t.Run("100000 keys with the last two identical returns KindParseType", func(t *testing.T) {
+		const path = "p"
+		root := buildDistinctKeyMapping(numKeys)
+		lastKeyIdx := len(root.Content) - 2
+		prevKeyIdx := lastKeyIdx - 2
+		root.Content[lastKeyIdx].Value = root.Content[prevKeyIdx].Value
+		doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
+
+		result := make(chan *LoadError, 1)
+		go func() { result <- validateSourceGraph(path, doc) }()
+
+		timer := time.NewTimer(budget)
+		defer timer.Stop()
+		select {
+		case err := <-result:
+			wantParseType(t, err, path)
+		case <-timer.C:
+			t.Fatalf("validateSourceGraph did not return within %s for a 100000-key mapping with a trailing duplicate", budget)
+		}
+	})
 }

@@ -191,8 +191,8 @@ wired into `Load()` or `loadFromPath()` — both are unchanged and still fall
 back to `defaultConfig()` on any read or parse failure, so there is no
 strict parsing and no fail-closed runtime behavior yet. This is the first
 of several package-private capabilities (document parsing, reachable
-source-graph shape validation, and merge-operand shape validation now;
-effective-merge construction, duplicate-key detection, and the
+source-graph shape validation, merge-operand shape validation, and
+duplicate-explicit-key detection now; effective-merge construction and the
 alias-hop/path-visit bounds in later changes) meant to eventually replace
 `loadFromPath()`'s current `yaml.Unmarshal` call with fail-closed,
 single-document, structurally validated loading — but none of that wiring
@@ -263,10 +263,11 @@ returns carries a nil `Err`; `LoadError.Error()` still renders the full
 between two anchored mappings are both rejected too, but as a byproduct of
 the same generic alias-cycle rule above rather than merge-specific code: the
 merge operand's alias is still in the `visiting` state by the time any
-merge-shape check would run, so the cycle rule fires first. Duplicate
-explicit keys inside a mapping and the alias-hop/path-visit bounds remain
-unimplemented as of this writing and are later work. `validateSourceGraph`
-is not wired into any call path yet either.
+merge-shape check would run, so the cycle rule fires first. Every reachable
+mapping's explicit keys must also be pairwise unique (see the duplicate-key
+paragraph below); the alias-hop/path-visit bounds remain unimplemented as of
+this writing and are later work. `validateSourceGraph` is not wired into any
+call path yet either.
 
 **Merge-operand shape validation (`internal/config/sourcegraph.go`).**
 Layered onto the traversal above: every mapping entry whose key
@@ -298,8 +299,37 @@ favor of a later `<<` entry — because this function proves every reachable
 node well-formed, not just the nodes an eventual effective-merge result
 would keep
 (`docs/agents/skills/discarded-merge-branches-still-need-validation.md`).
-Duplicate explicit keys inside a mapping and the alias-hop/path-visit
-bounds remain unimplemented as of this writing and are later work.
+
+**Duplicate explicit-key detection (`internal/config/sourcegraph.go`).**
+Every reachable mapping's explicit keys must be pairwise unique under
+`sourceKeyID{Kind, Value}` identity — a repeated key rejects the whole
+graph as `KindParseType`, naming the duplicated key's value and, when the
+parser recorded a positive line for it, that line. The identity
+deliberately compares only `Kind` and `Value`, reproducing `gopkg.in/yaml.v3`
+v3.0.1 `decode.go`'s own `uniqueKeys` predicate (inside `decoder.mapping`)
+exactly rather than the tag-aware key identity
+`docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md`
+requires elsewhere in this package for merge/dedup purposes — that rule is
+about a different, not-yet-implemented concern (merge-precedence identity)
+and does not apply here, because yaml.v3's own duplicate-key guard never
+looks at `Tag` either. Two surprising consequences follow directly: two
+`<<` merge-key entries in the same mapping collide as duplicates regardless
+of which of `isMergeKey`'s four accepted tag forms each carries (an
+implicit `<<` and one explicitly tagged `!!merge` are still "the same key"),
+and a bare `1` (yaml.v3 resolves it to `!!int`) collides with an explicitly
+quoted `"1"` (`!!str`) even though their `Tag`s differ, because neither
+`Kind` nor `Value` distinguishes them. Detection is per-mapping, not
+global — the same key value recurring in a sibling mapping, or in a nested
+mapping reachable through it, is never a duplicate — and it runs on every
+reachable mapping regardless of how it is reached: directly, as a merge
+operand's value, through an alias target, or inside a complex mapping key's
+own subtree. The implementation is one `map[sourceKeyID]struct{}` per
+mapping, sized from `len(n.Content)/2`, filled by a single linear pass over
+key indices — deliberately not yaml.v3's own nested-loop `uniqueKeys`
+comparison, which is pairwise (`O(k^2)` per mapping). This package's version
+is `O(k)` per mapping and `O(V+E)` over the whole graph, so a mapping with
+tens of thousands of keys does not make the validator's own running time
+blow up the way the pairwise loop would.
 
 **Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
 and `SchemaGroups(page)` derive the authoritative list of page names and,

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -91,10 +92,13 @@ func sourceGraphError(path, detail string) *LoadError {
 // (validateMergeOperand): a mapping, an alias whose immediate target is a
 // mapping, or a sequence of those, checked wherever such an entry is
 // reachable — including a branch a later merge-precedence pass would
-// discard, and inside a complex mapping key's own subtree. This validation
-// covers structural well-formedness and merge-operand shape; duplicate-key
-// detection and the alias-hop/path-visit bounds are out of this function's
-// scope.
+// discard, and inside a complex mapping key's own subtree. Every reachable
+// mapping's explicit keys must also be pairwise unique under sourceKeyID
+// identity (checkDuplicateMappingKeys), checked per mapping rather than
+// globally, so the same key value may recur in a sibling or nested mapping
+// without conflict. This validation covers structural well-formedness,
+// merge-operand shape, and duplicate-key detection; the alias-hop/path-visit
+// bounds are out of this function's scope.
 func validateSourceGraph(path string, doc *yaml.Node) *LoadError {
 	if doc == nil {
 		return nil
@@ -155,6 +159,9 @@ func walkSourceNode(path string, n *yaml.Node, states map[*yaml.Node]nodeState) 
 					return err
 				}
 			}
+		}
+		if err := checkDuplicateMappingKeys(path, n); err != nil {
+			return err
 		}
 	case yaml.SequenceNode:
 		for _, entry := range n.Content {
@@ -228,4 +235,57 @@ func isMergeOperandMapping(n *yaml.Node) bool {
 		return true
 	}
 	return n.Kind == yaml.AliasNode && n.Alias != nil && n.Alias.Kind == yaml.MappingNode
+}
+
+// sourceKeyID identifies a mapping key for duplicate-key detection using
+// exactly gopkg.in/yaml.v3 v3.0.1 decode.go's uniqueKeys predicate (inside
+// decoder.mapping): two keys are the same key when their Kind and Value
+// match, nothing else. Deliberately no third field is compared, even though
+// docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md
+// requires that omitted third field for *merge/dedup key identity*
+// elsewhere in this package. This is a narrow, intentional exception:
+// yaml.v3's own duplicate-key guard never looks at that field either, so a
+// faithful reproduction means a bare `1` (resolved !!int) and a quoted "1"
+// (explicit !!str) collide as the same key here, exactly as yaml.Unmarshal
+// itself would report them with its default UniqueKeys(true) behavior.
+// Later merge-precedence identity (a different, not-yet-implemented
+// concern) is expected to need that third field and will not reuse
+// sourceKeyID.
+type sourceKeyID struct {
+	Kind  yaml.Kind
+	Value string
+}
+
+// checkDuplicateMappingKeys rejects a mapping n whose reachable explicit
+// keys are not pairwise unique under sourceKeyID identity (see its doc
+// comment for exactly what "unique" means here), as a KindParseType
+// *LoadError naming the repeated key's value and, when the parser recorded
+// a positive line for it, that line. It assumes the caller (walkSourceNode)
+// has already rejected an odd content count and any nil key/value, so every
+// key at an even index is non-nil.
+//
+// Unlike gopkg.in/yaml.v3 v3.0.1 decode.go's uniqueKeys loop — which nests
+// a second index j over i+2..l inside the first, an O(k^2) pairwise
+// comparison per mapping — this builds one hash set per mapping, sized
+// from len(n.Content)/2, and makes a single linear pass over key indices:
+// O(k) per mapping and O(V+E) over the whole reachable graph. This is a
+// deliberate departure from yaml.v3's own (quadratic) implementation while
+// reproducing its comparison exactly; a mapping with tens of thousands of
+// distinct keys must not make the validator's own running time blow up the
+// way the pairwise loop would.
+func checkDuplicateMappingKeys(path string, n *yaml.Node) *LoadError {
+	seen := make(map[sourceKeyID]struct{}, len(n.Content)/2)
+	for i := 0; i < len(n.Content); i += 2 {
+		key := n.Content[i]
+		id := sourceKeyID{Kind: key.Kind, Value: key.Value}
+		if _, dup := seen[id]; dup {
+			detail := fmt.Sprintf("mapping key %q is duplicated", key.Value)
+			if key.Line > 0 {
+				detail = fmt.Sprintf("mapping key %q is duplicated (line %d)", key.Value, key.Line)
+			}
+			return sourceGraphError(path, detail)
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
 }
