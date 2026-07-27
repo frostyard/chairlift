@@ -2,8 +2,38 @@ package config
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
+
+func yamlTagIgnoringOmitEmpty(tag string) string {
+	parts := strings.Split(tag, ",")
+	kept := parts[:1]
+	for _, option := range parts[1:] {
+		if option != "omitempty" {
+			kept = append(kept, option)
+		}
+	}
+	return strings.Join(kept, ",")
+}
+
+func TestYamlTagParityIgnoresOnlyOmitEmpty(t *testing.T) {
+	tests := []struct {
+		tag  string
+		want string
+	}{
+		{tag: "field", want: "field"},
+		{tag: "field,omitempty", want: "field"},
+		{tag: "field,flow", want: "field,flow"},
+		{tag: "field,omitempty,flow", want: "field,flow"},
+	}
+
+	for _, tt := range tests {
+		if got := yamlTagIgnoringOmitEmpty(tt.tag); got != tt.want {
+			t.Errorf("yamlTagIgnoringOmitEmpty(%q) = %q, want %q", tt.tag, got, tt.want)
+		}
+	}
+}
 
 // TestSchemaPagesMatchesPageNames asserts SchemaPages() equals the
 // hand-written pageNames slice already declared in config_test.go — an
@@ -348,8 +378,9 @@ func TestRawConfigMatchesConfigFields(t *testing.T) {
 // TestRawGroupConfigMatchesGroupConfigFields proves rawGroupConfig's
 // exported fields match GroupConfig's exactly, ignoring only pointer-vs-
 // value representation and "omitempty": same field count, same field names
-// in the same declaration order, same yaml tag names (options stripped) in
-// the same order per index, and per field, rawGroupConfig's type equal to
+// in the same declaration order, same yaml tags after removing only the
+// omitempty option in the same order per index, and per field,
+// rawGroupConfig's type equal to
 // GroupConfig's type or exactly a pointer to it. This is the parity test
 // required by docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md:
 // SchemaGroupFields() reads rawGroupConfig (what yaml.v3 actually decodes
@@ -378,8 +409,8 @@ func TestRawGroupConfigMatchesGroupConfigFields(t *testing.T) {
 			t.Errorf("field %d: GroupConfig field name %q, rawGroupConfig field name %q", i, gf.Name, rf.Name)
 		}
 
-		gTag := yamlTagName(gf.Tag.Get("yaml"))
-		rTag := yamlTagName(rf.Tag.Get("yaml"))
+		gTag := yamlTagIgnoringOmitEmpty(gf.Tag.Get("yaml"))
+		rTag := yamlTagIgnoringOmitEmpty(rf.Tag.Get("yaml"))
 		if gTag != rTag {
 			t.Errorf("field %d (%s): GroupConfig yaml tag %q, rawGroupConfig yaml tag %q", i, gf.Name, gTag, rTag)
 		}
