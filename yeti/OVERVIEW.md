@@ -781,12 +781,16 @@ steps never run once an earlier one has already classified the entry:
    decode failure) preserved in `Err` and classified `KindParseType`.
 
 Page, group, group-field, and action-field name inventories are never a
-hand-maintained list in `validate.go`. They come entirely from the
-canonical `Config`/`rawConfig`/`rawGroupConfig`/`ActionConfig` structs,
-reflected via `SchemaPages()`, `SchemaGroups(page)`, `SchemaGroupFields()`,
-and `SchemaActionFields()` respectively (schema.go) — adding, renaming, or
-removing a field on one of those structs changes the accepted schema
-automatically, with no parallel edit required in the validator.
+hand-maintained list in `validate.go`. `SchemaPages()`, `SchemaGroupFields()`,
+and `SchemaActionFields()` (schema.go) reflect directly on the canonical
+`Config`, `rawGroupConfig`, and `ActionConfig` structs, so adding, renaming,
+or removing a field on one of those structs changes the accepted schema
+automatically, with no parallel edit required in the validator. `SchemaGroups(page)`
+is derived differently: it reads the group names present as map keys in that
+page's entry in `defaultConfig()`, not struct fields of `Config` — a group
+added only to `defaultConfig()`'s map (with no corresponding struct field)
+still changes the accepted schema, and a parity test keeps that map's keys
+from drifting out of sync with the fields the validator otherwise expects.
 
 **Interpretation I8: the validator is deliberately stricter than
 `mergePage`'s unknown-group tolerance.** `mergePage` (config.go) already
