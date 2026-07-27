@@ -17,9 +17,10 @@ import (
 // matching the "absent config" semantics the rest of this package already
 // uses for a missing file. A document that fails to parse returns a
 // KindParseType *LoadError wrapping the real yaml parser error, with Detail
-// set to that error's own message (which yaml.v3 always renders as
-// "yaml: line N: ...", so the reported line is visible in Detail without a
-// second look at Err).
+// set to that error's own message. When yaml.v3 includes a "line N"
+// fragment, the same fragment is therefore visible in Detail without a
+// second look at Err; when it does not report a line, this helper does not
+// invent one.
 //
 // Exactly one YAML document is accepted. After the first document decodes
 // successfully, only io.EOF from a second Decode proves there is no more
@@ -57,8 +58,8 @@ func parseYAMLDocument(path string, data []byte) (*yaml.Node, *LoadError) {
 }
 
 // parseFailure wraps a yaml parser error into a KindParseType *LoadError,
-// copying path verbatim and rendering the parser error's own message (which
-// always contains "line N") into Detail.
+// copying path verbatim and rendering the parser error's own message into
+// Detail. This preserves any "line N" fragment yaml.v3 provides.
 func parseFailure(path string, err error) *LoadError {
 	return &LoadError{
 		Path:   path,

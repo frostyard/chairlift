@@ -154,7 +154,19 @@ func TestSourceConfigExportedSurface(t *testing.T) {
 					continue
 				}
 				if d.Recv != nil {
-					methods[d.Name.Name] = true
+					receiver := ""
+					switch typ := d.Recv.List[0].Type.(type) {
+					case *ast.Ident:
+						receiver = typ.Name
+					case *ast.StarExpr:
+						if id, ok := typ.X.(*ast.Ident); ok {
+							receiver = id.Name
+						}
+					}
+					if receiver == "" {
+						t.Fatalf("unsupported exported method receiver in %s: %T", name, d.Recv.List[0].Type)
+					}
+					methods[receiver+"."+d.Name.Name] = true
 				} else {
 					funcs[d.Name.Name] = true
 				}
@@ -180,7 +192,7 @@ func TestSourceConfigExportedSurface(t *testing.T) {
 	assertExactNameSet(t, "exported funcs", funcs,
 		[]string{"Load", "SchemaActionFields", "SchemaGroupFields", "SchemaGroups", "SchemaPages"})
 	assertExactNameSet(t, "exported methods", methods,
-		[]string{"Error", "GetGroupConfig", "IsGroupEnabled", "Unwrap"})
+		[]string{"Config.GetGroupConfig", "Config.IsGroupEnabled", "LoadError.Error", "LoadError.Unwrap"})
 	assertExactNameSet(t, "exported types", types,
 		[]string{"ActionConfig", "Config", "ErrorKind", "GroupConfig", "LoadError", "PageConfig"})
 	assertExactNameSet(t, "exported values", values,

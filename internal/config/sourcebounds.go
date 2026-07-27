@@ -74,7 +74,7 @@ func collectSourceInventory(root *yaml.Node) *sourceInventory {
 		}
 
 		switch n.Kind {
-		case yaml.MappingNode, yaml.SequenceNode:
+		case yaml.DocumentNode, yaml.MappingNode, yaml.SequenceNode:
 			for _, child := range n.Content {
 				inv.edges = append(inv.edges, sourceEdge{parent: n, child: child})
 				walk(child, nextAncestor)
@@ -264,7 +264,7 @@ func pathVisitCount(n *yaml.Node, memo map[*yaml.Node]int) int {
 	}
 	deepest := 0
 	switch n.Kind {
-	case yaml.MappingNode, yaml.SequenceNode:
+	case yaml.DocumentNode, yaml.MappingNode, yaml.SequenceNode:
 		for _, child := range n.Content {
 			if v := pathVisitCount(child, memo); v > deepest {
 				deepest = v

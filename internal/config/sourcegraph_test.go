@@ -214,16 +214,25 @@ func TestValidateSourceGraphNodeIdentityNotValueEquality(t *testing.T) {
 		Content: []*yaml.Node{scalarNode("k"), scalarNode("v")},
 	}
 
+	scalarParentA := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Content: []*yaml.Node{scalarNode("a"), sharedScalar},
+	}
+	scalarParentB := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Content: []*yaml.Node{scalarNode("b"), sharedScalar},
+	}
+	mappingParentA := &yaml.Node{
+		Kind:    yaml.SequenceNode,
+		Content: []*yaml.Node{sharedMapping},
+	}
+	mappingParentB := &yaml.Node{
+		Kind:    yaml.SequenceNode,
+		Content: []*yaml.Node{sharedMapping},
+	}
 	root := &yaml.Node{
-		Kind: yaml.MappingNode,
-		Content: []*yaml.Node{
-			scalarNode("a"), sharedScalar,
-			scalarNode("b"), sharedScalar,
-			scalarNode("seq"), &yaml.Node{
-				Kind:    yaml.SequenceNode,
-				Content: []*yaml.Node{sharedMapping, sharedMapping, sharedMapping},
-			},
-		},
+		Kind:    yaml.SequenceNode,
+		Content: []*yaml.Node{scalarParentA, scalarParentB, mappingParentA, mappingParentB},
 	}
 	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
 
@@ -303,7 +312,7 @@ func TestValidateSourceGraphMergeOperandAccepted(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := &yaml.Node{
 				Kind:    yaml.MappingNode,
-				Content: []*yaml.Node{mergeKeyNode(), tt.value, scalarNode("anchors"), &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{anchoredA, anchoredB}}},
+				Content: []*yaml.Node{mergeKeyNode(), tt.value, scalarNode("anchors"), {Kind: yaml.SequenceNode, Content: []*yaml.Node{anchoredA, anchoredB}}},
 			}
 			doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{root}}
 			if err := validateSourceGraph("p", doc); err != nil {
@@ -378,7 +387,7 @@ func TestValidateSourceGraphMergeOperandRejected(t *testing.T) {
 				Kind: yaml.MappingNode,
 				Content: []*yaml.Node{
 					mergeKeyNode(), tt.value,
-					scalarNode("anchors"), &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{
+					scalarNode("anchors"), {Kind: yaml.SequenceNode, Content: []*yaml.Node{
 						anchoredMapping, anchoredSeq, anchoredScalar, aliasToMapping,
 					}},
 				},

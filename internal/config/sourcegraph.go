@@ -119,7 +119,7 @@ func validateSourceGraph(path string, doc *yaml.Node) *LoadError {
 	if err := walkSourceNode(path, doc.Content[0], states); err != nil {
 		return err
 	}
-	return checkSourceGraphBounds(path, doc.Content[0])
+	return checkSourceGraphBounds(path, doc)
 }
 
 // walkSourceNode validates a single reachable node and, on success,

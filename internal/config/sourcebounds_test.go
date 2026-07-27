@@ -339,14 +339,14 @@ func TestValidateSourceGraphPathVisitBoundary(t *testing.T) {
 	const path = "/etc/chairlift/path-visit-boundary.yml"
 
 	t.Run("exactly 128 visits succeeds", func(t *testing.T) {
-		doc := newSourceDocNode(buildSourceVisitChain(128))
+		doc := newSourceDocNode(buildSourceVisitChain(127))
 		if err := validateSourceGraph(path, doc); err != nil {
 			t.Fatalf("validateSourceGraph(128-visit chain) = %v, want nil", err)
 		}
 	})
 
 	t.Run("129 visits fails", func(t *testing.T) {
-		doc := newSourceDocNode(buildSourceVisitChain(129))
+		doc := newSourceDocNode(buildSourceVisitChain(128))
 		err := validateSourceGraph(path, doc)
 		wantParseType(t, err, path)
 
@@ -365,6 +365,24 @@ func TestValidateSourceGraphPathVisitBoundary(t *testing.T) {
 	})
 }
 
+// TestValidateSourceGraphPathVisitIncludesDocument proves the document node
+// is both charged as the first path visit and retained as an attribution
+// ancestor. The child graph has exactly 128 visits on its own, so wrapping it
+// in the required document makes the source path 129 visits; because all
+// child nodes have Line == 0, the limit error must inherit the document's
+// positive line rather than falling back to line 1.
+func TestValidateSourceGraphPathVisitIncludesDocument(t *testing.T) {
+	const path = "/etc/chairlift/path-visit-document.yml"
+
+	doc := newSourceDocNode(buildSourceVisitChain(128))
+	doc.Line = 77
+	err := validateSourceGraph(path, doc)
+	wantParseType(t, err, path)
+	if got := sourceDetailLine(t, err); got != 77 {
+		t.Fatalf("attributed line = %d, want document line 77", got)
+	}
+}
+
 // TestValidateSourceGraphPathVisitAliasCounts confirms an alias node plus
 // its target contributes two path visits, not one: two graphs identical
 // in wrap-depth differ only in whether the deepest leaf is a direct scalar
@@ -372,7 +390,7 @@ func TestValidateSourceGraphPathVisitBoundary(t *testing.T) {
 // alone flips the result across the 128 boundary.
 func TestValidateSourceGraphPathVisitAliasCounts(t *testing.T) {
 	const path = "/etc/chairlift/path-visit-alias-counts.yml"
-	const wraps = 127
+	const wraps = 126
 
 	direct := buildSourceVisitChainWithLeaf(wraps, newSourceScalarNode("leaf"))
 	if err := validateSourceGraph(path, newSourceDocNode(direct)); err != nil {
@@ -386,6 +404,9 @@ func TestValidateSourceGraphPathVisitAliasCounts(t *testing.T) {
 	if !strings.Contains(err.Detail, "128") {
 		t.Fatalf("err.Detail = %q, want the literal %q", err.Detail, "128")
 	}
+	if got := sourceDetailLine(t, err); got != 1 {
+		t.Fatalf("attributed line = %d, want 1 (wholly synthetic fallback)", got)
+	}
 }
 
 // TestValidateSourceGraphPathVisitKeyAccounting confirms mapping keys
@@ -398,19 +419,22 @@ func TestValidateSourceGraphPathVisitAliasCounts(t *testing.T) {
 func TestValidateSourceGraphPathVisitKeyAccounting(t *testing.T) {
 	const path = "/etc/chairlift/path-visit-key-accounting.yml"
 
-	t.Run("127 key-position wraps (128 visits) succeeds", func(t *testing.T) {
-		doc := newSourceDocNode(buildSourceVisitKeyChain(127, newSourceScalarNode("leaf")))
+	t.Run("126 key-position wraps (128 visits) succeeds", func(t *testing.T) {
+		doc := newSourceDocNode(buildSourceVisitKeyChain(126, newSourceScalarNode("leaf")))
 		if err := validateSourceGraph(path, doc); err != nil {
-			t.Fatalf("validateSourceGraph(127-deep key chain) = %v, want nil", err)
+			t.Fatalf("validateSourceGraph(126-wrap key chain plus document) = %v, want nil", err)
 		}
 	})
 
-	t.Run("128 key-position wraps (129 visits) fails", func(t *testing.T) {
-		doc := newSourceDocNode(buildSourceVisitKeyChain(128, newSourceScalarNode("leaf")))
+	t.Run("127 key-position wraps (129 visits) fails", func(t *testing.T) {
+		doc := newSourceDocNode(buildSourceVisitKeyChain(127, newSourceScalarNode("leaf")))
 		err := validateSourceGraph(path, doc)
 		wantParseType(t, err, path)
 		if !strings.Contains(err.Detail, "128") {
 			t.Fatalf("err.Detail = %q, want the literal %q", err.Detail, "128")
+		}
+		if got := sourceDetailLine(t, err); got != 1 {
+			t.Fatalf("attributed line = %d, want 1 (wholly synthetic fallback)", got)
 		}
 	})
 }
@@ -562,5 +586,8 @@ func TestValidateSourceGraphBothBoundsViolatedReportsAliasHopDeterministically(t
 	}
 	if strings.Contains(err.Detail, "path visit") {
 		t.Fatalf("err.Detail = %q, want only the alias-hop limit named, not the path-visit limit too", err.Detail)
+	}
+	if got := sourceDetailLine(t, err); got != 1 {
+		t.Fatalf("attributed line = %d, want 1 (wholly synthetic fallback)", got)
 	}
 }

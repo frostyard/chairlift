@@ -203,7 +203,7 @@ exercises.
 
 **Exact merge-key recognition and tag normalization
 (`internal/config/sourcegraph.go`).** `isMergeKey(n *yaml.Node) bool` and
-`shortYAMLTag(tag string) string` are deliberate line-for-line reproductions
+`shortYAMLTag(tag string) string` are deliberate behaviorally exact reproductions
 of two unexported predicates from `gopkg.in/yaml.v3` v3.0.1 itself —
 `decode.go:isMerge` and `resolve.go:shortTag` — rather than reimplementations
 from a description of YAML merge-key semantics, so this package's own
