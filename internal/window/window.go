@@ -37,6 +37,7 @@ type Window struct {
 	pages       map[string]*adw.ToolbarView
 	navRows     map[string]*adw.ActionRow // Store references to nav rows for badges
 	config      *config.Config
+	configError *config.LoadError
 	views       *views.UserHome
 	updateBadge *gtk.Button // Badge for updates count
 }
@@ -74,7 +75,7 @@ func init() {
 				o.Cast(&parent)
 
 				cfgStart := time.Now()
-				cfg := config.Load()
+				cfg, configErr := config.Load()
 				log.Printf("window: config loaded in %s", time.Since(cfgStart))
 
 				w := &Window{
@@ -82,6 +83,7 @@ func init() {
 					pages:             make(map[string]*adw.ToolbarView),
 					navRows:           make(map[string]*adw.ActionRow),
 					config:            cfg,
+					configError:       configErr,
 				}
 
 				reg.Pin(o, unsafe.Pointer(w))
@@ -89,6 +91,12 @@ func init() {
 				w.SetDefaultSize(900, 700)
 				w.SetTitle("ChairLift")
 				w.buildUI()
+				if w.configError != nil {
+					// OverrideConstructed and buildUI both run on GTK's main
+					// thread; the toast overlay now exists and timeout 0 makes
+					// this diagnostic persist until dismissed.
+					w.ShowErrorToast(w.configError.ToastMessage())
+				}
 				w.setupActions()
 
 				log.Printf("window: constructed in %s", time.Since(windowStart))

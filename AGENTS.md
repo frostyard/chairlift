@@ -65,6 +65,11 @@ An agent must not break these:
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget
   from another group exists — nil-guard cross-group widget access.
+- **Configuration precedence fails closed.** Only a missing candidate advances
+  to the next configuration search path. The first file that exists is
+  authoritative: read, YAML, or schema errors must disable every configurable
+  group, emit the `CONFIGURATION ERROR` diagnostic, and remain visible in the
+  UI as a persistent toast until the file is fixed and ChairLift is restarted.
 
 ## Documentation
 

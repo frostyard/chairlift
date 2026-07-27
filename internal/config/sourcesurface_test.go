@@ -45,6 +45,10 @@ import (
 //     docs/agents/skills/frozen-allowlist-authorization-is-per-entry-not-per-chunk.md.
 //     No other new production helper c1 adds may be added here; they are
 //     exercised only indirectly, through parseAndValidate.
+//   - resolveCandidatePath is the runtime-wiring slice's one direct-test
+//     authorization. Path resolution is observable security/diagnostic
+//     behavior and its executable/cwd branches are tested directly; all other
+//     runtime-loading helpers remain exercised through Load/loadFromPath.
 var directCallAllowlist = map[string]bool{
 	"parseYAMLDocument": true,
 
@@ -69,6 +73,8 @@ var directCallAllowlist = map[string]bool{
 	"effectiveKeyIdentity": true,
 
 	"parseAndValidate": true,
+
+	"resolveCandidatePath": true,
 }
 
 // packageGoFiles lists the *.go files directly in this package's directory
@@ -219,7 +225,7 @@ func TestSourceConfigExportedSurface(t *testing.T) {
 	assertExactNameSet(t, "exported funcs", funcs,
 		[]string{"Load", "SchemaActionFields", "SchemaGroupFields", "SchemaGroups", "SchemaPages"})
 	assertExactNameSet(t, "exported methods", methods,
-		[]string{"Config.GetGroupConfig", "Config.IsGroupEnabled", "LoadError.Error", "LoadError.Unwrap"})
+		[]string{"Config.GetGroupConfig", "Config.IsGroupEnabled", "LoadError.Error", "LoadError.LogMessage", "LoadError.ToastMessage", "LoadError.Unwrap"})
 	assertExactNameSet(t, "exported types", types,
 		[]string{"ActionConfig", "Config", "ErrorKind", "GroupConfig", "LoadError", "PageConfig"})
 	assertExactNameSet(t, "exported values", values,

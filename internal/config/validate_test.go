@@ -177,32 +177,36 @@ func TestParseAndValidateMinimalMapping(t *testing.T) {
 	}
 }
 
-// TestParseAndValidateStaysOutOfRuntimeLoad proves, via go/ast over
-// internal/config/config.go, that neither Load nor loadFromPath's function
-// body references parseAndValidate: this chunk adds parseAndValidate as a
-// standalone capability without wiring it into the runtime config-loading
-// path.
-func TestParseAndValidateStaysOutOfRuntimeLoad(t *testing.T) {
+// TestRuntimeLoadUsesStrictValidator proves, via go/ast over config.go, that
+// the resolved-file loader calls parseAndValidate. This prevents a future
+// refactor from silently restoring permissive yaml.Unmarshal runtime loading.
+func TestRuntimeLoadUsesStrictValidator(t *testing.T) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "config.go", nil, 0)
 	if err != nil {
 		t.Fatalf("parsing config.go: %v", err)
 	}
 
+	foundLoader := false
 	for _, decl := range f.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Body == nil {
+		if !ok || fn.Body == nil || fn.Name.Name != "loadResolvedPath" {
 			continue
 		}
-		if fn.Name.Name != "Load" && fn.Name.Name != "loadFromPath" {
-			continue
-		}
+		foundLoader = true
+		foundValidator := false
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			if id, ok := n.(*ast.Ident); ok && id.Name == "parseAndValidate" {
-				t.Fatalf("%s references parseAndValidate, want it left unwired in this chunk", fn.Name.Name)
+				foundValidator = true
 			}
 			return true
 		})
+		if !foundValidator {
+			t.Fatal("loadResolvedPath does not reference parseAndValidate")
+		}
+	}
+	if !foundLoader {
+		t.Fatal("config.go has no loadResolvedPath function")
 	}
 }
 

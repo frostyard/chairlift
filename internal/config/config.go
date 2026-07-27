@@ -2,11 +2,10 @@
 package config
 
 import (
+	"errors"
+	"io/fs"
 	"log"
 	"os"
-	"path/filepath"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Config represents the application configuration
@@ -79,46 +78,81 @@ var configPaths = []string{
 	"config.yml",
 }
 
-// Load loads the configuration from available config files
-func Load() *Config {
-	for _, path := range configPaths {
-		cfg, err := loadFromPath(path)
+// readFile is an injection seam for deterministic read-failure tests. Its
+// production value is always os.ReadFile.
+var readFile = os.ReadFile
+
+// Load loads the first existing configuration candidate. A missing candidate
+// continues the documented search order; any other failure in the first
+// existing candidate is authoritative and returns a fail-closed configuration
+// together with the actionable error.
+func Load() (*Config, *LoadError) {
+	for _, candidate := range configPaths {
+		path := resolveCandidatePath(candidate)
+		cfg, err := loadResolvedPath(path)
 		if err == nil {
 			log.Printf("Loaded config from %s", path)
-			return cfg
+			return cfg, nil
 		}
+		if err.Kind == KindRead && errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+
+		log.Print(err.LogMessage())
+		return disabledConfig(), err
 	}
 
-	// Return default config if no file found
+	// Preserve built-in defaults only when every candidate is genuinely absent.
 	log.Println("No config file found, using defaults")
-	return defaultConfig()
+	return defaultConfig(), nil
 }
 
 // loadFromPath attempts to load config from a specific path
-func loadFromPath(path string) (*Config, error) {
-	// Handle relative paths
-	if !filepath.IsAbs(path) {
-		// Try relative to executable
-		execDir, err := os.Executable()
-		if err == nil {
-			execPath := filepath.Join(filepath.Dir(execDir), path)
-			if _, err := os.Stat(execPath); err == nil {
-				path = execPath
-			}
+func loadFromPath(path string) (*Config, *LoadError) {
+	return loadResolvedPath(resolveCandidatePath(path))
+}
+
+// loadResolvedPath reads and strictly validates one already-resolved
+// candidate, then overlays it onto the built-in defaults.
+func loadResolvedPath(path string) (*Config, *LoadError) {
+	data, err := readFile(path)
+	if err != nil {
+		return nil, &LoadError{
+			Path:   path,
+			Kind:   KindRead,
+			Detail: "reading configuration file",
+			Err:    err,
 		}
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
+	raw, loadErr := parseAndValidate(path, data)
+	if loadErr != nil {
+		return nil, loadErr
 	}
 
-	var raw rawConfig
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, err
-	}
+	return mergeConfig(defaultConfig(), raw), nil
+}
 
-	return mergeConfig(defaultConfig(), &raw), nil
+// disabledConfig retains the canonical pages, groups, and non-visibility
+// defaults while forcing every known group off. It is the only configuration
+// returned for an authoritative read, parse/type, or schema failure.
+func disabledConfig() *Config {
+	cfg := defaultConfig()
+	pages := []PageConfig{
+		cfg.SystemPage,
+		cfg.UpdatesPage,
+		cfg.ApplicationsPage,
+		cfg.MaintenancePage,
+		cfg.FeaturesPage,
+		cfg.HelpPage,
+	}
+	for _, page := range pages {
+		for name, group := range page {
+			group.Enabled = false
+			page[name] = group
+		}
+	}
+	return cfg
 }
 
 // mergeConfig overlays raw (a parsed config file) onto def (defaultConfig())
@@ -137,12 +171,10 @@ func mergeConfig(def *Config, raw *rawConfig) *Config {
 	}
 }
 
-// mergePage overlays raw onto def for a single page. Groups present only in
-// def are kept as-is; groups present only in raw (a group name unknown to
-// defaultConfig() for this page) start from a zero GroupConfig that defaults
-// Enabled to true, matching IsGroupEnabled's existing "missing group ->
-// enabled" fallback for the wholly-absent case. Groups present in both are
-// merged field by field.
+// mergePage overlays raw onto def for a single page. Runtime inputs have
+// already passed strict schema validation, so the unknown-group branch is
+// defensive support for trusted package-internal callers only. Groups present
+// in both maps are merged field by field.
 func mergePage(def PageConfig, raw rawPageConfig) PageConfig {
 	result := make(PageConfig, len(def))
 	for name, group := range def {
@@ -152,7 +184,7 @@ func mergePage(def PageConfig, raw rawPageConfig) PageConfig {
 	for name, rawGroup := range raw {
 		base, ok := def[name]
 		if !ok {
-			// Unknown group: omitted `enabled` still resolves to true.
+			// Preserve the historical package-internal merge behavior.
 			base = GroupConfig{Enabled: true}
 		}
 		result[name] = mergeGroup(base, rawGroup)

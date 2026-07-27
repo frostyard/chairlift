@@ -8,9 +8,15 @@ Configuration files are searched in order (first found wins):
 
 1. `/etc/chairlift/config.yml` — system-wide (highest priority)
 2. `/usr/share/chairlift/config.yml` — package maintainer defaults
-3. `config.yml` — relative to executable (development)
+3. `config.yml` — beside the executable when present, otherwise relative to
+   the current working directory (development fallback)
 
-If no file is found, all features default to enabled.
+Only a missing candidate advances the search. The first existing candidate is
+authoritative. If it cannot be read or fails YAML/schema validation, ChairLift
+hides every feature group, logs a `CONFIGURATION ERROR`, and displays a
+persistent toast with the path and cause. Fix the file and restart ChairLift.
+If no file is found, built-in defaults apply: all groups are enabled except
+`maintenance_cleanup_group`.
 
 ## Format
 
@@ -21,7 +27,9 @@ page_name:
     # Optional per-group fields (see below)
 ```
 
-Groups with `enabled: false` are hidden from the UI. Missing entries default to `enabled: true`. Changes require restarting ChairLift.
+Groups with `enabled: false` are hidden from the UI. Missing entries inherit
+their built-in values. Unknown page, group, or field names and wrong field
+types are errors. Changes require restarting ChairLift.
 
 ## Pages and Groups
 

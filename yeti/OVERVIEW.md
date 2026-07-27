@@ -131,9 +131,11 @@ pointer means the file omitted (or explicitly nulled) that key, so
 key — including to an empty string or empty slice — so it replaces the
 default outright. This is why `maintenance_cleanup_group` stays disabled
 overall (and keeps its default `actions` entry) when a config file mentions
-the group only to flip an unrelated field, and why `Load()` falling back to
-`defaultConfig()` when no file is found or the file is unreadable/invalid
-preserves that same per-group default — it is never "all features enabled."
+the group only to flip an unrelated field. When every search candidate is
+absent, `Load()` returns `defaultConfig()`. An authoritative file that cannot
+be read or validated instead returns `disabledConfig()`: the same defaults
+for non-visibility fields, with every canonical group's `Enabled` field
+forced to false.
 
 **Structured load-error vocabulary (`internal/config/loaderror.go`).** A
 stable `ErrorKind` enumerates why loading/validating a config file could
@@ -186,29 +188,12 @@ YAML document, with a fixed cardinality outcome per input shape:
   error and line in `Err`/`Detail`, just like a malformed first document
   would.
 
-As of this writing `parseYAMLDocument`, `validateSourceGraph`,
-`resolveEffective`, and `parseAndValidate` (the four-stage entry point tying
-them together, described below alongside the schema inventory) are not
-wired into `Load()` or `loadFromPath()` — both are unchanged and still fall
-back to `defaultConfig()` on any read or parse failure, so there is no
-strict parsing and no fail-closed runtime behavior yet, and neither
-`resolveEffective`'s nor `parseAndValidate`'s output feeds ChairLift's
-strict schema validation either. This is the first of several package-private
-capabilities (document parsing, reachable source-graph shape validation,
-merge-operand shape validation, duplicate-explicit-key detection, the
-memoized alias-hop bound and the memoized source-node path-visit bound
-(both with all-paths line attribution), and now a validate-first
-alias/anchor-resolving, merge-precedence-resolving, bounded-output emitter
-with its own post-alias key-identity-collision rule) meant to
-eventually replace `loadFromPath()`'s current `yaml.Unmarshal` call with
-fail-closed, single-document, structurally validated loading — but none of
-that wiring exists yet, so `KindRead` still describes a capability the
-package's vocabulary anticipates but no code path yet reaches. `KindSchema`
-no longer belongs in that list:
-`parseAndValidate`'s page-level walk (described below) is the package's
-first code path that actually produces a `KindSchema` error — an unknown
-top-level page name — even though `Load()`/`loadFromPath()` still never call
-`parseAndValidate` and so never see it.
+These capabilities are now the runtime loading path:
+`Load`/`loadFromPath` → `loadResolvedPath` → `parseAndValidate` →
+`parseYAMLDocument`/`resolveEffective`/`validateSourceGraph`. Read failures
+produce `KindRead`; malformed or wrong-type YAML produces `KindParseType`;
+unknown schema names and invalid shapes produce `KindSchema`. No runtime
+load uses the old permissive `yaml.Unmarshal` path.
 
 **Exact merge-key recognition and tag normalization
 (`internal/config/sourcegraph.go`).** `isMergeKey(n *yaml.Node) bool` and
@@ -237,7 +222,8 @@ unit test (`TestMergeKeyRecognition`, `TestShortYAMLTagNormalization` in
 `sourcegraph_test.go`) rather than only exercising them through an exported
 entry point, per
 `docs/agents/skills/helper-functions-need-direct-test-calls.md`; neither
-helper is wired into any call path yet — that wiring is later work.
+helper is called directly by runtime loading, but both are reached indirectly
+through `resolveEffective` in the strict validator pipeline.
 
 **Reachable source-graph shape validation
 (`internal/config/sourcegraph.go`).** `validateSourceGraph(path string, doc
@@ -279,7 +265,8 @@ mapping's explicit keys must also be pairwise unique (see the duplicate-key
 paragraph below); the memoized 64-consecutive-alias-hop bound and the
 memoized 128-source-node-path-visit bound, both described below, now run
 as a second pass once these checks prove the graph acyclic.
-`validateSourceGraph` is not wired into any call path yet either.
+Runtime loading reaches `validateSourceGraph` through
+`parseAndValidate` → `resolveEffective`.
 
 **Merge-operand shape validation (`internal/config/sourcegraph.go`).**
 Layered onto the traversal above: every mapping entry whose key
@@ -562,10 +549,9 @@ names any of them directly — `effective_test.go`, `effectivebound_test.go`,
 `effectivemerge_test.go`, and `effectiveidentity_test.go` exercise them
 only through `resolveEffective` itself, alongside `resolveEffective` and
 `effectiveKeyIdentity`, the two additions that allowlist authorizes.
-`resolveEffective` itself is still not yet wired into `Load()`,
-`loadFromPath()`, or ChairLift's strict schema validation — it remains a
-standalone capability, like `parseYAMLDocument` and `validateSourceGraph`
-before it.
+Runtime loading reaches `resolveEffective` only through
+`parseAndValidate`; its lower-level helpers remain encapsulated behind that
+validator entry point.
 
 **Reachable inventory, all-paths line attribution, and the 64
 consecutive-alias-hop and 128-source-node-path-visit bounds
@@ -689,11 +675,9 @@ it (ignoring only that pointer-vs-value difference and `omitempty`) — so
 `SchemaActionFields()` reads `ActionConfig`'s yaml tags directly, since
 `ActionConfig` has no raw/pointer mirror. Both return a freshly allocated
 slice on every call and report an empty or duplicate field name as an error,
-never a panic, `log.Fatal`, or `os.Exit`. As of this writing no production
-code path — neither `Load()`/`loadFromPath()` nor any runtime diagnostic —
-consumes this inventory yet, and this slice adds no strict parsing and no
-unknown-key rejection; `Load()` still falls back to `defaultConfig()` on any
-read or parse failure. The inventory exists for a later change to build on.
+never a panic, `log.Fatal`, or `os.Exit`. `parseAndValidate` consumes this
+inventory in production, so unknown pages, groups, and fields are rejected by
+the runtime loader rather than silently ignored.
 
 **The four-stage validator entry point (`internal/config/validate.go`).**
 `parseAndValidate(path string, data []byte) (*rawConfig, *LoadError)` is the
@@ -792,21 +776,16 @@ added only to `defaultConfig()`'s map (with no corresponding struct field)
 still changes the accepted schema, and a parity test keeps that map's keys
 from drifting out of sync with the fields the validator otherwise expects.
 
-**Interpretation I8: the validator is deliberately stricter than
-`mergePage`'s unknown-group tolerance.** `mergePage` (config.go) already
+**Interpretation I8: runtime validation precedes `mergePage`'s tolerant
+mechanics.** `mergePage` (config.go) mechanically
 tolerates a group name absent from `defaultConfig()` for a page: it
 synthesizes a zero `GroupConfig{Enabled: true}` as the merge base and
 proceeds, matching `IsGroupEnabled`'s "missing group -> enabled" fallback.
 `parseAndValidate`'s `validateGroupEntries`, by contrast, rejects that same
-unknown group name outright as `KindSchema` — it never reaches `mergePage`
-at all. These two behaviors diverge on the same input class, and that
-divergence is intentional and currently safe: `parseAndValidate` is not
-wired into `Load()`/`loadFromPath()` (see below), so `mergePage` is the only
-one of the two that any runtime config load actually exercises today. A
-future slice that wires `parseAndValidate` into runtime loading must resolve
-this divergence explicitly — either by loosening the validator to match
-`mergePage`'s tolerance or by tightening `mergePage`/`defaultConfig()` to
-match the validator — rather than leaving both behaviors live at once.
+unknown group name outright as `KindSchema`. Runtime loading always calls
+`parseAndValidate` before `mergeConfig`, so unrecognized groups can never
+reach `mergePage`; its tolerance remains useful only to package-internal
+callers operating on already trusted `rawConfig` values.
 
 Once both prior stages succeed, stage 3 classifies the effective document by
 its top-level node shape into exactly one of these outcomes:
@@ -939,8 +918,9 @@ its top-level node shape into exactly one of these outcomes:
   precisely so a merge onto `defaultConfig()` can tell "explicitly set to
   the zero value" apart from "key absent."
 
-Per the frozen `directCallAllowlist` in `sourcesurface_test.go`,
-`parseAndValidate` is the only addition this slice's authorization spends;
+Per the guarded `directCallAllowlist` in `sourcesurface_test.go`,
+`parseAndValidate` and `resolveCandidatePath` are the runtime entry helpers
+authorized for direct test calls;
 `validatorShapeError`, `validatorDecodeError`, `effectiveNodeLine`,
 `validatePageEntries`, `schemaKeyName`, `validatorSchemaError`,
 `validatorSchemaPagesError`, `validatorKeyShapeError`,
@@ -952,18 +932,35 @@ Per the frozen `directCallAllowlist` in `sourcesurface_test.go`,
 `validatorActionEntryShapeError`, `validateActionFieldEntries`,
 `actionFieldTypes`, and `validatorActionFieldTypesError` are all exercised
 only indirectly, through `parseAndValidate`, in `validate_test.go`.
-`parseAndValidate` itself is, like `parseYAMLDocument`, `validateSourceGraph`,
-and `resolveEffective` before it, still not wired into `Load()` or
-`loadFromPath()` — a `go/ast`-based test
-(`TestParseAndValidateStaysOutOfRuntimeLoad`) proves neither function's body
-references it, so this remains a standalone capability rather than a change
-in runtime behavior. Concretely: `Load()` and `loadFromPath()` are unchanged
-from before this slice; there is no strict runtime config validation and no
-fail-closed config loading — a malformed or schema-invalid config file still
-falls back silently to `defaultConfig()`, exactly as before; and there is no
-startup config-error log line and no config-error toast/notification
-surfaced anywhere in the UI. `parseAndValidate` is reachable only from tests
-in `internal/config` until a later issue-69 slice wires it in.
+
+**Runtime loading, precedence, and diagnostics
+(`internal/config/config.go`, `paths.go`, `diagnostic.go`).** `Load` resolves
+each configured candidate to the exact path it will read, then calls
+`loadResolvedPath`, which reads bytes, runs `parseAndValidate`, and only then
+merges the validated overlay onto `defaultConfig()`. A missing candidate
+(`errors.Is(err, fs.ErrNotExist)`) advances to the next search location. Any
+other read failure, or any parse/type/schema failure in the first file that
+exists, makes that file authoritative: lower-priority files are not read,
+`Load` returns `disabledConfig()` plus the structured `*LoadError`, and every
+canonical feature group is hidden while non-visibility defaults remain
+available. If all candidates are absent, the ordinary built-in defaults and
+a nil error are returned.
+
+`resolveCandidatePath` makes diagnostic paths deterministic and absolute when
+the operating system supplies a working directory: absolute candidates are
+cleaned; a relative candidate prefers a file beside the executable and
+otherwise resolves against the current working directory. Filesystem reads,
+the executable path, and the working directory have narrow package-level
+seams so precedence and permission failures are testable without relying on
+host permissions.
+
+On an authoritative failure, `LoadError.LogMessage` prefixes the full
+path-and-cause diagnostic with `CONFIGURATION ERROR`, states that all groups
+were disabled, and instructs the user to restart after fixing the file.
+`window.New` retains the same `LoadError`, builds the toast overlay, then calls
+`ShowErrorToast` with `LoadError.ToastMessage`. `ShowErrorToast` sets timeout
+zero, so the startup error remains visible instead of expiring; construction
+and the toast call both occur on the GTK main thread.
 
 ### Package manager wrapper pattern
 
@@ -1055,9 +1052,15 @@ Help page links are opened via `xdg-open` using `exec.Command`. The process is s
 
 1. `/etc/chairlift/config.yml` — system-wide (highest priority)
 2. `/usr/share/chairlift/config.yml` — package maintainer defaults
-3. `config.yml` — relative to executable (development)
+3. `config.yml` — beside the executable when present, otherwise relative to
+   the current working directory (development fallback)
 
-If no file is found, all features default to enabled (except `maintenance_cleanup_group` which defaults to disabled). See [CONFIG.md](../CONFIG.md) for the full reference.
+Only a missing candidate advances the search. The first existing candidate is
+authoritative; a read, parse, type, or schema error disables every feature
+group and produces both a high-signal log entry and a persistent toast. If no
+file is found, all features default to enabled except
+`maintenance_cleanup_group`, which defaults to disabled. See
+[CONFIG.md](../CONFIG.md) for the full reference.
 
 ### Config structure
 

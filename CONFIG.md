@@ -8,10 +8,17 @@ ChairLift searches for the configuration file in the following locations (in ord
 
 1. `/etc/chairlift/config.yml` (system-wide configuration - highest priority)
 2. `/usr/share/chairlift/config.yml` (package maintainer defaults)
-3. `chairlift/config.yml` (development/source directory)
+3. `config.yml` beside the ChairLift executable, or in the current working
+   directory when no executable-relative file exists (development fallback)
 
 If no configuration file is found, all features default to enabled, except
 `maintenance_cleanup_group`, which defaults to disabled.
+
+The first file that exists in this order is authoritative. ChairLift does not
+fall through to a lower-priority file when that file is unreadable, malformed,
+or fails schema validation. Instead, it disables every feature group, logs a
+high-signal `CONFIGURATION ERROR`, and displays a persistent error toast naming
+the file and cause. Fix the authoritative file and restart ChairLift.
 
 ## Configuration Format
 
@@ -78,7 +85,7 @@ To create a distribution-specific configuration that disables all Homebrew featu
 
 ```yaml
 updates_page:
-  updates_status_group:
+  bootc_updates_group:
     enabled: true
   flatpak_updates_group:
     enabled: true # Keep Flatpak updates
@@ -158,7 +165,9 @@ install -D -m 644 config.yml debian/tmp/etc/chairlift/config.yml
   - An explicit empty list (e.g. `actions: []`) clears the field
   - A non-empty list, or an explicitly set scalar value, replaces the
     default outright
-- Invalid or unreadable configuration files fall back to the built-in
-  defaults in full (`maintenance_cleanup_group` stays disabled; every other
-  group stays enabled) — not "all features enabled"
+- Page names, group names, and field names must match the documented schema;
+  unknown names and values of the wrong type are configuration errors
+- An unreadable, malformed, or schema-invalid authoritative file fails closed:
+  all feature groups are hidden, lower-priority files are ignored, and
+  ChairLift reports the path and cause in both its log and a persistent toast
 - Changes require restarting ChairLift to take effect
