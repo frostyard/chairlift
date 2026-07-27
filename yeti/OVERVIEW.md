@@ -202,9 +202,13 @@ alias/anchor-resolving, merge-precedence-resolving, bounded-output emitter
 with its own post-alias key-identity-collision rule) meant to
 eventually replace `loadFromPath()`'s current `yaml.Unmarshal` call with
 fail-closed, single-document, structurally validated loading — but none of
-that wiring exists yet, so `KindRead` and `KindSchema` still describe
-capabilities the package's vocabulary anticipates rather than ones any code
-path currently exercises.
+that wiring exists yet, so `KindRead` still describes a capability the
+package's vocabulary anticipates but no code path yet reaches. `KindSchema`
+no longer belongs in that list:
+`parseAndValidate`'s page-level walk (described below) is the package's
+first code path that actually produces a `KindSchema` error — an unknown
+top-level page name — even though `Load()`/`loadFromPath()` still never call
+`parseAndValidate` and so never see it.
 
 **Exact merge-key recognition and tag normalization
 (`internal/config/sourcegraph.go`).** `isMergeKey(n *yaml.Node) bool` and
@@ -724,23 +728,55 @@ its top-level node shape into exactly one of these outcomes:
   non-positive, mirroring `effectiveOutputLimitError`'s own clamp). No
   `Decode` call runs for this outcome either, since there is no mapping to
   decode.
-- **Top-level mapping** — accepted structurally; stage 4 then calls the
-  effective document's `yaml.Node.Decode` into a `*rawConfig`. A `Decode`
-  failure here is classified `KindParseType` via the unexported
-  `validatorDecodeError`, with the yaml.v3 error's message in `Detail` and
-  the error itself preserved in `Err` — a defensive final step, since
-  `validateSourceGraph`/`resolveEffective` already prove the effective
-  document is well-formed by the time `Decode` runs, but any residual
-  decode failure is still classified rather than left unhandled.
-  Per-entry classification of page/group/action content within an accepted
-  mapping (unknown keys, wrong-shaped values, and so on) is out of
-  `parseAndValidate`'s scope as of this writing and starts at a later
-  chunk.
+- **Top-level mapping** — accepted structurally, and its entries are
+  classified one at a time, in effective `Content` order, by
+  `validatePageEntries` (interpretation I3's per-entry order: key shape,
+  then name membership, then value shape):
+  - A mapping key whose effective node is not a scalar with `ShortTag() ==
+    "!!str"` — an integer, boolean, or null scalar; a custom-tagged scalar;
+    a sequence; a mapping; or an alias to any of those (already
+    dereferenced into a copy of its target by `resolveEffective`) — is
+    rejected as `KindParseType` via the unexported `validatorKeyShapeError`
+    before its name or value is ever inspected. The unexported
+    `schemaKeyName(key *yaml.Node) (string, bool)` implements this rule; a
+    quoted `"<<"` key resolves to tag `!!str` (an ordinary name), while a
+    bare `<<` merge key carries `!!merge` and is consumed by
+    `resolveEffective` long before this walk runs, so it never reaches
+    `schemaKeyName` at all.
+  - A well-formed string key that is not one of `SchemaPages()`'s canonical
+    page names (schema.go, reflected off `Config`'s yaml tags — never a
+    literal list in validate.go) is rejected as `KindSchema` via the
+    unexported `validatorSchemaError`, naming the literal offending key and
+    a positive line, without descending into that entry's value at all.
+    (`SchemaPages()` returning an error — only possible for a malformed
+    struct tag on `Config` itself, which cannot happen for that canonical
+    struct — is still surfaced defensively as a `KindSchema` `*LoadError`
+    via the unexported `validatorSchemaPagesError`, wrapping the reflect
+    error, rather than ignored or panicked on.)
+  - A known page's **null** value is accepted as a no-op for that page.
+  - A known page's **non-null scalar or sequence** value is rejected as
+    `KindParseType` via the unexported `validatorPageValueShapeError`,
+    naming the page, the actual shape found, and a positive line.
+  - A known page's **mapping** value is accepted structurally; its own
+    entries (groups and fields) are classified starting at a later chunk.
+
+  Once every entry passes, stage 4 calls the effective document's
+  `yaml.Node.Decode` into a `*rawConfig`. A `Decode` failure here is
+  classified `KindParseType` via the unexported `validatorDecodeError`,
+  with the yaml.v3 error's message in `Detail` and the error itself
+  preserved in `Err` — a defensive final step, since
+  `validateSourceGraph`/`resolveEffective` and the page-entry walk above
+  already prove the effective document is well-formed by the time `Decode`
+  runs, but any residual decode failure is still classified rather than
+  left unhandled.
 
 Per the frozen `directCallAllowlist` in `sourcesurface_test.go`,
-`parseAndValidate` is the only addition this chunk's authorization spends;
-`validatorShapeError`, `validatorDecodeError`, and `effectiveNodeLine` are
-exercised only indirectly, through `parseAndValidate`, in `validate_test.go`.
+`parseAndValidate` is the only addition this slice's authorization spends;
+`validatorShapeError`, `validatorDecodeError`, `effectiveNodeLine`,
+`validatePageEntries`, `schemaKeyName`, `validatorSchemaError`,
+`validatorSchemaPagesError`, `validatorKeyShapeError`,
+`validatorPageValueShapeError`, and `describeNodeShape` are all exercised
+only indirectly, through `parseAndValidate`, in `validate_test.go`.
 `parseAndValidate` itself is, like `parseYAMLDocument`, `validateSourceGraph`,
 and `resolveEffective` before it, still not wired into `Load()` or
 `loadFromPath()` — a `go/ast`-based test

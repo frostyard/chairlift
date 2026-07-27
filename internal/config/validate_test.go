@@ -8,6 +8,21 @@ import (
 	"testing"
 )
 
+// wantSchema fails the test unless err is a non-nil *LoadError with
+// Kind == KindSchema and Path == path.
+func wantSchema(t *testing.T, err *LoadError, path string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("parseAndValidate(%q, ...) = nil, want a KindSchema error", path)
+	}
+	if err.Kind != KindSchema {
+		t.Fatalf("err.Kind = %q, want %q", err.Kind, KindSchema)
+	}
+	if err.Path != path {
+		t.Fatalf("err.Path = %q, want %q", err.Path, path)
+	}
+}
+
 // wantNoopRawConfig fails the test unless parseAndValidate(path, data)
 // returns a non-nil, zero-valued *rawConfig (every page map nil/empty) and
 // a nil error, as required for a document-level no-op overlay.
@@ -185,4 +200,234 @@ func TestParseAndValidateStaysOutOfRuntimeLoad(t *testing.T) {
 			return true
 		})
 	}
+}
+
+// TestParseAndValidateUnknownPageRejected confirms decision-table row 5: an
+// unrecognized top-level page name is KindSchema, with Path copied and
+// Detail containing both the literal offending name and a positive line.
+func TestParseAndValidateUnknownPageRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	raw, err := parseAndValidate(path, []byte("not_a_page: 1\n"))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantSchema(t, err, path)
+	if !strings.Contains(err.Detail, "not_a_page") {
+		t.Fatalf("err.Detail = %q, want it to contain %q", err.Detail, "not_a_page")
+	}
+	if !strings.Contains(err.Detail, "line 1") {
+		t.Fatalf("err.Detail = %q, want it to contain %q", err.Detail, "line 1")
+	}
+}
+
+// TestParseAndValidateKnownPageNull confirms decision-table row 6: a known
+// page with a null value is accepted (a no-op for that page), returning a
+// nil error and a non-nil *rawConfig.
+func TestParseAndValidateKnownPageNull(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	raw, err := parseAndValidate(path, []byte("system_page:\n"))
+	if err != nil {
+		t.Fatalf("parseAndValidate(...) error = %v, want nil", err)
+	}
+	if raw == nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = nil, want non-nil")
+	}
+}
+
+// TestParseAndValidateKnownPageWrongShape confirms decision-table row 7: a
+// known page whose value is a scalar or a sequence is KindParseType, with
+// Path copied and a positive line named in Detail.
+func TestParseAndValidateKnownPageWrongShape(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"scalar value", "system_page: 3\n"},
+		{"sequence value", "system_page:\n  - a\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantParseType(t, err, path)
+			if !strings.Contains(err.Detail, "line ") {
+				t.Fatalf("err.Detail = %q, want it to contain a positive line", err.Detail)
+			}
+		})
+	}
+}
+
+// TestParseAndValidateEveryCanonicalPageAccepted iterates every page name
+// SchemaPages() returns and confirms each is accepted with a null value, so
+// no canonical page is accidentally rejected by validatePageEntries's known-
+// page check (docs/agents/skills/regression-tests-must-cover-every-
+// collection-entry.md).
+func TestParseAndValidateEveryCanonicalPageAccepted(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	pages, err := SchemaPages()
+	if err != nil {
+		t.Fatalf("SchemaPages() error = %v, want nil", err)
+	}
+	if len(pages) == 0 {
+		t.Fatalf("SchemaPages() = %v, want at least one page", pages)
+	}
+
+	for _, page := range pages {
+		t.Run(page, func(t *testing.T) {
+			data := page + ":\n"
+			raw, loadErr := parseAndValidate(path, []byte(data))
+			if loadErr != nil {
+				t.Fatalf("parseAndValidate(%q) error = %v, want nil", data, loadErr)
+			}
+			if raw == nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = nil, want non-nil", data)
+			}
+		})
+	}
+}
+
+// TestParseAndValidateNonStringPageKeyRejected confirms every non-!!str
+// mapping-key shape at page level is KindParseType: schemaKeyName's name
+// rule requires a scalar whose effective ShortTag() is exactly "!!str", so
+// an integer, boolean, or null scalar key, a custom-tagged scalar key, a
+// sequence key, and a mapping key are all rejected before any name lookup.
+func TestParseAndValidateNonStringPageKeyRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"integer key", "1: x\n"},
+		{"boolean key", "true: x\n"},
+		{"null key", "~: x\n"},
+		{"custom-tagged scalar key", "!custom foo: x\n"},
+		{"sequence key", "? [a]\n: x\n"},
+		{"mapping key", "? {a: 1}\n: x\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantParseType(t, err, path)
+		})
+	}
+}
+
+// TestParseAndValidateAliasToNonStringPageKeyRejected confirms that an
+// alias-to-non-string page key is KindParseType, not KindSchema, proving the
+// fixture reaches the alias key rather than failing earlier on an unknown
+// page name. The fixture introduces the anchor through a structurally valid
+// canonical subtree (system_page/system_info_group/enabled, a *bool field,
+// so its own entry is valid) so the alias key really is the first failing
+// entry (interpretation I3/O2).
+//
+// The reported line is 3 — the anchor's own line ("enabled: &n true"), not
+// the alias's line (4, "*n: x") — because resolveEffective dereferences an
+// alias into a copy of its anchor's node, carrying the anchor's Line
+// (interpretation I6).
+func TestParseAndValidateAliasToNonStringPageKeyRejected(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group:\n    enabled: &n true\n*n: x\n"
+
+	raw, err := parseAndValidate(path, []byte(data))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantParseType(t, err, path)
+	if !strings.Contains(err.Detail, "line 3") {
+		t.Fatalf("err.Detail = %q, want it to contain %q (the anchor's line)", err.Detail, "line 3")
+	}
+}
+
+// TestParseAndValidateQuotedMergeKeyIsSchemaError confirms a quoted "<<" key
+// is an ordinary !!str name and therefore KindSchema: the resolver leaves a
+// quoted merge key's effective node tagged "!!str" (a bare merge key would
+// instead carry "!!merge" and be consumed by the resolver before reaching
+// the validator; see the next test).
+func TestParseAndValidateQuotedMergeKeyIsSchemaError(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	raw, err := parseAndValidate(path, []byte("\"<<\": x\n"))
+	if raw != nil {
+		t.Fatalf("parseAndValidate(...) rawConfig = %+v, want nil", raw)
+	}
+	wantSchema(t, err, path)
+	if !strings.Contains(err.Detail, "<<") {
+		t.Fatalf("err.Detail = %q, want it to contain %q", err.Detail, "<<")
+	}
+}
+
+// TestParseAndValidateBareMergeKeyNotSchemaError is a regression test: a
+// document using a bare "<<: *anchor" merge key inside a valid canonical
+// subtree must not produce a KindSchema "<<" error. resolveEffective's
+// merge-key handling consumes the bare merge key entirely before the
+// validator's per-entry walk ever sees it, so this document is simply
+// valid — the merge stays confined to system_page's own (unvalidated at
+// this chunk) group-level mapping, which the merge produces no unknown
+// top-level key from.
+func TestParseAndValidateBareMergeKeyNotSchemaError(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+	const data = "system_page:\n  system_info_group: &g\n    enabled: true\n  other_group:\n    <<: *g\n"
+
+	_, err := parseAndValidate(path, []byte(data))
+	if err != nil {
+		t.Fatalf("parseAndValidate(...) error = %v, want nil", err)
+	}
+}
+
+// TestParseAndValidateUnknownPagePrecedesValueInspection confirms that
+// unknown-name classification precedes value inspection at page level: all
+// four value shapes (null, scalar, sequence, mapping) for an unrecognized
+// page name return KindSchema, never KindParseType.
+func TestParseAndValidateUnknownPagePrecedesValueInspection(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	tests := []struct {
+		name string
+		data string
+	}{
+		{"null value", "nope:\n"},
+		{"scalar value", "nope: 3\n"},
+		{"sequence value", "nope:\n  - a\n"},
+		{"mapping value", "nope:\n  k: 1\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			raw, err := parseAndValidate(path, []byte(tt.data))
+			if raw != nil {
+				t.Fatalf("parseAndValidate(%q) rawConfig = %+v, want nil", tt.data, raw)
+			}
+			wantSchema(t, err, path)
+		})
+	}
+}
+
+// TestParseAndValidateEntryOrderConsequence confirms interpretation I3's
+// per-entry ordering consequence: entries are classified in effective
+// Content order, so which error surfaces depends on which failing entry
+// comes first. "nope: x\nsystem_page: 3\n" fails on "nope" (KindSchema)
+// before "system_page: 3\n"'s shape is ever inspected; reversing the entries
+// makes "system_page: 3\n" the first failing entry (KindParseType) before
+// "nope" is ever looked up.
+func TestParseAndValidateEntryOrderConsequence(t *testing.T) {
+	const path = "/etc/chairlift/config.yml"
+
+	t.Run("unknown page first", func(t *testing.T) {
+		_, err := parseAndValidate(path, []byte("nope: x\nsystem_page: 3\n"))
+		wantSchema(t, err, path)
+	})
+	t.Run("known page with wrong shape first", func(t *testing.T) {
+		_, err := parseAndValidate(path, []byte("system_page: 3\nnope: x\n"))
+		wantParseType(t, err, path)
+	})
 }
