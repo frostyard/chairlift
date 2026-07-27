@@ -82,7 +82,11 @@ func TestLoadFromPathUnreadablePathReturnsError(t *testing.T) {
 func TestLoadAbsentFileFallsBackToDefaultConfig(t *testing.T) {
 	withConfigPaths(t, []string{filepath.Join(t.TempDir(), "does-not-exist.yml")})
 
-	got := pagesOf(Load())
+	cfg, loadErr := Load()
+	if loadErr != nil {
+		t.Fatalf("Load() error = %v, want nil for all-absent candidates", loadErr)
+	}
+	got := pagesOf(cfg)
 	want := pagesOf(defaultConfig())
 
 	for _, page := range pageNames {
@@ -128,7 +132,10 @@ func TestMaintenanceCleanupGroupDefaultConsistentAcrossAbsentAndOmitted(t *testi
 
 	// Absent-file case.
 	withConfigPaths(t, []string{filepath.Join(t.TempDir(), "does-not-exist.yml")})
-	absentCfg := Load()
+	absentCfg, loadErr := Load()
+	if loadErr != nil {
+		t.Fatalf("Load() error = %v, want nil for absent file", loadErr)
+	}
 	groupsEqual(t, "maintenance_page", "maintenance_cleanup_group",
 		absentCfg.MaintenancePage["maintenance_cleanup_group"], wantGroup)
 
@@ -326,7 +333,10 @@ func TestGroupEnabledMatchesExpectedForEveryGroup(t *testing.T) {
 
 	t.Run("absent file", func(t *testing.T) {
 		withConfigPaths(t, []string{filepath.Join(t.TempDir(), "does-not-exist.yml")})
-		cfg := Load()
+		cfg, loadErr := Load()
+		if loadErr != nil {
+			t.Fatalf("Load() error = %v, want nil for absent file", loadErr)
+		}
 
 		for _, page := range pageNames {
 			for name, group := range defPages[page] {

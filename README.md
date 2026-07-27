@@ -159,7 +159,15 @@ Configuration files are searched in the following locations (in order):
 
 1. `/etc/chairlift/config.yml` (system-wide - highest priority)
 2. `/usr/share/chairlift/config.yml` (package maintainer defaults)
-3. `chairlift/config.yml` (development/source directory)
+3. `config.yml` beside the ChairLift executable, or in the current working
+   directory when no executable-relative file exists (development fallback)
+
+The first file that exists is authoritative. If it is unreadable, malformed,
+or contains unknown pages, groups, fields, or invalid field types, ChairLift
+does not use a lower-priority file: it hides every configurable feature group,
+logs a `CONFIGURATION ERROR`, and shows a persistent error toast with the path
+and cause. Fix the file and restart ChairLift. If every candidate is absent,
+the built-in defaults apply.
 
 ---
 
