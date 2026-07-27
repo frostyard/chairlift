@@ -41,16 +41,26 @@ import (
 //     chunk must be exercised only indirectly, through resolveEffective —
 //     it must not be added to this allowlist.
 var directCallAllowlist = map[string]bool{
-	"parseYAMLDocument":    true,
-	"validateSourceGraph":  true,
-	"isMergeKey":           true,
-	"shortYAMLTag":         true,
-	"defaultConfig":        true,
-	"loadFromPath":         true,
-	"schemaPageGroups":     true,
-	"yamlFieldNames":       true,
-	"yamlTagName":          true,
-	"resolveEffective":     true,
+	"parseYAMLDocument": true,
+
+	"validateSourceGraph": true,
+
+	"isMergeKey": true,
+
+	"shortYAMLTag": true,
+
+	"defaultConfig": true,
+
+	"loadFromPath": true,
+
+	"schemaPageGroups": true,
+
+	"yamlFieldNames": true,
+
+	"yamlTagName": true,
+
+	"resolveEffective": true,
+
 	"effectiveKeyIdentity": true,
 }
 

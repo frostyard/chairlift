@@ -264,6 +264,59 @@ func TestResolveEffectiveEntryOrderIsDeterministic(t *testing.T) {
 	}
 }
 
+// TestResolveEffectiveEntryOrderIsDeterministicThroughNestedOperand asserts
+// the same ordering contract as
+// TestResolveEffectiveEntryOrderIsDeterministic still holds when a merge
+// operand's own effective entries are themselves recursively computed
+// from a nested merge, rather than being only explicit entries: opA here
+// merges from opAInner, so opA's own effective order (its explicit "p"
+// and "q" first, then its inherited "s") must be discovered correctly
+// before it is spliced into root's inherited entries in operand order.
+func TestResolveEffectiveEntryOrderIsDeterministicThroughNestedOperand(t *testing.T) {
+	opAInner := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		scalarNode("s"), scalarNode("s-from-inner"),
+	}}
+	opA := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		mergeKeyNode(), opAInner,
+		scalarNode("p"), scalarNode("p-from-a"),
+		scalarNode("q"), scalarNode("q-from-a"),
+	}}
+	opB := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{
+		scalarNode("q"), scalarNode("q-from-b"),
+		scalarNode("r"), scalarNode("r-from-b"),
+	}}
+	seq := &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{opA, opB}}
+	root := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			scalarNode("explicit1"), scalarNode("e1"),
+			mergeKeyNode(), seq,
+			scalarNode("explicit2"), scalarNode("e2"),
+		},
+	}
+	doc := docOf(root)
+
+	want := []string{"explicit1", "explicit2", "p", "q", "s", "r"}
+
+	out, err := resolveEffective("order-deterministic-nested.yml", doc)
+	if err != nil {
+		t.Fatalf("resolveEffective returned unexpected error: %v", err)
+	}
+	outRoot := out.Content[0]
+	var got []string
+	for i := 0; i+1 < len(outRoot.Content); i += 2 {
+		got = append(got, outRoot.Content[i].Value)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got key order %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got key order %v, want %v", got, want)
+		}
+	}
+}
+
 // TestResolveEffectiveMergedKeyIdentityIsTagAware asserts an inherited
 // integer key `1` and an explicit quoted string key "1" both survive as
 // separate entries (proving effectiveKeyIdentity, not sourceKeyID, drives
