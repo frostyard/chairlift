@@ -177,10 +177,28 @@ Both exported functions return a freshly allocated slice (and `SchemaGroups`
 an error for a page name outside `SchemaPages()`) on every call, so a caller
 mutating a returned slice cannot affect a later call. An empty or duplicate
 page/group name is reported as a returned `error`, never a panic, `log.Fatal`,
-or `os.Exit`, so failures stay deterministic and assertable from tests. As of
-this writing no production code path — neither `Load()`/`loadFromPath()` nor
-any runtime diagnostic — consumes this inventory yet; it exists for a later
-change to build on.
+or `os.Exit`, so failures stay deterministic and assertable from tests.
+
+`SchemaGroupFields()` and `SchemaActionFields()` extend the same inventory to
+field names, reusing `yamlFieldNames` — no second tag-parsing rule.
+`SchemaGroupFields()` reads `rawGroupConfig`'s yaml tags, in struct
+declaration order, because `rawGroupConfig` (not `GroupConfig`) is what
+yaml.v3 actually decodes a group into; `GroupConfig` remains the semantic
+authority, and a dedicated reflection test
+(`TestRawGroupConfigMatchesGroupConfigFields`) holds the two to each other —
+same field count, same names and yaml tags per index, and each
+`rawGroupConfig` field type equal to `GroupConfig`'s or exactly a pointer to
+it (ignoring only that pointer-vs-value difference and `omitempty`) — so
+`rawGroupConfig` cannot silently drift from `GroupConfig` per
+`docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md`.
+`SchemaActionFields()` reads `ActionConfig`'s yaml tags directly, since
+`ActionConfig` has no raw/pointer mirror. Both return a freshly allocated
+slice on every call and report an empty or duplicate field name as an error,
+never a panic, `log.Fatal`, or `os.Exit`. As of this writing no production
+code path — neither `Load()`/`loadFromPath()` nor any runtime diagnostic —
+consumes this inventory yet, and this slice adds no strict parsing and no
+unknown-key rejection; `Load()` still falls back to `defaultConfig()` on any
+read or parse failure. The inventory exists for a later change to build on.
 
 ### Package manager wrapper pattern
 

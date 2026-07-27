@@ -344,3 +344,176 @@ func TestRawConfigMatchesConfigFields(t *testing.T) {
 		}
 	}
 }
+
+// TestRawGroupConfigMatchesGroupConfigFields proves rawGroupConfig's
+// exported fields match GroupConfig's exactly, ignoring only pointer-vs-
+// value representation and "omitempty": same field count, same field names
+// in the same declaration order, same yaml tag names (options stripped) in
+// the same order per index, and per field, rawGroupConfig's type equal to
+// GroupConfig's type or exactly a pointer to it. This is the parity test
+// required by docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md:
+// SchemaGroupFields() reads rawGroupConfig (what yaml.v3 actually decodes
+// into) because the spec designates it the field source, while this test
+// holds it to GroupConfig, the semantic authority, so the two cannot
+// silently drift apart.
+func TestRawGroupConfigMatchesGroupConfigFields(t *testing.T) {
+	groupType := reflect.TypeOf(GroupConfig{})
+	rawType := reflect.TypeOf(rawGroupConfig{})
+
+	if groupType.NumField() == 0 {
+		t.Fatal("GroupConfig has zero fields")
+	}
+	if rawType.NumField() == 0 {
+		t.Fatal("rawGroupConfig has zero fields")
+	}
+	if groupType.NumField() != rawType.NumField() {
+		t.Fatalf("GroupConfig has %d fields, rawGroupConfig has %d", groupType.NumField(), rawType.NumField())
+	}
+
+	for i := 0; i < groupType.NumField(); i++ {
+		gf := groupType.Field(i)
+		rf := rawType.Field(i)
+
+		if gf.Name != rf.Name {
+			t.Errorf("field %d: GroupConfig field name %q, rawGroupConfig field name %q", i, gf.Name, rf.Name)
+		}
+
+		gTag := yamlTagName(gf.Tag.Get("yaml"))
+		rTag := yamlTagName(rf.Tag.Get("yaml"))
+		if gTag != rTag {
+			t.Errorf("field %d (%s): GroupConfig yaml tag %q, rawGroupConfig yaml tag %q", i, gf.Name, gTag, rTag)
+		}
+
+		if rf.Type != gf.Type && rf.Type != reflect.PointerTo(gf.Type) {
+			t.Errorf("field %d (%s): rawGroupConfig type %s is neither GroupConfig's type %s nor a pointer to it", i, gf.Name, rf.Type, gf.Type)
+		}
+	}
+}
+
+// TestSchemaGroupFieldsMatchesGroupConfigTags asserts SchemaGroupFields()
+// equals the yaml tags of GroupConfig (via yamlFieldNames) element by
+// element (same length, same order), and that a counting loop shows each
+// name appears exactly once.
+func TestSchemaGroupFieldsMatchesGroupConfigTags(t *testing.T) {
+	got, err := SchemaGroupFields()
+	if err != nil {
+		t.Fatalf("SchemaGroupFields(): %v", err)
+	}
+
+	want, err := yamlFieldNames(reflect.TypeOf(GroupConfig{}))
+	if err != nil {
+		t.Fatalf("yamlFieldNames(GroupConfig{}): %v", err)
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("SchemaGroupFields() has %d fields, want %d: got %v, want %v", len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("SchemaGroupFields()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	wantOrder := []string{"enabled", "app_id", "actions", "website", "issues", "chat", "bundles_paths"}
+	if len(got) != len(wantOrder) {
+		t.Fatalf("SchemaGroupFields() has %d fields, want %d: got %v, want %v", len(got), len(wantOrder), got, wantOrder)
+	}
+	for i := range wantOrder {
+		if got[i] != wantOrder[i] {
+			t.Errorf("SchemaGroupFields()[%d] = %q, want %q", i, got[i], wantOrder[i])
+		}
+	}
+
+	counts := make(map[string]int, len(got))
+	for _, name := range got {
+		counts[name]++
+	}
+	for _, name := range wantOrder {
+		if counts[name] != 1 {
+			t.Errorf("SchemaGroupFields(): field %q appears %d times, want exactly 1", name, counts[name])
+		}
+	}
+}
+
+// TestSchemaActionFields asserts SchemaActionFields() equals
+// [title script sudo] in that order, each exactly once.
+func TestSchemaActionFields(t *testing.T) {
+	got, err := SchemaActionFields()
+	if err != nil {
+		t.Fatalf("SchemaActionFields(): %v", err)
+	}
+
+	want := []string{"title", "script", "sudo"}
+	if len(got) != len(want) {
+		t.Fatalf("SchemaActionFields() has %d fields, want %d: got %v, want %v", len(got), len(want), got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("SchemaActionFields()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+
+	counts := make(map[string]int, len(got))
+	for _, name := range got {
+		counts[name]++
+	}
+	for _, name := range want {
+		if counts[name] != 1 {
+			t.Errorf("SchemaActionFields(): field %q appears %d times, want exactly 1", name, counts[name])
+		}
+	}
+}
+
+// TestSchemaGroupFieldsReturnsFreshSlice mutates the slice returned by
+// SchemaGroupFields() and asserts a subsequent call is unaffected.
+func TestSchemaGroupFieldsReturnsFreshSlice(t *testing.T) {
+	first, err := SchemaGroupFields()
+	if err != nil {
+		t.Fatalf("SchemaGroupFields(): %v", err)
+	}
+	if len(first) == 0 {
+		t.Fatal("SchemaGroupFields() returned no fields")
+	}
+
+	original := make([]string, len(first))
+	copy(original, first)
+
+	for i := range first {
+		first[i] = "MUTATED"
+	}
+
+	second, err := SchemaGroupFields()
+	if err != nil {
+		t.Fatalf("SchemaGroupFields(): %v", err)
+	}
+	if !reflect.DeepEqual(second, original) {
+		t.Errorf("SchemaGroupFields() second call = %v, want unaffected %v", second, original)
+	}
+}
+
+// TestSchemaActionFieldsReturnsFreshSlice mutates the slice returned by
+// SchemaActionFields() and asserts a subsequent call is unaffected.
+func TestSchemaActionFieldsReturnsFreshSlice(t *testing.T) {
+	first, err := SchemaActionFields()
+	if err != nil {
+		t.Fatalf("SchemaActionFields(): %v", err)
+	}
+	if len(first) == 0 {
+		t.Fatal("SchemaActionFields() returned no fields")
+	}
+
+	original := make([]string, len(first))
+	copy(original, first)
+
+	for i := range first {
+		first[i] = "MUTATED"
+	}
+
+	second, err := SchemaActionFields()
+	if err != nil {
+		t.Fatalf("SchemaActionFields(): %v", err)
+	}
+	if !reflect.DeepEqual(second, original) {
+		t.Errorf("SchemaActionFields() second call = %v, want unaffected %v", second, original)
+	}
+}

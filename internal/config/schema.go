@@ -145,3 +145,22 @@ func SchemaGroups(page string) ([]string, error) {
 	copy(result, groups)
 	return result, nil
 }
+
+// SchemaGroupFields returns the canonical group-field names, sourced from
+// rawGroupConfig's yaml tags in struct declaration order. rawGroupConfig,
+// not GroupConfig, is used because it is the representation yaml.v3 actually
+// decodes into; a parity test in schema_test.go holds rawGroupConfig's yaml
+// tags to GroupConfig's, so the two cannot silently drift apart. It returns
+// a freshly allocated slice on every call, so callers cannot mutate shared
+// state.
+func SchemaGroupFields() ([]string, error) {
+	return yamlFieldNames(reflect.TypeOf(rawGroupConfig{}))
+}
+
+// SchemaActionFields returns the canonical action-field names, sourced from
+// ActionConfig's yaml tags, in struct declaration order. It returns a
+// freshly allocated slice on every call, so callers cannot mutate shared
+// state.
+func SchemaActionFields() ([]string, error) {
+	return yamlFieldNames(reflect.TypeOf(ActionConfig{}))
+}
