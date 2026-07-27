@@ -186,20 +186,23 @@ YAML document, with a fixed cardinality outcome per input shape:
   error and line in `Err`/`Detail`, just like a malformed first document
   would.
 
-As of this writing `parseYAMLDocument` and `validateSourceGraph` are not
-wired into `Load()` or `loadFromPath()` — both are unchanged and still fall
-back to `defaultConfig()` on any read or parse failure, so there is no
-strict parsing and no fail-closed runtime behavior yet. This is the first
-of several package-private capabilities (document parsing, reachable
-source-graph shape validation, merge-operand shape validation,
-duplicate-explicit-key detection, the memoized alias-hop bound and the
-memoized source-node path-visit bound, both with all-paths line
-attribution, now; effective-merge construction in a later change) meant to eventually replace
-`loadFromPath()`'s current `yaml.Unmarshal` call with fail-closed,
-single-document, structurally validated loading — but none of that wiring
-exists yet, so `KindRead` and `KindSchema` still describe capabilities the
-package's vocabulary anticipates rather than ones any code path currently
-exercises.
+As of this writing `parseYAMLDocument`, `validateSourceGraph`, and
+`resolveEffective` are not wired into `Load()` or `loadFromPath()` — both
+are unchanged and still fall back to `defaultConfig()` on any read or parse
+failure, so there is no strict parsing and no fail-closed runtime behavior
+yet, and `resolveEffective`'s output does not feed ChairLift's strict
+schema validation either. This is the first of several package-private
+capabilities (document parsing, reachable source-graph shape validation,
+merge-operand shape validation, duplicate-explicit-key detection, the
+memoized alias-hop bound and the memoized source-node path-visit bound
+(both with all-paths line attribution), and now a validate-first
+alias/anchor-resolving emitter whose merge precedence and final output
+shape are still being built out across the next two chunks) meant to
+eventually replace `loadFromPath()`'s current `yaml.Unmarshal` call with
+fail-closed, single-document, structurally validated loading — but none of
+that wiring exists yet, so `KindRead` and `KindSchema` still describe
+capabilities the package's vocabulary anticipates rather than ones any code
+path currently exercises.
 
 **Exact merge-key recognition and tag normalization
 (`internal/config/sourcegraph.go`).** `isMergeKey(n *yaml.Node) bool` and
@@ -368,6 +371,56 @@ reproduce yaml.v3's own duplicate-key guard exactly, while
 `effectiveKeyIdentity` intentionally includes it because merge-precedence
 resolution must not let a `!!str "1"` entry silently discard or be
 discarded by an `!!int 1` entry from another merge source.
+
+**Validate-first, alias-resolving effective emitter
+(`internal/config/effective.go`).** `resolveEffective(path string, doc
+*yaml.Node) (*yaml.Node, *LoadError)` is the slice's entry point toward an
+"effective" (post-merge) configuration tree, and imports only
+`gopkg.in/yaml.v3` plus stdlib. It always calls `validateSourceGraph(path,
+doc)` first and returns that error unchanged on failure — Detail and Path
+byte-identical to what `validateSourceGraph` itself would return for the
+same input — so a caller cannot use `resolveEffective` to bypass
+source-graph validation, and `doc == nil` returns `(nil, nil)` only *after*
+that successful validation, matching `parseYAMLDocument`'s valid
+empty-input result.
+
+On success `resolveEffective` emits a fresh copy of `doc` via the
+unexported `emitEffectiveNode`: the result is rooted at a `yaml.DocumentNode`
+copy with exactly one resolved child, and every emitted node — document,
+mappings, sequences, keys, and values — copies exactly `Kind`, `Style`,
+`Tag`, `Value`, `Line`, `Column`, `HeadComment`, `LineComment`, and
+`FootComment` from the source node it corresponds to, via the unexported
+`emitNodeMetadata`, leaving `Anchor` as `""` and `Alias` as `nil` on every
+copy and allocating a distinct `*yaml.Node` each time (mutating the result
+never mutates `doc`). A `yaml.AliasNode` is never copied as itself: the
+unexported `dereferenceAliasTarget` follows its (possibly multi-hop) `Alias`
+chain to the non-alias target first, and the emitted node carries that
+*target's* metadata, not the alias node's own — this applies identically
+whether the alias appears in mapping value position or as a mapping key.
+Because the output must stay alias-free, a single source node reached
+through more than one alias becomes more than one independent fresh copy in
+the result; the per-emission budget that keeps that expansion from being
+unbounded is added in a later chunk, not this one.
+
+This chunk deliberately leaves two things unfinished, both authorized by
+the spec and tracked forward: a recognized `<<` merge key (`isMergeKey`)
+is still emitted as an ordinary mapping entry with its operand value
+resolved like any other value, rather than being consumed by
+merge-precedence resolution (`TestResolveEffectiveMergeDirectiveRetainedForNow`
+pins this down and is one of the tests a later chunk must update when real
+merge precedence lands); and `resolveEffective` is not wired into `Load()`,
+`loadFromPath()`, or ChairLift's strict schema validation — it is a
+standalone, still-unwired capability like `parseYAMLDocument` and
+`validateSourceGraph` before it. A `!!str`-tagged `"<<"` key and a
+`!!merge`-tagged scalar whose `Value` isn't literally `"<<"` both survive
+as ordinary effective keys today and are expected to keep doing so once
+merge precedence is implemented, since `isMergeKey` never recognizes either
+shape. `emitEffectiveNode` and `dereferenceAliasTarget`/`emitNodeMetadata`
+are unexported helpers reachable only from `resolveEffective` in this same
+chunk; per the frozen `directCallAllowlist` in `sourcesurface_test.go`, no
+`_test.go` file names them directly — `effective_test.go` exercises them
+only through `resolveEffective` itself, alongside `resolveEffective` and
+`effectiveKeyIdentity`, the two additions that allowlist authorizes.
 
 **Reachable inventory, all-paths line attribution, and the 64
 consecutive-alias-hop and 128-source-node-path-visit bounds
