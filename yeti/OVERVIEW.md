@@ -192,6 +192,34 @@ validated loading — but none of that wiring exists yet, so `KindRead` and
 `KindSchema` still describe capabilities the package's vocabulary
 anticipates rather than ones any code path currently exercises.
 
+**Exact merge-key recognition and tag normalization
+(`internal/config/sourcegraph.go`).** `isMergeKey(n *yaml.Node) bool` and
+`shortYAMLTag(tag string) string` are deliberate line-for-line reproductions
+of two unexported predicates from `gopkg.in/yaml.v3` v3.0.1 itself —
+`decode.go:isMerge` and `resolve.go:shortTag` — rather than reimplementations
+from a description of YAML merge-key semantics, so this package's own
+merge-key walk (a later change) recognizes exactly the same nodes yaml.v3's
+own decoder would treat as a merge key, node for node. `isMergeKey` reports
+true only for a `yaml.ScalarNode` whose `Value` is exactly `"<<"` and whose
+`Tag` is one of: absent (`""`, the implicit/unresolved tag), the bare
+non-specific tag (`"!"`), the short merge tag (`"!!merge"`), or its canonical
+long form (`"tag:yaml.org,2002:merge"`) — the last two both recognized via
+`shortYAMLTag`. A quoted `"<<"` (explicitly tagged `"!!str"`) is therefore an
+ordinary key, not a merge key, and so is a merge-tagged scalar whose `Value`
+isn't literally `"<<"`; non-scalar nodes (mapping, sequence, alias) and a nil
+`*yaml.Node` are never merge keys either — `isMergeKey` is nil-safe rather
+than panicking. `shortYAMLTag` rewrites a canonical `"tag:yaml.org,2002:xxx"`
+tag to yaml.v3's short `"!!xxx"` form and returns any tag without that prefix
+unchanged (including the empty tag, `"!"`, an already-short `"!!xxx"` tag, a
+custom `"!xxx"` tag, and a long tag under a different authority such as
+`"tag:example.com,2020:merge"`). These are the only two unexported helpers in
+this package's source-graph slice that the spec singles out for a direct
+unit test (`TestMergeKeyRecognition`, `TestShortYAMLTagNormalization` in
+`sourcegraph_test.go`) rather than only exercising them through an exported
+entry point, per
+`docs/agents/skills/helper-functions-need-direct-test-calls.md`; neither
+helper is wired into any call path yet — that wiring is later work.
+
 **Canonical page/group inventory (`internal/config/schema.go`).** `SchemaPages()`
 and `SchemaGroups(page)` derive the authoritative list of page names and,
 per page, group names by reflection — never by a second hand-maintained
