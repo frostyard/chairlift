@@ -448,10 +448,10 @@ crossed it. That line comes from reusing `sourcebounds.go`'s existing
 `collectSourceInventory` and `attributeSourceLines` pair on the validated
 source document — the same all-paths line attribution
 (`checkSourceGraphBounds` uses it too) rather than a second, separate line-
-attribution implementation — computed once per `resolveEffective` call: a
-node's own line when positive, otherwise its nearest positive-line ancestor
-over all root-reachable paths, otherwise `1` for a wholly synthetic graph
-with no line metadata anywhere, so the reported line is always positive.
+attribution implementation — computed once when constructing the resolver
+error: a node's own line when positive, otherwise its nearest positive-line
+ancestor over all root-reachable paths, otherwise `1` for a wholly synthetic
+graph with no line metadata anywhere, so the reported line is always positive.
 
 **Merge precedence, memoized candidate inventory, merge-free output
 (`internal/config/effectivemerge.go`).** `effectiveEntries(m *yaml.Node)
@@ -501,20 +501,24 @@ order both times.
 
 `effectiveEntries` delegates to the unexported `effectiveEntriesWithMemo`,
 threading an `effectiveMergeMemo` (`map[*yaml.Node][]effectiveEntry`) keyed
-by mapping-node pointer identity through the recursion described above,
-scoped to that one `effectiveEntries` call: a mapping node reached as a
-merge operand through more than one parent, or through more than one alias
-to the same anchor, within that recursion has its candidate inventory
-computed once and reused rather than recomputed once per parent —
+by mapping-node pointer identity through the recursion described above. The
+memo lives on `effectiveEmitState` for one complete `resolveEffective` call:
+a mapping node reached as a merge operand through more than one emitted
+parent, or through more than one alias to the same anchor, has its candidate
+inventory computed once and reused rather than recomputed once per parent —
 `TestResolveEffectiveSharedOperandInventoriedOnce`'s 40-level doubling merge
 chain (mirroring `buildSourceSharingDAG`'s construction, but merging via
 `<<: [*prev, *prev]` at each level instead of plain aliasing) would need on
 the order of `2^40` recursive computations without this memo and completes
-in well under a bounded timeout with it. A losing candidate's value is
-never resolved by this pass either — `effectiveEntries` only ever returns
-the source nodes for winning entries, so `emitEffectiveNode` never clones,
-and never charges against `maxEffectiveOutputNodes`, anything a merge
-discarded.
+in well under a bounded timeout with it.
+`TestResolveEffectiveSharedOperandMemoSpansEmittedMappings` separately pins
+the memo lifetime: thousands of distinct retained parent mappings merge one
+wide shared operand, which would rebuild that inventory for every parent if
+the memo were scoped only to a top-level `effectiveEntries` call. A losing
+candidate's value is never resolved by this pass either — `effectiveEntries`
+only ever returns the source nodes for winning entries, so
+`emitEffectiveNode` never clones, and never charges against
+`maxEffectiveOutputNodes`, anything a merge discarded.
 
 The post-alias key-identity-collision rule is layered on top of, not a
 replacement for, `checkDuplicateMappingKeys`'s tag-blind `Kind`+`Value`

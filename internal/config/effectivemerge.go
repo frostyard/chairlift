@@ -15,18 +15,14 @@ type effectiveEntry struct {
 }
 
 // effectiveMergeMemo memoizes effectiveEntries results by mapping-node
-// pointer identity for the duration of one effectiveEntries call and its
-// recursion into merge operands. A mapping reached as a merge operand
-// through more than one parent within that recursion, or through more
-// than one alias to the same anchor, has its candidate inventory computed
-// once and reused, rather than recomputed once per parent — this is what
-// keeps a shared-operand fan-out, or a doubling merge DAG like the one
-// TestResolveEffectiveSharedOperandInventoriedOnce builds, linear in the
-// number of distinct mapping nodes rather than exponential in fan-out
-// depth. Memoizing after the recursive call below (rather than before) is
-// safe without its own cycle guard because validateSourceGraph has already
-// proven the whole source graph acyclic before resolveEffective ever
-// calls this.
+// pointer identity for one complete resolveEffective call. It is stored on
+// effectiveEmitState, so a mapping reached as a merge operand through more
+// than one emitted parent, or through more than one alias to the same anchor,
+// has its candidate inventory computed once and reused. This keeps both
+// shared-operand fan-out and doubling merge DAGs linear in the number of
+// distinct mapping nodes. Memoizing after the recursive call below is safe
+// without a separate cycle guard because validateSourceGraph has already
+// proven the whole source graph acyclic.
 type effectiveMergeMemo map[*yaml.Node][]effectiveEntry
 
 // effectiveEntries computes m's complete, ordered, deduplicated effective
@@ -56,13 +52,10 @@ type effectiveMergeMemo map[*yaml.Node][]effectiveEntry
 // inheriting the accumulated set rather than resetting it, which is why
 // this function's own recursive calls flatten rather than re-seed.
 //
-// effectiveEntries creates a fresh effectiveMergeMemo scoped to this one
-// call (and delegates to effectiveEntriesWithMemo, which threads it
-// through the recursion below): resolveEffective's emission path
-// (effective.go) calls this once per mapping node it emits, so a mapping
-// node reached only as a merge operand deep inside another mapping's
-// inventory is inventoried at most once per top-level emitted mapping
-// that reaches it, not once per parent within that recursion.
+// effectiveEntries delegates to effectiveEntriesWithMemo using the memo
+// carried by st for the entire resolveEffective call. The defensive nil
+// initialization also keeps the helper safe if a future internal caller
+// constructs an effectiveEmitState without using resolveEffective.
 //
 // It also threads st (effective.go's effectiveEmitState) through the
 // recursion so an effective-identity collision between two of m's own
@@ -72,14 +65,16 @@ type effectiveMergeMemo map[*yaml.Node][]effectiveEntry
 // rest of the inventory computation without inventorying or emitting
 // anything further.
 func effectiveEntries(m *yaml.Node, st *effectiveEmitState) []effectiveEntry {
-	return effectiveEntriesWithMemo(m, make(effectiveMergeMemo), st)
+	if st.mergeMemo == nil {
+		st.mergeMemo = make(effectiveMergeMemo)
+	}
+	return effectiveEntriesWithMemo(m, st.mergeMemo, st)
 }
 
 // effectiveEntriesWithMemo is effectiveEntries' real implementation,
-// threading a shared memo across recursive merge-operand lookups so a
-// mapping node's inventory is computed at most once per top-level
-// effectiveEntries call no matter how many operands or aliases reach it
-// within that call's recursion, and threading st so an identity collision
+// threading a shared memo across every emitted mapping and recursive
+// merge-operand lookup so a mapping node's inventory is computed at most
+// once per resolveEffective call, and threading st so an identity collision
 // discovered anywhere in that recursion halts the whole computation.
 func effectiveEntriesWithMemo(m *yaml.Node, memo effectiveMergeMemo, st *effectiveEmitState) []effectiveEntry {
 	if m == nil || st.collided {

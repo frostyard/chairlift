@@ -442,3 +442,58 @@ func TestResolveEffectiveSharedOperandInventoriedOnce(t *testing.T) {
 		t.Fatalf("outRoot.Content = %+v, want a single leaf=leaf-value entry", outRoot.Content)
 	}
 }
+
+// TestResolveEffectiveSharedOperandMemoSpansEmittedMappings proves the
+// candidate-inventory memo belongs to the whole resolveEffective call, not
+// merely to one top-level mapping inventory. Thousands of distinct retained
+// parent mappings all merge the same expensive shared operand. Each parent
+// explicitly suppresses the operand's sole effective key, keeping output
+// small; without a resolver-wide memo, the shared operand's wide inventory
+// would be rebuilt once per parent and the test would exceed its timeout.
+func TestResolveEffectiveSharedOperandMemoSpansEmittedMappings(t *testing.T) {
+	const (
+		path   = "shared-operand-across-emitted-mappings.yml"
+		fanout = 8000
+	)
+
+	operandMappings := make([]*yaml.Node, 0, fanout)
+	for i := 0; i < fanout; i++ {
+		operandMappings = append(operandMappings, &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				scalarNode("shared"), scalarNode("losing"),
+			},
+		})
+	}
+	sharedOperand := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			mergeKeyNode(), {Kind: yaml.SequenceNode, Content: operandMappings},
+		},
+	}
+
+	parents := make([]*yaml.Node, 0, fanout)
+	for i := 0; i < fanout; i++ {
+		parents = append(parents, &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				mergeKeyNode(), {Kind: yaml.AliasNode, Alias: sharedOperand},
+				scalarNode("shared"), scalarNode("winner"),
+			},
+		})
+	}
+	doc := docOf(&yaml.Node{Kind: yaml.SequenceNode, Content: parents})
+
+	out, err := runResolveEffectiveWithin(t, path, doc, 5*time.Second)
+	if err != nil {
+		t.Fatalf("resolveEffective returned unexpected error: %v", err)
+	}
+	if got := len(out.Content[0].Content); got != fanout {
+		t.Fatalf("emitted parent count = %d, want %d", got, fanout)
+	}
+	for i, parent := range out.Content[0].Content {
+		if len(parent.Content) != 2 || parent.Content[0].Value != "shared" || parent.Content[1].Value != "winner" {
+			t.Fatalf("parent %d content = %#v, want only explicit shared: winner", i, parent.Content)
+		}
+	}
+}

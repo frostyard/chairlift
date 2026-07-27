@@ -69,7 +69,7 @@ func resolveEffective(path string, doc *yaml.Node) (*yaml.Node, *LoadError) {
 	if doc == nil {
 		return nil, nil
 	}
-	st := &effectiveEmitState{}
+	st := &effectiveEmitState{mergeMemo: make(effectiveMergeMemo)}
 	out := emitEffectiveNode(doc, st)
 	if st.overflowed {
 		return nil, effectiveOutputLimitError(path, doc, st.overflowNode)
@@ -98,6 +98,7 @@ type effectiveEmitState struct {
 	overflowNode *yaml.Node
 	collided     bool
 	collisionKey *yaml.Node
+	mergeMemo    effectiveMergeMemo
 }
 
 // emitEffectiveNode dereferences n through dereferenceAliasTarget and
@@ -106,12 +107,11 @@ type effectiveEmitState struct {
 // order — except for a mapping node, whose emitted entries come from
 // effectiveEntries instead of its raw Content, so only winning keys and
 // values are ever resolved (see resolveEffective's doc comment).
-// effectiveEntries' own memo (effectivemerge.go) is scoped to that one
-// call and its recursion into merge operands, so a mapping node reached
-// as a merge operand through several parents or aliases within the same
-// mapping's inventory computation is inventoried once, not once per
-// parent. It assumes n comes from a graph validateSourceGraph has already
-// proven acyclic and well-formed, so it never needs its own cycle guard.
+// effectiveEntries' memo lives on st for the whole resolveEffective call,
+// so a mapping node reached through several emitted parents or aliases is
+// inventoried once for the complete resolution, not once per emission.
+// It assumes n comes from a graph validateSourceGraph has already proven
+// acyclic and well-formed, so it never needs its own cycle guard.
 //
 // Before allocating anything for the dereferenced target, it increments
 // st.count and checks it against maxEffectiveOutputNodes; once st.count
