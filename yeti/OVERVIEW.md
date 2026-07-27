@@ -311,8 +311,8 @@ deliberately compares only `Kind` and `Value`, reproducing `gopkg.in/yaml.v3`
 v3.0.1 `decode.go`'s own `uniqueKeys` predicate (inside `decoder.mapping`)
 exactly rather than the tag-aware key identity
 `docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md`
-requires elsewhere in this package for merge/dedup purposes — that rule is
-about a different, not-yet-implemented concern (merge-precedence identity)
+requires elsewhere in this package for merge-precedence purposes — that rule
+is about a different concern (`effectiveKeyIdentity`, described just below)
 and does not apply here, because yaml.v3's own duplicate-key guard never
 looks at `Tag` either. Two surprising consequences follow directly: two
 `<<` merge-key entries in the same mapping collide as duplicates regardless
@@ -332,6 +332,42 @@ comparison, which is pairwise (`O(k^2)` per mapping). This package's version
 is `O(k)` per mapping and `O(V+E)` over the whole graph, so a mapping with
 tens of thousands of keys does not make the validator's own running time
 blow up the way the pairwise loop would.
+
+**Effective (merge-precedence) key identity
+(`internal/config/effectivekeys.go`).** A separate, standalone helper,
+`effectiveKeyIdentity`, computes a comparable `effectiveKeyID` for a mapping
+key node — the identity a later merge-precedence resolver
+(`resolveEffective`, not implemented in this slice yet) needs to decide
+whether two keys from different merge sources are "the same key" and must
+therefore resolve to one effective value rather than two. It is
+deliberately a different type and a different comparison from
+`sourceKeyID` above: `effectiveKeyIdentity` first follows `n`'s
+`yaml.AliasNode` chain (any number of hops, guarded by a local
+node-pointer seen-set so a synthetic self-referential alias handed to it
+directly terminates instead of hanging) to its non-alias target, then
+branches on that target's `Kind`. A `yaml.ScalarNode` target yields `{kind:
+yaml.ScalarNode, tag: target.ShortTag(), value: target.Value}` —
+`ShortTag()` is used rather than the raw `Tag` field because
+`gopkg.in/yaml.v3` v3.0.1's `yaml.go` implements it to resolve an unset or
+`"!"` tag from the node's own value (`resolve("", n.Value)` for scalars),
+so this rule is exactly the tag-aware identity
+`docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md`
+requires: a bare `1` and an explicitly `!!int`-tagged `1` are the same
+key, but a bare `1` and an explicitly `!!str`-tagged (quoted) `"1"` are not,
+and `01` and `1` are not (different `Value`). A `yaml.MappingNode` or
+`yaml.SequenceNode` target instead yields `{complex: target}` — pointer
+identity on the target node alone, with no structural expansion of the
+complex key's contents: two distinct nodes that look alike are different
+keys, two aliases sharing one complex target are the same key, and a
+complex identity is never equal to any scalar identity (the zero
+`*yaml.Node` complex field only appears alongside the zero scalar fields
+for a nil or dead-ended-alias input, and a real complex node's pointer is
+never nil). This is the tag-blind `sourceKeyID` above's direct
+counterpart, not a reuse of it: `sourceKeyID` intentionally omits `Tag` to
+reproduce yaml.v3's own duplicate-key guard exactly, while
+`effectiveKeyIdentity` intentionally includes it because merge-precedence
+resolution must not let a `!!str "1"` entry silently discard or be
+discarded by an `!!int 1` entry from another merge source.
 
 **Reachable inventory, all-paths line attribution, and the 64
 consecutive-alias-hop and 128-source-node-path-visit bounds

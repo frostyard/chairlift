@@ -32,16 +32,26 @@ import (
 //     yamlTagName are a frozen pre-existing baseline: they were already
 //     named directly by config_test.go/schema_test.go before this chunk
 //     and are not widened or added to here.
+//   - resolveEffective and effectiveKeyIdentity are the exactly two
+//     additions this slice's spec authorizes, added in this chunk before
+//     either function exists so no later chunk needs to touch this frozen
+//     guard again. resolveEffective does not exist yet as of this chunk;
+//     effectiveKeyIdentity does, and effectivekeys_test.go names it
+//     directly. Every other new resolver helper this slice adds in a later
+//     chunk must be exercised only indirectly, through resolveEffective —
+//     it must not be added to this allowlist.
 var directCallAllowlist = map[string]bool{
-	"parseYAMLDocument":   true,
-	"validateSourceGraph": true,
-	"isMergeKey":          true,
-	"shortYAMLTag":        true,
-	"defaultConfig":       true,
-	"loadFromPath":        true,
-	"schemaPageGroups":    true,
-	"yamlFieldNames":      true,
-	"yamlTagName":         true,
+	"parseYAMLDocument":    true,
+	"validateSourceGraph":  true,
+	"isMergeKey":           true,
+	"shortYAMLTag":         true,
+	"defaultConfig":        true,
+	"loadFromPath":         true,
+	"schemaPageGroups":     true,
+	"yamlFieldNames":       true,
+	"yamlTagName":          true,
+	"resolveEffective":     true,
+	"effectiveKeyIdentity": true,
 }
 
 // packageGoFiles lists the *.go files directly in this package's directory
