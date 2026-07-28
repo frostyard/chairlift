@@ -76,9 +76,7 @@ archives:
       - data/org.frostyard.ChairLift.desktop
       - data/icons/**/*
       - data/org.frostyard.ChairLift.bootc.policy
-      - data/org.frostyard.ChairLift.bootc.rules
       - data/org.frostyard.ChairLift.updex.policy
-      - data/org.frostyard.ChairLift.updex.rules
 
 
 checksum:
@@ -142,16 +140,12 @@ nfpms:
         dst: /usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
       - src: ./data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
         dst: /usr/share/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
-      # PolicyKit policy and rules for bootc
+      # PolicyKit policy for bootc
       - src: ./data/org.frostyard.ChairLift.bootc.policy
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.bootc.policy
-      - src: ./data/org.frostyard.ChairLift.bootc.rules
-        dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.bootc.rules
-      # PolicyKit policy and rules for updex
+      # PolicyKit policy for updex
       - src: ./data/org.frostyard.ChairLift.updex.policy
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy
-      - src: ./data/org.frostyard.ChairLift.updex.rules
-        dst: /usr/share/polkit-1/rules.d/org.frostyard.ChairLift.updex.rules
     formats:
       - deb
       - rpm

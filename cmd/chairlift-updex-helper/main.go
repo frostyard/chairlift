@@ -17,34 +17,26 @@ import (
 const defaultTimeout = 5 * time.Minute
 
 func main() {
-	if len(os.Args) < 2 {
-		fatal("usage: chairlift-updex-helper <command> [args...]")
+	invocation, err := updexhelper.ParseInvocation(os.Args[1:])
+	if err != nil {
+		fatal(err.Error())
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	defer cancel()
 
 	client := updex.NewClient(updex.ClientConfig{})
-	dryRun := updexhelper.HasDryRunFlag(os.Args[2:])
 
-	switch os.Args[1] {
-	case "enable-feature":
-		if len(os.Args) < 3 {
-			fatal("usage: chairlift-updex-helper enable-feature <name> [--dry-run]")
-		}
-		result, err := client.EnableFeature(ctx, os.Args[2], updexhelper.EnableOptions(dryRun))
+	switch invocation.Command {
+	case updexhelper.CommandEnableFeature:
+		result, err := client.EnableFeature(ctx, invocation.Feature, updexhelper.EnableOptions(invocation.DryRun))
 		outputJSON(result, err)
-	case "disable-feature":
-		if len(os.Args) < 3 {
-			fatal("usage: chairlift-updex-helper disable-feature <name> [--dry-run]")
-		}
-		result, err := client.DisableFeature(ctx, os.Args[2], updexhelper.DisableOptions(dryRun))
+	case updexhelper.CommandDisableFeature:
+		result, err := client.DisableFeature(ctx, invocation.Feature, updexhelper.DisableOptions(invocation.DryRun))
 		outputJSON(result, err)
-	case "update":
-		results, err := client.UpdateFeatures(ctx, updexhelper.UpdateOptions(dryRun))
+	case updexhelper.CommandUpdate:
+		results, err := client.UpdateFeatures(ctx, updexhelper.UpdateOptions(invocation.DryRun))
 		outputJSON(results, err)
-	default:
-		fatal("unknown command: " + os.Args[1])
 	}
 }
 

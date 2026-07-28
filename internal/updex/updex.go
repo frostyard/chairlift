@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/frostyard/chairlift/internal/updexhelper"
 	updexapi "github.com/frostyard/updex/updex"
 )
 
@@ -19,12 +20,9 @@ const (
 	// HelperPath is the fixed, absolute installed path of the privileged
 	// updex helper binary. It must match the
 	// org.freedesktop.policykit.exec.path annotation on all three actions in
-	// data/org.frostyard.ChairLift.updex.policy exactly: pkexec resolves the
-	// program it is about to run to an absolute path and compares it
-	// textually against that annotation to pick the matching
-	// org.frostyard.ChairLift.updex.* action (and its no-reprompt
-	// sudo-group rule in data/org.frostyard.ChairLift.updex.rules). A
-	// mismatch (e.g. a bare, $PATH-resolved name) makes pkexec silently fall
+	// data/org.frostyard.ChairLift.updex.policy exactly. Each action also
+	// selects one supported helper command through the exec.argv1 annotation.
+	// A path mismatch (e.g. a bare, $PATH-resolved name) makes pkexec fall
 	// back to the generic, more restrictive
 	// org.freedesktop.policykit.pkexec.run-program action instead. This
 	// constant is installed at $(PREFIX)/bin/chairlift-updex-helper by the
@@ -133,19 +131,19 @@ func CheckFeatures(ctx context.Context) ([]FeatureCheck, error) {
 
 // EnableFeature enables a feature for download
 func EnableFeature(ctx context.Context, name string) error {
-	_, _, err := runHelper(ctx, pkexecCommand, "enable-feature", name)
+	_, _, err := runHelper(ctx, pkexecCommand, updexhelper.CommandEnableFeature, name)
 	return err
 }
 
 // DisableFeature disables a feature
 func DisableFeature(ctx context.Context, name string) error {
-	_, _, err := runHelper(ctx, pkexecCommand, "disable-feature", name)
+	_, _, err := runHelper(ctx, pkexecCommand, updexhelper.CommandDisableFeature, name)
 	return err
 }
 
 // UpdateFeatures downloads enabled features
 func UpdateFeatures(ctx context.Context) error {
-	_, _, err := runHelper(ctx, pkexecCommand, "update")
+	_, _, err := runHelper(ctx, pkexecCommand, updexhelper.CommandUpdate)
 	return err
 }
 

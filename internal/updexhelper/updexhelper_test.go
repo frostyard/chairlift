@@ -1,48 +1,99 @@
 package updexhelper
 
-import "testing"
+import (
+	"fmt"
+	"reflect"
+	"testing"
+)
 
-// TestHasDryRunFlag covers representative arg slices: the flag present, the
-// flag absent, and the flag present among other args.
-func TestHasDryRunFlag(t *testing.T) {
+func TestParseInvocationAcceptsSupportedShapes(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
-		want bool
+		want Invocation
 	}{
 		{
-			name: "flag present alone",
-			args: []string{"--dry-run"},
-			want: true,
+			name: "enable",
+			args: []string{"enable-feature", "demo"},
+			want: Invocation{Command: CommandEnableFeature, Feature: "demo"},
 		},
 		{
-			name: "flag absent, no args",
-			args: []string{},
-			want: false,
+			name: "enable dry run",
+			args: []string{"enable-feature", "demo", "--dry-run"},
+			want: Invocation{Command: CommandEnableFeature, Feature: "demo", DryRun: true},
 		},
 		{
-			name: "flag absent, other args present",
-			args: []string{"some-feature"},
-			want: false,
+			name: "disable",
+			args: []string{"disable-feature", "demo"},
+			want: Invocation{Command: CommandDisableFeature, Feature: "demo"},
 		},
 		{
-			name: "flag present among other args",
-			args: []string{"some-feature", "--dry-run"},
-			want: true,
+			name: "disable dry run",
+			args: []string{"disable-feature", "demo", "--dry-run"},
+			want: Invocation{Command: CommandDisableFeature, Feature: "demo", DryRun: true},
 		},
 		{
-			name: "flag present before other args",
-			args: []string{"--dry-run", "some-feature"},
-			want: true,
+			name: "update",
+			args: []string{"update"},
+			want: Invocation{Command: CommandUpdate},
+		},
+		{
+			name: "update dry run",
+			args: []string{"update", "--dry-run"},
+			want: Invocation{Command: CommandUpdate, DryRun: true},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := HasDryRunFlag(tt.args); got != tt.want {
-				t.Errorf("HasDryRunFlag(%v) = %v, want %v", tt.args, got, tt.want)
+			got, err := ParseInvocation(tt.args)
+			if err != nil {
+				t.Fatalf("ParseInvocation(%v): %v", tt.args, err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseInvocation(%v) = %+v, want %+v", tt.args, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseInvocationRejectsUnsupportedShapes(t *testing.T) {
+	tests := [][]string{
+		nil,
+		{"unknown"},
+		{"enable-feature"},
+		{"enable-feature", ""},
+		{"enable-feature", "--dry-run"},
+		{"enable-feature", "demo", "--unknown"},
+		{"enable-feature", "demo", "--dry-run", "extra"},
+		{"disable-feature"},
+		{"disable-feature", ""},
+		{"disable-feature", "--dry-run"},
+		{"disable-feature", "demo", "--unknown"},
+		{"disable-feature", "demo", "--dry-run", "extra"},
+		{"update", "--unknown"},
+		{"update", "--dry-run", "extra"},
+	}
+
+	for i, args := range tests {
+		t.Run(fmt.Sprintf("case-%d", i), func(t *testing.T) {
+			if got, err := ParseInvocation(args); err == nil {
+				t.Errorf("ParseInvocation(%v) = %+v, want error", args, got)
+			}
+		})
+	}
+}
+
+func TestSupportedCommandsIsCompleteAndImmutable(t *testing.T) {
+	want := []string{CommandEnableFeature, CommandDisableFeature, CommandUpdate}
+	got := SupportedCommands()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("SupportedCommands() = %v, want %v", got, want)
+	}
+
+	got[0] = "changed"
+	if again := SupportedCommands(); !reflect.DeepEqual(again, want) {
+		t.Errorf("SupportedCommands() was mutated through returned slice: %v", again)
 	}
 }
 

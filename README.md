@@ -65,17 +65,25 @@ sudo make install
 `/usr` is the **only** supported `PREFIX` for an installation that
 participates in PolicyKit authentication (`sudo make install` uses it by
 default — no need to pass `PREFIX` explicitly). PolicyKit's `polkitd` reads
-`.policy`/`.rules` files only from the fixed system directories
-`/usr/share/polkit-1/actions` and `/usr/share/polkit-1/rules.d`, and `pkexec`
-matches the updex helper it's asked to run against the absolute path
+`.policy` files from the fixed system directory
+`/usr/share/polkit-1/actions`, and `pkexec` matches the updex helper it's
+asked to run against the absolute path
 `/usr/bin/chairlift-updex-helper` recorded in
 `data/org.frostyard.ChairLift.updex.policy`'s
-`org.freedesktop.policykit.exec.path` annotation. Installing under any other
-prefix places those files where polkit never looks, so the privileged
+`org.freedesktop.policykit.exec.path` annotation and its first argument
+against an `org.freedesktop.policykit.exec.argv1` annotation. Installing under
+any other prefix places those files where polkit never looks, so the privileged
 updex and bootc-staging features silently stop working (or fall back to a
 more restrictive, always-reprompting authentication rule). This also matches
 the layout used by ChairLift's own `.goreleaser.yaml` packages, so a source
 install and a packaged install end up identical.
+
+ChairLift does not install passwordless PolicyKit rules. Bootc staging and
+updex writes use the policies' normal administrator-authentication defaults;
+an active session may retain a successful authorization briefly. The updex
+helper accepts only `enable-feature <name> [--dry-run]`, `disable-feature
+<name> [--dry-run]`, and `update [--dry-run]`, rejecting every other argument
+shape inside the privileged process.
 
 Both paths install package-maintainer configuration defaults at
 `/usr/share/chairlift/config.yml`. They never create or overwrite the
@@ -218,7 +226,7 @@ chairlift/
 │   ├── bootc/     # bootc wrapper (status reads, pkexec stage script)
 │   ├── updex/     # Updex feature manager
 │   └── version/   # Build metadata (ldflags injection)
-├── data/          # Desktop file, icons, polkit policies/rules
+├── data/          # Desktop file, icons, and PolicyKit policies
 └── Makefile       # Build configuration
 ```
 

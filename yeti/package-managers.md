@@ -542,6 +542,14 @@ recipe and a YAML block — with no shared code path, so nothing stops them (or
 `internal/updex.HelperPath`, the fixed absolute path `pkexec` matches against
 the policy's `exec.path` annotation) from silently drifting apart.
 
+ChairLift packages only the bootc and updex `.policy` files. It no longer
+ships its old `.rules` files, which returned `YES` for every active local
+member of the `sudo` group and bypassed authentication. Source installation
+explicitly removes those legacy rule paths; package upgrades remove them as
+obsolete tracked files. Both policies now use normal administrator
+authentication, while the updex policy selects one action for each supported
+first argument and the helper validates the complete argv shape.
+
 Both paths install the repository's `config.yml` as package-owned maintainer
 defaults at `/usr/share/chairlift/config.yml`. Neither path installs
 `/etc/chairlift/config.yml`: that higher-precedence path belongs to the
@@ -555,10 +563,11 @@ installed layout itself:
   DESTDIR=<t.TempDir()>` — a dry run, so no compilation, no writes outside
   the temp dir, and no root — once with no `PREFIX` override and once with
   `PREFIX=/usr`, and asserts the printed `install -Dm...` lines place the
-  updex helper at `DESTDIR` + `internal/updex.HelperPath` and both
-  policy/rules pairs under `DESTDIR` + the fixed
-  `/usr/share/polkit-1/{actions,rules.d}` PolicyKit reads, installs maintainer
-  defaults at `DESTDIR/usr/share/chairlift/config.yml`, and never targets the
+  updex helper at `DESTDIR` + `internal/updex.HelperPath` and both policies
+  under the fixed `/usr/share/polkit-1/actions` directory PolicyKit reads,
+  removes both legacy rules from `DESTDIR/usr/share/polkit-1/rules.d`,
+  installs maintainer defaults at
+  `DESTDIR/usr/share/chairlift/config.yml`, and never targets the
   administrator-owned `/etc/chairlift/config.yml`. It shells out to
   the real `make` rather than parsing the Makefile textually because `make`
   itself is the authority on what a given `PREFIX`/`DESTDIR` combination
@@ -575,8 +584,8 @@ installed layout itself:
   still fails — per
   `docs/agents/skills/regression-tests-must-cover-every-collection-entry.md`),
   asserts each entry's `bindir` matches the directory of
-  `internal/updex.HelperPath` and its updex/bootc policy+rules
-  `contents[].dst` entries equal those same fixed polkit-1 paths. It also
+  `internal/updex.HelperPath`, its updex/bootc policy `contents[].dst` entries
+  equal the fixed polkit-1 actions paths, and no `.rules` content remains. It also
   requires every package to map the repository `config.yml` to
   `/usr/share/chairlift/config.yml` and rejects any content entry targeting
   `/etc/chairlift/config.yml`.
