@@ -75,8 +75,8 @@ against an `org.freedesktop.policykit.exec.argv1` annotation. Installing under
 any other prefix places those files where polkit never looks, so the privileged
 updex and bootc-staging features silently stop working (or fall back to a
 more restrictive, always-reprompting authentication rule). This also matches
-the layout used by ChairLift's own `.goreleaser.yaml` packages, so a source
-install and a packaged install end up identical.
+the layout used by ChairLift's full `frostyard-chairlift` nFPM package, so a
+source install and a full packaged install end up identical.
 
 ChairLift does not install passwordless PolicyKit rules. Bootc staging and
 updex writes use the policies' normal administrator-authentication defaults;
@@ -88,6 +88,20 @@ shape inside the privileged process.
 Both paths install package-maintainer configuration defaults at
 `/usr/share/chairlift/config.yml`. They never create or overwrite the
 administrator-owned `/etc/chairlift/config.yml` override.
+
+Releases also publish a small
+`frostyard-chairlift-system-integration` deb/rpm/apk for distributions that
+deliver the GUI through a user-scoped mechanism such as the Homebrew cask. It
+installs only the fixed `/usr/bin/chairlift-updex-helper`, both PolicyKit
+policies, and `/usr/share/chairlift/config.yml`; it does not install the GUI.
+The integration and full packages conflict intentionally because they own the
+same privileged files.
+
+The bootc policy deliberately retains the fixed
+`/usr/libexec/bootc-update-stage` path. A distribution must provide a trusted
+stage helper at exactly that path before enabling `bootc_updates_group`; the
+integration package does not provide a distro-specific staging implementation.
+ChairLift hides the group when the helper is absent.
 
 `PREFIX` can still be overridden (e.g. `make install PREFIX=$HOME/.local`)
 for a non-privileged, non-PolicyKit-integrated install — but the updex

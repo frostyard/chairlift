@@ -111,7 +111,12 @@ changelog:
       order: 9999
 
 nfpms:
-  - file_name_template: "{{ .ConventionalFileName }}"
+  # Self-contained system package: app plus privileged integration.
+  - id: chairlift
+    ids:
+      - chairlift
+      - chairlift-updex-helper
+    file_name_template: "{{ .ConventionalFileName }}"
     package_name: frostyard-chairlift
     # Both build ids' binaries (chairlift, chairlift-updex-helper) are
     # packaged automatically into bindir; do not add them as contents
@@ -121,6 +126,8 @@ nfpms:
       System management tool for bootc-based installations.
       Manage flatpaks, homebrew and system updates with a modern GTK4/Libadwaita interface.
     license: GPL-3.0-or-later
+    conflicts:
+      - frostyard-chairlift-system-integration
     contents:
       # Wrapper script
       - src: ./data/chairlift-wrapper.sh
@@ -133,6 +140,8 @@ nfpms:
       # Package-maintainer defaults; never install into the administrator-owned /etc path
       - src: ./config.yml
         dst: /usr/share/chairlift/config.yml
+        file_info:
+          mode: 0644
       # Icons
       - src: ./data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg
         dst: /usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg
@@ -143,9 +152,47 @@ nfpms:
       # PolicyKit policy for bootc
       - src: ./data/org.frostyard.ChairLift.bootc.policy
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.bootc.policy
+        file_info:
+          mode: 0644
       # PolicyKit policy for updex
       - src: ./data/org.frostyard.ChairLift.updex.policy
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy
+        file_info:
+          mode: 0644
+    formats:
+      - deb
+      - rpm
+      - apk
+
+  # Root-owned companion for a user-scoped app installation such as the
+  # Homebrew cask. It intentionally retains ChairLift's fixed helper and
+  # PolicyKit paths. Distros enabling bootc staging must separately provide
+  # /usr/libexec/bootc-update-stage.
+  - id: chairlift-system-integration
+    ids:
+      - chairlift-updex-helper
+    file_name_template: "{{ .ConventionalFileName }}"
+    package_name: frostyard-chairlift-system-integration
+    bindir: /usr/bin
+    description: |-
+      System integration for a user-scoped ChairLift installation.
+      Installs the privileged updex helper, PolicyKit policies, and maintainer configuration defaults.
+    license: GPL-3.0-or-later
+    conflicts:
+      - frostyard-chairlift
+    contents:
+      - src: ./config.yml
+        dst: /usr/share/chairlift/config.yml
+        file_info:
+          mode: 0644
+      - src: ./data/org.frostyard.ChairLift.bootc.policy
+        dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.bootc.policy
+        file_info:
+          mode: 0644
+      - src: ./data/org.frostyard.ChairLift.updex.policy
+        dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy
+        file_info:
+          mode: 0644
     formats:
       - deb
       - rpm

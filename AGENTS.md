@@ -28,7 +28,11 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   path matches its fixed `pkexec` exec-path annotation (see the privilege
   boundary invariant below). It installs maintainer defaults at
   `/usr/share/chairlift/config.yml` and must never install or overwrite the
-  administrator-owned `/etc/chairlift/config.yml`.
+  administrator-owned `/etc/chairlift/config.yml`. GoReleaser publishes both
+  the self-contained `frostyard-chairlift` package and the mutually exclusive
+  `frostyard-chairlift-system-integration` companion for user-scoped GUI
+  installs; every nFPM entry carrying policies must retain the same fixed
+  paths.
 
 CI (`.github/workflows/test.yml`) filters tests with `-run "^Test[^I]"
 -skip "Integration"`. That filter excludes *any* test whose name begins `TestI`
@@ -63,6 +67,14 @@ An agent must not break these:
   deliberately per-user and does **not** use pkexec. Do not add arbitrary
   privileged command execution, broaden what pkexec runs, or route new
   mutations around the fixed helper/policy pair.
+- **System-integration split.** The
+  `frostyard-chairlift-system-integration` nFPM package contains the fixed-path
+  updex helper, both PolicyKit policies, and package-maintainer config, but not
+  the GUI or a bootc staging implementation. Distributions pairing it with a
+  user-scoped ChairLift install must provide their trusted stage helper at
+  `/usr/libexec/bootc-update-stage` before enabling `bootc_updates_group`.
+  Do not make the privileged path configurable from ChairLift's user-writable
+  configuration.
 - **GTK main-thread safety.** All external tool calls run in goroutines; every
   UI update marshals back to the GTK main thread via
   `snowkit`'s `sgtk.RunOnMainThread(...)`. Never touch a widget directly from a

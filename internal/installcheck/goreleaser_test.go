@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -27,6 +28,11 @@ const wantSPDXLicense = "GPL-3.0-or-later"
 // edit here would silently redirect every generated release note.
 const wantHomepage = "https://github.com/frostyard/chairlift"
 
+const (
+	fullPackageName        = "frostyard-chairlift"
+	integrationPackageName = "frostyard-chairlift-system-integration"
+)
+
 // loadGoreleaserConfig parses the real, repo-root .goreleaser.yaml — not a
 // fixture or copy that could drift from the file goreleaser actually reads
 // — using the yaml.v3 dependency already vendored for internal/config.
@@ -46,18 +52,38 @@ func loadGoreleaserConfig(t *testing.T) GoreleaserConfig {
 	return cfg
 }
 
-// nfpmDst finds the contents[] entry whose src ends in srcSuffix and returns
-// its dst, failing the test if no such entry exists.
-func nfpmDst(t *testing.T, nfpm NfpmConfig, srcSuffix string) string {
+// nfpmContentBySuffix finds the contents[] entry whose src ends in srcSuffix,
+// failing the test if no such entry exists.
+func nfpmContentBySuffix(t *testing.T, nfpm NfpmConfig, srcSuffix string) NfpmContent {
 	t.Helper()
 
 	for _, c := range nfpm.Contents {
 		if strings.HasSuffix(c.Src, srcSuffix) {
-			return c.Dst
+			return c
 		}
 	}
 	t.Fatalf("no nfpm contents entry with src ending in %q", srcSuffix)
-	return ""
+	return NfpmContent{}
+}
+
+func nfpmDst(t *testing.T, nfpm NfpmConfig, srcSuffix string) string {
+	t.Helper()
+	return nfpmContentBySuffix(t, nfpm, srcSuffix).Dst
+}
+
+func nfpmByPackageName(t *testing.T, cfg GoreleaserConfig, packageName string) NfpmConfig {
+	t.Helper()
+
+	var matches []NfpmConfig
+	for _, nfpm := range cfg.Nfpms {
+		if nfpm.PackageName == packageName {
+			matches = append(matches, nfpm)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("nfpms entries with package_name %q = %d, want exactly 1", packageName, len(matches))
+	}
+	return matches[0]
 }
 
 // TestGoreleaserNfpmLayoutMatchesUsrPrefix parses the real .goreleaser.yaml
@@ -77,9 +103,9 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 		t.Fatal(".goreleaser.yaml has no nfpms entries")
 	}
 
-	// nFPM auto-packages both build ids' binaries (chairlift,
-	// chairlift-updex-helper) into bindir, so bindir alone determines where
-	// the packaged updex helper lands. It must match the directory of
+	// nFPM auto-packages each entry's selected build ids into bindir. Every
+	// current package selects chairlift-updex-helper, so bindir determines
+	// where its helper lands. It must match the directory of
 	// internal/updex.HelperPath — the fixed absolute path pkexec matches
 	// against the PolicyKit policy's exec.path annotation — not just a
 	// hardcoded "/usr/bin" literal, so this fails if either side changes
@@ -104,9 +130,12 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 
 			for _, cc := range contentChecks {
 				t.Run(cc.name, func(t *testing.T) {
-					got := nfpmDst(t, nfpm, cc.srcSuffix)
-					if got != cc.want {
-						t.Errorf("nfpms[%d] contents dst for %s = %q, want required package path %q", i, cc.srcSuffix, got, cc.want)
+					content := nfpmContentBySuffix(t, nfpm, cc.srcSuffix)
+					if content.Dst != cc.want {
+						t.Errorf("nfpms[%d] contents dst for %s = %q, want required package path %q", i, cc.srcSuffix, content.Dst, cc.want)
+					}
+					if content.FileInfo.Mode != 0o644 {
+						t.Errorf("nfpms[%d] contents mode for %s = %#o, want 0644", i, cc.srcSuffix, content.FileInfo.Mode)
 					}
 				})
 			}
@@ -120,6 +149,47 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGoreleaserPublishesSystemIntegrationPackage(t *testing.T) {
+	cfg := loadGoreleaserConfig(t)
+	full := nfpmByPackageName(t, cfg, fullPackageName)
+	integration := nfpmByPackageName(t, cfg, integrationPackageName)
+
+	if full.ID == "" || integration.ID == "" || full.ID == integration.ID {
+		t.Errorf("nFPM ids must be non-empty and unique: full=%q integration=%q", full.ID, integration.ID)
+	}
+	if want := []string{"chairlift", "chairlift-updex-helper"}; !reflect.DeepEqual(full.IDs, want) {
+		t.Errorf("%s ids = %v, want %v", fullPackageName, full.IDs, want)
+	}
+	if want := []string{"chairlift-updex-helper"}; !reflect.DeepEqual(integration.IDs, want) {
+		t.Errorf("%s ids = %v, want %v", integrationPackageName, integration.IDs, want)
+	}
+	if want := []string{integrationPackageName}; !reflect.DeepEqual(full.Conflicts, want) {
+		t.Errorf("%s conflicts = %v, want %v", fullPackageName, full.Conflicts, want)
+	}
+	if want := []string{fullPackageName}; !reflect.DeepEqual(integration.Conflicts, want) {
+		t.Errorf("%s conflicts = %v, want %v", integrationPackageName, integration.Conflicts, want)
+	}
+	for _, nfpm := range []NfpmConfig{full, integration} {
+		if want := []string{"deb", "rpm", "apk"}; !reflect.DeepEqual(nfpm.Formats, want) {
+			t.Errorf("%s formats = %v, want %v", nfpm.PackageName, nfpm.Formats, want)
+		}
+	}
+
+	wantIntegrationContents := map[string]string{
+		"config.yml":                           "/usr/share/chairlift/config.yml",
+		"org.frostyard.ChairLift.bootc.policy": filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.bootc.policy"),
+		"org.frostyard.ChairLift.updex.policy": filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.updex.policy"),
+	}
+	if len(integration.Contents) != len(wantIntegrationContents) {
+		t.Errorf("%s contents has %d entries, want %d", integrationPackageName, len(integration.Contents), len(wantIntegrationContents))
+	}
+	for srcSuffix, wantDst := range wantIntegrationContents {
+		if got := nfpmDst(t, integration, srcSuffix); got != wantDst {
+			t.Errorf("%s contents dst for %s = %q, want %q", integrationPackageName, srcSuffix, got, wantDst)
+		}
 	}
 }
 

@@ -534,11 +534,11 @@ The Features page's per-feature switch (`onFeatureToggled`, `internal/views/feat
 
 ## Install-path consistency (`internal/installcheck`)
 
-Two installation paths ship this repository's privileged surface and
-maintainer configuration: a source `make install` (Makefile, `PREFIX`
-defaulting to `/usr`) and the packaged nFPM (deb/rpm/apk) layout GoReleaser
-builds from `.goreleaser.yaml`. Both are hand-maintained text — a Makefile
-recipe and a YAML block — with no shared code path, so nothing stops them (or
+The source `make install` path (Makefile, `PREFIX` defaulting to `/usr`) and
+the two packaged nFPM (deb/rpm/apk) layouts GoReleaser builds from
+`.goreleaser.yaml` ship this repository's privileged surface and maintainer
+configuration. They are hand-maintained text — a Makefile recipe and YAML
+blocks — with no shared code path, so nothing stops them (or
 `internal/updex.HelperPath`, the fixed absolute path `pkexec` matches against
 the policy's `exec.path` annotation) from silently drifting apart.
 
@@ -550,10 +550,19 @@ obsolete tracked files. Both policies now use normal administrator
 authentication, while the updex policy selects one action for each supported
 first argument and the helper validates the complete argv shape.
 
-Both paths install the repository's `config.yml` as package-owned maintainer
-defaults at `/usr/share/chairlift/config.yml`. Neither path installs
+All three layouts install the repository's `config.yml` as package-owned
+maintainer defaults at `/usr/share/chairlift/config.yml`. None installs
 `/etc/chairlift/config.yml`: that higher-precedence path belongs to the
 administrator and must survive package installation and upgrades unchanged.
+
+GoReleaser has two nFPM entries. `frostyard-chairlift` is self-contained and
+selects both `chairlift` and `chairlift-updex-helper` builds.
+`frostyard-chairlift-system-integration` selects only the helper and packages
+only maintainer config plus the bootc/updex policies, for pairing with a
+user-scoped app installation. The two package names conflict to prevent
+simultaneous ownership of the same fixed system files. The companion does not
+provide `/usr/libexec/bootc-update-stage`; a distro must bake its own trusted
+implementation at that exact policy-annotated path.
 
 `internal/installcheck` holds regression tests, not production code, that turn
 "verified by inspection" into real, gated checks. The first two guard the
@@ -585,10 +594,16 @@ installed layout itself:
   `docs/agents/skills/regression-tests-must-cover-every-collection-entry.md`),
   asserts each entry's `bindir` matches the directory of
   `internal/updex.HelperPath`, its updex/bootc policy `contents[].dst` entries
-  equal the fixed polkit-1 actions paths, and no `.rules` content remains. It also
-  requires every package to map the repository `config.yml` to
+  equal the fixed polkit-1 actions paths, their policy/config modes remain
+  `0644`, and no `.rules` content remains. It also requires every package to
+  map the repository `config.yml` to
   `/usr/share/chairlift/config.yml` and rejects any content entry targeting
   `/etc/chairlift/config.yml`.
+- **`TestGoreleaserPublishesSystemIntegrationPackage`** requires exactly one
+  full package and one integration package, verifies their build filters,
+  mutual conflicts, unique IDs, and the integration package's exact three
+  content mappings. This prevents the companion from accidentally acquiring
+  the GUI binary or losing one of the root-owned integration files.
 
 Both tests fail — not skip — if `internal/updex.HelperPath`, the Makefile's
 `PREFIX` default, or `.goreleaser.yaml`'s `nfpms` block change independently

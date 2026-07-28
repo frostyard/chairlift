@@ -18,6 +18,8 @@ If no configuration file is found, all features default to enabled, except
 Packages own and may replace the `/usr/share` defaults during an upgrade.
 Administrators should put local changes in `/etc/chairlift/config.yml`;
 ChairLift's install and packaging paths never create or overwrite that file.
+The `frostyard-chairlift-system-integration` package also provides the
+`/usr/share` defaults for a user-scoped GUI installation.
 
 The first file that exists in this order is authoritative. ChairLift does not
 fall through to a lower-priority file when that file is unreadable, malformed,

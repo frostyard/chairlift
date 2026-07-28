@@ -3,9 +3,11 @@
 # while keeping universal features enabled.
 #
 # To use this configuration:
-# 1. Copy this file to /etc/chairlift/config.yml
-# 2. Modify as needed for your distribution
-# 3. Restart ChairLift
+# 1. Install frostyard-chairlift-system-integration when the GUI is user-scoped
+# 2. Provide a trusted staging helper at /usr/libexec/bootc-update-stage
+# 3. Copy this file to /etc/chairlift/config.yml
+# 4. Modify as needed for your distribution
+# 5. Restart ChairLift
 
 system_page:
   system_info_group:
@@ -18,7 +20,7 @@ system_page:
 
 updates_page:
   bootc_updates_group:
-    enabled: true  # Show system updates
+    enabled: true  # Requires /usr/libexec/bootc-update-stage
   brew_updates_group:
     enabled: false  # Hide Homebrew updates (not typically used on other distros)
   brew_trust_group:
@@ -46,6 +48,10 @@ maintenance_page:
         sudo: true  # Whether the script requires administrator privileges
   maintenance_optimization_group:
     enabled: true  # Show optimization tools
+
+features_page:
+  features_group:
+    enabled: false  # Enable only when updex is configured for this distribution
 
 help_page:
   help_resources_group:
