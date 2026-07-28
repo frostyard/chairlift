@@ -1172,7 +1172,7 @@ page_name:
 | `applications_page` | `flatpak_user_group` | User Flatpak applications |
 | `applications_page` | `flatpak_system_group` | System Flatpak applications |
 | `applications_page` | `brew_group` | Homebrew formulae and casks |
-| `applications_page` | `brew_search_group` | Homebrew package search |
+| `applications_page` | `brew_search_group` | Typed Homebrew formula/cask search and confirmed install |
 | `applications_page` | `brew_bundles_group` | Curated `*.Brewfile` bundles discovered from every configured `bundles_paths` directory, with guarded install actions |
 | `applications_page` | `applications_installed_group` | Installed apps launcher (configurable `app_id`, default: Bazaar) |
 | `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts (5min timeout, pkexec for sudo); **disabled by default** |

@@ -18,7 +18,8 @@
 ### 📦 Homebrew Package Management
 
 - **View Installed Packages**: Browse all installed formulae and casks in organized expandable lists
-- **Search & Install**: Search the Homebrew repository and install packages with one click
+- **Search & Install**: Search formulae and casks, confirm the selected package
+  type, and install with loading, error, refresh, and dry-run states
 - **Update & Upgrade**: Keep Homebrew up-to-date and upgrade outdated packages individually
 - **Pin Packages**: Pin packages to prevent accidental upgrades
 - **Curated Bundles**: Install pre-configured package bundles for common use cases

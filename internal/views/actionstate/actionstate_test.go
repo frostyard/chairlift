@@ -40,6 +40,40 @@ func TestPackageUpgradeEnumeratesEveryOutcome(t *testing.T) {
 	}
 }
 
+func TestPackageInstallEnumeratesEveryOutcome(t *testing.T) {
+	tests := []struct {
+		name      string
+		succeeded bool
+		dryRun    bool
+		want      Decision
+	}{
+		{
+			name: "failure restores the install control",
+			want: Decision{RestoreControl: true},
+		},
+		{
+			name:      "dry-run success restores the install control",
+			succeeded: true,
+			dryRun:    true,
+			want:      Decision{RestoreControl: true},
+		},
+		{
+			name:      "live success completes the control and refreshes installed packages",
+			succeeded: true,
+			want:      Decision{Refresh: true, CompleteControl: true},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := PackageInstall(tt.succeeded, tt.dryRun)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("PackageInstall(%v, %v) = %#v, want %#v", tt.succeeded, tt.dryRun, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMetadataUpdateEnumeratesEveryOutcome(t *testing.T) {
 	tests := []struct {
 		name      string

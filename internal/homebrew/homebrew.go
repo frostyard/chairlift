@@ -80,9 +80,25 @@ type Package struct {
 
 // SearchResult represents a search result
 type SearchResult struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Homepage    string `json:"homepage"`
+	Name string
+	Kind PackageKind
+}
+
+// PackageKind identifies which Homebrew install namespace a search result
+// belongs to. Formulae and casks can share a name, so the kind must travel
+// with the result all the way to the install command.
+type PackageKind string
+
+const (
+	Formula PackageKind = "formula"
+	Cask    PackageKind = "cask"
+)
+
+func (k PackageKind) DisplayName() string {
+	if k == Cask {
+		return "Cask"
+	}
+	return "Formula"
 }
 
 // stateChangingCommands are commands that modify system state
@@ -324,23 +340,53 @@ func ListOutdated() ([]Package, error) {
 	return packages, nil
 }
 
-// Search searches for formulae matching the query
+// Search searches both Homebrew namespaces and returns typed results.
 func Search(query string) ([]SearchResult, error) {
-	output, err := runBrewCommand("search", "--formula", query)
+	return searchWith(runBrewCommand, query)
+}
+
+func searchWith(run func(...string) (string, error), query string) ([]SearchResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, nil
+	}
+
+	formulae, err := searchKind(run, query, "--formula", Formula)
 	if err != nil {
 		return nil, err
 	}
+	casks, err := searchKind(run, query, "--cask", Cask)
+	if err != nil {
+		return nil, err
+	}
+	return append(formulae, casks...), nil
+}
 
+func searchKind(run func(...string) (string, error), query, flag string, kind PackageKind) ([]SearchResult, error) {
+	output, err := run("search", flag, query)
+	if err != nil {
+		// Homebrew exits 1 when one namespace has no matches, even if the
+		// other namespace may have results. Treat only that documented
+		// no-result diagnostic as an empty category.
+		if strings.Contains(err.Error(), "No formulae or casks found") {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return parseSearchOutput(output, kind), nil
+}
+
+func parseSearchOutput(output string, kind PackageKind) []SearchResult {
 	var results []SearchResult
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" && !strings.HasPrefix(line, "==>") {
-			results = append(results, SearchResult{Name: line})
+			results = append(results, SearchResult{Name: line, Kind: kind})
 		}
 	}
-
-	return results, nil
+	return results
 }
 
 // Install installs a package

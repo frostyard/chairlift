@@ -66,7 +66,7 @@ valid page.
 - `flatpak_user_group`: User-installed Flatpak applications
 - `flatpak_system_group`: System-wide Flatpak applications
 - `brew_group`: Installed Homebrew formulae and casks
-- `brew_search_group`: Search and install Homebrew packages
+- `brew_search_group`: Search and install Homebrew formulae and casks
 - `brew_bundles_group`: Curated Homebrew package bundles
   - `bundles_paths`: Array of directories searched for immediate
     `*.Brewfile` entries (default: `['/usr/share/snow/bundles']`). Missing

@@ -9,7 +9,9 @@ Wraps the `brew` CLI. Uses JSON output (`--json=v2`) for structured data where a
 ### Key types
 
 - **`Package`** — name, version, pinned status, outdated flag, `InstalledOnRequest` bool, `Dependencies` string slice (struct field exists but not populated by current parsing)
-- **`SearchResult`** — name, description, homepage (only `Name` is populated by `Search()` — description and homepage fields exist but are always empty since search parses text output)
+- **`SearchResult`** — name plus a required `PackageKind` (`Formula` or
+  `Cask`). The kind is not cosmetic: it selects whether installation adds
+  `--cask`.
 
 ### Operations
 
@@ -18,7 +20,7 @@ Wraps the `brew` CLI. Uses JSON output (`--json=v2`) for structured data where a
 | `ListInstalledFormulae()` | `brew info --installed --json=v2 --formula` | 30s | JSON parsed |
 | `ListInstalledCasks()` | `brew info --installed --json=v2 --cask` | 30s | JSON parsed |
 | `ListOutdated()` | `brew outdated --json=v2` | 30s | JSON parsed; returns both formulae and casks |
-| `Search(query)` | `brew search --formula <query>` | 30s | Text output parsed; formula-only search |
+| `Search(query)` | `brew search --formula <query>`, then `brew search --cask <query>` | 30s each | Text output parsed into typed formula/cask results; one namespace's normal no-match exit is treated as empty |
 | `Install(name, isCask)` | `brew install [--cask] <name>` | 30m | State-changing, dry-run aware |
 | `Uninstall(name, isCask)` | `brew uninstall [--cask] <name>` | 30m | State-changing |
 | `Upgrade(name)` | `brew upgrade [<name>]` | 30m | State-changing; empty name upgrades all |
@@ -70,6 +72,31 @@ expanders. A successful live `BundleInstall` leaves the clicked row labelled
 and restores the action because nothing was installed. Each row owns a
 `bundleview.InstallGate`, so a second callback cannot overlap a running
 install even if invoked independently of GTK's insensitive-button guard.
+
+### Typed search and install
+
+`Search` trims the query and delegates to the pure injected seam
+`searchWith(run, query)`. It queries formulae and casks separately because
+Homebrew's combined human-readable search output does not reliably label every
+result, while `--formula` and `--cask` make the namespace unambiguous. Homebrew
+exits non-zero when one namespace has no matches; only its specific
+`No formulae or casks found` diagnostic becomes an empty category. Other
+errors remain failures. `homebrew_test.go` drives a fake runner to assert both
+argv sequences, type preservation, empty-category handling, error
+propagation, blank-query behavior, and header filtering.
+
+`onHomebrewSearch` assigns each query a `searchRefresh` generation so an older
+slow query cannot replace newer results. Rows display `Formula` or `Cask`, and
+the confirmation callback carries that type into
+`homebrew.Install(result.Name, result.Kind == homebrew.Cask)`. Each result owns
+an `actionstate.Gate`: cancel resets it, confirmation changes the button to
+`Installing...`, failure and dry-run restore it, and a live success completes
+it as `Installed`. `actionstate.PackageInstall` is the tested authority for
+restore/complete/refresh decisions. Live success starts
+`loadHomebrewPackages`; that loader has its own `brewPackagesRefresh`
+generation, nil-guards the independently configurable installed-package
+group, and clear-then-repopulates separate formula/cask `rowset.Tracker`
+values.
 
 ### Error handling
 
@@ -467,7 +494,19 @@ the full decision table is tested without constructing GTK widgets.
 
 A small standalone binary that accepts commands (`enable-feature`, `disable-feature`, `update`) and uses the updex Go library to perform privileged operations. It supports `--dry-run` for all three subcommands — `enable-feature`, `disable-feature`, and `update` — passing it through to the corresponding `updex.*Options.DryRun` field. Outputs JSON to stdout. Invoked via pkexec so that the main chairlift process does not need root.
 
-`main.go` itself is thin argv dispatch only: parsing `os.Args` and building each subcommand's `Options` struct live in `internal/updexhelper` (`internal/updexhelper/updexhelper.go`), a package with no puregotk import — only stdlib plus `github.com/frostyard/updex/updex`. That's what makes the logic testable at all: neither `gates_chunk` nor `make ci` ever runs `go test ./...`, both are scoped to `go test ./internal/...`, so a `_test.go` under `cmd/chairlift-updex-helper` would never execute under any gate this repo actually runs (see `docs/agents/skills/gtk-headless-tests.md` for the same "extract to a testable `internal/` package" pattern applied to GTK code). `internal/updexhelper` exports `HasDryRunFlag(args []string) bool` (pure — takes an args slice instead of reading `os.Args` directly) plus `EnableOptions`, `DisableOptions`, and `UpdateOptions`, each `func(dryRun bool) updex.*Options` setting `DryRun` to exactly the argument passed. `internal/updexhelper/updexhelper_test.go` table-tests all four functions, including the previously-dropped `update` case (see "Cross-cutting: dry-run" below).
+`main.go` itself is thin dispatch only: strict `os.Args` parsing and each
+subcommand's `Options` struct live in `internal/updexhelper`
+(`internal/updexhelper/updexhelper.go`), a package with no puregotk import —
+only stdlib plus `github.com/frostyard/updex/updex`. That's what makes the
+logic testable at all: neither `gates_chunk` nor `make ci` ever runs `go test
+./...`, both are scoped to `go test ./internal/...`, so a `_test.go` under
+`cmd/chairlift-updex-helper` would never execute under any gate this repo
+actually runs. `ParseInvocation` accepts only `enable-feature <name>
+[--dry-run]`, `disable-feature <name> [--dry-run]`, and `update [--dry-run]`;
+`SupportedCommands` is the complete first-argument surface matched by the
+PolicyKit actions. `EnableOptions`, `DisableOptions`, and `UpdateOptions` set
+`DryRun` exactly. Tests cover every accepted/rejected argv shape, the immutable
+command inventory, and all three option builders.
 
 ## Cross-cutting: dry-run
 
@@ -495,7 +534,24 @@ gate and button without showing a success/preview toast. `TryStart` and
 `SetSensitive(false)` both happen before the worker goroutine starts, so
 repeated callbacks cannot overlap an install.
 
-The Applications page's per-result Homebrew install button (`onHomebrewSearch`, `internal/views/applications_page.go`) and per-app Flatpak uninstall buttons (`loadFlatpakApplications`, both the user- and system-installation branches) show toasts built by `actionmsg.Install(homebrew.IsDryRun(), pkgName)` and `actionmsg.Uninstall(flatpak.IsDryRun(), appID)` respectively, rather than an unconditional "installed"/"uninstalled" string — the wrapper's own dry-run skip already makes `Install`/`Uninstall` a no-op, so the toast must say "would be installed/uninstalled" instead of claiming it happened. The list refresh after uninstall (`go uh.loadFlatpakApplications()`) stays unconditional since it re-queries live state either way. That refresh does not append to whatever is already on screen: each success branch of `loadFlatpakApplications` first clears the rows the previous load recorded — `uh.flatpakUserRows.Clear(...)` / `uh.flatpakSystemRows.Clear(...)`, two `rowset.Tracker[*adw.ActionRow]` values, each removing its rows from its own expander — and then rebuilds and re-adds them, all inside *one* `sgtk.RunOnMainThread` closure per expander (the two expanders keep separate closures and separate trackers). Keeping the clear and the repopulate in a single closure is what makes overlapping reloads safe without any locking: `RunOnMainThread` serializes closures FIFO on glib's idle queue, so two concurrent reloads run as clear+add, then clear+add, and cannot interleave into clear/clear/add/add. There is deliberately no mutex, generation counter, or in-flight flag. Each success branch also calls `SetEnableExpansion(len(apps) > 0)`, matching `onHomebrewSearch`; the not-installed and error branches only change the subtitle and deliberately leave the existing rows in place. Caveat: the Applications page's Homebrew formulae and casks expanders (`loadHomebrewPackages`) still have no clear-before-repopulate bookkeeping; issue #64 concerns the separate Updates-page outdated list and does not change those expanders.
+The Applications page's per-result Homebrew install button
+(`onHomebrewSearch`, `internal/views/applications_page.go`) and per-app Flatpak
+uninstall buttons (`loadFlatpakApplications`, both user and system branches)
+show toasts built by `actionmsg.Install(homebrew.IsDryRun(), result.Name)` and
+`actionmsg.Uninstall(flatpak.IsDryRun(), appID)`, rather than unconditional
+completion claims. The Homebrew path restores its install control after a
+dry-run and does not refresh, because nothing changed; only a live success
+completes the control and starts the generation-guarded installed-package
+refresh described above.
+
+The Flatpak list refresh after uninstall remains unconditional because it
+re-queries live state either way. Each successful loader branch first clears
+the prior `flatpakUserRows` or `flatpakSystemRows` tracker and then rebuilds it
+inside one main-thread closure. Homebrew's installed formula/cask loader now
+uses the same separate-tracker clear-before-repopulate pattern, with an
+additional refresh generation because multiple Homebrew actions can request
+overlapping reloads. Not-installed and error branches change the subtitle and
+preserve the last known rows.
 
 The Updates page's per-package Homebrew upgrade button, per-app Flatpak update button, and the "Update Homebrew" self-update button (`internal/views/updates_page.go`) follow the same toast pattern: `actionmsg.Upgrade(dryRun, pkgName)`, `actionmsg.Update(flatpak.IsDryRun(), appID)`, and `actionmsg.SelfUpdate(dryRun, "Homebrew")` replace what were unconditional "upgraded"/"updated"/"updated successfully" toasts, since `upgrade` and `update` are both in their wrappers' `stateChangingCommands` and no-op under dry-run. The Flatpak update button's list refresh (`go uh.loadFlatpakUpdates()`) stays unconditional, same reasoning as the uninstall refresh above.
 

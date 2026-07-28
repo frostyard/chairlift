@@ -1,6 +1,7 @@
 // Package actionstate owns the pure state transitions used by asynchronous
-// update-page actions. It has no GTK or puregotk dependency, so command
-// completion and repeated-click behavior can be tested headlessly.
+// Applications- and Updates-page actions. It has no GTK or puregotk
+// dependency, so command completion, refresh ordering, and repeated-click
+// behavior can be tested headlessly.
 package actionstate
 
 import (
@@ -55,9 +56,10 @@ func (g *Gate) Complete() {
 
 // Decision describes the UI work following one command attempt.
 type Decision struct {
-	Refresh        bool
-	RemoveRow      bool
-	RestoreControl bool
+	Refresh         bool
+	RemoveRow       bool
+	RestoreControl  bool
+	CompleteControl bool
 }
 
 // RefreshDecision describes whether a completed outdated-package query has
@@ -105,6 +107,21 @@ func PackageUpgrade(succeeded, dryRun bool) Decision {
 		return Decision{RestoreControl: true}
 	default:
 		return Decision{Refresh: true, RemoveRow: true}
+	}
+}
+
+// PackageInstall distinguishes a command failure, a successful dry-run
+// preview, and a successful live install from a search result. Only the live
+// install permanently completes the row control and refreshes installed
+// packages.
+func PackageInstall(succeeded, dryRun bool) Decision {
+	switch {
+	case !succeeded:
+		return Decision{RestoreControl: true}
+	case dryRun:
+		return Decision{RestoreControl: true}
+	default:
+		return Decision{Refresh: true, CompleteControl: true}
 	}
 }
 

@@ -5,10 +5,12 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
+	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/bundleview"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
@@ -131,7 +133,7 @@ func (uh *UserHome) buildApplicationsPage() {
 	if uh.config.IsGroupEnabled("applications_page", "brew_search_group") {
 		group := adw.NewPreferencesGroup()
 		group.SetTitle("Search Homebrew")
-		group.SetDescription("Search for and install Homebrew formulae")
+		group.SetDescription("Search for and install Homebrew formulae and casks")
 
 		// Search entry row
 		searchRow := adw.NewActionRow()
@@ -267,48 +269,82 @@ func (uh *UserHome) loadBrewBundles(paths []string) {
 
 // loadHomebrewPackages loads installed Homebrew packages asynchronously
 func (uh *UserHome) loadHomebrewPackages() {
+	generation := uh.brewPackagesRefresh.Begin()
 	if !homebrew.IsInstalledCached() {
 		sgtk.RunOnMainThread(func() {
-			uh.formulaeExpander.SetSubtitle("Homebrew not installed")
-			uh.casksExpander.SetSubtitle("Homebrew not installed")
+			if !uh.brewPackagesRefresh.IsCurrent(generation) {
+				return
+			}
+			if uh.formulaeExpander != nil {
+				uh.formulaeExpander.SetSubtitle("Homebrew not installed")
+			}
+			if uh.casksExpander != nil {
+				uh.casksExpander.SetSubtitle("Homebrew not installed")
+			}
 		})
 		return
 	}
 
 	// Load formulae
-	formulae, err := homebrew.ListInstalledFormulae()
-	if err != nil {
-		sgtk.RunOnMainThread(func() {
-			uh.formulaeExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
-		})
-	} else {
-		sgtk.RunOnMainThread(func() {
-			uh.formulaeExpander.SetSubtitle(fmt.Sprintf("%d installed", len(formulae)))
-			for _, pkg := range formulae {
-				row := adw.NewActionRow()
-				row.SetTitle(pkg.Name)
-				row.SetSubtitle(pkg.Version)
-				uh.formulaeExpander.AddRow(&row.Widget)
-			}
-		})
+	if uh.formulaeExpander != nil {
+		formulae, err := homebrew.ListInstalledFormulae()
+		if err != nil {
+			sgtk.RunOnMainThread(func() {
+				if !uh.brewPackagesRefresh.IsCurrent(generation) {
+					return
+				}
+				uh.formulaeExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
+			})
+		} else {
+			sgtk.RunOnMainThread(func() {
+				if !uh.brewPackagesRefresh.IsCurrent(generation) {
+					return
+				}
+				uh.formulaeRows.Clear(func(row *adw.ActionRow) {
+					uh.formulaeExpander.Remove(&row.Widget)
+				})
+				uh.formulaeExpander.SetSubtitle(fmt.Sprintf("%d installed", len(formulae)))
+				uh.formulaeExpander.SetEnableExpansion(len(formulae) > 0)
+				for _, pkg := range formulae {
+					row := adw.NewActionRow()
+					row.SetTitle(pkg.Name)
+					row.SetSubtitle(pkg.Version)
+					uh.formulaeExpander.AddRow(&row.Widget)
+					uh.formulaeRows.Add(row)
+				}
+			})
+		}
 	}
 
 	// Load casks
-	casks, err := homebrew.ListInstalledCasks()
-	if err != nil {
-		sgtk.RunOnMainThread(func() {
-			uh.casksExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
-		})
-	} else {
-		sgtk.RunOnMainThread(func() {
-			uh.casksExpander.SetSubtitle(fmt.Sprintf("%d installed", len(casks)))
-			for _, pkg := range casks {
-				row := adw.NewActionRow()
-				row.SetTitle(pkg.Name)
-				row.SetSubtitle(pkg.Version)
-				uh.casksExpander.AddRow(&row.Widget)
-			}
-		})
+	if uh.casksExpander != nil {
+		casks, err := homebrew.ListInstalledCasks()
+		if err != nil {
+			sgtk.RunOnMainThread(func() {
+				if !uh.brewPackagesRefresh.IsCurrent(generation) {
+					return
+				}
+				uh.casksExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
+			})
+		} else {
+			sgtk.RunOnMainThread(func() {
+				if !uh.brewPackagesRefresh.IsCurrent(generation) {
+					return
+				}
+				uh.caskRows.Clear(func(row *adw.ActionRow) {
+					uh.casksExpander.Remove(&row.Widget)
+				})
+				uh.casksExpander.SetSubtitle(fmt.Sprintf("%d installed", len(casks)))
+				uh.casksExpander.SetEnableExpansion(len(casks) > 0)
+				for _, pkg := range casks {
+					row := adw.NewActionRow()
+					row.SetTitle(pkg.Name)
+					row.SetSubtitle(pkg.Version)
+					uh.casksExpander.AddRow(&row.Widget)
+					uh.caskRows.Add(row)
+				}
+			})
+		}
 	}
 }
 
@@ -443,11 +479,12 @@ func (uh *UserHome) loadFlatpakApplications() {
 
 // onHomebrewSearch handles the Homebrew search action
 func (uh *UserHome) onHomebrewSearch() {
-	query := uh.searchEntry.GetText()
+	query := strings.TrimSpace(uh.searchEntry.GetText())
 	if query == "" {
 		return
 	}
 
+	generation := uh.searchRefresh.Begin()
 	uh.searchResultsExpander.SetSubtitle("Searching...")
 	uh.searchResultsExpander.SetEnableExpansion(false)
 
@@ -455,17 +492,22 @@ func (uh *UserHome) onHomebrewSearch() {
 		results, err := homebrew.Search(query)
 		if err != nil {
 			sgtk.RunOnMainThread(func() {
+				if !uh.searchRefresh.IsCurrent(generation) {
+					return
+				}
 				uh.searchResultsExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			})
 			return
 		}
 
 		sgtk.RunOnMainThread(func() {
-			// Clear previous search results
-			for _, row := range uh.searchResultRows {
-				uh.searchResultsExpander.Remove(&row.Widget)
+			if !uh.searchRefresh.IsCurrent(generation) {
+				return
 			}
-			uh.searchResultRows = nil
+			// Clear previous search results
+			uh.searchResultRows.Clear(func(row *adw.ActionRow) {
+				uh.searchResultsExpander.Remove(&row.Widget)
+			})
 
 			uh.searchResultsExpander.SetSubtitle(fmt.Sprintf("%d results", len(results)))
 			uh.searchResultsExpander.SetEnableExpansion(len(results) > 0)
@@ -474,33 +516,79 @@ func (uh *UserHome) onHomebrewSearch() {
 			for _, result := range results {
 				row := adw.NewActionRow()
 				row.SetTitle(result.Name)
+				row.SetSubtitle(result.Kind.DisplayName())
 
 				installBtn := gtk.NewButtonWithLabel("Install")
 				installBtn.SetValign(gtk.AlignCenterValue)
 				installBtn.AddCssClass("suggested-action")
 
-				pkgName := result.Name
-				clickedCb := func(btn gtk.Button) {
-					go func() {
-						if err := homebrew.Install(pkgName, false); err != nil {
-							sgtk.RunOnMainThread(func() {
-								uh.toastAdder.ShowErrorToast(fmt.Sprintf("Install failed: %v", err))
-							})
-							return
-						}
-						sgtk.RunOnMainThread(func() {
-							uh.toastAdder.ShowToast(actionmsg.Install(homebrew.IsDryRun(), pkgName))
-						})
-					}()
+				result := result
+				gate := &actionstate.Gate{}
+				button := installBtn
+				clickedCb := func(_ gtk.Button) {
+					if !gate.TryStart() {
+						return
+					}
+					uh.confirmHomebrewInstall(result, button, gate)
 				}
 				installBtn.ConnectClicked(&clickedCb)
 
 				row.AddSuffix(&installBtn.Widget)
 				uh.searchResultsExpander.AddRow(&row.Widget)
-				uh.searchResultRows = append(uh.searchResultRows, row)
+				uh.searchResultRows.Add(row)
 			}
 		})
 	}()
+}
+
+func (uh *UserHome) confirmHomebrewInstall(result homebrew.SearchResult, button *gtk.Button, gate *actionstate.Gate) {
+	kind := strings.ToLower(result.Kind.DisplayName())
+	dialog := adw.NewAlertDialog(
+		fmt.Sprintf("Install %s?", result.Name),
+		fmt.Sprintf("Homebrew will install the %s %s and run its package-defined installation steps.", kind, result.Name),
+	)
+	dialog.AddResponse("cancel", "Cancel")
+	dialog.AddResponse("install", "Install")
+	dialog.SetResponseAppearance("install", adw.ResponseSuggestedValue)
+
+	responseCb := func(_ adw.AlertDialog, response string) {
+		if response != "install" {
+			gate.Reset()
+			return
+		}
+		button.SetSensitive(false)
+		button.SetLabel("Installing...")
+		go uh.installHomebrewSearchResult(result, button, gate)
+	}
+	dialog.ConnectResponse(&responseCb)
+	dialog.Present(&uh.applicationsPrefsPage.Widget)
+}
+
+func (uh *UserHome) installHomebrewSearchResult(result homebrew.SearchResult, button *gtk.Button, gate *actionstate.Gate) {
+	err := homebrew.Install(result.Name, result.Kind == homebrew.Cask)
+	dryRun := homebrew.IsDryRun()
+	decision := actionstate.PackageInstall(err == nil, dryRun)
+
+	sgtk.RunOnMainThread(func() {
+		if decision.RestoreControl {
+			gate.Reset()
+			button.SetSensitive(true)
+			button.SetLabel("Install")
+		}
+		if err != nil {
+			uh.toastAdder.ShowErrorToast(fmt.Sprintf("Install failed: %v", err))
+			return
+		}
+		if decision.CompleteControl {
+			gate.Complete()
+			button.SetLabel("Installed")
+			button.SetSensitive(false)
+		}
+		uh.toastAdder.ShowToast(actionmsg.Install(dryRun, result.Name))
+		if decision.Refresh {
+			go uh.loadHomebrewPackages()
+		}
+	})
 }
 
 // launchApp launches a desktop application by its application ID

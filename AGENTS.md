@@ -96,6 +96,12 @@ An agent must not break these:
   changing rows or counts. A live package success removes its row, decrements
   the count/badge, and refreshes; a failed refresh preserves that last known
   row/count state instead of replacing it with an invented zero.
+- **Homebrew application actions are typed and refresh-safe.** Search queries
+  both formula and cask namespaces and carries the result kind into
+  `brew install [--cask]`. Search and installed-package refreshes use separate
+  `actionstate.RefreshGate` generations; stale workers must not replace newer
+  rows. Confirmed installs use an `actionstate.Gate`, restore controls on
+  failure/dry-run, and refresh installed rows only after a live success.
 - **Update badge counts have one state owner.** Bootc, Flatpak, and Homebrew
   counts live in the pure `internal/views/badgestate` package. Refreshes
   replace a provider's count, successful row removals decrement without going

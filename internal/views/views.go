@@ -56,7 +56,9 @@ type UserHome struct {
 	flatpakUpdateRows      []*adw.ActionRow               // Store references for cleanup
 	flatpakUserRows        rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	flatpakSystemRows      rowset.Tracker[*adw.ActionRow] // Store references for cleanup
-	searchResultRows       []*adw.ActionRow               // Store references for cleanup
+	formulaeRows           rowset.Tracker[*adw.ActionRow]
+	caskRows               rowset.Tracker[*adw.ActionRow]
+	searchResultRows       rowset.Tracker[*adw.ActionRow]
 	brewBundlesGroup       *adw.PreferencesGroup
 	brewTrustGroup         *adw.PreferencesGroup
 	brewTrustRows          map[string]*adw.ActionRow
@@ -79,7 +81,10 @@ type UserHome struct {
 
 	// Update badge tracking
 	updateCounts badgestate.Counts
-	brewRefresh  actionstate.RefreshGate
+
+	brewRefresh         actionstate.RefreshGate
+	searchRefresh       actionstate.RefreshGate
+	brewPackagesRefresh actionstate.RefreshGate
 }
 
 // New creates a new UserHome views manager
