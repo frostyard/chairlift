@@ -121,7 +121,7 @@ func TestResolveEffectiveOutputHasNoAnchorsOrAliases(t *testing.T) {
 			scalarNode("second-key"), anchoredValue,
 			aliasKey, scalarNode("via-alias-key"),
 			scalarNode("third-key"), aliasValue,
-			scalarNode("seq"), &yaml.Node{Kind: yaml.SequenceNode, Content: []*yaml.Node{aliasValue, scalarNode("plain")}},
+			scalarNode("seq"), {Kind: yaml.SequenceNode, Content: []*yaml.Node{aliasValue, scalarNode("plain")}},
 		},
 	}
 
