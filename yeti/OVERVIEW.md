@@ -52,7 +52,9 @@ The `views.go` file defines the central `UserHome` struct that holds references 
 
 ### Pages
 
-The UI has six pages, each in its own file under `internal/views/`:
+The UI defines six pages, each in its own file under `internal/views/`. Static
+configuration may omit any functional page whose builder-backed groups are all
+disabled; Help is always retained:
 
 | Page | File | Purpose |
 |------|------|---------|
@@ -1041,28 +1043,35 @@ Configurable maintenance scripts (from `config.yml` `actions` entries) are execu
 
 `internal/navigation` is the single puregotk-free authority for sidebar page
 order, titles, icons, advertised shortcuts, registered accelerators, and the
-complete page-selection transition. `internal/app` registers
-`navigation.Bindings()`, while the custom shortcuts dialog in
-`internal/window` renders `navigation.Shortcuts()`; the two surfaces therefore
-cannot advertise and register different keys.
+complete page-selection transition. Its item metadata also maps every page to
+the groups that actually build content. `navigation.VisibleItems` filters that
+inventory using `Config.IsGroupEnabled`, always retains Help, and assigns
+compacted Alt+number keys. `internal/window` uses the result for its sidebar,
+stack, actions, initial selection, and shortcuts dialog. After construction,
+`internal/app` registers `navigation.Bindings(window.NavigationItems())`, so
+the registered and advertised keys use the exact same visible inventory.
 
-The canonical accelerators are:
+The accelerators are:
 
 - `Ctrl+Q` → quit
 - `Ctrl+?` → show shortcuts dialog
-- `Alt+1` through `Alt+6` → navigate to each page (Applications, Maintenance, Updates, System, Features, Help)
-- `F1` → navigate to Help (the same `win.navigate-help` action as `Alt+6`)
+- `Alt+1` through `Alt+N` → navigate to the first through Nth visible page in
+  canonical order, with omitted pages leaving no gaps
+- `F1` → navigate to Help (the same `win.navigate-help` action as Help's
+  current compacted Alt+number binding)
 
 Mouse row activation and keyboard navigation actions both call
-`Window.navigateToPage`. That method calls `navigation.Resolve`, rejects a
-page that was not constructed, then applies all four successful outcomes:
-select the canonical sidebar row, set the stack's visible child, update the
-content-page title, and set `NavigationSplitView.show-content` true so a
-collapsed layout reveals the destination. `internal/navigation` tests every
-canonical page's index/title/visible-child/reveal result, unavailable and
-unknown rejection, the complete advertised-to-registered shortcut inventory,
-the F1 Help binding, and static app/window wiring. No `_test.go` is added to
-the puregotk-importing `internal/window` or `internal/app` packages.
+`Window.navigateToPage`. That method calls `navigation.Resolve` against the
+visible inventory, rejects an omitted or unconstructed page, then applies all
+four successful outcomes: select the compacted sidebar row, set the stack's
+visible child, update the content-page title, and set
+`NavigationSplitView.show-content` true so a collapsed layout reveals the
+destination. `internal/navigation` tests every functional page with all of its
+groups disabled, each builder-backed group individually enabled, the Help-only
+fallback, compacted indices/accelerators, unavailable and unknown rejection,
+the complete advertised-to-registered shortcut inventory, the F1 Help
+binding, and static app/window wiring. No `_test.go` is added to the
+puregotk-importing `internal/window` or `internal/app` packages.
 
 Note: `GtkShortcutsWindow` is not available in puregotk, so a custom `adw.Window` with `adw.PreferencesGroup` rows is used for the shortcuts dialog.
 

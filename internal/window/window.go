@@ -41,6 +41,7 @@ type Window struct {
 	configError *config.LoadError
 	views       *views.UserHome
 	updateBadge *gtk.Button // Badge for updates count
+	navItems    []navigation.Item
 }
 
 func init() {
@@ -102,6 +103,8 @@ func New(app adw.Application) *Window {
 func (w *Window) buildUI() {
 	start := time.Now()
 
+	w.navItems = navigation.VisibleItems(w.config.IsGroupEnabled)
+
 	// Create views manager
 	w.views = views.New(w.config, w)
 	log.Printf("window: views built in %s", time.Since(start))
@@ -151,7 +154,7 @@ func (w *Window) buildSidebar() *adw.NavigationPage {
 	w.sidebarList.AddCssClass("navigation-sidebar")
 
 	// Add navigation items
-	for _, item := range navigation.Items() {
+	for _, item := range w.navItems {
 		row := w.createNavRow(item)
 		w.sidebarList.Append(&row.Widget)
 	}
@@ -208,7 +211,7 @@ func (w *Window) buildContentArea() *adw.NavigationPage {
 	w.contentStack.SetTransitionType(gtk.StackTransitionTypeCrossfadeValue)
 
 	// Add pages to the stack
-	items := navigation.Items()
+	items := w.navItems
 	for _, item := range items {
 		page := w.views.GetPage(item.Name)
 		if page != nil {
@@ -290,7 +293,7 @@ func (w *Window) setupActions() {
 	w.AddAction(aboutAction)
 
 	// Navigation actions
-	for _, item := range navigation.Items() {
+	for _, item := range w.navItems {
 		itemName := item.Name // Capture for closure
 		action := gio.NewSimpleAction("navigate-"+itemName, nil)
 		navActivateCb := func(action gio.SimpleAction, param uintptr) {
@@ -303,7 +306,7 @@ func (w *Window) setupActions() {
 
 // navigateToPage navigates to a specific page
 func (w *Window) navigateToPage(pageName string) {
-	transition, ok := navigation.Resolve(pageName, func(name string) bool {
+	transition, ok := navigation.Resolve(pageName, w.navItems, func(name string) bool {
 		_, exists := w.pages[name]
 		return exists
 	})
@@ -356,7 +359,7 @@ func (w *Window) onShowShortcuts() {
 	navGroup := adw.NewPreferencesGroup()
 	navGroup.SetTitle("Navigation")
 
-	for _, shortcut := range navigation.Shortcuts() {
+	for _, shortcut := range navigation.Shortcuts(w.navItems) {
 		if shortcut.Group != navigation.GroupNavigation {
 			continue
 		}
@@ -376,7 +379,7 @@ func (w *Window) onShowShortcuts() {
 	generalGroup := adw.NewPreferencesGroup()
 	generalGroup.SetTitle("General")
 
-	for _, shortcut := range navigation.Shortcuts() {
+	for _, shortcut := range navigation.Shortcuts(w.navItems) {
 		if shortcut.Group != navigation.GroupGeneral {
 			continue
 		}
@@ -398,6 +401,12 @@ func (w *Window) onShowShortcuts() {
 
 	dialog.SetContent(&toolbarView.Widget)
 	dialog.Present()
+}
+
+// NavigationItems returns the visible, compacted page inventory used by this
+// window. The application uses the same inventory to register accelerators.
+func (w *Window) NavigationItems() []navigation.Item {
+	return append([]navigation.Item(nil), w.navItems...)
 }
 
 // onShowAbout shows the about dialog
