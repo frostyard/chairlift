@@ -73,7 +73,7 @@ order below. Help is always retained.
 | User Flatpak | `flatpak_user_group` | User-installed Flatpak applications |
 | System Flatpak | `flatpak_system_group` | System-wide Flatpak applications |
 | Homebrew | `brew_group` | Installed Homebrew formulae and casks |
-| Brew Search | `brew_search_group` | Search and install Homebrew packages |
+| Brew Search | `brew_search_group` | Search and install Homebrew formulae and casks with an explicit package-type confirmation |
 | Brew Bundles | `brew_bundles_group` | Install packages from Brewfile bundles |
 
 `applications_installed_group` supports:
