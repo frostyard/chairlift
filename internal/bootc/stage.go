@@ -22,7 +22,6 @@ type EventType string
 
 const (
 	EventMessage  EventType = "message"
-	EventError    EventType = "error"
 	EventComplete EventType = "complete"
 )
 

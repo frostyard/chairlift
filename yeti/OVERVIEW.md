@@ -984,7 +984,10 @@ Each wrapper in `internal/` follows a consistent shape:
 `bootc.StageUpdate(ctx, progressCh)` runs `pkexec /usr/libexec/bootc-update-stage`, streaming combined stdout+stderr line-by-line to the caller's channel and closing it when done:
 1. Caller creates a `chan bootc.ProgressEvent` and passes it to `StageUpdate`
 2. Each non-empty output line becomes an `EventMessage`; the channel is closed after either an `EventComplete` (success) or the function returning an error
-3. Event types: `EventMessage`, `EventError`, `EventComplete` — deliberately simpler than a step/percent model because the stage script's own output is unstructured log lines, not a structured progress protocol
+3. Event types: `EventMessage` and `EventComplete` — deliberately simpler than
+   a step/percent model because the stage script's own output is unstructured
+   log lines, not a structured progress protocol. Failures return as errors;
+   they are not duplicated into the event stream.
 4. The view goroutine (`internal/views/updates_page.go`, `onBootcStageClicked`) reads events and dispatches UI updates to the main thread via `sgtk.RunOnMainThread`
 
 **Caller-visible outcomes.** Both context-taking bootc functions classify failures with `errors.Is` against the context sentinels (never `==` on `ctx.Err()`), and `bootc.Error` has an `Err error` field plus `Unwrap() error` so callers can tell them apart:
@@ -1000,7 +1003,7 @@ The deadline and cancellation messages differ in both functions, and neither eve
 
 ### bootc progress UI (updates page)
 
-`onBootcStageClicked()` (`internal/views/updates_page.go`) drives the "System Update" expander: it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes the `ProgressEvent` channel on a second goroutine — `EventMessage` lines are appended to a log expander with timestamps, `EventError` surfaces an error toast, and `EventComplete` re-queries `bootc.GetStatus` to refresh the staged/booted summary and re-enables the button. After `wg.Wait()` returns, the handler re-reads live `bootc.GetStatus()` and calls `uh.updateCounts.Set(badgestate.Bootc, 0|1)` plus `uh.updateBadgeCount()` unconditionally in both dry-run and live mode (this is a plain read, not a mutation, so it always reflects reality); it then sets `expander`'s subtitle from that same live read unconditionally as well, but shows `actionmsg.BootcStage(bootc.IsDryRun(), staged)` for the completion toast — an explicit preview string under dry-run rather than one of the "staged"/"up to date" strings that read as a verified completion claim about a click that, under dry-run, checked and changed nothing. The system page has a separate, simpler bootc path: `loadBootcStatus` (gated on `IsBootcBootedCached()`) calls `bootc.GetStatus` to show the booted/staged/rollback deployment images, versions, and digests, with no staging controls of its own — staging happens on the Updates page.
+`onBootcStageClicked()` (`internal/views/updates_page.go`) drives the "System Update" expander: it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes the `ProgressEvent` channel on a second goroutine — `EventMessage` lines are appended to a log expander with timestamps, and `EventComplete` marks the activity complete. A returned `stageErr` drives the error subtitle and toast after the stream closes; there is no duplicate error event. After `wg.Wait()` returns, the handler re-reads live `bootc.GetStatus()` and calls `uh.updateCounts.Set(badgestate.Bootc, 0|1)` plus `uh.updateBadgeCount()` unconditionally in both dry-run and live mode (this is a plain read, not a mutation, so it always reflects reality); it then sets `expander`'s subtitle from that same live read unconditionally as well, but shows `actionmsg.BootcStage(bootc.IsDryRun(), staged)` for the completion toast — an explicit preview string under dry-run rather than one of the "staged"/"up to date" strings that read as a verified completion claim about a click that, under dry-run, checked and changed nothing. The system page has a separate, simpler bootc path: `loadBootcStatus` (gated on `IsBootcBootedCached()`) calls `bootc.GetStatus` to show the booted/staged/rollback deployment images, versions, and digests, with no staging controls of its own — staging happens on the Updates page.
 
 ### Update badge tracking
 
@@ -1176,7 +1179,7 @@ page_name:
 |--------|---------|
 | `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO) |
 | `github.com/frostyard/snowkit` | GObject registration, main-thread dispatch |
-| `github.com/frostyard/updex` | Updex Go library for feature reads and helper binary (currently pinned to v1.2.3 in go.mod) |
+| `github.com/frostyard/updex` | Updex Go library for feature reads and helper binary (currently pinned to v1.3.0 in go.mod) |
 | `gopkg.in/yaml.v3` | YAML config parsing |
 | `golang.org/x/text` | Title-casing OS release info keys |
 

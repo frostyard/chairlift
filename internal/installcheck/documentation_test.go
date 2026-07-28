@@ -1,0 +1,101 @@
+package installcheck
+
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+)
+
+func readRepoFile(t *testing.T, relative string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(RepoRoot(), relative))
+	if err != nil {
+		t.Fatalf("read %s: %v", relative, err)
+	}
+	return string(data)
+}
+
+func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
+	t.Run("updex version comes from go.mod", func(t *testing.T) {
+		goMod := readRepoFile(t, "go.mod")
+		match := regexp.MustCompile(`(?m)^\s*github\.com/frostyard/updex\s+(v\S+)`).FindStringSubmatch(goMod)
+		if len(match) != 2 {
+			t.Fatal("go.mod does not contain a parseable github.com/frostyard/updex version")
+		}
+		overview := readRepoFile(t, filepath.Join("yeti", "OVERVIEW.md"))
+		want := "currently pinned to " + match[1] + " in go.mod"
+		if !strings.Contains(overview, want) {
+			t.Errorf("yeti/OVERVIEW.md does not contain %q", want)
+		}
+	})
+
+	t.Run("bootc event contract has no duplicate error event", func(t *testing.T) {
+		for _, path := range []string{
+			filepath.Join("internal", "bootc", "stage.go"),
+			filepath.Join("internal", "views", "updates_page.go"),
+			filepath.Join("yeti", "OVERVIEW.md"),
+			filepath.Join("yeti", "package-managers.md"),
+		} {
+			if strings.Contains(readRepoFile(t, path), "EventError") {
+				t.Errorf("%s still documents or implements removed EventError", path)
+			}
+		}
+	})
+
+	t.Run("historical port guide is marked", func(t *testing.T) {
+		if !strings.Contains(readRepoFile(t, "README-go-port.md"), "**Historical document.**") {
+			t.Error("README-go-port.md is not clearly marked historical")
+		}
+	})
+
+	t.Run("configuration fallback wording is consistent", func(t *testing.T) {
+		for _, path := range []string{
+			"README.md",
+			"CONFIG.md",
+			filepath.Join("docs", "reference.md"),
+		} {
+			document := readRepoFile(t, path)
+			for _, fact := range []string{
+				"beside the",
+				"executable",
+				"current working",
+				"development fallback",
+			} {
+				if !strings.Contains(document, fact) {
+					t.Errorf("%s does not describe %q", path, fact)
+				}
+			}
+		}
+	})
+
+	t.Run("optional visibility and install prefix are current", func(t *testing.T) {
+		index := readRepoFile(t, filepath.Join("docs", "index.md"))
+		if strings.Contains(index, "Groups for unavailable tools are hidden automatically") {
+			t.Error("docs/index.md retains the false uniform runtime-visibility claim")
+		}
+		if !strings.Contains(index, "default `/usr`") {
+			t.Error("docs/index.md does not document the /usr install default")
+		}
+	})
+
+	t.Run("known stale claims stay removed", func(t *testing.T) {
+		current := strings.Join([]string{
+			readRepoFile(t, "README.md"),
+			readRepoFile(t, "CONFIG.md"),
+			readRepoFile(t, filepath.Join("docs", "index.md")),
+			readRepoFile(t, filepath.Join("docs", "reference.md")),
+		}, "\n")
+		for _, stale := range []string{
+			"updates_status_group",
+			"Help page coming soon",
+			"Help is coming soon",
+			"Groups for unavailable tools are hidden automatically",
+		} {
+			if strings.Contains(current, stale) {
+				t.Errorf("current documentation still contains stale claim %q", stale)
+			}
+		}
+	})
+}

@@ -1,5 +1,10 @@
 # ChairLift (Go/puregotk version)
 
+> **Historical document.** This file records the original Go-port proposal and
+> is not current build or installation guidance. ChairLift is now wholly Go
+> and puregotk-based. Use [README.md](README.md), [CONFIG.md](CONFIG.md), and
+> [docs/index.md](docs/index.md) for the maintained instructions.
+
 A modern GTK4/Libadwaita system management tool written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings.
 
 ## Features

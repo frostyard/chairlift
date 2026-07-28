@@ -245,6 +245,9 @@ remain test-binary-free because GTK libraries are unavailable on CI.
 ### Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
+Changes that affect behavior, configuration, dependencies, or installation
+layout should also follow the
+[documentation consistency checklist](docs/documentation-consistency.md).
 
 ---
 

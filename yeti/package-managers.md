@@ -384,10 +384,12 @@ The deadline and cancellation messages differ, and neither surfaces as `signal: 
 ### Event types
 
 - `EventMessage` — one line of stage-script output
-- `EventError` — surfaced by the view layer when `StageUpdate` returns an error
 - `EventComplete` — sent once, after successful completion
 
-This is intentionally flatter than a step/percent progress model, because the stage script emits unstructured log lines, not a structured progress protocol.
+This is intentionally flatter than a step/percent progress model, because the
+stage script emits unstructured log lines, not a structured progress protocol.
+Failures are returned by `StageUpdate` and handled once by the view after the
+channel closes; there is no error event duplicating that path.
 
 ### Dry-run behavior
 
@@ -418,13 +420,12 @@ for event := range progressCh {
         switch evt.Type {
         case bootc.EventMessage:
             // append to log expander with timestamp
-        case bootc.EventError:
-            // show error toast
         case bootc.EventComplete:
-            // re-query GetStatus to refresh staged/booted summary
+            // mark streamed activity complete
         }
     })
 }
+// After the channel closes, handle the returned error or re-query GetStatus.
 ```
 
 ### Progress UI (`internal/views/updates_page.go`)
