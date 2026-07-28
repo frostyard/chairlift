@@ -27,10 +27,49 @@ Wraps the `brew` CLI. Uses JSON output (`--json=v2`) for structured data where a
 | `Cleanup()` | `brew cleanup` | 30m | State-changing; returns output string |
 | `BundleDump(path, force)` | `brew bundle dump [--file=<path>] [--force]` | 30m | State-changing; writes to file path |
 | `BundleInstall(path)` | `brew bundle install [--file=<path>]` | 30m | State-changing |
+| `AvailableBundles(paths)` | none | — | Discovers immediate `*.Brewfile` entries from every configured directory |
 
 ### State-changing commands
 
 The `stateChangingCommands` map has exactly ten keys: `install`, `uninstall`, `remove`, `upgrade`, `update`, `pin`, `unpin`, `bundle`, `cleanup`, `trust`. The map now drives two things. First, when dry-run is active these commands are skipped entirely and return a mock message. Second, `commandTimeout(args []string)` — a pure selector reading only `args` and this map — returns `mutationTimeout` (30 minutes) when `args[0]` is one of the ten keys and `readTimeout` (30 seconds) otherwise, including for empty args; `runBrewCommand` passes its result to `context.WithTimeout`. Read commands therefore keep the old 30-second budget while installs, upgrades and bundle operations — which download and build — get 30 minutes. `homebrew_test.go`'s `TestCommandTimeout` iterates the real map and asserts `len(stateChangingCommands) == 10`, so a newly added key cannot go untested.
+
+### Configured Brew bundle discovery
+
+`AvailableBundles(paths []string) ([]Bundle, error)`
+(`internal/homebrew/bundles.go`) does no Homebrew invocation. It resolves each
+non-empty configured directory to an absolute path and scans only its immediate
+entries whose names end exactly in `.Brewfile`. A candidate must resolve to a
+regular file. Its display name is the filename without `.Brewfile`, its
+absolute path is retained for `brew bundle install --file=...`, and a
+first-line `#` comment becomes its optional description. Reading the first
+line is bounded to 64 KiB, so a malformed file cannot force an unbounded
+description allocation.
+
+The outcomes are deliberately lossless and deterministic:
+
+- a configured directory that does not exist contributes no rows and no
+  error, allowing one config to name paths for several distribution variants;
+- an empty path, unreadable/non-directory configured path, broken candidate,
+  or unreadable Brewfile contributes a joined diagnostic, while bundles from
+  other readable paths are still returned;
+- a readable directory with no immediate `*.Brewfile` regular files
+  contributes no rows and no error;
+- repeating the same cleaned absolute file path contributes one row;
+- same-named Brewfiles from different directories both remain visible, sorted
+  by name and then absolute path, so configuration order never silently hides
+  a distinct bundle.
+
+`loadBrewBundles` on the Applications page calls discovery from a worker
+goroutine and applies every widget change through one
+`sgtk.RunOnMainThread` closure. `brew_bundles_group` is independent of
+`brew_group`, so this path neither reads nor refreshes the formulae/casks
+expanders. A successful live `BundleInstall` leaves the clicked row labelled
+`Installed` and permanently insensitive. A failed install restores the
+`Install` action. A successful dry-run uses
+`actionmsg.BundleInstall(...).Complete == false`, shows an explicit preview,
+and restores the action because nothing was installed. Each row owns a
+`bundleview.InstallGate`, so a second callback cannot overlap a running
+install even if invoked independently of GTK's insensitive-button guard.
 
 ### Error handling
 
@@ -73,12 +112,13 @@ The upgrade-failure toast text adapts to whether that UI is actually available: 
 
 ### View-layer toast and decision helpers (`internal/views/actionmsg`, `internal/views/trustmsg`)
 
-Two of the five small, puregotk-free packages under `internal/views/` (the others are `internal/views/rowset`, `internal/views/flatpakstatus` and `internal/views/featurestatus`, each documented in its own subsection below) hold the text (and, at three call sites, the accompanying UI decision) that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
+Two of the six small, puregotk-free packages under `internal/views/` (the others are `internal/views/bundleview`, `internal/views/rowset`, `internal/views/flatpakstatus` and `internal/views/featurestatus`, each documented in its own subsection below) hold the text and, at four call sites, the accompanying UI decision that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
 
 - **`internal/views/trustmsg`** (added for issue #57) — `UpgradeMessage(pkgName string, trustGroupAvailable bool) string`, the toast shown when a Homebrew upgrade fails with an `*homebrew.UntrustedTapError`; see "Tap trust" above.
-- **`internal/views/actionmsg`** (added for issue #56, this dry-run fix) — builds the toast text for every state-changing view action across the maintenance, applications, updates, and features pages, and, at the three call sites where the view also mutates a row/group/switch on success, the execute/mutate/confirm decision itself, so the same table-driven test in `actionmsg_test.go` that checks the toast also checks the gate (see "Dry-run mode" in [OVERVIEW.md](./OVERVIEW.md#dry-run-mode) for the general rule this implements). Exported surface, all added across this feature's chunks (c1-c5):
+- **`internal/views/actionmsg`** (added for issue #56 and extended for issue #8) — builds the toast text for every state-changing view action across the maintenance, applications, updates, and features pages, and, at the four call sites where the view also mutates a row/group/switch on success, the execute/complete/mutate/confirm decision itself, so the same table-driven test in `actionmsg_test.go` that checks the toast also checks the gate (see "Dry-run mode" in [OVERVIEW.md](./OVERVIEW.md#dry-run-mode) for the general rule this implements). Exported surface:
   - `ScriptDecision{Execute bool; Toast string}` + `MaintenanceScript(dryRun bool, title string) ScriptDecision` — gates whether `runMaintenanceAction` constructs and runs the configured script's `exec.Cmd` at all (c1)
   - `BundleDump(dryRun bool, path string) string` — Homebrew Brewfile dump toast (c1)
+  - `BundleInstallDecision{Complete bool; Toast string}` + `BundleInstall(dryRun bool, name string) BundleInstallDecision` — completes a successfully installed bundle row in live mode, or resets it after a dry-run preview (issue #8)
   - `Cleanup(dryRun bool, tool, output string) string` — Homebrew/Flatpak cleanup toast (c1)
   - `Install(dryRun bool, pkgName string) string` — Homebrew install toast (c2)
   - `Uninstall(dryRun bool, appID string) string` — Flatpak uninstall toast (c2)
@@ -90,11 +130,35 @@ Two of the five small, puregotk-free packages under `internal/views/` (the other
   - `FeatureToggleDecision{Confirm bool; Toast string}` + `FeatureToggle(dryRun, enable bool, name string) FeatureToggleDecision` — gates whether `onFeatureToggled`'s switch confirms the flip or reverts it (c5)
   - `FeatureUpdate(dryRun bool) string` — Features page "Update" button toast (c5)
 
-  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`, `FeatureUpdate`) are correct as-is because the state-changing/no-op decision for those actions is already made and already tested one layer down, in the relevant wrapper package (`internal/homebrew`, `internal/flatpak`, `internal/bootc`, `internal/updex`) — there is nothing left for the view to gate beyond the toast wording. The three decision-struct functions exist because their call sites have no such wrapper-layer gate for the *second*, UI-side effect (script execution has no wrapper package at all; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip doesn't touch).
+  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`, `FeatureUpdate`) are correct as-is because the state-changing/no-op decision for those actions is already made and already tested one layer down, in the relevant wrapper package (`internal/homebrew`, `internal/flatpak`, `internal/bootc`, `internal/updex`) — there is nothing left for the view to gate beyond the toast wording. The four decision-struct functions exist because their call sites have no such wrapper-layer gate for the *second*, UI-side effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch.
+
+### View-layer Brew bundle state (`internal/views/bundleview`)
+
+`internal/views/bundleview` is one of the six puregotk-free leaf packages
+under `internal/views`. It owns the bundle group's load presentation and its
+per-row concurrency state, leaving `applications_page.go` to construct and
+update widgets only.
+
+`Present(count, warning, homebrewAvailable) Presentation` enumerates the
+group-level outcomes: zero bundles without a warning produces the
+`No bundles available` placeholder; zero with a warning produces the
+`Bundles unavailable` placeholder carrying that warning; one bundle uses a
+singular available description; several use a plural description; partial
+results append the warning while keeping their rows; and any of those states
+with Homebrew unavailable appends that install actions are disabled. The view
+composes none of this group/placeholder text itself.
+
+`InstallGate` is zero-value-ready and has three states. `TryStart` atomically
+moves idle to running and rejects every concurrent caller; `Reset` returns a
+failed or dry-run action to idle; `Complete` permanently closes a live
+successful action. `bundleview_test.go` races 64 callers against one gate and
+asserts exactly one acquisition, then separately covers reset and completion.
+The type has no GTK dependency and the callback still performs every actual
+button mutation on the main thread.
 
 ### View-layer row bookkeeping (`internal/views/rowset`)
 
-`internal/views/rowset` is one of the five puregotk-free leaf packages under `internal/views/` (its siblings are `internal/views/actionmsg`, `internal/views/trustmsg`, `internal/views/flatpakstatus` and `internal/views/featurestatus`). It holds the clear-then-repopulate bookkeeping for rows a view adds to an expander, so a list that is reloaded does not accumulate stale rows from an earlier load. Like `actionmsg` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
+`internal/views/rowset` is one of the six puregotk-free leaf packages under `internal/views/` (its siblings are `internal/views/actionmsg`, `internal/views/bundleview`, `internal/views/trustmsg`, `internal/views/flatpakstatus` and `internal/views/featurestatus`). It holds the clear-then-repopulate bookkeeping for rows a view adds to an expander, so a list that is reloaded does not accumulate stale rows from an earlier load. Like `actionmsg`, `bundleview` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
 
 Exported surface:
 
@@ -107,7 +171,7 @@ Exported surface:
 
 ### View-layer Flatpak update status (`internal/views/flatpakstatus`)
 
-`internal/views/flatpakstatus` is the fourth of the five puregotk-free leaf packages under `internal/views/` (the fifth is `internal/views/featurestatus`, documented in the subsection below). It turns the outcome of the two Flatpak update queries — how many updates are known, and which of the user/system installations could not be checked — into the Flatpak updates expander's subtitle text plus whether the expander should be expandable. Like `actionmsg`, `trustmsg` and `rowset` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); like `rowset` it imports nothing at all outside the standard library (`fmt`).
+`internal/views/flatpakstatus` is one of the six puregotk-free leaf packages under `internal/views/`. It turns the outcome of the two Flatpak update queries — how many updates are known, and which of the user/system installations could not be checked — into the Flatpak updates expander's subtitle text plus whether the expander should be expandable. Like `actionmsg`, `bundleview`, `trustmsg` and `rowset` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); like `rowset` it imports nothing at all outside the standard library (`fmt`).
 
 Exported surface:
 
@@ -124,7 +188,7 @@ The practical consequence is that a total failure — both installations unquery
 
 ### View-layer feature update status (`internal/views/featurestatus`)
 
-`internal/views/featurestatus` is the fifth puregotk-free leaf package under `internal/views/`. It owns every string and every decision the Features page's updex update check needs: a feature row's subtitle, whether that feature has an update, and the features group's description. Like `actionmsg`, `trustmsg`, `rowset` and `flatpakstatus` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`). Unlike them it imports one non-standard-library package, `internal/updex`, for the `CheckResult` type; that is safe because `internal/updex` is itself puregotk-free (`go list -deps ./internal/updex | grep -c puregotk` prints `0`), and `go list -deps ./internal/views/featurestatus | grep -c puregotk` prints `0` too.
+`internal/views/featurestatus` is one of the six puregotk-free leaf packages under `internal/views/`. It owns every string and every decision the Features page's updex update check needs: a feature row's subtitle, whether that feature has an update, and the features group's description. Like `actionmsg`, `bundleview`, `trustmsg`, `rowset` and `flatpakstatus` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`). Unlike them it imports one non-standard-library package, `internal/updex`, for the `CheckResult` type; that is safe because `internal/updex` is itself puregotk-free (`go list -deps ./internal/updex | grep -c puregotk` prints `0`), and `go list -deps ./internal/views/featurestatus | grep -c puregotk` prints `0` too.
 
 Exported surface:
 
@@ -343,6 +407,18 @@ Every wrapper has `SetDryRun(bool)` and `IsDryRun() bool`. Behavior varies by wr
 | views (custom maintenance scripts) | `runMaintenanceAction` never constructs an `exec.Cmd` (no `pkexec`, no direct script exec); logs `[DRY-RUN] Would execute: ...` instead | Yes |
 
 Custom maintenance scripts (config.yml `actions` entries) have no wrapper package of their own, so `internal/views` carries its own `SetDryRun`/`IsDryRun` (`internal/views/dryrun.go`) rather than reusing one of the above. Unlike the other wrappers, the execution gate for this one is not just an `if IsDryRun()` branch inline in the view: `internal/views/actionmsg.MaintenanceScript(dryRun, title)` returns a `ScriptDecision{Execute, Toast}` computed once, before the goroutine spawns, and both the "does it execute" question and the toast text come from that single tested function call — not two independently-maintained conditionals. See "View-layer toast and decision helpers" above for the full `actionmsg`/`trustmsg` function and type list.
+
+The Applications page's configured Brew bundle rows use the same paired
+decision pattern. `homebrew.BundleInstall` already skips `brew bundle install`
+under dry-run because `bundle` is state-changing, but a nil wrapper error does
+not mean the row should read `Installed`: `actionmsg.BundleInstall` returns
+`BundleInstallDecision{Complete: false, Toast: <preview>}` for that outcome,
+and the callback resets both its `bundleview.InstallGate` and button. A live
+success returns `Complete: true`, permanently completes the gate, labels the
+button `Installed`, and leaves it insensitive. A command failure resets the
+gate and button without showing a success/preview toast. `TryStart` and
+`SetSensitive(false)` both happen before the worker goroutine starts, so
+repeated callbacks cannot overlap an install.
 
 The Applications page's per-result Homebrew install button (`onHomebrewSearch`, `internal/views/applications_page.go`) and per-app Flatpak uninstall buttons (`loadFlatpakApplications`, both the user- and system-installation branches) show toasts built by `actionmsg.Install(homebrew.IsDryRun(), pkgName)` and `actionmsg.Uninstall(flatpak.IsDryRun(), appID)` respectively, rather than an unconditional "installed"/"uninstalled" string — the wrapper's own dry-run skip already makes `Install`/`Uninstall` a no-op, so the toast must say "would be installed/uninstalled" instead of claiming it happened. The list refresh after uninstall (`go uh.loadFlatpakApplications()`) stays unconditional since it re-queries live state either way. That refresh does not append to whatever is already on screen: each success branch of `loadFlatpakApplications` first clears the rows the previous load recorded — `uh.flatpakUserRows.Clear(...)` / `uh.flatpakSystemRows.Clear(...)`, two `rowset.Tracker[*adw.ActionRow]` values, each removing its rows from its own expander — and then rebuilds and re-adds them, all inside *one* `sgtk.RunOnMainThread` closure per expander (the two expanders keep separate closures and separate trackers). Keeping the clear and the repopulate in a single closure is what makes overlapping reloads safe without any locking: `RunOnMainThread` serializes closures FIFO on glib's idle queue, so two concurrent reloads run as clear+add, then clear+add, and cannot interleave into clear/clear/add/add. There is deliberately no mutex, generation counter, or in-flight flag. Each success branch also calls `SetEnableExpansion(len(apps) > 0)`, matching `onHomebrewSearch`; the not-installed and error branches only change the subtitle and deliberately leave the existing rows in place. Caveat: the Homebrew formulae and casks expanders (`loadHomebrewPackages`) still have no such cleanup and can accumulate duplicate rows on reload — that is tracked separately by #64.
 

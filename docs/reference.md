@@ -71,7 +71,13 @@ types are errors. Changes require restarting ChairLift.
 
 `brew_bundles_group` supports:
 
-- `bundles_paths` — list of directories to search for Brewfile bundles (default: `["/usr/share/snow/bundles"]`)
+- `bundles_paths` — directories searched, without recursion, for
+  `*.Brewfile` bundles (default: `["/usr/share/snow/bundles"]`). Missing
+  directories are ignored; other path errors are shown while readable
+  directories still contribute rows. Exact duplicate paths are collapsed,
+  but same-named Brewfiles in different directories remain separate and show
+  their absolute paths. The first-line `#` comment, when present, is displayed
+  as the bundle description.
 
 ### Maintenance Page (`maintenance_page`)
 

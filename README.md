@@ -129,7 +129,14 @@ chairlift
 
 ### Bundle Installation
 
-ChairLift supports installing curated package bundles (Brewfiles) located in `/usr/share/snow/bundles`. Each bundle is a pre-configured set of packages for specific use cases.
+The Applications page discovers curated `*.Brewfile` bundles from every
+directory configured in `applications_page.brew_bundles_group.bundles_paths`
+(`/usr/share/snow/bundles` by default). Each bundle row shows its source path
+and an Install action; a leading comment in the Brewfile becomes its
+description. Missing directories are harmless, while unreadable configured
+paths are reported without hiding bundles found elsewhere. Repeated clicks
+cannot start overlapping installs, and `--dry-run` shows a preview without
+leaving the row marked as installed.
 
 ---
 

@@ -9,6 +9,7 @@ import (
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
+	"github.com/frostyard/chairlift/internal/views/bundleview"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -156,6 +157,112 @@ func (uh *UserHome) buildApplicationsPage() {
 
 		page.Add(group)
 	}
+
+	// Curated Homebrew bundles group
+	if uh.config.IsGroupEnabled("applications_page", "brew_bundles_group") {
+		group := adw.NewPreferencesGroup()
+		group.SetTitle("Brew Bundles")
+		group.SetDescription("Loading configured Brewfile bundles...")
+		page.Add(group)
+		uh.brewBundlesGroup = group
+
+		var bundlePaths []string
+		groupCfg := uh.config.GetGroupConfig("applications_page", "brew_bundles_group")
+		if groupCfg != nil {
+			bundlePaths = append(bundlePaths, groupCfg.BundlesPaths...)
+		}
+		go uh.loadBrewBundles(bundlePaths)
+	}
+}
+
+// loadBrewBundles discovers configured Brewfiles on a worker goroutine and
+// builds all bundle rows on GTK's main thread.
+func (uh *UserHome) loadBrewBundles(paths []string) {
+	bundles, discoveryErr := homebrew.AvailableBundles(paths)
+	homebrewAvailable := homebrew.IsInstalledCached()
+	warning := ""
+	if discoveryErr != nil {
+		log.Printf("Error discovering Brew bundles: %v", discoveryErr)
+		warning = discoveryErr.Error()
+	}
+	presentation := bundleview.Present(len(bundles), warning, homebrewAvailable)
+
+	sgtk.RunOnMainThread(func() {
+		if uh.brewBundlesGroup == nil {
+			return
+		}
+		uh.brewBundlesGroup.SetDescription(presentation.Description)
+
+		if len(bundles) == 0 {
+			row := adw.NewActionRow()
+			row.SetTitle(presentation.PlaceholderTitle)
+			row.SetSubtitle(presentation.PlaceholderSubtitle)
+			uh.brewBundlesGroup.Add(&row.Widget)
+			return
+		}
+
+		for _, bundle := range bundles {
+			row := adw.NewActionRow()
+			row.SetTitle(bundle.Name)
+			subtitle := bundle.Path
+			if bundle.Description != "" {
+				subtitle = fmt.Sprintf("%s — %s", bundle.Description, bundle.Path)
+			}
+			row.SetSubtitle(subtitle)
+
+			installBtn := gtk.NewButtonWithLabel("Install")
+			installBtn.SetValign(gtk.AlignCenterValue)
+			installBtn.AddCssClass("suggested-action")
+			installBtn.SetSensitive(homebrewAvailable)
+			if !homebrewAvailable {
+				installBtn.SetTooltipText("Homebrew is not installed")
+			}
+
+			gate := &bundleview.InstallGate{}
+			bundle := bundle
+			clickedCb := func(btn gtk.Button) {
+				if !gate.TryStart() {
+					return
+				}
+				btn.SetSensitive(false)
+				btn.SetLabel("Installing...")
+
+				go func() {
+					if err := homebrew.BundleInstall(bundle.Path); err != nil {
+						sgtk.RunOnMainThread(func() {
+							gate.Reset()
+							btn.SetLabel("Install")
+							btn.SetSensitive(homebrewAvailable)
+							uh.toastAdder.ShowErrorToast(fmt.Sprintf(
+								"Could not install Brew bundle %s: %v",
+								bundle.Name,
+								err,
+							))
+						})
+						return
+					}
+
+					decision := actionmsg.BundleInstall(homebrew.IsDryRun(), bundle.Name)
+					sgtk.RunOnMainThread(func() {
+						if decision.Complete {
+							gate.Complete()
+							btn.SetLabel("Installed")
+							btn.SetSensitive(false)
+						} else {
+							gate.Reset()
+							btn.SetLabel("Install")
+							btn.SetSensitive(homebrewAvailable)
+						}
+						uh.toastAdder.ShowToast(decision.Toast)
+					})
+				}()
+			}
+			installBtn.ConnectClicked(&clickedCb)
+
+			row.AddSuffix(&installBtn.Widget)
+			uh.brewBundlesGroup.Add(&row.Widget)
+		}
+	})
 }
 
 // loadHomebrewPackages loads installed Homebrew packages asynchronously

@@ -55,7 +55,13 @@ page_name:
 - `brew_group`: Installed Homebrew formulae and casks
 - `brew_search_group`: Search and install Homebrew packages
 - `brew_bundles_group`: Curated Homebrew package bundles
-  - `bundles_paths`: Array of directory paths to search for Brewfile bundles (default: `['/usr/share/snow/bundles']`)
+  - `bundles_paths`: Array of directories searched for immediate
+    `*.Brewfile` entries (default: `['/usr/share/snow/bundles']`). Missing
+    directories are ignored so one configuration can cover multiple
+    distribution variants. Other unreadable paths are reported in the group
+    while bundles from readable paths remain available. Repeating the same
+    path does not duplicate a row; same-named Brewfiles in different
+    directories remain distinct and show their full paths.
 
 ### Maintenance Page (`maintenance_page`)
 

@@ -64,7 +64,9 @@ An agent must not break these:
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget
-  from another group exists — nil-guard cross-group widget access.
+  from another group exists — nil-guard cross-group widget access. In
+  particular, `brew_bundles_group` is independent of `brew_group`; bundle
+  discovery and installs must not assume the formulae/casks expanders exist.
 - **Configuration precedence fails closed.** Only a missing candidate advances
   to the next configuration search path. The first file that exists is
   authoritative: read, YAML, or schema errors must disable every configurable

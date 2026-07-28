@@ -56,6 +56,7 @@ type UserHome struct {
 	flatpakUserRows        rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	flatpakSystemRows      rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	searchResultRows       []*adw.ActionRow               // Store references for cleanup
+	brewBundlesGroup       *adw.PreferencesGroup
 	brewTrustGroup         *adw.PreferencesGroup
 	brewTrustRows          map[string]*adw.ActionRow
 	outdatedRows           []*adw.ActionRow // Store references for cleanup
