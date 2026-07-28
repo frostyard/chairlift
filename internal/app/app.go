@@ -10,6 +10,7 @@ import (
 	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/navigation"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/views"
 	"github.com/frostyard/chairlift/internal/window"
@@ -119,14 +120,9 @@ func (a *Application) onActivate() {
 
 // setupKeyboardShortcuts sets up application-wide keyboard shortcuts
 func (a *Application) setupKeyboardShortcuts() {
-	a.SetAccelsForAction("app.quit", []string{"<Primary>q"})
-	a.SetAccelsForAction("win.show-shortcuts", []string{"<Primary>question"})
-	a.SetAccelsForAction("win.navigate-applications", []string{"<Alt>1"})
-	a.SetAccelsForAction("win.navigate-maintenance", []string{"<Alt>2"})
-	a.SetAccelsForAction("win.navigate-updates", []string{"<Alt>3"})
-	a.SetAccelsForAction("win.navigate-system", []string{"<Alt>4"})
-	a.SetAccelsForAction("win.navigate-features", []string{"<Alt>5"})
-	a.SetAccelsForAction("win.navigate-help", []string{"<Alt>6"})
+	for _, binding := range navigation.Bindings() {
+		a.SetAccelsForAction(binding.Action, binding.Accelerators)
+	}
 }
 
 // registerOptions registers command line options
