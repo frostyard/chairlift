@@ -1052,6 +1052,24 @@ system facts, not values ChairLift decides; the Makefile and
 `internal/updex.HelperPath` exist to conform to them, matching the layout
 `.goreleaser.yaml`'s nFPM packages already use.
 
+**System-integration delivery:** GoReleaser publishes two mutually exclusive
+package shapes. `frostyard-chairlift` is the existing self-contained package
+with both application binaries, desktop assets, maintainer config, and
+policies. `frostyard-chairlift-system-integration` is the root-owned companion
+for a user-scoped GUI delivery such as the Homebrew cask: its build filter
+contains only `chairlift-updex-helper`, and its contents contain the two
+policies plus `/usr/share/chairlift/config.yml`. The packages declare conflicts
+because they intentionally own the same privileged files.
+
+The integration package does **not** ship `bootc-update-stage`. That operation
+is distro policy, so an image that enables `bootc_updates_group` must provide a
+trusted implementation at the existing fixed
+`/usr/libexec/bootc-update-stage` path. Keeping the path fixed preserves the
+PolicyKit executable boundary; making it a user-writable config value would
+allow the GUI configuration to redirect a root execution. The page already
+gates the group on `bootc.StageScriptAvailable`, so an absent distro helper
+hides the operation.
+
 ### Maintenance action execution
 
 Configurable maintenance scripts (from `config.yml` `actions` entries) are executed via `runMaintenanceAction()` in `internal/views/maintenance_page.go`. The pattern:

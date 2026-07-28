@@ -64,19 +64,26 @@ type ReleaseConfig struct {
 	Footer string `yaml:"footer"`
 }
 
-// NfpmConfig is the subset of an nfpms[] entry relevant to install-location
-// and license consistency: where packaged binaries land (Bindir), where
-// explicitly listed files (policies, maintainer config, wrapper script,
-// icons, ...) land
-// (Contents), and the package's declared license (License).
+// NfpmConfig is the subset of an nfpms[] entry relevant to package identity,
+// build selection, conflicts, install locations, and license consistency.
 type NfpmConfig struct {
-	Bindir   string        `yaml:"bindir"`
-	License  string        `yaml:"license"`
-	Contents []NfpmContent `yaml:"contents"`
+	ID          string        `yaml:"id"`
+	PackageName string        `yaml:"package_name"`
+	IDs         []string      `yaml:"ids"`
+	Bindir      string        `yaml:"bindir"`
+	License     string        `yaml:"license"`
+	Conflicts   []string      `yaml:"conflicts"`
+	Contents    []NfpmContent `yaml:"contents"`
+	Formats     []string      `yaml:"formats"`
 }
 
 // NfpmContent is one nfpm contents[] entry's source/destination pair.
 type NfpmContent struct {
-	Src string `yaml:"src"`
-	Dst string `yaml:"dst"`
+	Src      string       `yaml:"src"`
+	Dst      string       `yaml:"dst"`
+	FileInfo NfpmFileInfo `yaml:"file_info"`
+}
+
+type NfpmFileInfo struct {
+	Mode uint32 `yaml:"mode"`
 }
