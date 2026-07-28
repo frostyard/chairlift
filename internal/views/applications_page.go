@@ -306,9 +306,48 @@ func (uh *UserHome) loadHomebrewPackages() {
 				uh.formulaeExpander.SetSubtitle(fmt.Sprintf("%d installed", len(formulae)))
 				uh.formulaeExpander.SetEnableExpansion(len(formulae) > 0)
 				for _, pkg := range formulae {
+					pkg := pkg
 					row := adw.NewActionRow()
 					row.SetTitle(pkg.Name)
-					row.SetSubtitle(pkg.Version)
+					subtitle := pkg.Version
+					if pkg.Pinned {
+						subtitle += " • Pinned"
+					}
+					row.SetSubtitle(subtitle)
+
+					pinLabel := "Pin"
+					if pkg.Pinned {
+						pinLabel = "Unpin"
+					}
+					pinBtn := gtk.NewButtonWithLabel(pinLabel)
+					pinBtn.SetValign(gtk.AlignCenterValue)
+					pinBtn.SetTooltipText(pinLabel + " formula")
+
+					uninstallBtn := gtk.NewButtonWithLabel("Uninstall")
+					uninstallBtn.SetValign(gtk.AlignCenterValue)
+					uninstallBtn.AddCssClass("destructive-action")
+					uninstallBtn.SetTooltipText("Uninstall formula")
+
+					gate := &actionstate.Gate{}
+					controls := []*gtk.Button{pinBtn, uninstallBtn}
+					pinClickedCb := func(_ gtk.Button) {
+						if !gate.TryStart() {
+							return
+						}
+						uh.confirmHomebrewPin(pkg.Name, !pkg.Pinned, pinBtn, controls, gate)
+					}
+					pinBtn.ConnectClicked(&pinClickedCb)
+
+					uninstallClickedCb := func(_ gtk.Button) {
+						if !gate.TryStart() {
+							return
+						}
+						uh.confirmHomebrewUninstall(pkg.Name, homebrew.Formula, uninstallBtn, controls, gate)
+					}
+					uninstallBtn.ConnectClicked(&uninstallClickedCb)
+
+					row.AddSuffix(&pinBtn.Widget)
+					row.AddSuffix(&uninstallBtn.Widget)
 					uh.formulaeExpander.AddRow(&row.Widget)
 					uh.formulaeRows.Add(row)
 				}
@@ -337,14 +376,191 @@ func (uh *UserHome) loadHomebrewPackages() {
 				uh.casksExpander.SetSubtitle(fmt.Sprintf("%d installed", len(casks)))
 				uh.casksExpander.SetEnableExpansion(len(casks) > 0)
 				for _, pkg := range casks {
+					pkg := pkg
 					row := adw.NewActionRow()
 					row.SetTitle(pkg.Name)
 					row.SetSubtitle(pkg.Version)
+
+					uninstallBtn := gtk.NewButtonWithLabel("Uninstall")
+					uninstallBtn.SetValign(gtk.AlignCenterValue)
+					uninstallBtn.AddCssClass("destructive-action")
+					uninstallBtn.SetTooltipText("Uninstall cask")
+
+					gate := &actionstate.Gate{}
+					controls := []*gtk.Button{uninstallBtn}
+					uninstallClickedCb := func(_ gtk.Button) {
+						if !gate.TryStart() {
+							return
+						}
+						uh.confirmHomebrewUninstall(pkg.Name, homebrew.Cask, uninstallBtn, controls, gate)
+					}
+					uninstallBtn.ConnectClicked(&uninstallClickedCb)
+
+					row.AddSuffix(&uninstallBtn.Widget)
 					uh.casksExpander.AddRow(&row.Widget)
 					uh.caskRows.Add(row)
 				}
 			})
 		}
+	}
+}
+
+func (uh *UserHome) confirmHomebrewPin(
+	name string,
+	pin bool,
+	primary *gtk.Button,
+	controls []*gtk.Button,
+	gate *actionstate.Gate,
+) {
+	action := "Unpin"
+	description := "Unpinned formulae resume receiving upgrades."
+	if pin {
+		action = "Pin"
+		description = "Pinned formulae are skipped by Homebrew upgrades until they are unpinned."
+	}
+
+	dialog := adw.NewAlertDialog(fmt.Sprintf("%s %s?", action, name), description)
+	dialog.AddResponse("cancel", "Cancel")
+	dialog.AddResponse("confirm", action)
+	dialog.SetResponseAppearance("confirm", adw.ResponseSuggestedValue)
+
+	responseCb := func(_ adw.AlertDialog, response string) {
+		if response != "confirm" {
+			gate.Reset()
+			return
+		}
+		setHomebrewControlsSensitive(controls, false)
+		primary.SetLabel(action + "ning...")
+		go uh.runHomebrewPin(name, pin, primary, controls, gate)
+	}
+	dialog.ConnectResponse(&responseCb)
+	dialog.Present(&uh.applicationsPrefsPage.Widget)
+}
+
+func (uh *UserHome) runHomebrewPin(
+	name string,
+	pin bool,
+	primary *gtk.Button,
+	controls []*gtk.Button,
+	gate *actionstate.Gate,
+) {
+	var err error
+	if pin {
+		err = homebrew.Pin(name)
+	} else {
+		err = homebrew.Unpin(name)
+	}
+	dryRun := homebrew.IsDryRun()
+	decision := actionstate.PackagePin(err == nil, dryRun)
+
+	idleLabel := "Unpin"
+	completeLabel := "Unpinned"
+	errorPrefix := "Unpin failed"
+	if pin {
+		idleLabel = "Pin"
+		completeLabel = "Pinned"
+		errorPrefix = "Pin failed"
+	}
+	uh.finishHomebrewPackageMutation(
+		decision,
+		err,
+		errorPrefix,
+		actionmsg.Pin(dryRun, name, pin),
+		idleLabel,
+		completeLabel,
+		primary,
+		controls,
+		gate,
+	)
+}
+
+func (uh *UserHome) confirmHomebrewUninstall(
+	name string,
+	kind homebrew.PackageKind,
+	primary *gtk.Button,
+	controls []*gtk.Button,
+	gate *actionstate.Gate,
+) {
+	dialog := adw.NewAlertDialog(
+		fmt.Sprintf("Uninstall %s?", name),
+		fmt.Sprintf("Homebrew will remove the %s %s and its package-managed files.", strings.ToLower(kind.DisplayName()), name),
+	)
+	dialog.AddResponse("cancel", "Cancel")
+	dialog.AddResponse("uninstall", "Uninstall")
+	dialog.SetResponseAppearance("uninstall", adw.ResponseDestructiveValue)
+
+	responseCb := func(_ adw.AlertDialog, response string) {
+		if response != "uninstall" {
+			gate.Reset()
+			return
+		}
+		setHomebrewControlsSensitive(controls, false)
+		primary.SetLabel("Uninstalling...")
+		go uh.runHomebrewUninstall(name, kind, primary, controls, gate)
+	}
+	dialog.ConnectResponse(&responseCb)
+	dialog.Present(&uh.applicationsPrefsPage.Widget)
+}
+
+func (uh *UserHome) runHomebrewUninstall(
+	name string,
+	kind homebrew.PackageKind,
+	primary *gtk.Button,
+	controls []*gtk.Button,
+	gate *actionstate.Gate,
+) {
+	err := homebrew.Uninstall(name, kind == homebrew.Cask)
+	dryRun := homebrew.IsDryRun()
+	decision := actionstate.PackageUninstall(err == nil, dryRun)
+	uh.finishHomebrewPackageMutation(
+		decision,
+		err,
+		"Uninstall failed",
+		actionmsg.Uninstall(dryRun, name),
+		"Uninstall",
+		"Uninstalled",
+		primary,
+		controls,
+		gate,
+	)
+}
+
+func (uh *UserHome) finishHomebrewPackageMutation(
+	decision actionstate.Decision,
+	err error,
+	errorPrefix string,
+	toast string,
+	idleLabel string,
+	completeLabel string,
+	primary *gtk.Button,
+	controls []*gtk.Button,
+	gate *actionstate.Gate,
+) {
+	sgtk.RunOnMainThread(func() {
+		if decision.RestoreControl {
+			gate.Reset()
+			primary.SetLabel(idleLabel)
+			setHomebrewControlsSensitive(controls, true)
+		}
+		if err != nil {
+			uh.toastAdder.ShowErrorToast(fmt.Sprintf("%s: %v", errorPrefix, err))
+			return
+		}
+		if decision.CompleteControl {
+			gate.Complete()
+			primary.SetLabel(completeLabel)
+			setHomebrewControlsSensitive(controls, false)
+		}
+		uh.toastAdder.ShowToast(toast)
+		if decision.Refresh {
+			go uh.loadHomebrewPackages()
+		}
+	})
+}
+
+func setHomebrewControlsSensitive(controls []*gtk.Button, sensitive bool) {
+	for _, button := range controls {
+		button.SetSensitive(sensitive)
 	}
 }
 

@@ -40,6 +40,18 @@ func TestApplicationsPageWiresTypedSearchInstallState(t *testing.T) {
 		`go uh.loadHomebrewPackages()`,
 		`uh.formulaeRows.Clear(func(row *adw.ActionRow)`,
 		`uh.caskRows.Clear(func(row *adw.ActionRow)`,
+		`uh.confirmHomebrewPin(pkg.Name, !pkg.Pinned, pinBtn, controls, gate)`,
+		`uh.confirmHomebrewUninstall(pkg.Name, homebrew.Formula, uninstallBtn, controls, gate)`,
+		`uh.confirmHomebrewUninstall(pkg.Name, homebrew.Cask, uninstallBtn, controls, gate)`,
+		`dialog.SetResponseAppearance("uninstall", adw.ResponseDestructiveValue)`,
+		`primary.SetLabel("Uninstalling...")`,
+		`homebrew.Uninstall(name, kind == homebrew.Cask)`,
+		`actionstate.PackageUninstall(err == nil, dryRun)`,
+		`homebrew.Pin(name)`,
+		`homebrew.Unpin(name)`,
+		`actionstate.PackagePin(err == nil, dryRun)`,
+		`setHomebrewControlsSensitive(controls, false)`,
+		`uh.finishHomebrewPackageMutation(`,
 	} {
 		if !strings.Contains(text, required) {
 			t.Errorf("applications-page wiring does not contain %q", required)

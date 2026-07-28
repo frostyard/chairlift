@@ -22,13 +22,13 @@ Wraps the `brew` CLI. Uses JSON output (`--json=v2`) for structured data where a
 | `ListOutdated()` | `brew outdated --json=v2` | 30s | JSON parsed; returns both formulae and casks |
 | `Search(query)` | `brew search --formula <query>`, then `brew search --cask <query>` | 30s each | Text output parsed into typed formula/cask results; one namespace's normal no-match exit is treated as empty |
 | `Install(name, isCask)` | `brew install [--cask] <name>` | 30m | State-changing, dry-run aware |
-| `Uninstall(name, isCask)` | `brew uninstall [--cask] <name>` | 30m | State-changing |
+| `Uninstall(name, isCask)` | `brew uninstall [--cask] <name>` | 30m | State-changing, dry-run aware |
 | `Upgrade(name)` | `brew upgrade [<name>]` | 30m | State-changing; empty name upgrades all |
 | `Update()` | `brew update` | 30m | State-changing |
-| `Pin(name)` / `Unpin(name)` | `brew pin/unpin <name>` | 30m | State-changing |
+| `Pin(name)` / `Unpin(name)` | `brew pin/unpin <name>` | 30m | State-changing, dry-run aware |
 | `Cleanup()` | `brew cleanup` | 30m | State-changing; returns output string |
 | `BundleDump(path, force)` | `brew bundle dump [--file=<path>] [--force]` | 30m | State-changing; writes to file path |
-| `BundleInstall(path)` | `brew bundle install [--file=<path>]` | 30m | State-changing |
+| `BundleInstall(path)` | `brew bundle install [--file=<path>]` | 30m | State-changing, dry-run aware |
 | `AvailableBundles(paths)` | none | — | Discovers immediate `*.Brewfile` entries from every configured directory |
 
 ### State-changing commands
@@ -98,6 +98,26 @@ generation, nil-guards the independently configurable installed-package
 group, and clear-then-repopulates separate formula/cask `rowset.Tracker`
 values.
 
+### Installed Homebrew actions
+
+Each installed formula row has Pin/Unpin and Uninstall controls; each cask row
+has Uninstall. A formula's pinned state is visible in both its subtitle and
+the Pin/Unpin label. The row shares one `actionstate.Gate` across all of its
+controls, so a pin and uninstall cannot overlap. Every action requires an
+Adwaita confirmation: pin/unpin is suggested, while uninstall is destructive
+and identifies whether the target is a formula or cask.
+
+After confirmation, all controls on the row become insensitive and the
+primary control shows `Pinning...`, `Unpinning...`, or `Uninstalling...`;
+only then does a worker goroutine call `homebrew.Pin`, `Unpin`, or
+`Uninstall(name, isCask)`. `actionstate.PackagePin` and
+`PackageUninstall` enumerate the outcomes. Failure restores the original
+controls and reports the error, and dry-run success restores them with an
+explicit preview toast. Live success completes the old controls and starts
+the generation-guarded `loadHomebrewPackages` refresh. The refresh, rather
+than the action callback, owns row replacement, so overlapping loads cannot
+publish stale installed state.
+
 ### Error handling
 
 `runBrewCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"brew"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `runStageStreaming` gives `internal/bootc`. No exported function takes a `context.Context`: callers get deadlines, not cancellation.
@@ -148,7 +168,8 @@ Two of the eight small, puregotk-free packages under `internal/views/` (the othe
   - `BundleInstallDecision{Complete bool; Toast string}` + `BundleInstall(dryRun bool, name string) BundleInstallDecision` — completes a successfully installed bundle row in live mode, or resets it after a dry-run preview (issue #8)
   - `Cleanup(dryRun bool, tool, output string) string` — Homebrew/Flatpak cleanup toast (c1)
   - `Install(dryRun bool, pkgName string) string` — Homebrew install toast (c2)
-  - `Uninstall(dryRun bool, appID string) string` — Flatpak uninstall toast (c2)
+  - `Uninstall(dryRun bool, name string) string` — Homebrew or Flatpak uninstall toast (c2)
+  - `Pin(dryRun bool, name string, pin bool) string` — Homebrew formula pin/unpin toast (c2)
   - `Upgrade(dryRun bool, pkgName string) string` — Homebrew per-package upgrade toast (c3)
   - `Update(dryRun bool, appID string) string` — Flatpak per-app update toast (c3)
   - `SelfUpdate(dryRun bool, tool string) string` — Homebrew self-update ("Update Homebrew" button) toast (c3)
@@ -157,13 +178,13 @@ Two of the eight small, puregotk-free packages under `internal/views/` (the othe
   - `FeatureToggleDecision{Confirm bool; Toast string}` + `FeatureToggle(dryRun, enable bool, name string) FeatureToggleDecision` — gates whether `onFeatureToggled`'s switch confirms the flip or reverts it (c5)
   - `FeatureUpdate(dryRun bool) string` — Features page "Update" button toast (c5)
 
-  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`, `FeatureUpdate`) are correct as-is because the state-changing/no-op decision for those actions is already made and already tested one layer down, in the relevant wrapper package (`internal/homebrew`, `internal/flatpak`, `internal/bootc`, `internal/updex`) — there is nothing left for the view to gate beyond the toast wording. The four decision-struct functions exist because their call sites have no such wrapper-layer gate for the *second*, UI-side effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch.
+  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`, `FeatureUpdate`) select toast wording only. Where an application action also changes row controls or requests an inventory refresh, the separate tested `actionstate` decision owns that UI-side effect. The four decision-struct functions in `actionmsg` exist because their call sites have no wrapper- or `actionstate`-level gate for the *second* effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch.
 
 ### View-layer update action state (`internal/views/actionstate`)
 
 `internal/views/actionstate` is one of the eight puregotk-free leaf packages
 under `internal/views`. It owns the state machines and complete outcome tables
-for the Updates page's Homebrew mutation controls:
+for the Applications and Updates pages' Homebrew mutation controls:
 
 - `Gate.TryStart` atomically moves idle to running and rejects every repeated
   callback while running; `Reset` makes a failed, previewed, or fully-refreshed
@@ -175,6 +196,10 @@ for the Updates page's Homebrew mutation controls:
   restores the control without changing rows; dry-run success also restores
   it without a refresh; live success requests both immediate row removal and
   a full outdated-metadata refresh.
+- `PackageInstall`, `PackageUninstall`, and `PackagePin` share the installed
+  inventory mutation outcomes: failure and dry-run success restore the row
+  controls without a refresh; live success completes the old controls and
+  requests a generation-guarded installed-package refresh.
 - `MetadataUpdate(succeeded, dryRun)` returns exactly three outcomes: failure
   and dry-run success restore the top-level control without refreshing; live
   success requests a refresh and deliberately does not restore the control
@@ -190,9 +215,9 @@ for the Updates page's Homebrew mutation controls:
 `actionstate_test.go` table-tests every outcome, races 64 callers against one
 action gate (requiring exactly one acquisition), and proves 64 concurrent
 refresh requests receive unique generations with exactly one current.
-`wiring_test.go` statically checks the
-puregotk-importing `updates_page.go` uses those decisions, progress labels,
-gates, row removal, count decrement, versioned refresh callbacks, and
+`wiring_test.go` and `applications_wiring_test.go` statically check the
+puregotk-importing views use those decisions, confirmation/progress states,
+shared gates, row removal, count decrement, versioned refresh callbacks, and
 clear/add bookkeeping; no `_test.go` is added to `internal/views`.
 
 ### View-layer update badge state (`internal/views/badgestate`)
@@ -543,6 +568,15 @@ completion claims. The Homebrew path restores its install control after a
 dry-run and does not refresh, because nothing changed; only a live success
 completes the control and starts the generation-guarded installed-package
 refresh described above.
+
+Installed Homebrew formula/cask rows follow the same decision path for
+uninstall, and formula rows add pin/unpin. They confirm before starting,
+disable every mutation control on the row while the worker runs, use
+`actionmsg.Uninstall`/`actionmsg.Pin` for live versus preview wording, restore
+on failure or dry-run, and refresh the installed inventory only after live
+success. New Flatpak discovery and install deliberately remain in the
+configured external manager; ChairLift's direct Flatpak UI lists and
+uninstalls installed applications.
 
 The Flatpak list refresh after uninstall remains unconditional because it
 re-queries live state either way. Each successful loader branch first clears

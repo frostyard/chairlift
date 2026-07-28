@@ -10,7 +10,7 @@ ChairLift provides six configurable pages:
 
 | Page | Description |
 |------|-------------|
-| **Applications** | Browse, search, install, and uninstall Flatpak (user and system) and Homebrew packages. Install curated Brewfile bundles. |
+| **Applications** | Search/install Homebrew formulae and casks; uninstall installed formulae/casks; pin/unpin formulae; install curated Brewfile bundles. List/uninstall Flatpaks and launch the configured external manager for Flatpak discovery and installation. |
 | **Maintenance** | Run cleanup tasks for Homebrew and Flatpak, and execute custom maintenance scripts. |
 | **Updates** | Stage bootc system updates, apply Flatpak updates, upgrade Homebrew packages, and trust Homebrew taps. |
 | **System** | View OS information, bootc deployment status, and launch a system health monitor. |
@@ -53,7 +53,7 @@ groups configuration enables, not on runtime tool availability.
 | Tool | Used For |
 |------|----------|
 | Homebrew | Package management (formulae, casks, bundles) |
-| Flatpak | Application management and updates |
+| Flatpak | Installed-application listing/uninstall and updates; new installs are delegated to the configured external manager |
 | bootc + `/usr/libexec/bootc-update-stage` | Staged bootc system updates |
 | Updex | System feature toggles |
 
