@@ -140,3 +140,35 @@ func TestTrackerClearOnZeroValue(t *testing.T) {
 		t.Fatalf("Len() after second Clear = %d, want 0", got)
 	}
 }
+
+func TestTrackerRemoveOneRowAndPreserveTheRest(t *testing.T) {
+	container := &fakeContainer{}
+	var tracker Tracker[fakeRow]
+	for _, title := range []string{"alpha", "beta", "gamma"} {
+		row := fakeRow{title: title}
+		container.add(row)
+		tracker.Add(row)
+	}
+
+	if !tracker.Remove(fakeRow{title: "beta"}, container.remove) {
+		t.Fatal("Remove(beta) = false, want true")
+	}
+	if got, want := container.titles(), []string{"alpha", "gamma"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("container after Remove(beta) = %v, want %v", got, want)
+	}
+	if got := tracker.Len(); got != 2 {
+		t.Fatalf("Len() after Remove(beta) = %d, want 2", got)
+	}
+
+	if tracker.Remove(fakeRow{title: "missing"}, container.remove) {
+		t.Fatal("Remove(missing) = true, want false")
+	}
+	if got, want := container.removed, []string{"beta"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("removed log = %v, want %v", got, want)
+	}
+
+	tracker.Clear(container.remove)
+	if got, want := container.removed, []string{"beta", "alpha", "gamma"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("removed log after Clear = %v, want %v", got, want)
+	}
+}

@@ -9,9 +9,9 @@
 // function runs, so logic that must be tested cannot live in the view packages.
 // See docs/agents/skills/gtk-headless-tests.md.
 //
-// The tracker never names a widget type: it is generic over the row type, and
-// removal is performed by a caller-supplied callback, which is what keeps the
-// package dependency-free.
+// The tracker never names a widget type: it is generic over a comparable row
+// type, and removal is performed by a caller-supplied callback, which is what
+// keeps the package dependency-free.
 package rowset
 
 // Tracker records the rows a view has added to a container so they can all be
@@ -20,7 +20,7 @@ package rowset
 // The zero value is ready to use. Tracker is a plain value type with no
 // locking: main-thread safety is a property of the call site, which must keep
 // the clear-and-repopulate sequence inside a single main-thread closure.
-type Tracker[T any] struct {
+type Tracker[T comparable] struct {
 	rows []T
 }
 
@@ -32,6 +32,24 @@ func (t *Tracker[T]) Add(row T) {
 // Len reports how many rows are currently tracked.
 func (t *Tracker[T]) Len() int {
 	return len(t.rows)
+}
+
+// Remove invokes remove for the first tracked row equal to target, forgets
+// that row, preserves the order of every other row, and reports whether it
+// found a match.
+func (t *Tracker[T]) Remove(target T, remove func(T)) bool {
+	for index, row := range t.rows {
+		if row != target {
+			continue
+		}
+		remove(row)
+		copy(t.rows[index:], t.rows[index+1:])
+		var zero T
+		t.rows[len(t.rows)-1] = zero
+		t.rows = t.rows[:len(t.rows)-1]
+		return true
+	}
+	return false
 }
 
 // Clear invokes remove once for every tracked row, in insertion order, then

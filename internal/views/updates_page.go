@@ -12,6 +12,7 @@ import (
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
+	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/flatpakstatus"
 	"github.com/frostyard/chairlift/internal/views/trustmsg"
 
@@ -86,8 +87,14 @@ func (uh *UserHome) buildUpdatesPage() {
 		updateBtn := gtk.NewButtonWithLabel("Update")
 		updateBtn.SetValign(gtk.AlignCenterValue)
 		updateBtn.AddCssClass("suggested-action")
+		updateGate := &actionstate.Gate{}
 		updateClickedCb := func(btn gtk.Button) {
-			uh.onUpdateHomebrewClicked()
+			if !updateGate.TryStart() {
+				return
+			}
+			btn.SetSensitive(false)
+			btn.SetLabel("Updating...")
+			go uh.updateHomebrew(btn, updateGate)
 		}
 		updateBtn.ConnectClicked(&updateClickedCb)
 
@@ -103,7 +110,7 @@ func (uh *UserHome) buildUpdatesPage() {
 		page.Add(group)
 
 		// Load outdated packages asynchronously
-		go uh.loadOutdatedPackages()
+		uh.loadOutdatedPackages()
 	}
 
 	// Untrusted Homebrew Taps group - hidden unless untrusted taps with
@@ -216,7 +223,7 @@ func (uh *UserHome) trustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
 			uh.toastAdder.ShowToast(decision.Toast)
 
 			// Newly trusted packages may now appear as outdated.
-			go uh.loadOutdatedPackages()
+			uh.loadOutdatedPackages()
 		} else {
 			// Dry-run: nothing was actually trusted, so the row must not
 			// disappear from the Untrusted Taps list. Reset the button
@@ -234,56 +241,92 @@ func (uh *UserHome) trustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
 // against brew_updates_group being disabled — trustTap only depends on
 // brew_trust_group and has no way to know whether outdatedExpander exists.
 func (uh *UserHome) loadOutdatedPackages() {
+	uh.loadOutdatedPackagesWithDone(nil)
+}
+
+// loadOutdatedPackagesWithDone starts a versioned refresh. Only the newest
+// request may replace rows/count, while every supplied completion callback
+// still runs so a superseded action cannot remain disabled.
+func (uh *UserHome) loadOutdatedPackagesWithDone(done func(bool)) {
+	generation := uh.brewRefresh.Begin()
+	go uh.loadOutdatedPackagesGeneration(generation, done)
+}
+
+func (uh *UserHome) loadOutdatedPackagesGeneration(generation uint64, done func(bool)) {
 	if uh.outdatedExpander == nil {
+		if done != nil {
+			sgtk.RunOnMainThread(func() {
+				done(false)
+			})
+		}
 		return
 	}
 
 	if !homebrew.IsInstalledCached() {
-		uh.updateCountMu.Lock()
-		uh.brewUpdateCount = 0
-		uh.updateCountMu.Unlock()
-		uh.updateBadgeCount()
-
 		sgtk.RunOnMainThread(func() {
-			for _, row := range uh.outdatedRows {
-				uh.outdatedExpander.Remove(&row.Widget)
+			if !uh.brewRefresh.IsCurrent(generation) {
+				if done != nil {
+					done(false)
+				}
+				return
 			}
-			uh.outdatedRows = nil
+			uh.updateCountMu.Lock()
+			uh.brewUpdateCount = 0
+			uh.updateCountMu.Unlock()
+			uh.updateBadgeCount()
+			uh.outdatedRows.Clear(func(row *adw.ActionRow) {
+				uh.outdatedExpander.Remove(&row.Widget)
+			})
 			uh.outdatedExpander.SetSubtitle("Homebrew not installed")
+			uh.outdatedExpander.SetEnableExpansion(false)
+			if done != nil {
+				done(false)
+			}
 		})
 		return
 	}
 
 	packages, err := homebrew.ListOutdated()
+	uh.updateCountMu.Lock()
+	currentCount := uh.brewUpdateCount
+	uh.updateCountMu.Unlock()
+	refresh := actionstate.OutdatedRefresh(err == nil, currentCount, len(packages))
 	if err != nil {
-		uh.updateCountMu.Lock()
-		uh.brewUpdateCount = 0
-		uh.updateCountMu.Unlock()
-		uh.updateBadgeCount()
-
 		sgtk.RunOnMainThread(func() {
-			for _, row := range uh.outdatedRows {
-				uh.outdatedExpander.Remove(&row.Widget)
+			if !uh.brewRefresh.IsCurrent(generation) {
+				if done != nil {
+					done(false)
+				}
+				return
 			}
-			uh.outdatedRows = nil
-			uh.outdatedExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
+			uh.outdatedExpander.SetSubtitle(fmt.Sprintf("Error refreshing updates: %v", err))
+			if done != nil {
+				done(false)
+			}
 		})
 		return
 	}
 
-	// Update the badge count
-	uh.updateCountMu.Lock()
-	uh.brewUpdateCount = len(packages)
-	uh.updateCountMu.Unlock()
-	uh.updateBadgeCount()
-
 	sgtk.RunOnMainThread(func() {
-		for _, row := range uh.outdatedRows {
-			uh.outdatedExpander.Remove(&row.Widget)
+		if !uh.brewRefresh.IsCurrent(generation) {
+			if done != nil {
+				done(false)
+			}
+			return
 		}
-		uh.outdatedRows = nil
+		presentation := actionstate.OutdatedPresentation(refresh.Count)
+		uh.updateCountMu.Lock()
+		uh.brewUpdateCount = refresh.Count
+		uh.updateCountMu.Unlock()
+		uh.updateBadgeCount()
+		if refresh.ReplaceRows {
+			uh.outdatedRows.Clear(func(row *adw.ActionRow) {
+				uh.outdatedExpander.Remove(&row.Widget)
+			})
+		}
 
-		uh.outdatedExpander.SetSubtitle(fmt.Sprintf("%d packages available", len(packages)))
+		uh.outdatedExpander.SetSubtitle(presentation.Subtitle)
+		uh.outdatedExpander.SetEnableExpansion(presentation.Expandable)
 		for _, pkg := range packages {
 			row := adw.NewActionRow()
 			row.SetTitle(pkg.Name)
@@ -291,10 +334,19 @@ func (uh *UserHome) loadOutdatedPackages() {
 
 			upgradeBtn := gtk.NewButtonWithLabel("Upgrade")
 			upgradeBtn.SetValign(gtk.AlignCenterValue)
+			upgradeGate := &actionstate.Gate{}
 			pkgName := pkg.Name
 			clickedCb := func(btn gtk.Button) {
+				if !upgradeGate.TryStart() {
+					return
+				}
+				btn.SetSensitive(false)
+				btn.SetLabel("Upgrading...")
 				go func() {
-					if err := homebrew.Upgrade(pkgName); err != nil {
+					err := homebrew.Upgrade(pkgName)
+					dryRun := homebrew.IsDryRun()
+					decision := actionstate.PackageUpgrade(err == nil, dryRun)
+					if err != nil {
 						var trustErr *homebrew.UntrustedTapError
 						msg := fmt.Sprintf("Upgrade failed: %v", err)
 						if errors.As(err, &trustErr) {
@@ -305,12 +357,42 @@ func (uh *UserHome) loadOutdatedPackages() {
 							msg = trustmsg.UpgradeMessage(pkgName, uh.brewTrustGroup != nil)
 						}
 						sgtk.RunOnMainThread(func() {
+							if decision.RestoreControl {
+								upgradeGate.Reset()
+								btn.SetSensitive(true)
+								btn.SetLabel("Upgrade")
+							}
 							uh.toastAdder.ShowErrorToast(msg)
 						})
 						return
 					}
 					sgtk.RunOnMainThread(func() {
-						uh.toastAdder.ShowToast(actionmsg.Upgrade(homebrew.IsDryRun(), pkgName))
+						uh.toastAdder.ShowToast(actionmsg.Upgrade(dryRun, pkgName))
+						if decision.RemoveRow {
+							upgradeGate.Complete()
+						}
+						if decision.RemoveRow && uh.outdatedRows.Remove(row, func(row *adw.ActionRow) {
+							uh.outdatedExpander.Remove(&row.Widget)
+						}) {
+							uh.updateCountMu.Lock()
+							if uh.brewUpdateCount > 0 {
+								uh.brewUpdateCount--
+							}
+							remaining := uh.brewUpdateCount
+							uh.updateCountMu.Unlock()
+							presentation := actionstate.OutdatedPresentation(remaining)
+							uh.outdatedExpander.SetSubtitle(presentation.Subtitle)
+							uh.outdatedExpander.SetEnableExpansion(presentation.Expandable)
+							uh.updateBadgeCount()
+						}
+						if decision.RestoreControl {
+							upgradeGate.Reset()
+							btn.SetSensitive(true)
+							btn.SetLabel("Upgrade")
+						}
+						if decision.Refresh {
+							uh.loadOutdatedPackages()
+						}
 					})
 				}()
 			}
@@ -318,7 +400,10 @@ func (uh *UserHome) loadOutdatedPackages() {
 
 			row.AddSuffix(&upgradeBtn.Widget)
 			uh.outdatedExpander.AddRow(&row.Widget)
-			uh.outdatedRows = append(uh.outdatedRows, row)
+			uh.outdatedRows.Add(row)
+		}
+		if done != nil {
+			done(true)
 		}
 	})
 }
@@ -600,17 +685,37 @@ func (uh *UserHome) onBootcStageClicked() {
 	}()
 }
 
-// onUpdateHomebrewClicked handles the Homebrew update button click
-func (uh *UserHome) onUpdateHomebrewClicked() {
-	go func() {
-		if err := homebrew.Update(); err != nil {
-			sgtk.RunOnMainThread(func() {
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
-			})
-			return
-		}
+// updateHomebrew updates Homebrew metadata, then refreshes the outdated list
+// before restoring the top-level action.
+func (uh *UserHome) updateHomebrew(button gtk.Button, gate *actionstate.Gate) {
+	err := homebrew.Update()
+	dryRun := homebrew.IsDryRun()
+	decision := actionstate.MetadataUpdate(err == nil, dryRun)
+	if err != nil {
 		sgtk.RunOnMainThread(func() {
-			uh.toastAdder.ShowToast(actionmsg.SelfUpdate(homebrew.IsDryRun(), "Homebrew"))
+			if decision.RestoreControl {
+				gate.Reset()
+				button.SetSensitive(true)
+				button.SetLabel("Update")
+			}
+			uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
 		})
-	}()
+		return
+	}
+
+	sgtk.RunOnMainThread(func() {
+		uh.toastAdder.ShowToast(actionmsg.SelfUpdate(dryRun, "Homebrew"))
+		if decision.RestoreControl {
+			gate.Reset()
+			button.SetSensitive(true)
+			button.SetLabel("Update")
+		}
+		if decision.Refresh {
+			uh.loadOutdatedPackagesWithDone(func(bool) {
+				gate.Reset()
+				button.SetSensitive(true)
+				button.SetLabel("Update")
+			})
+		}
+	})
 }
