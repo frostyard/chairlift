@@ -13,6 +13,7 @@ import (
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
+	"github.com/frostyard/chairlift/internal/views/badgestate"
 	"github.com/frostyard/chairlift/internal/views/flatpakstatus"
 	"github.com/frostyard/chairlift/internal/views/trustmsg"
 
@@ -270,9 +271,7 @@ func (uh *UserHome) loadOutdatedPackagesGeneration(generation uint64, done func(
 				}
 				return
 			}
-			uh.updateCountMu.Lock()
-			uh.brewUpdateCount = 0
-			uh.updateCountMu.Unlock()
+			uh.updateCounts.Set(badgestate.Homebrew, 0)
 			uh.updateBadgeCount()
 			uh.outdatedRows.Clear(func(row *adw.ActionRow) {
 				uh.outdatedExpander.Remove(&row.Widget)
@@ -287,9 +286,7 @@ func (uh *UserHome) loadOutdatedPackagesGeneration(generation uint64, done func(
 	}
 
 	packages, err := homebrew.ListOutdated()
-	uh.updateCountMu.Lock()
-	currentCount := uh.brewUpdateCount
-	uh.updateCountMu.Unlock()
+	currentCount := uh.updateCounts.Get(badgestate.Homebrew)
 	refresh := actionstate.OutdatedRefresh(err == nil, currentCount, len(packages))
 	if err != nil {
 		sgtk.RunOnMainThread(func() {
@@ -315,9 +312,7 @@ func (uh *UserHome) loadOutdatedPackagesGeneration(generation uint64, done func(
 			return
 		}
 		presentation := actionstate.OutdatedPresentation(refresh.Count)
-		uh.updateCountMu.Lock()
-		uh.brewUpdateCount = refresh.Count
-		uh.updateCountMu.Unlock()
+		uh.updateCounts.Set(badgestate.Homebrew, refresh.Count)
 		uh.updateBadgeCount()
 		if refresh.ReplaceRows {
 			uh.outdatedRows.Clear(func(row *adw.ActionRow) {
@@ -374,12 +369,7 @@ func (uh *UserHome) loadOutdatedPackagesGeneration(generation uint64, done func(
 						if decision.RemoveRow && uh.outdatedRows.Remove(row, func(row *adw.ActionRow) {
 							uh.outdatedExpander.Remove(&row.Widget)
 						}) {
-							uh.updateCountMu.Lock()
-							if uh.brewUpdateCount > 0 {
-								uh.brewUpdateCount--
-							}
-							remaining := uh.brewUpdateCount
-							uh.updateCountMu.Unlock()
+							remaining := uh.updateCounts.Add(badgestate.Homebrew, -1).Count
 							presentation := actionstate.OutdatedPresentation(remaining)
 							uh.outdatedExpander.SetSubtitle(presentation.Subtitle)
 							uh.outdatedExpander.SetEnableExpansion(presentation.Expandable)
@@ -411,9 +401,7 @@ func (uh *UserHome) loadOutdatedPackagesGeneration(generation uint64, done func(
 // loadFlatpakUpdates loads available Flatpak updates asynchronously
 func (uh *UserHome) loadFlatpakUpdates() {
 	if !flatpak.IsInstalledCached() {
-		uh.updateCountMu.Lock()
-		uh.flatpakUpdateCount = 0
-		uh.updateCountMu.Unlock()
+		uh.updateCounts.Set(badgestate.Flatpak, 0)
 		uh.updateBadgeCount()
 
 		sgtk.RunOnMainThread(func() {
@@ -447,9 +435,7 @@ func (uh *UserHome) loadFlatpakUpdates() {
 	status := flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)
 
 	// Update the badge count
-	uh.updateCountMu.Lock()
-	uh.flatpakUpdateCount = len(allUpdates)
-	uh.updateCountMu.Unlock()
+	uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))
 	uh.updateBadgeCount()
 
 	sgtk.RunOnMainThread(func() {
@@ -530,13 +516,11 @@ func (uh *UserHome) loadBootcUpdateStatus(group *adw.PreferencesGroup) {
 	status, err := bootc.GetStatus(ctx)
 
 	staged := err == nil && status.Status.Staged != nil
-	uh.updateCountMu.Lock()
 	if staged {
-		uh.bootcUpdateCount = 1
+		uh.updateCounts.Set(badgestate.Bootc, 1)
 	} else {
-		uh.bootcUpdateCount = 0
+		uh.updateCounts.Set(badgestate.Bootc, 0)
 	}
-	uh.updateCountMu.Unlock()
 	uh.updateBadgeCount()
 
 	sgtk.RunOnMainThread(func() {
@@ -646,13 +630,11 @@ func (uh *UserHome) onBootcStageClicked() {
 		statusCancel()
 
 		staged := statusErr == nil && status.Status.Staged != nil
-		uh.updateCountMu.Lock()
 		if staged {
-			uh.bootcUpdateCount = 1
+			uh.updateCounts.Set(badgestate.Bootc, 1)
 		} else {
-			uh.bootcUpdateCount = 0
+			uh.updateCounts.Set(badgestate.Bootc, 0)
 		}
-		uh.updateCountMu.Unlock()
 		uh.updateBadgeCount()
 
 		sgtk.RunOnMainThread(func() {

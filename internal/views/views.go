@@ -3,11 +3,11 @@ package views
 
 import (
 	"log"
-	"sync"
 	"time"
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
+	"github.com/frostyard/chairlift/internal/views/badgestate"
 	"github.com/frostyard/chairlift/internal/views/rowset"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
@@ -78,11 +78,8 @@ type UserHome struct {
 	maintenanceFlatpakGroup *adw.PreferencesGroup
 
 	// Update badge tracking
-	bootcUpdateCount   int
-	flatpakUpdateCount int
-	brewUpdateCount    int
-	updateCountMu      sync.Mutex
-	brewRefresh        actionstate.RefreshGate
+	updateCounts badgestate.Counts
+	brewRefresh  actionstate.RefreshGate
 }
 
 // New creates a new UserHome views manager
@@ -117,9 +114,7 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 
 // updateBadgeCount updates the total update count and notifies the window
 func (uh *UserHome) updateBadgeCount() {
-	uh.updateCountMu.Lock()
-	total := uh.bootcUpdateCount + uh.flatpakUpdateCount + uh.brewUpdateCount
-	uh.updateCountMu.Unlock()
+	total := uh.updateCounts.Total()
 
 	sgtk.RunOnMainThread(func() {
 		uh.toastAdder.SetUpdateBadge(total)

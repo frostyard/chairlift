@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -187,6 +188,43 @@ func TestPageMetadataCoversEveryBuilderBackedGroup(t *testing.T) {
 		if !reflect.DeepEqual(item.Groups, wantGroups) {
 			t.Errorf("%s groups = %v, want %v", item.Name, item.Groups, wantGroups)
 		}
+	}
+}
+
+func TestPageMetadataMatchesViewBuilders(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller could not locate navigation_test.go")
+	}
+	viewsDir := filepath.Join(filepath.Dir(filename), "..", "views")
+	groupCall := regexp.MustCompile(
+		`IsGroupEnabled\("([^"]+)",\s*"([^"]+)"\)`,
+	)
+
+	for _, item := range Items() {
+		t.Run(item.Name, func(t *testing.T) {
+			path := filepath.Join(viewsDir, item.Name+"_page.go")
+			source, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+
+			found := make(map[string]bool)
+			for _, match := range groupCall.FindAllStringSubmatch(string(source), -1) {
+				if match[1] != item.ConfigPage {
+					t.Errorf("builder uses config page %q, want %q", match[1], item.ConfigPage)
+				}
+				found[match[2]] = true
+			}
+			if len(found) != len(item.Groups) {
+				t.Fatalf("builder groups = %v, navigation metadata = %v", found, item.Groups)
+			}
+			for _, group := range item.Groups {
+				if !found[group] {
+					t.Errorf("navigation group %q has no builder guard in %s", group, path)
+				}
+			}
+		})
 	}
 }
 

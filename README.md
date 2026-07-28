@@ -231,6 +231,17 @@ See [yeti/OVERVIEW.md](yeti/OVERVIEW.md) and [yeti/package-managers.md](yeti/pac
 - **Build**: `make build` (see [Building from Source](#building-from-source) above)
 - **Containerized dev environment**: `distrobox.ini` describes a Debian Trixie container with the runtime and build dependencies; use `distrobox assemble create --file distrobox.ini` (or your preferred distrobox workflow) to create it, then `distrobox enter chairlift` and run `make build`/`make dev` inside. It mounts `/home/linuxbrew` (for Homebrew integration testing) and `/usr/share/snow/bundles` (for bundle management testing) from the host.
 
+### Testing
+
+Run `make ci` before pushing; it mirrors the hosted verify, lint, unit, race,
+and cross-architecture build gates. Coverage expectations are risk-based, not
+a repository-wide percentage target: command wrappers must cover argument
+construction, dry-run, parsing, and failure propagation; configuration and
+privileged paths must keep exhaustive consistency tests; and GTK-independent
+view state belongs in headlessly tested leaf packages. The puregotk-importing
+`internal/app`, `internal/window`, and `internal/views` packages intentionally
+remain test-binary-free because GTK libraries are unavailable on CI.
+
 ### Contributing
 
 Contributions are welcome! Please feel free to submit issues and pull requests.
