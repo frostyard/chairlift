@@ -44,6 +44,45 @@ func TestBundleDump(t *testing.T) {
 	}
 }
 
+func TestBundleInstallDecision(t *testing.T) {
+	tests := []struct {
+		name         string
+		dryRun       bool
+		wantComplete bool
+		wantExact    string
+		wantContains []string
+	}{
+		{
+			name:         "live install completes the row",
+			wantComplete: true,
+			wantExact:    "Brew bundle cli installed",
+		},
+		{
+			name:         "dry-run resets the row after a preview",
+			dryRun:       true,
+			wantComplete: false,
+			wantContains: []string{"[DRY-RUN]", "cli", "no changes made"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BundleInstall(tt.dryRun, "cli")
+			if got.Complete != tt.wantComplete {
+				t.Errorf("BundleInstall(%v, cli).Complete = %v, want %v", tt.dryRun, got.Complete, tt.wantComplete)
+			}
+			if tt.wantExact != "" && got.Toast != tt.wantExact {
+				t.Errorf("BundleInstall(%v, cli).Toast = %q, want %q", tt.dryRun, got.Toast, tt.wantExact)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got.Toast, want) {
+					t.Errorf("BundleInstall(%v, cli).Toast = %q, want it to contain %q", tt.dryRun, got.Toast, want)
+				}
+			}
+		})
+	}
+}
+
 // TestCleanup covers both dry-run states for the Homebrew/Flatpak cleanup
 // toast text. This is the extraction of onBrewCleanupClicked's and
 // onFlatpakCleanupClicked's already-correct message selection into a tested,

@@ -1,7 +1,7 @@
 // Package actionmsg builds the toast text (and, where the action itself is
 // gated by dry-run, the execution decision) for maintenance-page,
 // applications-page, updates-page, and features-page actions: Homebrew
-// Brewfile dumps, Homebrew/Flatpak cleanup, Homebrew package
+// Brewfile dumps and installs, Homebrew/Flatpak cleanup, Homebrew package
 // installs/upgrades/self-updates, Flatpak application uninstalls/updates,
 // Homebrew tap trust, bootc system update staging, configured custom
 // maintenance scripts, and system feature toggles/updates.
@@ -18,19 +18,17 @@
 // return a plain string: the state-changing/no-op decision for those actions
 // is already made and already tested inside their wrapper package
 // (internal/homebrew, internal/flatpak, internal/bootc, internal/updex).
-// Functions whose result gates a further decision that has no wrapper
-// package of its own to make it (MaintenanceScript, for configured custom
-// scripts) return a decision struct instead of a plain string, precisely so
-// the gated decision — not just the wording of the toast that follows it —
-// is what a table-driven test in actionmsg_test.go asserts. TapTrust and
-// FeatureToggle also return decision structs even though homebrew.
-// TrustPackages/updex.EnableFeature/DisableFeature already gate their
-// underlying exec/pkexec call itself: the thing that needs gating in each
-// case is a second, UI-side decision — whether the Untrusted Homebrew Taps
-// view mutates (row removal, group visibility, refresh), or whether a
-// feature's switch confirms its new visual state — which has no
-// wrapper-package equivalent to decide it, so TapTrustDecision.MutateUI and
-// FeatureToggleDecision.Confirm are what actionmsg_test.go asserts on.
+// Functions whose result gates a further decision return a decision struct,
+// precisely so the gated decision — not just the wording of the toast that
+// follows it — is what a table-driven test in actionmsg_test.go asserts.
+// MaintenanceScript decides whether a configured custom script executes at
+// all. BundleInstall decides whether its row becomes permanently installed
+// or resets after a dry-run preview. TapTrust decides whether the Untrusted
+// Homebrew Taps view removes a row, changes group visibility, and refreshes.
+// FeatureToggle decides whether a feature switch confirms its new visual
+// state. Those latter three UI-side decisions have no wrapper-package
+// equivalent even though the wrappers already gate their underlying
+// command.
 package actionmsg
 
 import "fmt"
@@ -45,6 +43,31 @@ func BundleDump(dryRun bool, path string) string {
 		return fmt.Sprintf("[DRY-RUN] Preview: Brewfile would be saved to %s — no changes made", path)
 	}
 	return fmt.Sprintf("Brewfile saved to %s", path)
+}
+
+// BundleInstallDecision is the result of installing one configured Brew
+// bundle. Complete is false under dry-run because homebrew.BundleInstall
+// skipped the command; the row must become clickable again instead of
+// claiming the bundle is installed.
+type BundleInstallDecision struct {
+	Complete bool
+	Toast    string
+}
+
+// BundleInstall decides whether a successful wrapper return represents a real
+// completed install and supplies the corresponding toast. The caller must use
+// Complete for both its InstallGate transition and button state.
+func BundleInstall(dryRun bool, name string) BundleInstallDecision {
+	if dryRun {
+		return BundleInstallDecision{
+			Complete: false,
+			Toast:    fmt.Sprintf("[DRY-RUN] Preview: Brew bundle %s would be installed — no changes made", name),
+		}
+	}
+	return BundleInstallDecision{
+		Complete: true,
+		Toast:    fmt.Sprintf("Brew bundle %s installed", name),
+	}
 }
 
 // Cleanup returns the toast text for a Homebrew or Flatpak cleanup action.
