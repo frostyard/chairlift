@@ -1024,27 +1024,31 @@ rows), while dry-run previews restore their controls without changing either.
 
 ### Privileged operations
 
-bootc staging and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), while updex delegates to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`) via `pkexec`. Polkit policy files are installed for both: `data/org.frostyard.ChairLift.bootc.policy` and `data/org.frostyard.ChairLift.updex.policy`. Homebrew tap trust (`brew trust`) is explicitly per-user and does *not* go through pkexec — see [package-managers.md](./package-managers.md).
+bootc staging and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), while updex delegates to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`) via `pkexec`. Polkit policy files are installed for both: `data/org.frostyard.ChairLift.bootc.policy` and `data/org.frostyard.ChairLift.updex.policy`. ChairLift deliberately ships no `.rules` files: the policies require normal administrator authentication (`auth_admin`, with `auth_admin_keep` for an active local session) rather than granting blanket passwordless access to a login group. Source installation removes the two legacy ChairLift `.rules` files so an older passwordless rule cannot survive an upgrade. Homebrew tap trust (`brew trust`) is explicitly per-user and does *not* go through pkexec — see [package-managers.md](./package-managers.md).
 
 **Why the helper path must be absolute, and why `PREFIX=/usr`:** `pkexec`
 resolves the program it's asked to run to an absolute path and compares it
 textually against the `org.freedesktop.policykit.exec.path` annotation on
-each action in `data/org.frostyard.ChairLift.updex.policy` (all three
-actions annotate `/usr/bin/chairlift-updex-helper`) to decide which
-`org.frostyard.ChairLift.updex.*` action — and its no-reprompt sudo-group
-rule in `data/org.frostyard.ChairLift.updex.rules` — applies. A bare,
-`$PATH`-resolved command name can resolve to a different absolute path
-depending on the invoking process's `$PATH`, which makes that comparison
-miss and silently falls `pkexec` back to the generic, always-reprompting
-`org.freedesktop.policykit.pkexec.run-program` action. `internal/updex.go`'s
-`runHelper` therefore always invokes `HelperPath` (never a bare name).
-Separately, `polkitd` itself only ever reads `.policy`/`.rules` files from
-the fixed directories `/usr/share/polkit-1/actions` and
-`/usr/share/polkit-1/rules.d` — not `$XDG_DATA_DIRS`, not any
+each action in `data/org.frostyard.ChairLift.updex.policy` (all three actions
+annotate `/usr/bin/chairlift-updex-helper`). The policy also uses
+`org.freedesktop.policykit.exec.argv1` to select the corresponding
+`enable-feature`, `disable-feature`, or `update` action from the first helper
+argument. PolicyKit does not validate the remainder of argv: the privileged
+helper's pure `internal/updexhelper.ParseInvocation` boundary accepts only
+`enable-feature <name> [--dry-run]`, `disable-feature <name> [--dry-run]`, and
+`update [--dry-run]`, rejecting extra, misplaced, or unknown arguments before
+calling updex. A bare, `$PATH`-resolved command name can resolve to a different
+absolute path depending on the invoking process's `$PATH`, which makes the
+path comparison miss and falls `pkexec` back to the generic, more restrictive
+action. `internal/updex/updex.go`'s `runHelper` therefore always invokes
+`HelperPath` (never a bare name).
+
+Separately, `polkitd` reads application policies from the fixed directory
+`/usr/share/polkit-1/actions` — not `$XDG_DATA_DIRS`, not any
 `$PREFIX`-derived path — so the Makefile's `install`/`uninstall` targets
 require `PREFIX=/usr` (the default since issue #59) for a source install's
-polkit assets to land somewhere polkit actually looks. Both constraints are
-fixed system facts, not values ChairLift decides; the Makefile and
+polkit assets to land somewhere polkit actually looks. These constraints are
+system facts, not values ChairLift decides; the Makefile and
 `internal/updex.HelperPath` exist to conform to them, matching the layout
 `.goreleaser.yaml`'s nFPM packages already use.
 
@@ -1169,7 +1173,7 @@ page_name:
 - **Semantic versioning**: Uses [svu](https://github.com/caarlos0/svu) via `make bump`
 - **CI**: GitHub Actions workflows for test, snapshot, and release (`.github/workflows/`); snapshot publishers use the `chairlift-dev-release` concurrency group without in-progress cancellation so uploads to the rolling `dev` release cannot overlap. GitHub retains only the newest pending run in a concurrency group, so rapid pushes can skip intermediate snapshots while preserving the active upload and latest queued snapshot.
 - **Release**: GoReleaser config at `.goreleaser.yaml`. Its `metadata.homepage` is the single source of truth for the repository URL and is consumed by `release.footer`, whose "Full Changelog" link is templated from `{{ .Metadata.Homepage }}` rather than a hardcoded owner; two static tests guard that pairing — see the "Install-path consistency (`internal/installcheck`)" section of [package-managers.md](./package-managers.md#install-path-consistency-internalinstallcheck)
-- **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint), `make install`/`make uninstall` (system install including polkit policies, icons, and wrapper script; default `PREFIX=/usr`, the only prefix that matches where polkit reads policy/rules files and the updex helper's fixed pkexec exec-path annotation — see "Privileged operations" above), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
+- **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint), `make install`/`make uninstall` (system install including polkit policies, icons, and wrapper script; default `PREFIX=/usr`, the only prefix that matches where polkit reads policy files and the updex helper's fixed pkexec exec-path annotation — see "Privileged operations" above), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
 
 ### Runtime dependencies
 

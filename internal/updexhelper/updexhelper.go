@@ -7,25 +7,73 @@
 // libraries at package init, before any test function runs. See
 // docs/agents/skills/gtk-headless-tests.md.
 //
-// cmd/chairlift-updex-helper/main.go is reduced to argv dispatch only: it
-// calls HasDryRunFlag to parse the shared --dry-run flag, then passes the
-// per-subcommand Options struct built here to the corresponding updex
-// client call.
+// cmd/chairlift-updex-helper/main.go is reduced to dispatching the validated
+// Invocation returned here, then passing the per-subcommand Options struct to
+// the corresponding updex client call.
 package updexhelper
 
-import "github.com/frostyard/updex/updex"
+import (
+	"fmt"
 
-// HasDryRunFlag reports whether args (the helper's subcommand arguments,
-// i.e. os.Args[2:]) contains the --dry-run flag. It takes an args slice
-// rather than reading os.Args directly so it is a pure function, testable
-// without process-global state.
-func HasDryRunFlag(args []string) bool {
-	for _, arg := range args {
-		if arg == "--dry-run" {
-			return true
-		}
+	"github.com/frostyard/updex/updex"
+)
+
+const (
+	CommandEnableFeature  = "enable-feature"
+	CommandDisableFeature = "disable-feature"
+	CommandUpdate         = "update"
+)
+
+// Invocation is a validated privileged-helper command. PolicyKit selects an
+// action from the executable path and first argument; ParseInvocation is the
+// second boundary and rejects every argv shape the helper does not support.
+type Invocation struct {
+	Command string
+	Feature string
+	DryRun  bool
+}
+
+// SupportedCommands returns the complete first-argument set accepted by the
+// privileged helper. The returned slice is a fresh value so callers cannot
+// mutate the package's command surface.
+func SupportedCommands() []string {
+	return []string{CommandEnableFeature, CommandDisableFeature, CommandUpdate}
+}
+
+// ParseInvocation accepts only the three argv shapes ChairLift emits:
+//
+//	enable-feature <name> [--dry-run]
+//	disable-feature <name> [--dry-run]
+//	update [--dry-run]
+//
+// pkexec does not validate arguments after selecting an action, so the
+// privileged helper must reject extra, misplaced, and unknown arguments.
+func ParseInvocation(args []string) (Invocation, error) {
+	if len(args) == 0 {
+		return Invocation{}, fmt.Errorf("usage: chairlift-updex-helper <command> [args...]")
 	}
-	return false
+
+	switch args[0] {
+	case CommandEnableFeature, CommandDisableFeature:
+		if len(args) != 2 && len(args) != 3 {
+			return Invocation{}, fmt.Errorf("usage: chairlift-updex-helper %s <name> [--dry-run]", args[0])
+		}
+		if args[1] == "" || args[1] == "--dry-run" {
+			return Invocation{}, fmt.Errorf("usage: chairlift-updex-helper %s <name> [--dry-run]", args[0])
+		}
+		dryRun := len(args) == 3
+		if dryRun && args[2] != "--dry-run" {
+			return Invocation{}, fmt.Errorf("usage: chairlift-updex-helper %s <name> [--dry-run]", args[0])
+		}
+		return Invocation{Command: args[0], Feature: args[1], DryRun: dryRun}, nil
+	case CommandUpdate:
+		if len(args) > 2 || (len(args) == 2 && args[1] != "--dry-run") {
+			return Invocation{}, fmt.Errorf("usage: chairlift-updex-helper update [--dry-run]")
+		}
+		return Invocation{Command: CommandUpdate, DryRun: len(args) == 2}, nil
+	default:
+		return Invocation{}, fmt.Errorf("unknown command: %s", args[0])
+	}
 }
 
 // EnableOptions builds the updex.EnableFeatureOptions for the

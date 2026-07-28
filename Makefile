@@ -13,10 +13,10 @@ BUILD_DIR=build
 # matches against PolicyKit's org.freedesktop.policykit.exec.path annotation
 # (data/org.frostyard.ChairLift.updex.policy, internal/updex.HelperPath) and
 # the layout .goreleaser.yaml's nFPM packages already install to. PolicyKit
-# itself only ever reads actions/rules from /usr/share/polkit-1/{actions,
-# rules.d} — it does not consult PREFIX or XDG_DATA_DIRS — so installing
-# under any other PREFIX means the .policy/.rules files land somewhere
-# polkit never looks. Override PREFIX for a non-privileged dev install (e.g.
+# itself only ever reads actions from /usr/share/polkit-1/actions — it does
+# not consult PREFIX or XDG_DATA_DIRS — so installing under any other PREFIX
+# means the .policy files land somewhere polkit never looks. Override PREFIX
+# for a non-privileged dev install (e.g.
 # `make install PREFIX=$$HOME/.local`), but understand that the
 # PolicyKit-authenticated updex helper path then no longer resolves to the
 # fixed exec.path annotation. DESTDIR (below) still layers under PREFIX
@@ -110,12 +110,13 @@ install: build
 	install -Dm644 data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
 	# Install updex helper binary
 	install -Dm755 $(BUILD_DIR)/$(HELPER_NAME) $(DESTDIR)$(BINDIR)/$(HELPER_NAME)
-	# Install PolicyKit policy and rules for bootc
+	# Remove legacy passwordless rules from prior source installs
+	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.bootc.rules
+	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
+	# Install PolicyKit policy for bootc
 	install -Dm644 data/org.frostyard.ChairLift.bootc.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.bootc.policy
-	install -Dm644 data/org.frostyard.ChairLift.bootc.rules $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.bootc.rules
-	# Install PolicyKit policy and rules for updex
+	# Install PolicyKit policy for updex
 	install -Dm644 data/org.frostyard.ChairLift.updex.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
-	install -Dm644 data/org.frostyard.ChairLift.updex.rules $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
 
 # Uninstall the application
 uninstall:

@@ -66,7 +66,8 @@ type ReleaseConfig struct {
 
 // NfpmConfig is the subset of an nfpms[] entry relevant to install-location
 // and license consistency: where packaged binaries land (Bindir), where
-// explicitly listed files (policy/rules, wrapper script, icons, ...) land
+// explicitly listed files (policies, maintainer config, wrapper script,
+// icons, ...) land
 // (Contents), and the package's declared license (License).
 type NfpmConfig struct {
 	Bindir   string        `yaml:"bindir"`

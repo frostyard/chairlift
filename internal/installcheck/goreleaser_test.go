@@ -93,9 +93,7 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 	}{
 		{"maintainer config", "config.yml", "/usr/share/chairlift/config.yml"},
 		{"updex policy", "org.frostyard.ChairLift.updex.policy", filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.updex.policy")},
-		{"updex rules", "org.frostyard.ChairLift.updex.rules", filepath.Join(polkitRulesDir, "org.frostyard.ChairLift.updex.rules")},
 		{"bootc policy", "org.frostyard.ChairLift.bootc.policy", filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.bootc.policy")},
-		{"bootc rules", "org.frostyard.ChairLift.bootc.rules", filepath.Join(polkitRulesDir, "org.frostyard.ChairLift.bootc.rules")},
 	}
 
 	for i, nfpm := range cfg.Nfpms {
@@ -116,6 +114,9 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 			for _, content := range nfpm.Contents {
 				if content.Dst == "/etc/chairlift/config.yml" {
 					t.Errorf("nfpms[%d] packages administrator-owned /etc/chairlift/config.yml", i)
+				}
+				if strings.HasSuffix(content.Src, ".rules") || strings.HasSuffix(content.Dst, ".rules") {
+					t.Errorf("nfpms[%d] still packages passwordless PolicyKit rule: src=%q dst=%q", i, content.Src, content.Dst)
 				}
 			}
 		})

@@ -124,7 +124,10 @@ Each action has:
 |-------|-----|-------------|
 | Features | `features_group` | Toggle system features managed by updex |
 
-Feature operations (enable, disable, update) require PolicyKit authentication and are performed by the `chairlift-updex-helper` binary.
+Feature operations (enable, disable, update) require administrator
+authentication through PolicyKit and are performed by the fixed
+`/usr/bin/chairlift-updex-helper` binary. ChairLift installs no passwordless
+authorization rule.
 
 ### Help Page (`help_page`)
 
