@@ -23,6 +23,7 @@ internal/views/                 Page builders and event handlers (one file per p
         │                       └── internal/views/featurestatus/ ┘ text, unit-tested headlessly
         │
         ├── internal/config/    YAML config loading, feature group enablement
+        ├── internal/navigation/ Canonical pages, shortcuts, and pure navigation transitions
         ├── internal/homebrew/  Homebrew CLI wrapper (JSON output parsing)
         ├── internal/flatpak/   Flatpak CLI wrapper (tabular output parsing)
         ├── internal/bootc/     bootc wrapper (status reads, pkexec stage script, line streaming)
@@ -33,7 +34,8 @@ internal/views/                 Page builders and event handlers (one file per p
 
 ### Dependency flow
 
-`cmd → app → window → views → {config, homebrew, flatpak, bootc, updex}`
+`cmd → app → window → views → {config, homebrew, flatpak, bootc, updex}`.
+`app` and `window` also depend on the pure `navigation` package.
 
 External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
 - `gobj` — GObject type registration and instance registry
@@ -1036,10 +1038,30 @@ Configurable maintenance scripts (from `config.yml` `actions` entries) are execu
 
 ### Keyboard shortcuts
 
-The window registers keyboard accelerators (`internal/window/window.go`):
+`internal/navigation` is the single puregotk-free authority for sidebar page
+order, titles, icons, advertised shortcuts, registered accelerators, and the
+complete page-selection transition. `internal/app` registers
+`navigation.Bindings()`, while the custom shortcuts dialog in
+`internal/window` renders `navigation.Shortcuts()`; the two surfaces therefore
+cannot advertise and register different keys.
+
+The canonical accelerators are:
+
 - `Ctrl+Q` → quit
 - `Ctrl+?` → show shortcuts dialog
 - `Alt+1` through `Alt+6` → navigate to each page (Applications, Maintenance, Updates, System, Features, Help)
+- `F1` → navigate to Help (the same `win.navigate-help` action as `Alt+6`)
+
+Mouse row activation and keyboard navigation actions both call
+`Window.navigateToPage`. That method calls `navigation.Resolve`, rejects a
+page that was not constructed, then applies all four successful outcomes:
+select the canonical sidebar row, set the stack's visible child, update the
+content-page title, and set `NavigationSplitView.show-content` true so a
+collapsed layout reveals the destination. `internal/navigation` tests every
+canonical page's index/title/visible-child/reveal result, unavailable and
+unknown rejection, the complete advertised-to-registered shortcut inventory,
+the F1 Help binding, and static app/window wiring. No `_test.go` is added to
+the puregotk-importing `internal/window` or `internal/app` packages.
 
 Note: `GtkShortcutsWindow` is not available in puregotk, so a custom `adw.Window` with `adw.PreferencesGroup` rows is used for the shortcuts dialog.
 

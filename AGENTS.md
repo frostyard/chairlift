@@ -61,6 +61,13 @@ An agent must not break these:
   UI update marshals back to the GTK main thread via
   `snowkit`'s `sgtk.RunOnMainThread(...)`. Never touch a widget directly from a
   worker goroutine.
+- **Navigation behavior has one authority.** Page order, titles, icons, and
+  advertised/registered accelerators live in the pure
+  `internal/navigation` package. Mouse activation and window navigation
+  actions must both call `Window.navigateToPage`, which applies the complete
+  `navigation.Resolve` transition (selected row, visible child, title, and
+  collapsed-layout content reveal). Do not reintroduce a second page or
+  shortcut inventory in `internal/window` or `internal/app`.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget

@@ -112,11 +112,24 @@ chairlift
 
 ### Main Sections
 
-1. **System**: Monitor system health and performance
-2. **Updates**: Stage bootc system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, and trust Homebrew taps
-3. **Applications**: View installed packages, search for new ones, and install curated bundles
-4. **Maintenance**: System cleanup and maintenance tools (Homebrew, Flatpak, custom scripts)
-5. **Help**: Documentation and support resources (coming soon)
+1. **Applications**: View installed packages, search for new ones, and install curated bundles
+2. **Maintenance**: System cleanup and maintenance tools (Homebrew, Flatpak, custom scripts)
+3. **Updates**: Stage bootc system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, and trust Homebrew taps
+4. **System**: Monitor deployment, health, and performance information
+5. **Features**: Enable, disable, and update configured system features
+6. **Help**: Documentation and support resources
+
+### Keyboard Shortcuts
+
+- `Alt+1` through `Alt+6`: open Applications, Maintenance, Updates, System,
+  Features, or Help respectively
+- `F1`: open Help
+- `Ctrl+?`: show the keyboard-shortcuts window
+- `Ctrl+Q`: quit
+
+Mouse and keyboard navigation have identical behavior in a collapsed window:
+selecting a destination reveals its content as well as updating the selected
+sidebar row and page title.
 
 ### Managing Packages
 
@@ -190,6 +203,7 @@ chairlift/
 ├── internal/
 │   ├── app/       # GObject-registered Application (adw.Application subtype)
 │   ├── window/    # Main window: NavigationSplitView, sidebar, content stack
+│   ├── navigation/ # Canonical pages, shortcuts, and headless transition logic
 │   ├── views/     # Page builders and event handlers (one file per page)
 │   ├── config/    # YAML config loading, feature group enablement
 │   ├── homebrew/  # Homebrew CLI wrapper (incl. tap trust)

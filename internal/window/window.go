@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/frostyard/chairlift/internal/config"
+	"github.com/frostyard/chairlift/internal/navigation"
 	"github.com/frostyard/chairlift/internal/version"
 	"github.com/frostyard/chairlift/internal/views"
 
@@ -40,23 +41,6 @@ type Window struct {
 	configError *config.LoadError
 	views       *views.UserHome
 	updateBadge *gtk.Button // Badge for updates count
-}
-
-// NavItem represents a navigation item in the sidebar
-type NavItem struct {
-	Name  string
-	Title string
-	Icon  string
-}
-
-// navItems defines the sidebar navigation structure
-var navItems = []NavItem{
-	{Name: "applications", Title: "Applications", Icon: "application-x-executable-symbolic"},
-	{Name: "maintenance", Title: "Maintenance", Icon: "emblem-system-symbolic"},
-	{Name: "updates", Title: "Updates", Icon: "software-update-available-symbolic"},
-	{Name: "system", Title: "System", Icon: "computer-symbolic"},
-	{Name: "features", Title: "Features", Icon: "application-x-addon-symbolic"},
-	{Name: "help", Title: "Help", Icon: "help-browser-symbolic"},
 }
 
 func init() {
@@ -167,7 +151,7 @@ func (w *Window) buildSidebar() *adw.NavigationPage {
 	w.sidebarList.AddCssClass("navigation-sidebar")
 
 	// Add navigation items
-	for _, item := range navItems {
+	for _, item := range navigation.Items() {
 		row := w.createNavRow(item)
 		w.sidebarList.Append(&row.Widget)
 	}
@@ -190,7 +174,7 @@ func (w *Window) buildSidebar() *adw.NavigationPage {
 }
 
 // createNavRow creates a navigation row for the sidebar
-func (w *Window) createNavRow(item NavItem) *adw.ActionRow {
+func (w *Window) createNavRow(item navigation.Item) *adw.ActionRow {
 	row := adw.NewActionRow()
 	row.SetTitle(item.Title)
 	row.SetActivatable(true)
@@ -224,7 +208,8 @@ func (w *Window) buildContentArea() *adw.NavigationPage {
 	w.contentStack.SetTransitionType(gtk.StackTransitionTypeCrossfadeValue)
 
 	// Add pages to the stack
-	for _, item := range navItems {
+	items := navigation.Items()
+	for _, item := range items {
 		page := w.views.GetPage(item.Name)
 		if page != nil {
 			w.pages[item.Name] = page
@@ -234,17 +219,17 @@ func (w *Window) buildContentArea() *adw.NavigationPage {
 
 	// Create navigation page with initial title from first nav item
 	initialTitle := "Content"
-	if len(navItems) > 0 {
-		initialTitle = navItems[0].Title
+	if len(items) > 0 {
+		initialTitle = items[0].Title
 	}
 	w.contentPage = adw.NewNavigationPage(&w.contentStack.Widget, initialTitle)
 
 	// Select first item by default
-	if len(navItems) > 0 {
+	if len(items) > 0 {
 		firstRow := w.sidebarList.GetRowAtIndex(0)
 		if firstRow != nil {
 			w.sidebarList.SelectRow(firstRow)
-			w.contentStack.SetVisibleChildName(navItems[0].Name)
+			w.contentStack.SetVisibleChildName(items[0].Name)
 		}
 	}
 
@@ -265,19 +250,7 @@ func (w *Window) onSidebarRowActivated(row gtk.ListBoxRow) {
 		return
 	}
 
-	// Switch to the corresponding page
-	if _, ok := w.pages[name]; ok {
-		w.contentStack.SetVisibleChildName(name)
-		w.splitView.SetShowContent(true)
-
-		// Update the content page title
-		for _, item := range navItems {
-			if item.Name == name {
-				w.contentPage.SetTitle(item.Title)
-				break
-			}
-		}
-	}
+	w.navigateToPage(name)
 }
 
 // buildMenuButton creates the hamburger menu button
@@ -317,7 +290,7 @@ func (w *Window) setupActions() {
 	w.AddAction(aboutAction)
 
 	// Navigation actions
-	for _, item := range navItems {
+	for _, item := range navigation.Items() {
 		itemName := item.Name // Capture for closure
 		action := gio.NewSimpleAction("navigate-"+itemName, nil)
 		navActivateCb := func(action gio.SimpleAction, param uintptr) {
@@ -330,21 +303,21 @@ func (w *Window) setupActions() {
 
 // navigateToPage navigates to a specific page
 func (w *Window) navigateToPage(pageName string) {
-	if _, ok := w.pages[pageName]; ok {
-		w.contentStack.SetVisibleChildName(pageName)
-
-		// Select the corresponding row and update title
-		for i, item := range navItems {
-			if item.Name == pageName {
-				row := w.sidebarList.GetRowAtIndex(int32(i))
-				if row != nil {
-					w.sidebarList.SelectRow(row)
-				}
-				w.contentPage.SetTitle(item.Title)
-				break
-			}
-		}
+	transition, ok := navigation.Resolve(pageName, func(name string) bool {
+		_, exists := w.pages[name]
+		return exists
+	})
+	if !ok {
+		return
 	}
+
+	row := w.sidebarList.GetRowAtIndex(int32(transition.SelectedIndex))
+	if row != nil {
+		w.sidebarList.SelectRow(row)
+	}
+	w.contentStack.SetVisibleChildName(transition.VisibleChild)
+	w.contentPage.SetTitle(transition.Title)
+	w.splitView.SetShowContent(transition.ShowContent)
 }
 
 // onShowShortcuts shows the keyboard shortcuts window
@@ -383,23 +356,14 @@ func (w *Window) onShowShortcuts() {
 	navGroup := adw.NewPreferencesGroup()
 	navGroup.SetTitle("Navigation")
 
-	navShortcuts := []struct {
-		accel string
-		title string
-	}{
-		{"Alt+1", "Go to Applications"},
-		{"Alt+2", "Go to Maintenance"},
-		{"Alt+3", "Go to Updates"},
-		{"Alt+4", "Go to System"},
-		{"Alt+5", "Go to Features"},
-		{"Alt+6", "Go to Help"},
-	}
-
-	for _, s := range navShortcuts {
+	for _, shortcut := range navigation.Shortcuts() {
+		if shortcut.Group != navigation.GroupNavigation {
+			continue
+		}
 		row := adw.NewActionRow()
-		row.SetTitle(s.title)
+		row.SetTitle(shortcut.Title)
 
-		label := gtk.NewLabel(s.accel)
+		label := gtk.NewLabel(shortcut.Display)
 		label.AddCssClass("dim-label")
 		row.AddSuffix(&label.Widget)
 
@@ -412,20 +376,14 @@ func (w *Window) onShowShortcuts() {
 	generalGroup := adw.NewPreferencesGroup()
 	generalGroup.SetTitle("General")
 
-	generalShortcuts := []struct {
-		accel string
-		title string
-	}{
-		{"Ctrl+?", "Keyboard Shortcuts"},
-		{"Ctrl+Q", "Quit"},
-		{"F1", "Help"},
-	}
-
-	for _, s := range generalShortcuts {
+	for _, shortcut := range navigation.Shortcuts() {
+		if shortcut.Group != navigation.GroupGeneral {
+			continue
+		}
 		row := adw.NewActionRow()
-		row.SetTitle(s.title)
+		row.SetTitle(shortcut.Title)
 
-		label := gtk.NewLabel(s.accel)
+		label := gtk.NewLabel(shortcut.Display)
 		label.AddCssClass("dim-label")
 		row.AddSuffix(&label.Widget)
 
