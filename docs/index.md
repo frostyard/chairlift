@@ -76,8 +76,12 @@ Both are built with `CGO_ENABLED=0`.
 sudo make install
 ```
 
-Installs binaries, desktop file, icons, PolicyKit policies, and the updex helper
-to `PREFIX` (default `/usr`). PolicyKit integration requires that default.
+Installs binaries, desktop file, icons, PolicyKit policies, the updex helper,
+and maintainer configuration defaults to `PREFIX` (default `/usr`). The
+maintainer configuration is installed at `/usr/share/chairlift/config.yml`;
+`/etc/chairlift/config.yml` is reserved for administrator overrides and is
+never created or overwritten by ChairLift's source or nFPM packages. PolicyKit
+integration requires the default prefix.
 
 ### Development
 

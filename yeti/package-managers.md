@@ -534,18 +534,21 @@ The Features page's per-feature switch (`onFeatureToggled`, `internal/views/feat
 
 ## Install-path consistency (`internal/installcheck`)
 
-Two installation paths ship this repository's privileged surface (the updex
-helper binary and both PolicyKit policy/rules pairs): a source `make install`
-(Makefile, `PREFIX` defaulting to `/usr`) and the packaged nFPM (deb/rpm/apk)
-layout goreleaser builds from `.goreleaser.yaml`. Both are hand-maintained
-text — a Makefile recipe and a YAML block — with no shared code path, so
-nothing stops them (or `internal/updex.HelperPath`, the fixed absolute path
-`pkexec` matches against the policy's `exec.path` annotation) from silently
-drifting apart again the way the Makefile's old `/usr/local` default drifted
-from the policy's `/usr/bin` in the bug this package now guards against.
+Two installation paths ship this repository's privileged surface and
+maintainer configuration: a source `make install` (Makefile, `PREFIX`
+defaulting to `/usr`) and the packaged nFPM (deb/rpm/apk) layout GoReleaser
+builds from `.goreleaser.yaml`. Both are hand-maintained text — a Makefile
+recipe and a YAML block — with no shared code path, so nothing stops them (or
+`internal/updex.HelperPath`, the fixed absolute path `pkexec` matches against
+the policy's `exec.path` annotation) from silently drifting apart.
 
-`internal/installcheck` holds five regression tests, not production code, that
-turn "verified by inspection" into a real, gated check. The first two guard the
+Both paths install the repository's `config.yml` as package-owned maintainer
+defaults at `/usr/share/chairlift/config.yml`. Neither path installs
+`/etc/chairlift/config.yml`: that higher-precedence path belongs to the
+administrator and must survive package installation and upgrades unchanged.
+
+`internal/installcheck` holds regression tests, not production code, that turn
+"verified by inspection" into real, gated checks. The first two guard the
 installed layout itself:
 
 - **`TestMakefileInstallUsesUsrPrefix`** runs `make -n install
@@ -554,7 +557,9 @@ installed layout itself:
   `PREFIX=/usr`, and asserts the printed `install -Dm...` lines place the
   updex helper at `DESTDIR` + `internal/updex.HelperPath` and both
   policy/rules pairs under `DESTDIR` + the fixed
-  `/usr/share/polkit-1/{actions,rules.d}` PolicyKit reads. It shells out to
+  `/usr/share/polkit-1/{actions,rules.d}` PolicyKit reads, installs maintainer
+  defaults at `DESTDIR/usr/share/chairlift/config.yml`, and never targets the
+  administrator-owned `/etc/chairlift/config.yml`. It shells out to
   the real `make` rather than parsing the Makefile textually because `make`
   itself is the authority on what a given `PREFIX`/`DESTDIR` combination
   actually resolves to (variable derivation, `$(DESTDIR)$(BINDIR)`
@@ -571,7 +576,10 @@ installed layout itself:
   `docs/agents/skills/regression-tests-must-cover-every-collection-entry.md`),
   asserts each entry's `bindir` matches the directory of
   `internal/updex.HelperPath` and its updex/bootc policy+rules
-  `contents[].dst` entries equal those same fixed polkit-1 paths.
+  `contents[].dst` entries equal those same fixed polkit-1 paths. It also
+  requires every package to map the repository `config.yml` to
+  `/usr/share/chairlift/config.yml` and rejects any content entry targeting
+  `/etc/chairlift/config.yml`.
 
 Both tests fail — not skip — if `internal/updex.HelperPath`, the Makefile's
 `PREFIX` default, or `.goreleaser.yaml`'s `nfpms` block change independently

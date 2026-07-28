@@ -26,6 +26,7 @@ BINDIR = $(PREFIX)/bin
 DATADIR = $(PREFIX)/share
 ICONSDIR = $(DATADIR)/icons
 APPLICATIONSDIR = $(DATADIR)/applications
+CONFIGDIR = $(DATADIR)/chairlift
 POLKITACTIONSDIR = $(DATADIR)/polkit-1/actions
 POLKITRULESDIR = $(DATADIR)/polkit-1/rules.d
 
@@ -101,6 +102,8 @@ install: build
 	install -Dm755 data/chairlift-wrapper.sh $(DESTDIR)$(BINDIR)/chairlift-wrapper
 	# Install desktop file
 	install -Dm644 data/org.frostyard.ChairLift.desktop $(DESTDIR)$(APPLICATIONSDIR)/org.frostyard.ChairLift.desktop
+	# Install package-maintainer defaults; /etc/chairlift/config.yml remains the administrator-owned override
+	install -Dm644 config.yml $(DESTDIR)$(CONFIGDIR)/config.yml
 	# Install icons
 	install -Dm644 data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift.svg
 	install -Dm644 data/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
@@ -119,6 +122,7 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY_NAME)
 	rm -f $(DESTDIR)$(BINDIR)/chairlift-wrapper
 	rm -f $(DESTDIR)$(APPLICATIONSDIR)/org.frostyard.ChairLift.desktop
+	rm -f $(DESTDIR)$(CONFIGDIR)/config.yml
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift.svg
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg

@@ -1101,7 +1101,8 @@ Help page links are opened via `xdg-open` using `exec.Command`. The process is s
 ### Config file search order
 
 1. `/etc/chairlift/config.yml` — system-wide (highest priority)
-2. `/usr/share/chairlift/config.yml` — package maintainer defaults
+2. `/usr/share/chairlift/config.yml` — package-maintainer defaults installed
+   by both source `make install` and nFPM packages
 3. `config.yml` — beside the executable when present, otherwise relative to
    the current working directory (development fallback)
 
@@ -1111,6 +1112,11 @@ group and produces both a high-signal log entry and a persistent toast. If no
 file is found, all features default to enabled except
 `maintenance_cleanup_group`, which defaults to disabled. See
 [CONFIG.md](../CONFIG.md) for the full reference.
+
+Both packaging paths own only the `/usr/share` candidate and may replace it on
+upgrade. Neither writes `/etc/chairlift/config.yml`; that higher-precedence
+path remains administrator-owned, so local policy is never overwritten by a
+ChairLift install or package update.
 
 ### Config structure
 

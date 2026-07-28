@@ -42,13 +42,14 @@ func runMakeInstallDryRun(t *testing.T, destDir string, extraArgs ...string) str
 	return out.String()
 }
 
-// assertInstallsHelperAndPolicies checks that a `make -n install` dry-run's
+// assertInstallsPackageLayout checks that a `make -n install` dry-run's
 // output places the updex helper binary at DESTDIR+updex.HelperPath (cross-
 // referencing internal/updex.HelperPath as the single source of truth for
 // both the helper's installed directory and file name, per c1) and both
 // PolicyKit policy/rules pairs under DESTDIR + the fixed polkit-1
-// directories.
-func assertInstallsHelperAndPolicies(t *testing.T, output, destDir string) {
+// directories. It also requires the package-owned maintainer config under
+// /usr/share and rejects the administrator-owned /etc path.
+func assertInstallsPackageLayout(t *testing.T, output, destDir string) {
 	t.Helper()
 
 	wantHelper := filepath.Join("build", filepath.Base(updex.HelperPath)) +
@@ -65,8 +66,18 @@ func assertInstallsHelperAndPolicies(t *testing.T, output, destDir string) {
 	} {
 		want := filepath.Join(destDir, rel)
 		if !strings.Contains(output, want) {
-			t.Errorf("make -n install output does not target %q (fixed PolicyKit read location)\noutput:\n%s", want, output)
+			t.Errorf("make -n install output does not target required package path %q\noutput:\n%s", want, output)
 		}
+	}
+
+	maintainerConfig := filepath.Join(destDir, "/usr/share/chairlift/config.yml")
+	if want := "config.yml " + maintainerConfig; !strings.Contains(output, want) {
+		t.Errorf("make -n install output does not install config.yml at %q\nwant substring: %q\noutput:\n%s", maintainerConfig, want, output)
+	}
+
+	adminConfig := filepath.Join(destDir, "/etc/chairlift/config.yml")
+	if strings.Contains(output, adminConfig) {
+		t.Errorf("make install must not overwrite administrator config %q\noutput:\n%s", adminConfig, output)
 	}
 }
 
@@ -79,12 +90,12 @@ func TestMakefileInstallUsesUsrPrefix(t *testing.T) {
 	t.Run("default PREFIX", func(t *testing.T) {
 		destDir := t.TempDir()
 		out := runMakeInstallDryRun(t, destDir)
-		assertInstallsHelperAndPolicies(t, out, destDir)
+		assertInstallsPackageLayout(t, out, destDir)
 	})
 
 	t.Run("explicit PREFIX=/usr", func(t *testing.T) {
 		destDir := t.TempDir()
 		out := runMakeInstallDryRun(t, destDir, "PREFIX=/usr")
-		assertInstallsHelperAndPolicies(t, out, destDir)
+		assertInstallsPackageLayout(t, out, destDir)
 	})
 }

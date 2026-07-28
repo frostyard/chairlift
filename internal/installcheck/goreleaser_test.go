@@ -91,6 +91,7 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 		srcSuffix string
 		want      string
 	}{
+		{"maintainer config", "config.yml", "/usr/share/chairlift/config.yml"},
 		{"updex policy", "org.frostyard.ChairLift.updex.policy", filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.updex.policy")},
 		{"updex rules", "org.frostyard.ChairLift.updex.rules", filepath.Join(polkitRulesDir, "org.frostyard.ChairLift.updex.rules")},
 		{"bootc policy", "org.frostyard.ChairLift.bootc.policy", filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.bootc.policy")},
@@ -107,9 +108,15 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 				t.Run(cc.name, func(t *testing.T) {
 					got := nfpmDst(t, nfpm, cc.srcSuffix)
 					if got != cc.want {
-						t.Errorf("nfpms[%d] contents dst for %s = %q, want %q (fixed PolicyKit read location)", i, cc.srcSuffix, got, cc.want)
+						t.Errorf("nfpms[%d] contents dst for %s = %q, want required package path %q", i, cc.srcSuffix, got, cc.want)
 					}
 				})
+			}
+
+			for _, content := range nfpm.Contents {
+				if content.Dst == "/etc/chairlift/config.yml" {
+					t.Errorf("nfpms[%d] packages administrator-owned /etc/chairlift/config.yml", i)
+				}
 			}
 		})
 	}
