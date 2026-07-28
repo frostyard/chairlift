@@ -607,14 +607,6 @@ func (uh *UserHome) onBootcStageClicked() {
 					msgRow.SetSubtitle(time.Now().Format("15:04:05"))
 					logExpander.AddRow(&msgRow.Widget)
 					activityRow.SetSubtitle(evt.Message)
-				case bootc.EventError:
-					errRow := adw.NewActionRow()
-					errRow.SetTitle(evt.Message)
-					errRow.SetSubtitle("Error")
-					errIcon := gtk.NewImageFromIconName("dialog-error-symbolic")
-					errRow.AddPrefix(&errIcon.Widget)
-					logExpander.AddRow(&errRow.Widget)
-					logExpander.SetExpanded(true)
 				case bootc.EventComplete:
 					activityRow.SetSubtitle("Complete")
 				}

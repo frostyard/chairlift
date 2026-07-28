@@ -99,7 +99,10 @@ An agent must not break these:
 
 After any change to source code, update relevant documentation in `AGENTS.md`,
 `README.md`, and the `yeti/` folder. A task is not complete without reviewing
-and updating relevant documentation.
+and updating relevant documentation. For behavior, configuration, dependency,
+or install-layout changes, also follow
+`docs/documentation-consistency.md`; current-state claims must be checked
+against source/config/go.mod rather than copied from historical plans.
 
 **yeti/ directory** contains documentation written for AI consumption and
 context enhancement, not primarily for humans. Read `yeti/OVERVIEW.md` and

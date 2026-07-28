@@ -37,7 +37,18 @@ always retained so the window always has a valid destination.
 
 ## Optional Dependencies
 
-ChairLift adapts to what is available on the system. Groups for unavailable tools are hidden automatically.
+Runtime visibility depends on the group:
+
+- bootc status/staging groups and unavailable Homebrew/Flatpak maintenance
+  groups are hidden when their tool-specific runtime gates fail;
+- the Homebrew untrusted-taps group stays hidden unless actionable taps exist;
+- Features replaces its main group with an explicit unavailable message when
+  Updex is not configured;
+- Applications and Updates groups for Homebrew and Flatpak remain visible and
+  report that the tool is unavailable.
+
+Page omission is separate and static: it depends only on which builder-backed
+groups configuration enables, not on runtime tool availability.
 
 | Tool | Used For |
 |------|----------|
@@ -65,7 +76,8 @@ Both are built with `CGO_ENABLED=0`.
 sudo make install
 ```
 
-Installs binaries, desktop file, icons, PolicyKit policies, and the updex helper to `PREFIX` (default `/usr/local`).
+Installs binaries, desktop file, icons, PolicyKit policies, and the updex helper
+to `PREFIX` (default `/usr`). PolicyKit integration requires that default.
 
 ### Development
 
