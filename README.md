@@ -32,7 +32,9 @@
 ### 🔧 Updates & Maintenance
 
 - **System Updates**: On bootc-based systems, download and stage the next OS image update (applied on restart) and view booted/staged/rollback deployment status
-- **Homebrew Updates**: Check for and install package updates
+- **Homebrew Updates**: Check for and install package updates; actions show
+  progress, reject repeated clicks, and refresh the outdated rows and sidebar
+  badge after successful live operations
 - **Outdated Packages**: View and upgrade packages that have newer versions available
 - **System Maintenance**: Keep your system running smoothly
 

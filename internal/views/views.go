@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/frostyard/chairlift/internal/config"
+	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/rowset"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
@@ -59,7 +60,7 @@ type UserHome struct {
 	brewBundlesGroup       *adw.PreferencesGroup
 	brewTrustGroup         *adw.PreferencesGroup
 	brewTrustRows          map[string]*adw.ActionRow
-	outdatedRows           []*adw.ActionRow // Store references for cleanup
+	outdatedRows           rowset.Tracker[*adw.ActionRow]
 
 	// bootc update references
 	bootcStageExpander *adw.ExpanderRow
@@ -81,6 +82,7 @@ type UserHome struct {
 	flatpakUpdateCount int
 	brewUpdateCount    int
 	updateCountMu      sync.Mutex
+	brewRefresh        actionstate.RefreshGate
 }
 
 // New creates a new UserHome views manager

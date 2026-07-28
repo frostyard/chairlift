@@ -68,6 +68,12 @@ An agent must not break these:
   `navigation.Resolve` transition (selected row, visible child, title, and
   collapsed-layout content reveal). Do not reintroduce a second page or
   shortcut inventory in `internal/window` or `internal/app`.
+- **Homebrew update actions preserve known state.** Per-package upgrades and
+  the top-level metadata update use `internal/views/actionstate` gates before
+  spawning work. Failures and dry-run previews restore their controls without
+  changing rows or counts. A live package success removes its row, decrements
+  the count/badge, and refreshes; a failed refresh preserves that last known
+  row/count state instead of replacing it with an invented zero.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget
