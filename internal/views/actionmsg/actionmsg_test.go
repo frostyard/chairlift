@@ -175,8 +175,8 @@ func TestPackageInstallMessage(t *testing.T) {
 	}
 }
 
-// TestUninstall covers both dry-run states for the Flatpak
-// application-uninstall toast text.
+// TestUninstall covers both dry-run states for shared Homebrew/Flatpak
+// uninstall toast text.
 func TestUninstall(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -210,6 +210,44 @@ func TestUninstall(t *testing.T) {
 				if !strings.Contains(got, want) {
 					t.Errorf("Uninstall(%v, %q) = %q, want it to contain %q", tt.dryRun, tt.appID, got, want)
 				}
+			}
+		})
+	}
+}
+
+func TestPin(t *testing.T) {
+	tests := []struct {
+		name      string
+		dryRun    bool
+		pin       bool
+		wantExact string
+	}{
+		{
+			name:      "live pin",
+			pin:       true,
+			wantExact: "ripgrep pinned",
+		},
+		{
+			name:      "live unpin",
+			wantExact: "ripgrep unpinned",
+		},
+		{
+			name:      "dry-run pin",
+			dryRun:    true,
+			pin:       true,
+			wantExact: "[DRY-RUN] Preview: ripgrep would be pinned — no changes made",
+		},
+		{
+			name:      "dry-run unpin",
+			dryRun:    true,
+			wantExact: "[DRY-RUN] Preview: ripgrep would be unpinned — no changes made",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Pin(tt.dryRun, "ripgrep", tt.pin); got != tt.wantExact {
+				t.Errorf("Pin(%v, %q, %v) = %q, want %q", tt.dryRun, "ripgrep", tt.pin, got, tt.wantExact)
 			}
 		})
 	}

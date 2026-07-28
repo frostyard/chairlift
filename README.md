@@ -17,11 +17,11 @@
 
 ### 📦 Homebrew Package Management
 
-- **View Installed Packages**: Browse all installed formulae and casks in organized expandable lists
+- **Manage Installed Packages**: Browse installed formulae and casks, uninstall
+  either type, and pin or unpin formulae with confirmed, refresh-safe actions
 - **Search & Install**: Search formulae and casks, confirm the selected package
   type, and install with loading, error, refresh, and dry-run states
 - **Update & Upgrade**: Keep Homebrew up-to-date and upgrade outdated packages individually
-- **Pin Packages**: Pin packages to prevent accidental upgrades
 - **Curated Bundles**: Install pre-configured package bundles for common use cases
 - **Tap Trust Management**: Homebrew 6's per-tap trust model hides packages installed from untrusted taps; ChairLift detects them and lets you trust a tap (and resume its updates) with one click, without requiring root
 
@@ -141,7 +141,9 @@ chairlift
 
 ### Main Sections
 
-1. **Applications**: View installed packages, search for new ones, and install curated bundles
+1. **Applications**: Manage installed Homebrew packages, search for formulae
+   and casks, install curated bundles, and launch the configured external
+   Flatpak manager
 2. **Maintenance**: System cleanup and maintenance tools (Homebrew, Flatpak, custom scripts)
 3. **Updates**: Stage bootc system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, and trust Homebrew taps
 4. **System**: Monitor deployment, health, and performance information
@@ -166,9 +168,15 @@ sidebar row and page title.
 - **Browse Installed**: Navigate to Applications → Brew Packages to see all installed formulae and casks
 - **Search**: Use the search box to find packages by name or keyword
 - **Install**: Click the install button next to search results or bundle items
-- **Pin/Unpin**: Click the pin icon to lock/unlock a package version
-- **Remove**: Click the trash icon to uninstall a package
+- **Pin/Unpin**: Use the formula row's Pin or Unpin action and confirm the change
+- **Remove**: Use an installed formula or cask row's Uninstall action and
+  confirm the removal
 - **Upgrade**: Click upgrade button next to outdated packages
+
+ChairLift lists and uninstalls installed user and system Flatpak applications,
+but delegates discovery and installation of new Flatpaks to the external
+manager configured by
+`applications_page.applications_installed_group.app_id` (Bazaar by default).
 
 ### Bundle Installation
 

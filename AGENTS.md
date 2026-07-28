@@ -102,6 +102,10 @@ An agent must not break these:
   `actionstate.RefreshGate` generations; stale workers must not replace newer
   rows. Confirmed installs use an `actionstate.Gate`, restore controls on
   failure/dry-run, and refresh installed rows only after a live success.
+  Installed formula/cask rows likewise confirm uninstall, formula rows confirm
+  pin/unpin, and every row shares one gate across its mutation controls so
+  actions cannot overlap. A live success completes the old controls and starts
+  a generation-guarded inventory refresh; failure or dry-run restores them.
 - **Update badge counts have one state owner.** Bootc, Flatpak, and Homebrew
   counts live in the pure `internal/views/badgestate` package. Refreshes
   replace a provider's count, successful row removals decrement without going

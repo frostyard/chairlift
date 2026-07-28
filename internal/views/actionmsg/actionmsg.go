@@ -2,9 +2,9 @@
 // gated by dry-run, the execution decision) for maintenance-page,
 // applications-page, updates-page, and features-page actions: Homebrew
 // Brewfile dumps and installs, Homebrew/Flatpak cleanup, Homebrew package
-// installs/upgrades/self-updates, Flatpak application uninstalls/updates,
-// Homebrew tap trust, bootc system update staging, configured custom
-// maintenance scripts, and system feature toggles/updates.
+// installs/uninstalls/pins/upgrades/self-updates, Flatpak application
+// uninstalls/updates, Homebrew tap trust, bootc system update staging,
+// configured custom maintenance scripts, and system feature toggles/updates.
 //
 // It is deliberately free of any puregotk/GTK import, following the
 // internal/views/trustmsg pattern, so its logic can be unit-tested on a
@@ -14,10 +14,11 @@
 // packages. See docs/agents/skills/gtk-headless-tests.md.
 //
 // Functions whose result only selects display text (BundleDump, Cleanup,
-// Install, Uninstall, Upgrade, Update, SelfUpdate, BootcStage, FeatureUpdate)
-// return a plain string: the state-changing/no-op decision for those actions
-// is already made and already tested inside their wrapper package
-// (internal/homebrew, internal/flatpak, internal/bootc, internal/updex).
+// Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage,
+// FeatureUpdate) return a plain string: the state-changing/no-op decision for
+// those actions is already made and already tested inside their wrapper
+// package (internal/homebrew, internal/flatpak, internal/bootc,
+// internal/updex).
 // Functions whose result gates a further decision return a decision struct,
 // precisely so the gated decision — not just the wording of the toast that
 // follows it — is what a table-driven test in actionmsg_test.go asserts.
@@ -96,16 +97,26 @@ func Install(dryRun bool, pkgName string) string {
 	return fmt.Sprintf("%s installed", pkgName)
 }
 
-// Uninstall returns the toast text for a Flatpak application uninstall. The
-// wrapper package (internal/flatpak) already skips the state-changing
-// `flatpak uninstall` command under dry-run, so this function only selects
-// which string to show: a preview when dryRun is true, or a fixed completion
-// message when the uninstall actually ran.
-func Uninstall(dryRun bool, appID string) string {
+// Uninstall returns toast text for a Homebrew package or Flatpak application
+// uninstall. Both wrappers skip their state-changing uninstall command under
+// dry-run.
+func Uninstall(dryRun bool, name string) string {
 	if dryRun {
-		return fmt.Sprintf("[DRY-RUN] Preview: %s would be uninstalled — no changes made", appID)
+		return fmt.Sprintf("[DRY-RUN] Preview: %s would be uninstalled — no changes made", name)
 	}
-	return fmt.Sprintf("%s uninstalled", appID)
+	return fmt.Sprintf("%s uninstalled", name)
+}
+
+// Pin returns toast text for a formula pin or unpin.
+func Pin(dryRun bool, name string, pin bool) string {
+	action := "unpinned"
+	if pin {
+		action = "pinned"
+	}
+	if dryRun {
+		return fmt.Sprintf("[DRY-RUN] Preview: %s would be %s — no changes made", name, action)
+	}
+	return fmt.Sprintf("%s %s", name, action)
 }
 
 // Upgrade returns the toast text for a per-package Homebrew upgrade. The

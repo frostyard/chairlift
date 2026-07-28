@@ -74,6 +74,48 @@ func TestPackageInstallEnumeratesEveryOutcome(t *testing.T) {
 	}
 }
 
+func TestPackageMutationsEnumerateEveryInstalledOutcome(t *testing.T) {
+	operations := map[string]func(bool, bool) Decision{
+		"uninstall": PackageUninstall,
+		"pin":       PackagePin,
+	}
+	tests := []struct {
+		name      string
+		succeeded bool
+		dryRun    bool
+		want      Decision
+	}{
+		{
+			name: "failure restores controls",
+			want: Decision{RestoreControl: true},
+		},
+		{
+			name:      "dry-run success restores controls",
+			succeeded: true,
+			dryRun:    true,
+			want:      Decision{RestoreControl: true},
+		},
+		{
+			name:      "live success completes controls and refreshes inventory",
+			succeeded: true,
+			want:      Decision{Refresh: true, CompleteControl: true},
+		},
+	}
+
+	for operation, decide := range operations {
+		t.Run(operation, func(t *testing.T) {
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					got := decide(tt.succeeded, tt.dryRun)
+					if !reflect.DeepEqual(got, tt.want) {
+						t.Fatalf("%s decision(%v, %v) = %#v, want %#v", operation, tt.succeeded, tt.dryRun, got, tt.want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestMetadataUpdateEnumeratesEveryOutcome(t *testing.T) {
 	tests := []struct {
 		name      string

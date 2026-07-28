@@ -61,11 +61,14 @@ valid page.
 
 ### Applications Page (`applications_page`)
 
-- `applications_installed_group`: Flatpak application management link
+- `applications_installed_group`: External Flatpak manager link for discovering
+  and installing new applications; ChairLift itself lists and uninstalls
+  installed Flatpaks but does not directly install them
   - `app_id`: Application ID for the Flatpak manager (default: `io.github.kolunmi.Bazaar`)
-- `flatpak_user_group`: User-installed Flatpak applications
-- `flatpak_system_group`: System-wide Flatpak applications
-- `brew_group`: Installed Homebrew formulae and casks
+- `flatpak_user_group`: User-installed Flatpak applications with uninstall actions
+- `flatpak_system_group`: System-wide Flatpak applications with uninstall actions
+- `brew_group`: Installed Homebrew formulae/casks with uninstall actions and
+  formula pin/unpin actions
 - `brew_search_group`: Search and install Homebrew formulae and casks
 - `brew_bundles_group`: Curated Homebrew package bundles
   - `bundles_paths`: Array of directories searched for immediate

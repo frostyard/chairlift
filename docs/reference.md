@@ -69,16 +69,19 @@ order below. Help is always retained.
 
 | Group | Key | Description |
 |-------|-----|-------------|
-| Installed Apps | `applications_installed_group` | Launcher for a Flatpak manager |
-| User Flatpak | `flatpak_user_group` | User-installed Flatpak applications |
-| System Flatpak | `flatpak_system_group` | System-wide Flatpak applications |
-| Homebrew | `brew_group` | Installed Homebrew formulae and casks |
+| Installed Apps | `applications_installed_group` | Launcher for the external Flatpak manager used for discovery and installation |
+| User Flatpak | `flatpak_user_group` | User-installed Flatpak applications with uninstall actions |
+| System Flatpak | `flatpak_system_group` | System-wide Flatpak applications with uninstall actions |
+| Homebrew | `brew_group` | Installed Homebrew formulae/casks with uninstall actions and formula pin/unpin actions |
 | Brew Search | `brew_search_group` | Search and install Homebrew formulae and casks with an explicit package-type confirmation |
 | Brew Bundles | `brew_bundles_group` | Install packages from Brewfile bundles |
 
 `applications_installed_group` supports:
 
 - `app_id` — Flatpak application ID to launch (default: `io.github.kolunmi.Bazaar`)
+
+ChairLift does not directly discover or install new Flatpak applications.
+Those operations belong to the configured external manager.
 
 `brew_bundles_group` supports:
 

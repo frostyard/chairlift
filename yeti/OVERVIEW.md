@@ -59,7 +59,7 @@ disabled; Help is always retained:
 
 | Page | File | Purpose |
 |------|------|---------|
-| Applications | `applications_page.go` | Browse/install Flatpak (user+system) and Homebrew packages |
+| Applications | `applications_page.go` | Manage Homebrew formulae/casks and installed Flatpaks; launch an external manager for new Flatpak installs |
 | Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts (executed via `exec.Command`/`pkexec`) |
 | Updates | `updates_page.go` | bootc staged system updates, Flatpak updates, Homebrew outdated packages, untrusted-tap trust prompts |
 | System | `system_page.go` | OS info (`/etc/os-release`), bootc deployment status, health monitor launch |
@@ -110,13 +110,13 @@ bootc-related UI groups (system page's `bootc_status_group` and updates page's `
 
 The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, bootc, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
 
-**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would *also* mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm` — returned by the same `internal/views/actionmsg` function that produces the toast. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on its bool for both the mutation *and* the toast, so a table-driven test asserting the bool also proves the mutation gate, and the toast and the gate can never drift apart (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). Sites with no second UI mutation to gate (package install/uninstall/upgrade/update/self-update, cleanup, Brewfile dump, bootc stage, and feature-update toasts) get a plain string function instead — there's nothing beyond the toast for a bool to gate there, so adding one would be dead weight.
+**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would *also* mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation *and* the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). Sites with no second UI mutation to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, bootc stage, and feature-update toasts) get a plain string function instead.
 
 **Intentional exception:** bootc staging's completion **toast** is dry-run-aware (`actionmsg.BootcStage`), but its expander **subtitle** deliberately is not. The subtitle is a persistent status readout of live `bootc.GetStatus()` — what deployment is actually staged/booted right now — not a per-click completion claim, so it stays accurate and unchanged in both dry-run and live mode. Only the toast, which inherently answers "what did this click just do," needed dry-run-specific wording; there is no mutation left to gate once the subtitle is deliberately excluded, which is why `BootcStage` is string-only rather than a decision struct.
 
 Per-wrapper mechanics:
 
-- **Homebrew/Flatpak**: state-changing commands are skipped entirely at the wrapper layer (return mock/empty results); ordinary package-action toasts use the plain `actionmsg` string functions (`Install`, `Uninstall`, `Upgrade`, `Update`, `SelfUpdate`, `BundleDump`, `Cleanup`). Brew bundle installation uses `BundleInstallDecision`: a live success completes and permanently disables its row action, while a dry-run success resets the action after showing a preview.
+- **Homebrew/Flatpak**: state-changing commands are skipped entirely at the wrapper layer (return mock/empty results); ordinary package-action toasts use the plain `actionmsg` string functions (`Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BundleDump`, `Cleanup`). Homebrew search installs and installed-package uninstall/pin actions pair that text with `actionstate` decisions: live success completes the old row controls and refreshes the installed inventory, while failure or dry-run restores the controls. Brew bundle installation uses `BundleInstallDecision` with the same live-complete/dry-run-reset distinction.
 - **Updex**: `EnableFeature`/`DisableFeature`/`UpdateFeatures` skip their `pkexec` call entirely under dry-run and return empty/nil results; the helper binary itself (`cmd/chairlift-updex-helper`, dispatch logic in `internal/updexhelper`) also honors `--dry-run` for `update`, matching `enable-feature`/`disable-feature`, as defense-in-depth even though it's unreachable from the wrapper today.
 - **bootc**: `StageUpdate` short-circuits before invoking pkexec: it logs the would-be command, emits a synthetic `EventMessage` + `EventComplete` pair on the progress channel, and returns — the stage script is never actually run (see the exception above for the toast/subtitle split).
 - **Homebrew tap trust**: `trustTap` (`internal/views/updates_page.go`) computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once, after a successful `homebrew.TrustPackages` call, and gates removing the tap's row, hiding the group, and refreshing outdated packages on `decision.MutateUI`.
@@ -1169,12 +1169,12 @@ page_name:
 | `updates_page` | `flatpak_updates_group` | Flatpak pending updates |
 | `updates_page` | `brew_updates_group` | Homebrew outdated packages |
 | `updates_page` | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); hidden unless there is something to trust |
-| `applications_page` | `flatpak_user_group` | User Flatpak applications |
-| `applications_page` | `flatpak_system_group` | System Flatpak applications |
-| `applications_page` | `brew_group` | Homebrew formulae and casks |
+| `applications_page` | `flatpak_user_group` | User Flatpak applications with uninstall actions |
+| `applications_page` | `flatpak_system_group` | System Flatpak applications with uninstall actions |
+| `applications_page` | `brew_group` | Installed Homebrew formulae/casks with uninstall and formula pin/unpin actions |
 | `applications_page` | `brew_search_group` | Typed Homebrew formula/cask search and confirmed install |
 | `applications_page` | `brew_bundles_group` | Curated `*.Brewfile` bundles discovered from every configured `bundles_paths` directory, with guarded install actions |
-| `applications_page` | `applications_installed_group` | Installed apps launcher (configurable `app_id`, default: Bazaar) |
+| `applications_page` | `applications_installed_group` | External Flatpak-manager launcher for discovery/install (configurable `app_id`, default: Bazaar); ChairLift has no direct Flatpak-install UI |
 | `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts (5min timeout, pkexec for sudo); **disabled by default** |
 | `maintenance_page` | `maintenance_brew_group` | Homebrew cleanup (deferred visibility) |
 | `maintenance_page` | `maintenance_flatpak_group` | Flatpak unused cleanup (deferred visibility) |

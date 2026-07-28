@@ -115,6 +115,22 @@ func PackageUpgrade(succeeded, dryRun bool) Decision {
 // install permanently completes the row control and refreshes installed
 // packages.
 func PackageInstall(succeeded, dryRun bool) Decision {
+	return completedPackageMutation(succeeded, dryRun)
+}
+
+// PackageUninstall decides whether an installed-package uninstall control
+// resets or completes and whether the installed inventory must refresh.
+func PackageUninstall(succeeded, dryRun bool) Decision {
+	return completedPackageMutation(succeeded, dryRun)
+}
+
+// PackagePin decides whether a formula pin/unpin control resets or completes
+// and whether the installed inventory must refresh.
+func PackagePin(succeeded, dryRun bool) Decision {
+	return completedPackageMutation(succeeded, dryRun)
+}
+
+func completedPackageMutation(succeeded, dryRun bool) Decision {
 	switch {
 	case !succeeded:
 		return Decision{RestoreControl: true}
