@@ -18,6 +18,12 @@ persistent toast with the path and cause. Fix the file and restart ChairLift.
 If no file is found, built-in defaults apply: all groups are enabled except
 `maintenance_cleanup_group`.
 
+Source and nFPM installs provide the repository's maintainer defaults at
+`/usr/share/chairlift/config.yml`. Package upgrades may replace that file.
+Administrators should put local changes in `/etc/chairlift/config.yml`, which
+has higher precedence and is never created or overwritten by ChairLift's
+packages.
+
 ## Format
 
 ```yaml

@@ -26,7 +26,9 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   the installed PolicyKit policy/rules files land where `polkitd` reads them
   (`/usr/share/polkit-1/{actions,rules.d}`) and the updex helper's installed
   path matches its fixed `pkexec` exec-path annotation (see the privilege
-  boundary invariant below).
+  boundary invariant below). It installs maintainer defaults at
+  `/usr/share/chairlift/config.yml` and must never install or overwrite the
+  administrator-owned `/etc/chairlift/config.yml`.
 
 CI (`.github/workflows/test.yml`) filters tests with `-run "^Test[^I]"
 -skip "Integration"`. That filter excludes *any* test whose name begins `TestI`

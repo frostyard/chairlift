@@ -7,12 +7,17 @@ ChairLift can be configured to show or hide specific feature groups, making it m
 ChairLift searches for the configuration file in the following locations (in order):
 
 1. `/etc/chairlift/config.yml` (system-wide configuration - highest priority)
-2. `/usr/share/chairlift/config.yml` (package maintainer defaults)
+2. `/usr/share/chairlift/config.yml` (package maintainer defaults installed by
+   source and nFPM packages)
 3. `config.yml` beside the ChairLift executable, or in the current working
    directory when no executable-relative file exists (development fallback)
 
 If no configuration file is found, all features default to enabled, except
 `maintenance_cleanup_group`, which defaults to disabled.
+
+Packages own and may replace the `/usr/share` defaults during an upgrade.
+Administrators should put local changes in `/etc/chairlift/config.yml`;
+ChairLift's install and packaging paths never create or overwrite that file.
 
 The first file that exists in this order is authoritative. ChairLift does not
 fall through to a lower-priority file when that file is unreadable, malformed,

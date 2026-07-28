@@ -132,6 +132,9 @@ nfpms:
       # Desktop file
       - src: ./data/org.frostyard.ChairLift.desktop
         dst: /usr/share/applications/org.frostyard.ChairLift.desktop
+      # Package-maintainer defaults; never install into the administrator-owned /etc path
+      - src: ./config.yml
+        dst: /usr/share/chairlift/config.yml
       # Icons
       - src: ./data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg
         dst: /usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg

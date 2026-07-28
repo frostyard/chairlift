@@ -77,6 +77,10 @@ more restrictive, always-reprompting authentication rule). This also matches
 the layout used by ChairLift's own `.goreleaser.yaml` packages, so a source
 install and a packaged install end up identical.
 
+Both paths install package-maintainer configuration defaults at
+`/usr/share/chairlift/config.yml`. They never create or overwrite the
+administrator-owned `/etc/chairlift/config.yml` override.
+
 `PREFIX` can still be overridden (e.g. `make install PREFIX=$HOME/.local`)
 for a non-privileged, non-PolicyKit-integrated install — but the updex
 helper and bootc staging will not resolve to the fixed exec-path annotation
