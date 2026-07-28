@@ -112,7 +112,7 @@ The upgrade-failure toast text adapts to whether that UI is actually available: 
 
 ### View-layer toast and decision helpers (`internal/views/actionmsg`, `internal/views/trustmsg`)
 
-Two of the seven small, puregotk-free packages under `internal/views/` (the others are `internal/views/actionstate`, `internal/views/bundleview`, `internal/views/rowset`, `internal/views/flatpakstatus` and `internal/views/featurestatus`, each documented in its own subsection below) hold the text and, at four call sites, the accompanying UI decision that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
+Two of the eight small, puregotk-free packages under `internal/views/` (the others are `internal/views/actionstate`, `internal/views/badgestate`, `internal/views/bundleview`, `internal/views/rowset`, `internal/views/flatpakstatus` and `internal/views/featurestatus`, each documented in its own subsection below) hold the text and, at four call sites, the accompanying UI decision that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
 
 - **`internal/views/trustmsg`** (added for issue #57) — `UpgradeMessage(pkgName string, trustGroupAvailable bool) string`, the toast shown when a Homebrew upgrade fails with an `*homebrew.UntrustedTapError`; see "Tap trust" above.
 - **`internal/views/actionmsg`** (added for issue #56 and extended for issue #8) — builds the toast text for every state-changing view action across the maintenance, applications, updates, and features pages, and, at the four call sites where the view also mutates a row/group/switch on success, the execute/complete/mutate/confirm decision itself, so the same table-driven test in `actionmsg_test.go` that checks the toast also checks the gate (see "Dry-run mode" in [OVERVIEW.md](./OVERVIEW.md#dry-run-mode) for the general rule this implements). Exported surface:
@@ -134,7 +134,7 @@ Two of the seven small, puregotk-free packages under `internal/views/` (the othe
 
 ### View-layer update action state (`internal/views/actionstate`)
 
-`internal/views/actionstate` is one of the seven puregotk-free leaf packages
+`internal/views/actionstate` is one of the eight puregotk-free leaf packages
 under `internal/views`. It owns the state machines and complete outcome tables
 for the Updates page's Homebrew mutation controls:
 
@@ -168,9 +168,29 @@ puregotk-importing `updates_page.go` uses those decisions, progress labels,
 gates, row removal, count decrement, versioned refresh callbacks, and
 clear/add bookkeeping; no `_test.go` is added to `internal/views`.
 
+### View-layer update badge state (`internal/views/badgestate`)
+
+`internal/views/badgestate` is one of the eight puregotk-free leaf packages
+under `internal/views`. `Counts` replaces the three independent integer fields
+that previously lived on `UserHome` with one mutex-protected owner for Bootc,
+Flatpak, and Homebrew update counts. `Set(source, count)` models a completed
+provider refresh and replaces that provider's prior value; `Add(source,
+delta)` models an immediate row-level change such as a successful Homebrew
+upgrade. Both clamp negative results to zero and return an atomic
+`Snapshot{Count, Total}`. `Get` and `Total` provide locked reads.
+
+The view still performs widget mutation through `sgtk.RunOnMainThread`; the
+leaf package owns only integers and synchronization. `badgestate_test.go`
+proves the zero value, multi-provider totals, replacement rather than
+accumulation across repeated refreshes, decrement/clamping behavior, unknown
+source rejection, and concurrent changes under the race detector.
+`wiring_test.go` verifies `views.go` and `updates_page.go` route all three
+providers and the displayed total through this owner, and rejects the retired
+independent count fields.
+
 ### View-layer Brew bundle state (`internal/views/bundleview`)
 
-`internal/views/bundleview` is one of the seven puregotk-free leaf packages
+`internal/views/bundleview` is one of the eight puregotk-free leaf packages
 under `internal/views`. It owns the bundle group's load presentation and its
 per-row concurrency state, leaving `applications_page.go` to construct and
 update widgets only.
@@ -194,7 +214,7 @@ button mutation on the main thread.
 
 ### View-layer row bookkeeping (`internal/views/rowset`)
 
-`internal/views/rowset` is one of the seven puregotk-free leaf packages under `internal/views/` (its siblings are `internal/views/actionmsg`, `internal/views/actionstate`, `internal/views/bundleview`, `internal/views/trustmsg`, `internal/views/flatpakstatus` and `internal/views/featurestatus`). It holds single-row removal and clear-then-repopulate bookkeeping for rows a view adds to an expander, so a successful action can remove exactly its row and a later list reload does not accumulate stale rows. Like `actionmsg`, `actionstate`, `bundleview` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
+`internal/views/rowset` is one of the eight puregotk-free leaf packages under `internal/views/` (its siblings are `internal/views/actionmsg`, `internal/views/actionstate`, `internal/views/badgestate`, `internal/views/bundleview`, `internal/views/trustmsg`, `internal/views/flatpakstatus` and `internal/views/featurestatus`). It holds single-row removal and clear-then-repopulate bookkeeping for rows a view adds to an expander, so a successful action can remove exactly its row and a later list reload does not accumulate stale rows. Like `actionmsg`, `actionstate`, `badgestate`, `bundleview` and `trustmsg`, it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); unlike them it imports nothing at all outside the standard library.
 
 Exported surface:
 
@@ -210,7 +230,7 @@ Exported surface:
 
 ### View-layer Flatpak update status (`internal/views/flatpakstatus`)
 
-`internal/views/flatpakstatus` is one of the seven puregotk-free leaf packages under `internal/views/`. It turns the outcome of the two Flatpak update queries — how many updates are known, and which of the user/system installations could not be checked — into the Flatpak updates expander's subtitle text plus whether the expander should be expandable. Like `actionmsg`, `actionstate`, `bundleview`, `trustmsg` and `rowset` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); like `rowset` it imports nothing at all outside the standard library (`fmt`).
+`internal/views/flatpakstatus` is one of the eight puregotk-free leaf packages under `internal/views/`. It turns the outcome of the two Flatpak update queries — how many updates are known, and which of the user/system installations could not be checked — into the Flatpak updates expander's subtitle text plus whether the expander should be expandable. Like `actionmsg`, `actionstate`, `badgestate`, `bundleview`, `trustmsg` and `rowset` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`); like `rowset` it imports nothing at all outside the standard library (`fmt`).
 
 Exported surface:
 
@@ -223,11 +243,11 @@ The package is pure and holds no state, so it is safe to call from a worker goro
 
 `loadFlatpakUpdates` (`internal/views/updates_page.go`) is its only call site. It keeps both `flatpak.ListUpdates` errors as values — `userErr` and `systemErr`, still logged exactly as before via the two `log.Printf("Error loading {user,system} flatpak updates: %v", …)` lines — instead of dropping them once logged, and then calls `flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)` once on the worker goroutine, before entering `sgtk.RunOnMainThread`. Inside that closure (past the `if uh.flatpakUpdatesExpander == nil { return }` guard, which stays because `flatpak_updates_group` can be disabled and the expander then never gets built) the result is applied unconditionally: `SetSubtitle(result.Subtitle)` and `SetEnableExpansion(result.Expandable)` run on *every* path, including the zero-update path, and only the building of the per-update rows is skipped when there are none. The view holds no subtitle text and makes no decision of its own; the old hard-coded `"All applications are up to date"` and `fmt.Sprintf("%d updates available", …)` strings are gone from it.
 
-The practical consequence is that a total failure — both installations unqueryable — no longer renders as an all-up-to-date message: `allUpdates` is empty for the same reason it is empty when everything really is current, and only the retained errors distinguish the two, so the expander reads `Could not check for updates`. A partial failure is identified as partial rather than silently under-reported: the rows that were found are shown and expandable, with the subtitle naming the installation that could not be checked. The badge is deliberately left as a plain count — `uh.flatpakUpdateCount = len(allUpdates)` is unchanged and carries no error state — so a total failure shows a badge of `0` next to an honest subtitle rather than an invented number.
+The practical consequence is that a total failure — both installations unqueryable — no longer renders as an all-up-to-date message: `allUpdates` is empty for the same reason it is empty when everything really is current, and only the retained errors distinguish the two, so the expander reads `Could not check for updates`. A partial failure is identified as partial rather than silently under-reported: the rows that were found are shown and expandable, with the subtitle naming the installation that could not be checked. The badge deliberately remains a plain count — `uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))` carries no error state — so a total failure shows a badge contribution of `0` next to an honest subtitle rather than an invented number.
 
 ### View-layer feature update status (`internal/views/featurestatus`)
 
-`internal/views/featurestatus` is one of the seven puregotk-free leaf packages under `internal/views/`. It owns every string and every decision the Features page's updex update check needs: a feature row's subtitle, whether that feature has an update, and the features group's description. Like `actionmsg`, `actionstate`, `bundleview`, `trustmsg`, `rowset` and `flatpakstatus` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`). Unlike them it imports one non-standard-library package, `internal/updex`, for the `CheckResult` type; that is safe because `internal/updex` is itself puregotk-free (`go list -deps ./internal/updex | grep -c puregotk` prints `0`), and `go list -deps ./internal/views/featurestatus | grep -c puregotk` prints `0` too.
+`internal/views/featurestatus` is one of the eight puregotk-free leaf packages under `internal/views/`. It owns every string and every decision the Features page's updex update check needs: a feature row's subtitle, whether that feature has an update, and the features group's description. Like `actionmsg`, `actionstate`, `badgestate`, `bundleview`, `trustmsg`, `rowset` and `flatpakstatus` it exists because `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/Libadwaita/GLib/graphene shared libraries at package init, before any test runs — `docs/agents/skills/gtk-headless-tests.md`). Unlike them it imports one non-standard-library package, `internal/updex`, for the `CheckResult` type; that is safe because `internal/updex` is itself puregotk-free (`go list -deps ./internal/updex | grep -c puregotk` prints `0`), and `go list -deps ./internal/views/featurestatus | grep -c puregotk` prints `0` too.
 
 Exported surface:
 
@@ -300,6 +320,13 @@ Failures classify into exactly four distinct outcomes, checked in this order —
 | The executable is missing (`exec.ErrNotFound` for a bare name, `fs.ErrNotExist` for an explicit path) | `*NotFoundError` ("Flatpak not found…") |
 
 A deadline and a cancellation never produce the same message, and neither surfaces as `signal: killed` — the process is killed by ChairLift's own `Cancel` func, so the raw wait error is replaced by the classified one. `Error` carries an `Err error` field and an `Unwrap() error` method, so `errors.Is(err, context.DeadlineExceeded)` works for callers while `Error` keeps satisfying `error` and keeps its human-readable `Message`; nothing in the views switches on its concrete type. `internal/flatpak/runner_test.go` covers each outcome against a fake script, asserts the deadline and cancellation messages differ and contain no `signal: killed`, and `TestRunFlatpakCommandAtKillsProcessGroup` proves the process-group kill by having the fake script spawn a background `sleep`, recording its PID, and polling `syscall.Kill(pid, 0)` until it returns `ESRCH` — proving the helper is gone, not merely that the parent returned.
+
+`flatpak_test.go` separately drives every public CLI wrapper against a fake
+`flatpak` on `PATH`, asserting exact user/system arguments, parsing, and query
+failure propagation. It table-tests application and update parsing and
+iterates all four real state-changing command keys to prove dry-run returns
+before execution. This complements runner classification rather than chasing
+a percentage in isolation.
 
 ### Update queries exclude runtimes
 
@@ -427,6 +454,14 @@ Type aliases to `github.com/frostyard/updex/updex`:
 | `DisableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
 | `UpdateFeatures()` | `pkexec /usr/bin/chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features |
 
+`updex_test.go` drives all three public write operations through a fake
+`pkexec` on `PATH` and asserts that argv always begins with the fixed
+`HelperPath`, followed by the exact subcommand/name shape. It also covers
+missing-pkexec, non-zero/stderr, timeout, default-context, and wrapper dry-run
+outcomes. Multi-component update aggregation remains in the pure
+`internal/views/featurestatus` package, where every result is inspected and
+the full decision table is tested without constructing GTK widgets.
+
 ### Helper binary (`cmd/chairlift-updex-helper/main.go`)
 
 A small standalone binary that accepts commands (`enable-feature`, `disable-feature`, `update`) and uses the updex Go library to perform privileged operations. It supports `--dry-run` for all three subcommands — `enable-feature`, `disable-feature`, and `update` — passing it through to the corresponding `updex.*Options.DryRun` field. Outputs JSON to stdout. Invoked via pkexec so that the main chairlift process does not need root.
@@ -468,14 +503,15 @@ goroutine and immediately make the clicked button insensitive with an
 `Updating...` or `Upgrading...` label, so a repeated callback cannot overlap
 the operation even if it bypasses GTK's insensitive-button guard. A command
 failure restores the original label/sensitivity and leaves
-`brewUpdateCount`, the tracked rows, and the sidebar badge unchanged. A
-dry-run wrapper success shows the preview toast and restores the same control
+the Homebrew value in `updateCounts`, the tracked rows, and the sidebar badge
+unchanged. A dry-run wrapper success shows the preview toast and restores the same control
 without refreshing because no metadata or package state changed.
 
 A live per-package success completes its gate, removes exactly its tracked row
-through `rowset.Tracker.Remove`, decrements `brewUpdateCount` (and therefore
-the aggregate sidebar badge), and starts a full `ListOutdated` refresh. A live
-top-level `brew update` keeps its button busy while that refresh runs and
+through `rowset.Tracker.Remove`, decrements the Homebrew count (and therefore
+the aggregate sidebar badge) through `updateCounts.Add(badgestate.Homebrew,
+-1)`, and starts a full `ListOutdated` refresh. A live top-level `brew update`
+keeps its button busy while that refresh runs and
 restores it from the refresh's main-thread completion callback. Each request
 takes a generation from `actionstate.RefreshGate`; its main-thread result
 first proves that generation is still current, so a slower older query cannot

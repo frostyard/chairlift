@@ -32,7 +32,7 @@ func TestUpdatesPageUsesGuardedRefreshDecisions(t *testing.T) {
 		`actionstate.OutdatedRefresh(err == nil, currentCount, len(packages))`,
 		`actionstate.OutdatedPresentation(refresh.Count)`,
 		`uh.outdatedRows.Remove(row`,
-		`uh.brewUpdateCount--`,
+		`uh.updateCounts.Add(badgestate.Homebrew, -1)`,
 		`actionstate.OutdatedPresentation(remaining)`,
 		`uh.loadOutdatedPackages()`,
 		`actionstate.MetadataUpdate(err == nil, dryRun)`,

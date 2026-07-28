@@ -78,6 +78,11 @@ An agent must not break these:
   changing rows or counts. A live package success removes its row, decrements
   the count/badge, and refreshes; a failed refresh preserves that last known
   row/count state instead of replacing it with an invented zero.
+- **Update badge counts have one state owner.** Bootc, Flatpak, and Homebrew
+  counts live in the pure `internal/views/badgestate` package. Refreshes
+  replace a provider's count, successful row removals decrement without going
+  negative, and the displayed total is always the sum of all three providers.
+  Do not restore independent integer fields in `UserHome`.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget
