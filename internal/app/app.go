@@ -90,9 +90,6 @@ func New() *Application {
 		}
 	}
 
-	// Set up keyboard shortcuts
-	app.setupKeyboardShortcuts()
-
 	// Register command line options
 	app.registerOptions()
 
@@ -114,13 +111,14 @@ func (a *Application) onActivate() {
 	win := window.New(a.Application)
 	a.window = win
 	a.AddWindow(&win.Window)
+	a.setupKeyboardShortcuts(win.NavigationItems())
 	win.Present()
 	log.Printf("app: window presented in %s (since activate)", time.Since(activateStart))
 }
 
 // setupKeyboardShortcuts sets up application-wide keyboard shortcuts
-func (a *Application) setupKeyboardShortcuts() {
-	for _, binding := range navigation.Bindings() {
+func (a *Application) setupKeyboardShortcuts(items []navigation.Item) {
+	for _, binding := range navigation.Bindings(items) {
 		a.SetAccelsForAction(binding.Action, binding.Accelerators)
 	}
 }

@@ -63,11 +63,15 @@ An agent must not break these:
   worker goroutine.
 - **Navigation behavior has one authority.** Page order, titles, icons, and
   advertised/registered accelerators live in the pure
-  `internal/navigation` package. Mouse activation and window navigation
-  actions must both call `Window.navigateToPage`, which applies the complete
-  `navigation.Resolve` transition (selected row, visible child, title, and
-  collapsed-layout content reveal). Do not reintroduce a second page or
-  shortcut inventory in `internal/window` or `internal/app`.
+  `internal/navigation` package. It also decides page visibility from static
+  group configuration: omit a functional page when all of its builder-backed
+  groups are disabled, always retain Help, and compact Alt+number over visible
+  pages. Mouse activation and window navigation actions must both call
+  `Window.navigateToPage`, which applies the complete `navigation.Resolve`
+  transition (visible-row index, visible child, title, and collapsed-layout
+  content reveal). The app and shortcuts dialog must use the window's same
+  visible inventory. Do not reintroduce a second page or shortcut inventory in
+  `internal/window` or `internal/app`.
 - **Homebrew update actions preserve known state.** Per-package upgrades and
   the top-level metadata update use `internal/views/actionstate` gates before
   spawning work. Failures and dry-run previews restore their controls without

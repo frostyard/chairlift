@@ -123,8 +123,9 @@ chairlift
 
 ### Keyboard Shortcuts
 
-- `Alt+1` through `Alt+6`: open Applications, Maintenance, Updates, System,
-  Features, or Help respectively
+- `Alt+1` through `Alt+N`: open the first through Nth visible page in sidebar
+  order. Pages whose configurable groups are all disabled are omitted, so the
+  numbers compact without gaps; Help is always retained.
 - `F1`: open Help
 - `Ctrl+?`: show the keyboard-shortcuts window
 - `Ctrl+Q`: quit

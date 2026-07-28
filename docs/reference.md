@@ -31,6 +31,11 @@ Groups with `enabled: false` are hidden from the UI. Missing entries inherit
 their built-in values. Unknown page, group, or field names and wrong field
 types are errors. Changes require restarting ChairLift.
 
+When every builder-backed group on a functional page is disabled, the page is
+also omitted from the sidebar, content stack, shortcuts dialog, and
+Alt+number bindings. Alt+number is compacted over the remaining pages in the
+order below. Help is always retained.
+
 ## Pages and Groups
 
 ### System Page (`system_page`)

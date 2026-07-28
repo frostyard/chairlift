@@ -6,7 +6,7 @@ The UI is YAML-configuration-driven, making it portable to other Linux distribut
 
 ## Pages
 
-ChairLift organizes its functionality into six pages:
+ChairLift provides six configurable pages:
 
 | Page | Description |
 |------|-------------|
@@ -17,18 +17,17 @@ ChairLift organizes its functionality into six pages:
 | **Features** | Toggle system features managed by updex. |
 | **Help** | Links to the project website, issue tracker, and community chat. |
 
+A functional page is omitted when all of its groups are disabled. Help is
+always retained so the window always has a valid destination.
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Q` | Quit |
 | `Ctrl+?` | Show shortcuts dialog |
-| `Alt+1` | Applications |
-| `Alt+2` | Maintenance |
-| `Alt+3` | Updates |
-| `Alt+4` | System |
-| `Alt+5` | Features |
-| `Alt+6` | Help |
+| `Alt+1` … `Alt+N` | Open the first through Nth visible page in sidebar order; omitted pages leave no gaps |
+| `F1` | Help |
 
 ## Command-Line Flags
 

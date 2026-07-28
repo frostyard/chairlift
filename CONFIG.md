@@ -30,6 +30,12 @@ page_name:
     enabled: true/false
 ```
 
+When every functional group on a page is disabled, that page is omitted from
+the sidebar, content stack, shortcuts dialog, and Alt+number bindings. The
+remaining Alt+number shortcuts compact in sidebar order. Help remains visible
+even when `help_resources_group` is disabled, so the application always has a
+valid page.
+
 ## Available Pages and Groups
 
 ### System Page (`system_page`)
