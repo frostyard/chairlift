@@ -1,7 +1,7 @@
 # AGENTS
 
 ChairLift is a GTK4/Libadwaita system-management GUI for
-[Snow Linux](https://github.com/frostyard/snow), written in idiomatic Go using
+[Snow Linux](https://github.com/frostyard/snosi), written in idiomatic Go using
 [puregotk](https://codeberg.org/puregotk/puregotk) bindings — **no CGO**. GTK,
 Libadwaita, and GLib shared libraries are loaded at runtime via `dlopen`. The UI
 is YAML-configuration-driven; feature groups toggle on and off per host.

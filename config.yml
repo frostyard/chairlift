@@ -60,6 +60,6 @@ features_page:
 help_page:
   help_resources_group:
     enabled: true
-    website: https://github.com/frostyard/snow
-    issues: https://github.com/frostyard/snow/issues
-    chat: https://github.com/frostyard/snow/discussions
+    website: https://github.com/frostyard/snosi
+    issues: https://github.com/frostyard/snosi/issues
+    chat: https://github.com/frostyard/snosi/discussions
