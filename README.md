@@ -1,7 +1,7 @@
 <div align="center">
     <img src="data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg">
     <h1>ChairLift</h1>
-    <p>A modern system management tool for <a href="https://github.com/frostyard/snow">Snow Linux</a></p>
+    <p>A modern system management tool for <a href="https://github.com/frostyard/snosi">Snow Linux</a></p>
     <p>Manage your Homebrew packages, monitor system health, and maintain your system with ease.</p>
 </div>
 

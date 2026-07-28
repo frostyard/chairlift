@@ -278,9 +278,9 @@ func defaultConfig() *Config {
 		HelpPage: PageConfig{
 			"help_resources_group": GroupConfig{
 				Enabled: true,
-				Website: "https://github.com/frostyard/snow",
-				Issues:  "https://github.com/frostyard/snow/issues",
-				Chat:    "https://github.com/frostyard/snow/discussions",
+				Website: "https://github.com/frostyard/snosi",
+				Issues:  "https://github.com/frostyard/snosi/issues",
+				Chat:    "https://github.com/frostyard/snosi/discussions",
 			},
 		},
 	}
