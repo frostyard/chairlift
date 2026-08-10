@@ -46,9 +46,27 @@ func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
 		}
 	})
 
-	t.Run("historical port guide is marked", func(t *testing.T) {
-		if !strings.Contains(readRepoFile(t, "README-go-port.md"), "**Historical document.**") {
-			t.Error("README-go-port.md is not clearly marked historical")
+	t.Run("historical port guide is marked and non-runnable", func(t *testing.T) {
+		guide := readRepoFile(t, "README-go-port.md")
+		for _, required := range []string{
+			"**Historical document.**",
+			"Do not use build commands from this historical proposal.",
+			"[README.md](README.md#building-from-source)",
+		} {
+			if !strings.Contains(guide, required) {
+				t.Errorf("README-go-port.md does not contain %q", required)
+			}
+		}
+		for _, stale := range []string{
+			"Go 1.22",
+			"\ncd go\n",
+			"make deps",
+			"go mod download",
+			"\ngo/\n",
+		} {
+			if strings.Contains(guide, stale) {
+				t.Errorf("README-go-port.md still contains stale guidance %q", stale)
+			}
 		}
 	})
 

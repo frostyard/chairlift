@@ -26,7 +26,7 @@ This is an experimental port of ChairLift from Python to Go using puregotk. Bene
 
 ## Requirements
 
-- Go 1.22 or later
+- See [README.md](README.md) for the current Go version requirement
 - GTK 4
 - libadwaita 1
 - Homebrew (optional, for package management features)
@@ -53,51 +53,13 @@ sudo pacman -S gtk4 libadwaita
 
 ## Building
 
-```bash
-cd go
-
-# Download dependencies
-make deps
-
-# Build the application
-make build
-
-# Run the application
-make run
-```
-
-Or manually:
-
-```bash
-cd go
-go mod download
-CGO_ENABLED=0 go build -o build/chairlift ./cmd/chairlift
-./build/chairlift
-```
+> Do not use build commands from this historical proposal. See
+> [README.md](README.md#building-from-source) for the maintained instructions.
 
 ## Project Structure
 
-```
-go/
-├── cmd/
-│   └── chairlift/
-│       └── main.go          # Application entry point
-├── internal/
-│   ├── app/
-│   │   └── app.go           # Application setup
-│   ├── config/
-│   │   └── config.go        # YAML configuration loading
-│   ├── homebrew/
-│   │   └── homebrew.go      # Homebrew interface
-│   ├── views/
-│   │   └── userhome.go      # Page content views
-│   └── window/
-│       └── window.go        # Main window
-├── go.mod
-├── go.sum
-├── Makefile
-└── README.md
-```
+The port is complete, and the historical layout described by this proposal no
+longer exists. See [README.md](README.md) for the current repository layout.
 
 ## Configuration
 
