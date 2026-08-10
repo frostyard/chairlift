@@ -72,8 +72,9 @@ For an agent-authored pull request, audit the signals in this order:
    aggregate check mark.
 4. Review coverage for changed pure-Go logic and verify regression tests cover
    the reported failure mode.
-5. Apply the repository invariants and learned skills from `AGENTS.md`, then
-   record concrete review findings on the pull request.
+5. Apply the [pull request review rubric](review-rubric.md), including the
+   repository invariants and learned skills, then record concrete findings on
+   the pull request.
 
 Reusable implementation and review prompts are available in the
 [agent prompt catalog](prompts/index.md). They are aids only; repository

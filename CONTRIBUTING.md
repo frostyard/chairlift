@@ -55,6 +55,8 @@ For a quicker iteration loop, use `make test` and `make lint`, then run
 - Link the relevant issue.
 - Explain what changed and why.
 - Describe how the change was tested.
+- Review proposed changes against the
+  [pull request review rubric](docs/review-rubric.md).
 - Keep unrelated refactors out of the pull request.
 - Ensure all CI checks pass.
 
