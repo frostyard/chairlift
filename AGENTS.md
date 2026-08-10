@@ -152,6 +152,11 @@ before working. Write content there to be maximally useful to an AI agent
 understanding the codebase — detailed architecture and rationale rather than
 user-facing guides.
 
+**.knowledge/ directory** is the repository's cross-session knowledge index.
+Read `.knowledge/README.md` before working so prior corrections, handoffs,
+durable lessons, and architecture guidance are discovered from their canonical
+locations instead of duplicated into competing stores.
+
 **.memory/ directory** is the repository's committed correction store for AI
 agents. Read `.memory/README.md` and any learning artifacts in that directory
 before working. Record verified corrections there when a session establishes
