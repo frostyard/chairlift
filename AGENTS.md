@@ -135,6 +135,11 @@ An agent must not break these:
   authoritative: read, YAML, or schema errors must disable every configurable
   group, emit the `CONFIGURATION ERROR` diagnostic, and remain visible in the
   UI as a persistent toast until the file is fixed and ChairLift is restarted.
+- **CI actions are immutable.** Every external `uses:` reference under
+  `.github/workflows/` must use a full 40-character commit SHA. Keep the
+  human-readable version or source ref in a trailing comment and update both
+  intentionally. Local actions referenced with `./` are exempt. The
+  `internal/installcheck` workflow scan enforces this across every workflow.
 
 ## Documentation
 
@@ -151,6 +156,11 @@ context enhancement, not primarily for humans. Read `yeti/OVERVIEW.md` and
 before working. Write content there to be maximally useful to an AI agent
 understanding the codebase — detailed architecture and rationale rather than
 user-facing guides.
+
+**.knowledge/ directory** is the repository's cross-session knowledge index.
+Read `.knowledge/README.md` before working so prior corrections, handoffs,
+durable lessons, and architecture guidance are discovered from their canonical
+locations instead of duplicated into competing stores.
 
 **.memory/ directory** is the repository's committed correction store for AI
 agents. Read `.memory/README.md` and any learning artifacts in that directory

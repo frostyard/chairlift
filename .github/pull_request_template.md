@@ -10,6 +10,13 @@
 
 Closes #
 
+## Change classification
+
+<!-- Select the highest applicable tier from docs/risk-tiers.md. -->
+
+- Risk tier:
+- Rationale:
+
 ## Validation
 
 <!-- List exact commands and results. Explain any check that could not run. -->
