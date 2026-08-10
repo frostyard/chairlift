@@ -675,7 +675,10 @@ installed layout itself:
   be a second, divergence-prone implementation of `make`'s own substitution
   rules, and would stop being a regression test for the exact thing that
   broke (the *installed* path) the moment it disagreed with real `make`
-  output.
+  output. If GNU make is not installed, the check skips with an explicit
+  diagnostic so a minimal Go environment does not resemble an invariant
+  regression; when make is available, command and layout failures remain hard
+  failures.
 - **`TestGoreleaserNfpmLayoutMatchesUsrPrefix`** parses the real, repo-root
   `.goreleaser.yaml` (not a fixture) with the already-vendored
   `gopkg.in/yaml.v3` and, iterating **every** `nfpms[]` entry (not just

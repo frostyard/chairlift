@@ -274,9 +274,11 @@ Libadwaita, `dbus-run-session`, and Xvfb to execute the built application's
 help path, start its dry-run window in a private headless session, poll bounded
 startup readiness, stage the complete install layout, and exercise the installed
 privileged helper's argument rejection. The hosted E2E job installs those
-runtime dependencies and runs the same target. The unit gate also scans every
-workflow and rejects external GitHub Actions references that are not pinned to
-full commit SHAs.
+runtime dependencies and runs the same target. Direct Go test runs on a minimal
+host skip the Makefile install-layout consistency check when GNU make is absent;
+when make is present, any dry-run or layout mismatch remains a hard failure. The
+unit gate also scans every workflow and rejects external GitHub Actions
+references that are not pinned to full commit SHAs.
 
 Codecov rejects project coverage regressions greater than one percentage point.
 Coverage expectations otherwise remain risk-based, not a repository-wide
