@@ -82,6 +82,22 @@ func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
 		}
 	})
 
+	t.Run("public metrics catalog stays auditable", func(t *testing.T) {
+		catalog := strings.Join(strings.Fields(readRepoFile(t, filepath.Join("docs", "metrics", "README.md"))), " ")
+		for _, required := range []string{
+			"../metrics.md",
+			"actions/workflows/test.yml",
+			"actions/workflows/nightly-compliance.yml",
+			"app.codecov.io/gh/frostyard/chairlift",
+			"does not currently attach a reliable provenance marker",
+			"does not collect application usage telemetry",
+		} {
+			if !strings.Contains(catalog, required) {
+				t.Errorf("docs/metrics/README.md does not contain %q", required)
+			}
+		}
+	})
+
 	t.Run("known stale claims stay removed", func(t *testing.T) {
 		current := strings.Join([]string{
 			readRepoFile(t, "README.md"),

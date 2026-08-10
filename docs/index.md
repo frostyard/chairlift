@@ -96,6 +96,8 @@ one.
 
 The [quality dashboard](quality.md) links to live CI, coverage, build-artifact,
 and release signals and explains how to reproduce the enforced checks locally.
+The [public metrics catalog](metrics/) collects the public, read-only sources
+and documents their interpretation and agent-provenance boundaries.
 
 ```bash
 make run      # Build and run with --dry-run
