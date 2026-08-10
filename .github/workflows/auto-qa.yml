@@ -1,0 +1,166 @@
+name: Adaptive Auto-QA
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: auto-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tune:
+    name: Tune QA intensity
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    outputs:
+      repetitions: ${{ steps.policy.outputs.repetitions }}
+      reason: ${{ steps.policy.outputs.reason }}
+    steps:
+      - name: Derive bounded QA policy from recent outcomes
+        id: policy
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const defaultBranch = context.payload.repository.default_branch;
+
+            const response = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: 'test.yml',
+              branch: defaultBranch,
+              status: 'completed',
+              per_page: 20,
+            });
+            const runs = response.data.workflow_runs.filter(
+              (run) => run.event === 'push',
+            );
+            const failures = runs.filter(
+              (run) => run.conclusion === 'failure',
+            ).length;
+            const failureRate = runs.length === 0 ? null : failures / runs.length;
+
+            // Never tune below one uncached run. With no history, start at the
+            // conservative middle tier rather than assuming a perfect signal.
+            let repetitions = 2;
+            let outcomeReason = 'no completed default-branch history';
+            if (failureRate !== null && failureRate < 0.05) {
+              repetitions = 1;
+              outcomeReason = `${failures}/${runs.length} recent runs failed`;
+            } else if (failureRate !== null && failureRate < 0.20) {
+              repetitions = 2;
+              outcomeReason = `${failures}/${runs.length} recent runs failed`;
+            } else if (failureRate !== null) {
+              repetitions = 3;
+              outcomeReason = `${failures}/${runs.length} recent runs failed`;
+            }
+
+            let sensitiveFiles = [];
+            if (context.eventName === 'pull_request') {
+              const files = await github.paginate(
+                github.rest.pulls.listFiles,
+                {
+                  owner,
+                  repo,
+                  pull_number: context.payload.pull_request.number,
+                  per_page: 100,
+                },
+              );
+              const sensitivePrefixes = [
+                '.github/workflows/',
+                'cmd/chairlift-updex-helper/',
+                'internal/bootc/',
+                'internal/config/',
+                'internal/installcheck/',
+                'internal/updex/',
+                'internal/updexhelper/',
+              ];
+              const sensitiveExact = new Set([
+                '.goreleaser.yaml',
+                'Makefile',
+                'data/org.frostyard.ChairLift.bootc.policy',
+                'data/org.frostyard.ChairLift.updex.policy',
+                'go.mod',
+                'go.sum',
+              ]);
+              sensitiveFiles = files
+                .map((file) => file.filename)
+                .filter(
+                  (name) => sensitiveExact.has(name) ||
+                    sensitivePrefixes.some((prefix) => name.startsWith(prefix)),
+                );
+            }
+
+            if (sensitiveFiles.length > 0) {
+              repetitions = 3;
+            }
+
+            // Bound both the shell-facing count and attacker-controlled file
+            // names copied into output. Every file affects the decision, but a
+            // very large PR cannot overflow the job-output limit.
+            repetitions = Math.max(1, Math.min(3, repetitions));
+            const sensitiveSample = sensitiveFiles.slice(0, 20).join(', ');
+            const sensitiveSummary = sensitiveFiles.length > 20
+              ? `${sensitiveSample} (+${sensitiveFiles.length - 20} more)`
+              : sensitiveSample;
+            const reason = sensitiveFiles.length > 0
+              ? `${outcomeReason}; sensitive paths changed: ${sensitiveSummary}`
+              : outcomeReason;
+            core.setOutput('repetitions', String(repetitions));
+            core.setOutput('reason', reason);
+            await core.summary
+              .addHeading('Adaptive Auto-QA policy')
+              .addTable([
+                [{ data: 'Input', header: true }, { data: 'Value', header: true }],
+                ['Completed default-branch runs', String(runs.length)],
+                ['Failed default-branch runs', String(failures)],
+                ['Sensitive changed paths', sensitiveSummary || 'none'],
+                ['Selected repetitions', String(repetitions)],
+              ])
+              .addParagraph(reason)
+              .write();
+
+  adaptive-tests:
+    name: Adaptive tests (${{ needs.tune.outputs.repetitions }}x)
+    needs: tune
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tuned uncached test repetitions
+        env:
+          REPETITIONS: ${{ needs.tune.outputs.repetitions }}
+          TUNING_REASON: ${{ needs.tune.outputs.reason }}
+        run: |
+          if [[ ! "$REPETITIONS" =~ ^[1-3]$ ]]; then
+            echo "Invalid repetition count: $REPETITIONS" >&2
+            exit 1
+          fi
+          echo "Auto-QA selected ${REPETITIONS} run(s): ${TUNING_REASON}"
+          for attempt in $(seq 1 "$REPETITIONS"); do
+            echo "==> adaptive test run ${attempt}/${REPETITIONS}"
+            CGO_ENABLED=0 go test ./internal/... \
+              -count=1 \
+              -shuffle=on \
+              -run "^Test[^I]" \
+              -skip "Integration"
+          done

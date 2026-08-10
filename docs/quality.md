@@ -12,6 +12,7 @@ that would immediately become stale.
 | Signal | What it reports | Source |
 |---|---|---|
 | Tests workflow | Latest lint, unit-test, race-detection, verification, and cross-architecture build results | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/test.yml) |
+| Adaptive Auto-QA | Outcome- and risk-tuned uncached test repetitions for pull requests | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/auto-qa.yml) |
 | Nightly compliance | Daily full CI, E2E, and known-vulnerability scan results for the default branch | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/nightly-compliance.yml) |
 | Pull request checks | Gate results attached to each proposed change, including reruns and logs | Open a pull request and select its **Checks** tab |
 | PR acceptance | Accepted and closed pull request counts over a rolling 90-day cohort | [Metric definition and reproducible query](metrics.md) |
@@ -62,6 +63,34 @@ The test-name filters are significant: ordinary unit tests must not begin with
 `TestI` or contain `Integration`, because the gated command excludes them.
 Tests for packages that import puregotk also cannot run headlessly; decidable
 logic belongs in a pure package under `internal/`, as required by `AGENTS.md`.
+
+## Adaptive Auto-QA
+
+`.github/workflows/auto-qa.yml` adjusts additional QA intensity from observed
+outcomes without weakening the required Tests workflow. For each non-draft
+pull request, it reads up to 20 completed default-branch push runs of
+`test.yml` and selects a bounded number of uncached, shuffled internal test
+runs:
+
+| Recent default-branch failure rate | Repetitions |
+|---|---:|
+| No history | 2 |
+| Below 5% | 1 |
+| 5% to below 20% | 2 |
+| 20% or higher | 3 |
+
+Changes to workflows, dependency manifests, packaging/install files,
+PolicyKit policies, configuration validation, bootc, or updex raise the result
+to the maximum three repetitions regardless of recent success. The selected
+history inputs, sensitive-path count/sample, repetition count, and reason are
+recorded in the workflow summary so the tuning decision is auditable.
+
+The range is deliberately fixed at one through three: missing history fails
+conservatively to the middle tier, a healthy period cannot remove the extra
+uncached run, and bad outcomes can increase cost only to a known bound. The
+workflow has read-only API/repository permissions, uses commit-pinned actions,
+persists no checkout credentials, and receives no secrets. It supplements but
+never changes, skips, approves, or merges around the ordinary quality gates.
 
 ## Nightly compliance
 
