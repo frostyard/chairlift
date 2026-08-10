@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "ask": [
+      "Bash(gh issue close *)",
+      "Bash(gh pr close *)",
+      "Bash(gh pr merge *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(rm *)"
+    ],
+    "deny": [
+      "Bash(git clean *)",
+      "Bash(git push *--force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(sudo *)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  }
+}
