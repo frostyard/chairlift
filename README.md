@@ -288,10 +288,9 @@ suite tests them only by executing the already-built application.
 
 ### Contributing
 
-Contributions are welcome! Please feel free to submit issues and pull requests.
-Changes that affect behavior, configuration, dependencies, or installation
-layout should also follow the
-[documentation consistency checklist](docs/documentation-consistency.md).
+Contributions are welcome. See the [contributor guide](CONTRIBUTING.md) for
+local setup, the fork and pull-request workflow, testing constraints,
+documentation expectations, and required quality gates.
 
 ---
 
