@@ -95,3 +95,50 @@ func TestWorkflowActionsUseImmutableCommitSHAs(t *testing.T) {
 		t.Fatal("no workflow files found")
 	}
 }
+
+func TestTestWorkflowUsesLeastPrivilege(t *testing.T) {
+	path := filepath.Join(".github", "workflows", "test.yml")
+	workflow := readRepoFile(t, path)
+
+	var config struct {
+		Permissions *map[string]string `yaml:"permissions"`
+		Jobs        map[string]struct {
+			Permissions map[string]string `yaml:"permissions"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal([]byte(workflow), &config); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	if config.Permissions == nil || len(*config.Permissions) != 0 {
+		t.Errorf("top-level permissions = %v, want explicit empty permissions", config.Permissions)
+	}
+
+	expected := map[string]map[string]string{
+		"lint":      {"contents": "read"},
+		"unit-test": {"contents": "read", "id-token": "write"},
+		"race-test": {"contents": "read"},
+		"e2e":       {"contents": "read"},
+		"verify":    {"contents": "read"},
+		"build":     {"contents": "read"},
+	}
+	if len(config.Jobs) != len(expected) {
+		t.Errorf("workflow has %d jobs, want %d", len(config.Jobs), len(expected))
+	}
+	for name, want := range expected {
+		job, ok := config.Jobs[name]
+		if !ok {
+			t.Errorf("workflow does not define %s job", name)
+			continue
+		}
+		if len(job.Permissions) != len(want) {
+			t.Errorf("%s permissions = %v, want %v", name, job.Permissions, want)
+			continue
+		}
+		for permission, access := range want {
+			if job.Permissions[permission] != access {
+				t.Errorf("%s permissions = %v, want %v", name, job.Permissions, want)
+				break
+			}
+		}
+	}
+}
