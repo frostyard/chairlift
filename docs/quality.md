@@ -13,6 +13,7 @@ that would immediately become stale.
 |---|---|---|
 | Tests workflow | Latest lint, unit-test, race-detection, verification, and cross-architecture build results | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/test.yml) |
 | Nightly compliance | Daily full CI, E2E, and known-vulnerability scan results for the default branch | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/nightly-compliance.yml) |
+| Issue triage | Deterministic labels applied from structured issue titles and bodies | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/triage.yml) |
 | Pull request checks | Gate results attached to each proposed change, including reruns and logs | Open a pull request and select its **Checks** tab |
 | PR acceptance | Accepted and closed pull request counts over a rolling 90-day cohort | [Metric definition and reproducible query](metrics.md) |
 | Coverage | Line coverage produced by tests under `internal/...` | [Codecov](https://app.codecov.io/gh/frostyard/chairlift) |
@@ -107,6 +108,26 @@ does not check out or execute pull request code, interpolate review text into a
 shell, approve, merge, or bypass required checks. Copilot's resulting changes
 must still pass the ordinary quality gates and human review; findings that
 should not be applied must be explained on the pull request.
+
+## Automated issue triage
+
+`.github/workflows/triage.yml` applies conservative, additive labels when an
+issue is opened or edited. Its deterministic rules are:
+
+| Structured input | Labels |
+|---|---|
+| An `[ACMM L…]` title plus an `acmm:` criterion field | `acmm`, `ai-fix-requested` |
+| A `[guide]` title or guide-agent filing marker | `documentation`, `agent/guide` |
+| A `[quality]` title or quality-agent filing marker | `agent/quality` |
+| Explicit bug, documentation, feature/enhancement, or question title prefixes | The matching standard category label |
+| A `Documentation Gap` or `Feature Request` body heading | `documentation` or `enhancement` |
+
+Triage never removes a label, so an edit cannot erase a maintainer decision. It
+checks that configured labels still exist, skips labels already present, and
+leaves ambiguous issues for humans. Issue text is bounded and matched only as
+data by a commit-pinned API action: the workflow checks out and executes no
+issue-controlled code, receives no secrets, and has only read-only contents
+plus issue-label write permission.
 
 Reusable implementation and review prompts are available in the
 [agent prompt catalog](prompts/index.md). They are aids only; repository

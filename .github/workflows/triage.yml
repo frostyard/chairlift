@@ -1,0 +1,105 @@
+name: Automated issue triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    name: Apply deterministic issue labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Classify structured issue shapes
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue = context.payload.issue;
+            const title = (issue.title ?? '').trim();
+            // GitHub bounds issue bodies, but keep the automation's own input
+            // limit explicit. Content is matched as data and never executed.
+            const body = (issue.body ?? '').slice(0, 100000);
+            const labels = new Set();
+
+            const acmmTitle = /^\[ACMM L\d+\]\s+/i.test(title);
+            const acmmCriterion = /\*\*Criterion ID:\*\*\s*`acmm:[^`]+`/i.test(body);
+            if (acmmTitle && acmmCriterion) {
+              labels.add('acmm');
+              labels.add('ai-fix-requested');
+            }
+
+            const guideIssue = /^\[guide\]\s+/i.test(title) ||
+              /Filed by guide agent/i.test(body);
+            if (guideIssue) {
+              labels.add('documentation');
+              labels.add('agent/guide');
+            }
+
+            const qualityIssue = /^\[quality\]\s+/i.test(title) ||
+              /Filed by quality agent/i.test(body);
+            if (qualityIssue) {
+              labels.add('agent/quality');
+            }
+
+            if (/^(bug:|fix:|\[bug\])\s*/i.test(title)) {
+              labels.add('bug');
+            }
+            if (/^(docs?:|documentation:|\[(docs?|documentation)\])\s*/i.test(title) ||
+                /^## Documentation Gap\s*$/im.test(body)) {
+              labels.add('documentation');
+            }
+            if (/^(feat(ure)?:|enhancement:|\[(feature|enhancement)\])\s*/i.test(title) ||
+                /^## Feature Request\s*$/im.test(body)) {
+              labels.add('enhancement');
+            }
+            if (/^(question:|\[question\])\s*/i.test(title)) {
+              labels.add('question');
+            }
+
+            if (labels.size === 0) {
+              core.notice(`Issue #${issue.number} matched no automatic labels.`);
+              return;
+            }
+
+            // Apply only labels that still exist in the repository. A renamed
+            // label should not make all otherwise-valid triage fail.
+            const repositoryLabels = await github.paginate(
+              github.rest.issues.listLabelsForRepo,
+              { owner, repo, per_page: 100 },
+            );
+            const available = new Set(repositoryLabels.map((label) => label.name));
+            const selected = [...labels].filter((label) => available.has(label));
+            const missing = [...labels].filter((label) => !available.has(label));
+            if (missing.length > 0) {
+              core.warning(`Configured labels are unavailable: ${missing.join(', ')}`);
+            }
+            if (selected.length === 0) {
+              return;
+            }
+
+            const existing = new Set(
+              issue.labels.map((label) => typeof label === 'string' ? label : label.name),
+            );
+            const toAdd = selected.filter((label) => !existing.has(label));
+            if (toAdd.length === 0) {
+              core.notice(`Issue #${issue.number} already has: ${selected.join(', ')}`);
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: issue.number,
+              labels: toAdd,
+            });
+            core.notice(`Added to issue #${issue.number}: ${toAdd.join(', ')}`);
