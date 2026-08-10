@@ -26,8 +26,10 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
 - `make e2e` — builds both executables, checks the application's real
   `--help` surface, starts the dry-run GTK window under a private D-Bus/Xvfb
   session, stages `make install`, and executes the installed privileged
-  helper's rejection paths. It requires GTK4, Libadwaita,
-  `dbus-run-session`, GNU `timeout`, and `xvfb-run`; the hosted E2E job
+  helper's rejection paths. Startup polls the three readiness log markers for
+  up to 30 seconds, requires one additional second of process stability, and
+  terminates the private process group as soon as the smoke check passes. It
+  requires GTK4, Libadwaita, `dbus-run-session`, and `xvfb-run`; the hosted E2E job
   installs those runtime dependencies explicitly because ordinary unit-test
   hosts intentionally do not carry them.
 - `make install`'s default `PREFIX` is `/usr` — the only prefix under which

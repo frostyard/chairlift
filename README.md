@@ -270,9 +270,9 @@ See [yeti/OVERVIEW.md](yeti/OVERVIEW.md) and [yeti/package-managers.md](yeti/pac
 
 Run `make ci` before pushing; it mirrors the hosted verify, lint, unit, race,
 and cross-architecture build gates. Run `make e2e` on a host with GTK4,
-Libadwaita, `dbus-run-session`, GNU `timeout`, and Xvfb to execute the built
-application's help path, start its dry-run window in a private headless
-session, stage the complete install layout, and exercise the installed
+Libadwaita, `dbus-run-session`, and Xvfb to execute the built application's
+help path, start its dry-run window in a private headless session, poll bounded
+startup readiness, stage the complete install layout, and exercise the installed
 privileged helper's argument rejection. The hosted E2E job installs those
 runtime dependencies and runs the same target. The unit gate also scans every
 workflow and rejects external GitHub Actions references that are not pinned to

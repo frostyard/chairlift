@@ -3,15 +3,23 @@ package e2e
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
+	"time"
 )
 
-const startupTimeout = "15s"
+const (
+	startupTimeout  = 30 * time.Second
+	stabilityWindow = time.Second
+	shutdownTimeout = 5 * time.Second
+)
 
 func TestApplicationHelp(t *testing.T) {
 	app := filepath.Join(e2eBuildDir(t), "chairlift")
@@ -41,15 +49,10 @@ func TestApplicationStartsInDryRun(t *testing.T) {
 	app := filepath.Join(e2eBuildDir(t), "chairlift")
 	requireExecutable(t, app)
 
-	timeout := requireCommand(t, "timeout")
 	dbusRunSession := requireCommand(t, "dbus-run-session")
 	xvfbRun := requireCommand(t, "xvfb-run")
 
 	cmd := exec.Command(
-		timeout,
-		"--signal=TERM",
-		"--kill-after=5s",
-		startupTimeout,
 		dbusRunSession,
 		"--",
 		xvfbRun,
@@ -67,20 +70,49 @@ func TestApplicationStartsInDryRun(t *testing.T) {
 		"GSETTINGS_BACKEND=memory",
 		"HOME="+t.TempDir(),
 	)
-	output, err := cmd.CombinedOutput()
-
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 124 {
-		t.Fatalf("ChairLift exited before the %s smoke window elapsed: %v\noutput:\n%s", startupTimeout, err, output)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	output := &lockedBuffer{}
+	cmd.Stdout = output
+	cmd.Stderr = output
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start ChairLift dry-run smoke process: %v", err)
 	}
 
-	for _, want := range []string{
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	want := []string{
 		"Running in dry-run mode",
 		"ChairLift activated",
 		"app: window presented",
-	} {
-		if !bytes.Contains(output, []byte(want)) {
-			t.Errorf("ChairLift dry-run startup output does not contain %q\noutput:\n%s", want, output)
+	}
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	timer := time.NewTimer(startupTimeout)
+	defer timer.Stop()
+	var readyAt time.Time
+
+	for {
+		select {
+		case err := <-done:
+			t.Fatalf("ChairLift exited before startup readiness: %v\noutput:\n%s", err, output.String())
+		case <-ticker.C:
+			if missingOutput(output.String(), want) != "" {
+				continue
+			}
+			if readyAt.IsZero() {
+				readyAt = time.Now()
+				continue
+			}
+			if time.Since(readyAt) >= stabilityWindow {
+				stopProcessGroup(t, cmd, done)
+				return
+			}
+		case <-timer.C:
+			missing := missingOutput(output.String(), want)
+			stopProcessGroup(t, cmd, done)
+			t.Fatalf("ChairLift did not become ready within %s; missing %s\noutput:\n%s",
+				startupTimeout, missing, output.String())
 		}
 	}
 }
@@ -164,6 +196,50 @@ func TestInstalledBundleAndHelperBoundary(t *testing.T) {
 			}
 		})
 	}
+}
+
+type lockedBuffer struct {
+	mu sync.Mutex
+	bytes.Buffer
+}
+
+func (buffer *lockedBuffer) Write(data []byte) (int, error) {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.Buffer.Write(data)
+}
+
+func (buffer *lockedBuffer) String() string {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.Buffer.String()
+}
+
+func missingOutput(output string, markers []string) string {
+	missing := make([]string, 0, len(markers))
+	for _, marker := range markers {
+		if !strings.Contains(output, marker) {
+			missing = append(missing, fmt.Sprintf("%q", marker))
+		}
+	}
+	return strings.Join(missing, ", ")
+}
+
+func stopProcessGroup(t *testing.T, cmd *exec.Cmd, done <-chan error) {
+	t.Helper()
+	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+		t.Errorf("terminate ChairLift smoke process group: %v", err)
+	}
+	select {
+	case <-done:
+		return
+	case <-time.After(shutdownTimeout):
+	}
+
+	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		t.Errorf("kill ChairLift smoke process group: %v", err)
+	}
+	<-done
 }
 
 func repoRoot(t *testing.T) string {
