@@ -4,6 +4,7 @@ nav:
   - Home: "index.md"
   - Reference: "reference.md"
   - Quality dashboard: "quality.md"
+  - Change risk tiers: "risk-tiers.md"
   - Pull request review rubric: "review-rubric.md"
   - Agent prompts:
       - Catalog: "prompts/index.md"
