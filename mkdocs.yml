@@ -3,6 +3,7 @@ site_name: tools/chairlift
 nav:
   - Home: "index.md"
   - Reference: "reference.md"
+  - Quality dashboard: "quality.md"
   - Agent prompts:
       - Catalog: "prompts/index.md"
       - Implement an issue: "prompts/implement-issue.md"
