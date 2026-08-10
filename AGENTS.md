@@ -150,6 +150,13 @@ before working. Write content there to be maximally useful to an AI agent
 understanding the codebase — detailed architecture and rationale rather than
 user-facing guides.
 
+**.memory/ directory** is the repository's committed correction store for AI
+agents. Read `.memory/README.md` and any learning artifacts in that directory
+before working. Record verified corrections there when a session establishes
+that a prior belief about ChairLift was wrong, and promote stable rules into
+this file, `docs/agents/skills/`, or `yeti/` as appropriate. Never record
+secrets or personal data because the directory is version-controlled.
+
 ## Learned agent skills
 
 **docs/agents/skills/** Read every file in `docs/agents/skills/` before
