@@ -3,3 +3,8 @@ site_name: tools/chairlift
 nav:
   - Home: "index.md"
   - Reference: "reference.md"
+  - Agent prompts:
+      - Catalog: "prompts/index.md"
+      - Implement an issue: "prompts/implement-issue.md"
+      - Review a change: "prompts/review-change.md"
+      - Reconcile documentation: "prompts/reconcile-documentation.md"
