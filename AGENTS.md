@@ -20,7 +20,9 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   The build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into
   `build/ci-linux-<arch>/`, then rebuilds natively, so a cross-arch-only
   compile failure cannot pass locally and break CI. Run it before pushing;
-  the mill's deep gate calls this exact target.
+  the mill's deep gate calls this exact target. Codecov's remote project status
+  additionally rejects coverage regressions greater than one percentage point;
+  it has no fixed coverage target and cannot be mirrored locally.
 - `make e2e` — builds both executables, checks the application's real
   `--help` surface, starts the dry-run GTK window under a private D-Bus/Xvfb
   session, stages `make install`, and executes the installed privileged

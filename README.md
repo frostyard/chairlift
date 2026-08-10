@@ -276,9 +276,10 @@ session, stage the complete install layout, and exercise the installed
 privileged helper's argument rejection. The hosted E2E job installs those
 runtime dependencies and runs the same target.
 
-Coverage expectations are risk-based, not a repository-wide percentage
-target: command wrappers must cover argument construction, dry-run, parsing,
-and failure propagation; configuration and privileged paths must keep
+Codecov rejects project coverage regressions greater than one percentage point.
+Coverage expectations otherwise remain risk-based, not a repository-wide
+percentage target: command wrappers must cover argument construction, dry-run,
+parsing, and failure propagation; configuration and privileged paths must keep
 exhaustive consistency tests; and GTK-independent view state belongs in
 headlessly tested leaf packages. The puregotk-importing `internal/app`,
 `internal/window`, and `internal/views` packages intentionally remain
