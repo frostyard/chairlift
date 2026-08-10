@@ -29,7 +29,9 @@ make build
 3. Add or update tests for changed behavior.
 4. Update relevant documentation when behavior, configuration, dependencies,
    or installation changes.
-5. Format Go changes with `make fmt`.
+5. Use an EditorConfig-compatible editor so new text follows the repository's
+   line-ending, indentation, final-newline, and whitespace conventions.
+6. Format Go changes with `make fmt`.
 
 Tests for packages that import puregotk cannot run on headless systems because
 GTK libraries are loaded during package initialization. Extract testable logic
