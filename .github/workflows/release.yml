@@ -41,7 +41,7 @@ jobs:
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
 
       - name: Publish to frostyard repo
-        uses: frostyard/repogen/.github/actions/publish-to-r2@main
+        uses: frostyard/repogen/.github/actions/publish-to-r2@6648671cec7015231fac1f278f09ee5799281bc9 # main
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
           r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
