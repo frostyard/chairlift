@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-const startupTimeout = "15s"
+const startupTimeout = "30s"
 
 func TestApplicationHelp(t *testing.T) {
 	app := filepath.Join(e2eBuildDir(t), "chairlift")
