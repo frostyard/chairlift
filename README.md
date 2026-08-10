@@ -242,7 +242,7 @@ chairlift/
 │   ├── app/       # GObject-registered Application (adw.Application subtype)
 │   ├── window/    # Main window: NavigationSplitView, sidebar, content stack
 │   ├── navigation/ # Canonical pages, shortcuts, and headless transition logic
-│   ├── views/     # Page builders and event handlers (one file per page)
+│   ├── views/     # GTK page builders plus headlessly tested view-state packages
 │   ├── config/    # YAML config loading, feature group enablement
 │   ├── homebrew/  # Homebrew CLI wrapper (incl. tap trust)
 │   ├── flatpak/   # Flatpak CLI wrapper
@@ -260,6 +260,7 @@ See [yeti/OVERVIEW.md](yeti/OVERVIEW.md) and [yeti/package-managers.md](yeti/pac
 - **`internal/homebrew`**: Homebrew CLI wrapper — package listing/searching, install/uninstall, pin/unpin, bundles, updates, and Homebrew 6 tap-trust detection/management
 - **`internal/bootc`**: bootc status reads and pkexec-driven update staging via the snow `bootc-update-stage` script
 - **`internal/views`**: GTK4/Adwaita UI — async operations dispatched via `sgtk.RunOnMainThread`, toast notifications for user feedback
+- **`internal/views/pageview`**: pure-Go row text, page status, os-release parsing, help-link ordering, and maintenance-command selection shared by all six page builders
 
 ### Development Environment
 
@@ -283,7 +284,9 @@ Coverage expectations otherwise remain risk-based, not a repository-wide
 percentage target: command wrappers must cover argument construction, dry-run,
 parsing, and failure propagation; configuration and privileged paths must keep
 exhaustive consistency tests; and GTK-independent view state belongs in
-headlessly tested leaf packages. The puregotk-importing `internal/app`,
+headlessly tested leaf packages. `internal/views/pageview` table-tests the
+shared presentation decisions for every page and statically verifies each
+builder uses them. The puregotk-importing `internal/app`,
 `internal/window`, and `internal/views` packages intentionally remain
 test-binary-free because ordinary unit-test hosts lack GTK libraries; the E2E
 suite tests them only by executing the already-built application.

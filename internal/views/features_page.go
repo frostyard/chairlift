@@ -7,6 +7,7 @@ import (
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/featurestatus"
+	"github.com/frostyard/chairlift/internal/views/pageview"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -100,13 +101,14 @@ func (uh *UserHome) loadFeatures() {
 			return
 		}
 
-		uh.featuresGroup.SetDescription(fmt.Sprintf("%d features available", len(features)))
+		uh.featuresGroup.SetDescription(pageview.FeatureGroupDescription(len(features)))
 		uh.featureRows = make(map[string]*adw.ActionRow)
 
 		for _, feat := range features {
+			presentation := pageview.Feature(feat.Name, feat.Description)
 			row := adw.NewActionRow()
-			row.SetTitle(feat.Description)
-			row.SetSubtitle(feat.Name)
+			row.SetTitle(presentation.Title)
+			row.SetSubtitle(presentation.Subtitle)
 
 			toggle := gtk.NewSwitch()
 			toggle.SetActive(feat.Enabled)

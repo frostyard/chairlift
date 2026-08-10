@@ -1,19 +1,16 @@
 package views
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/frostyard/chairlift/internal/bootc"
+	"github.com/frostyard/chairlift/internal/views/pageview"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 // buildSystemPage builds the System page content
@@ -100,38 +97,30 @@ func (uh *UserHome) loadOSRelease(expander *adw.ExpanderRow) {
 	}
 	defer func() { _ = file.Close() }()
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
-			continue
-		}
-
-		parts := strings.SplitN(line, "=", 2)
-		key := parts[0]
-		value := strings.Trim(parts[1], "\"'")
-
-		// Convert key to readable format
-		readableKey := strings.ReplaceAll(key, "_", " ")
-		readableKey = cases.Title(language.English).String(strings.ToLower(readableKey))
-
+	entries, parseErr := pageview.ParseOSRelease(file)
+	for _, entry := range entries {
 		row := adw.NewActionRow()
-		row.SetTitle(readableKey)
-		row.SetSubtitle(value)
+		row.SetTitle(entry.Title)
+		row.SetSubtitle(entry.Value)
 
-		// Make URL rows clickable
-		if strings.HasSuffix(key, "URL") {
+		if entry.IsURL {
 			row.SetActivatable(true)
 			icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
 			row.AddSuffix(&icon.Widget)
 
-			url := value
+			url := entry.Value
 			activatedCb := func(row adw.ActionRow) {
 				uh.openURL(url)
 			}
 			row.ConnectActivated(&activatedCb)
 		}
 
+		expander.AddRow(&row.Widget)
+	}
+	if parseErr != nil {
+		row := adw.NewActionRow()
+		row.SetTitle("OS Information")
+		row.SetSubtitle("Not available")
 		expander.AddRow(&row.Widget)
 	}
 }
@@ -175,10 +164,7 @@ func (uh *UserHome) loadBootcStatus(group *adw.PreferencesGroup, expander *adw.E
 		if booted.Timestamp() != "" {
 			addRow("Built", booted.Timestamp())
 		}
-		if digest := booted.Digest(); digest != "" {
-			if len(digest) > 19 {
-				digest = digest[:19] + "..."
-			}
+		if digest := pageview.ShortDigest(booted.Digest()); digest != "" {
 			addRow("Digest", digest)
 		}
 

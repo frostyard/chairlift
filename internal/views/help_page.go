@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/frostyard/chairlift/internal/views/pageview"
+
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
@@ -24,62 +26,25 @@ func (uh *UserHome) buildHelpPage() {
 		group.SetDescription("Get help and learn more about ChairLift")
 
 		groupCfg := uh.config.GetGroupConfig("help_page", "help_resources_group")
+		if groupCfg != nil {
+			resources := pageview.HelpResources(groupCfg.Website, groupCfg.Issues, groupCfg.Chat)
+			for _, resource := range resources {
+				row := adw.NewActionRow()
+				row.SetTitle(resource.Title)
+				row.SetSubtitle(resource.URL)
+				row.SetActivatable(true)
 
-		// Website row
-		if groupCfg != nil && groupCfg.Website != "" {
-			row := adw.NewActionRow()
-			row.SetTitle("Website")
-			row.SetSubtitle(groupCfg.Website)
-			row.SetActivatable(true)
+				icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
+				row.AddSuffix(&icon.Widget)
 
-			icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-			row.AddSuffix(&icon.Widget)
+				url := resource.URL
+				activatedCb := func(row adw.ActionRow) {
+					uh.openURL(url)
+				}
+				row.ConnectActivated(&activatedCb)
 
-			url := groupCfg.Website
-			activatedCb := func(row adw.ActionRow) {
-				uh.openURL(url)
+				group.Add(&row.Widget)
 			}
-			row.ConnectActivated(&activatedCb)
-
-			group.Add(&row.Widget)
-		}
-
-		// Issues row
-		if groupCfg != nil && groupCfg.Issues != "" {
-			row := adw.NewActionRow()
-			row.SetTitle("Report Issues")
-			row.SetSubtitle(groupCfg.Issues)
-			row.SetActivatable(true)
-
-			icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-			row.AddSuffix(&icon.Widget)
-
-			url := groupCfg.Issues
-			activatedCb := func(row adw.ActionRow) {
-				uh.openURL(url)
-			}
-			row.ConnectActivated(&activatedCb)
-
-			group.Add(&row.Widget)
-		}
-
-		// Chat row
-		if groupCfg != nil && groupCfg.Chat != "" {
-			row := adw.NewActionRow()
-			row.SetTitle("Community Discussions")
-			row.SetSubtitle(groupCfg.Chat)
-			row.SetActivatable(true)
-
-			icon := gtk.NewImageFromIconName("adw-external-link-symbolic")
-			row.AddSuffix(&icon.Widget)
-
-			url := groupCfg.Chat
-			activatedCb := func(row adw.ActionRow) {
-				uh.openURL(url)
-			}
-			row.ConnectActivated(&activatedCb)
-
-			group.Add(&row.Widget)
 		}
 
 		page.Add(group)
