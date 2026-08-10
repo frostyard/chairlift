@@ -12,6 +12,7 @@ that would immediately become stale.
 | Signal | What it reports | Source |
 |---|---|---|
 | Tests workflow | Latest lint, unit-test, race-detection, verification, and cross-architecture build results | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/test.yml) |
+| Nightly compliance | Daily full CI, E2E, and known-vulnerability scan results for the default branch | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/nightly-compliance.yml) |
 | Pull request checks | Gate results attached to each proposed change, including reruns and logs | Open a pull request and select its **Checks** tab |
 | PR acceptance | Accepted and closed pull request counts over a rolling 90-day cohort | [Metric definition and reproducible query](metrics.md) |
 | Coverage | Line coverage produced by tests under `internal/...` | [Codecov](https://app.codecov.io/gh/frostyard/chairlift) |
@@ -61,6 +62,21 @@ The test-name filters are significant: ordinary unit tests must not begin with
 `TestI` or contain `Integration`, because the gated command excludes them.
 Tests for packages that import puregotk also cannot run headlessly; decidable
 logic belongs in a pure package under `internal/`, as required by `AGENTS.md`.
+
+## Nightly compliance
+
+The `Nightly compliance` workflow runs every day at 04:17 UTC and can also be
+started manually. It checks out the current default branch, runs the complete
+host-independent `make ci` gate, installs the same GTK/Xvfb runtime used by the
+hosted E2E job and runs `make e2e`, then runs `govulncheck ./...` against the
+current Go vulnerability database. This catches dependency disclosures and
+environment drift even when no pull request is active.
+
+The workflow has read-only repository permission, persists no checkout
+credentials, consumes no repository secrets, and publishes nothing. Its
+third-party actions are pinned to commits and its Go compliance tools are
+installed at explicit versions. A nightly failure is an investigation signal;
+it does not replace pull-request checks or authorize an automatic merge.
 
 ## Reviewing agent changes
 
