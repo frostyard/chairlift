@@ -30,6 +30,10 @@ const (
 func runMakeInstallDryRun(t *testing.T, destDir string, extraArgs ...string) string {
 	t.Helper()
 
+	if _, err := exec.LookPath("make"); err != nil {
+		t.Skip("GNU make not installed; skipping Makefile install-layout consistency check")
+	}
+
 	args := append([]string{"-n", "install", "DESTDIR=" + destDir}, extraArgs...)
 	cmd := exec.Command("make", args...)
 	cmd.Dir = RepoRoot()
@@ -41,6 +45,19 @@ func runMakeInstallDryRun(t *testing.T, destDir string, extraArgs ...string) str
 		t.Fatalf("make %s failed: %v\noutput:\n%s", strings.Join(args, " "), err, out.String())
 	}
 	return out.String()
+}
+
+func TestRunMakeInstallDryRunSkipsWithoutMake(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	returned := false
+	t.Run("missing make", func(t *testing.T) {
+		runMakeInstallDryRun(t, t.TempDir())
+		returned = true
+	})
+	if returned {
+		t.Fatal("runMakeInstallDryRun returned when make was unavailable")
+	}
 }
 
 // assertInstallsPackageLayout checks that a `make -n install` dry-run's
