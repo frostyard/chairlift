@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "rolling_window_days": 90,
+  "minimum_sample_size": 10,
+  "signals": {
+    "pr_acceptance_rate": "docs/metrics.md#pr-acceptance-rate"
+  },
+  "thresholds": {
+    "relative_regression": 0.1,
+    "consecutive_improved_windows_to_relax": 2
+  },
+  "actions": {
+    "pr_acceptance_rate": [
+      "tighten affected guidance in AGENTS.md, docs/review-rubric.md, or yeti/",
+      "add or document a targeted local check when rework reveals a validation gap"
+    ]
+  },
+  "guardrails": {
+    "insufficient_data": "hold",
+    "required_checks": "never_relax",
+    "security_checks": "never_relax",
+    "coverage_checks": "never_relax",
+    "changes_via_pull_request": true
+  }
+}
