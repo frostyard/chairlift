@@ -11,5 +11,17 @@
       "Bash(git reset --hard:*)",
       "Bash(git clean:*)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git diff HEAD --check >&2"
+          }
+        ]
+      }
+    ]
   }
 }

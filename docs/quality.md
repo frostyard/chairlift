@@ -41,6 +41,12 @@ gate documented in `AGENTS.md`.
 make ci
 ```
 
+Claude Code sessions have an additional structural stop gate in
+`.claude/settings.json`. Before an agent stops, it runs
+`git diff HEAD --check` and blocks completion when staged or unstaged tracked
+changes contain whitespace errors. This fast check complements rather than
+replaces the full `make ci` gate.
+
 To inspect the same coverage scope locally without relying on the external
 upload, run:
 
