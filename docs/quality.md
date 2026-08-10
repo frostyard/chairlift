@@ -79,6 +79,12 @@ third-party actions are pinned to commits and its Go compliance tools are
 installed at explicit versions. A nightly failure is an investigation signal;
 it does not replace pull-request checks or authorize an automatic merge.
 
+Every external action used by any workflow is pinned to a full 40-character
+commit SHA; trailing comments retain the corresponding version or source ref
+for maintainers. `TestWorkflowActionsUseImmutableCommitSHAs` scans every `.yml` and
+`.yaml` file in `.github/workflows/`, so adding a floating tag or branch fails
+the ordinary unit-test gate.
+
 ## Reviewing agent changes
 
 For an agent-authored pull request, audit the signals in this order:

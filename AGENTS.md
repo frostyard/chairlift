@@ -135,6 +135,11 @@ An agent must not break these:
   authoritative: read, YAML, or schema errors must disable every configurable
   group, emit the `CONFIGURATION ERROR` diagnostic, and remain visible in the
   UI as a persistent toast until the file is fixed and ChairLift is restarted.
+- **CI actions are immutable.** Every external `uses:` reference under
+  `.github/workflows/` must use a full 40-character commit SHA. Keep the
+  human-readable version or source ref in a trailing comment and update both
+  intentionally. Local actions referenced with `./` are exempt. The
+  `internal/installcheck` workflow scan enforces this across every workflow.
 
 ## Documentation
 
