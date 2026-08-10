@@ -269,15 +269,22 @@ See [yeti/OVERVIEW.md](yeti/OVERVIEW.md) and [yeti/package-managers.md](yeti/pac
 ### Testing
 
 Run `make ci` before pushing; it mirrors the hosted verify, lint, unit, race,
-and cross-architecture build gates. Codecov rejects project coverage
-regressions greater than one percentage point. Coverage expectations otherwise
-remain risk-based, not a repository-wide percentage target: command wrappers
-must cover argument construction, dry-run, parsing, and failure propagation;
-configuration and privileged paths must keep exhaustive consistency tests; and
-GTK-independent view state belongs in headlessly tested leaf packages. The
-puregotk-importing `internal/app`, `internal/window`, and `internal/views`
-packages intentionally remain test-binary-free because GTK libraries are
-unavailable on CI.
+and cross-architecture build gates. Run `make e2e` on a host with GTK4,
+Libadwaita, `dbus-run-session`, GNU `timeout`, and Xvfb to execute the built
+application's help path, start its dry-run window in a private headless
+session, stage the complete install layout, and exercise the installed
+privileged helper's argument rejection. The hosted E2E job installs those
+runtime dependencies and runs the same target.
+
+Codecov rejects project coverage regressions greater than one percentage point.
+Coverage expectations otherwise remain risk-based, not a repository-wide
+percentage target: command wrappers must cover argument construction, dry-run,
+parsing, and failure propagation; configuration and privileged paths must keep
+exhaustive consistency tests; and GTK-independent view state belongs in
+headlessly tested leaf packages. The puregotk-importing `internal/app`,
+`internal/window`, and `internal/views` packages intentionally remain
+test-binary-free because ordinary unit-test hosts lack GTK libraries; the E2E
+suite tests them only by executing the already-built application.
 
 ### Contributing
 
