@@ -17,10 +17,12 @@ that would immediately become stale.
 | Build artifacts | Seven-day Linux binaries for the workflow's amd64 and arm64 matrix | Open a successful workflow run and view **Artifacts** |
 | Release history | Published versions and release assets | [GitHub Releases](https://github.com/frostyard/chairlift/releases) |
 
-Coverage upload is intentionally informational: `.github/workflows/test.yml`
-sets Codecov failures to non-blocking. A missing Codecov report therefore does
-not mean tests failed, and a green workflow does not prove that coverage was
-uploaded. Use the workflow's **Unit Tests** log to distinguish those outcomes.
+`codecov.yml` compares project coverage with the pull request's base and fails
+its project status only when coverage drops by more than one percentage point.
+It deliberately has no fixed project target or patch target. The upload step
+remains non-blocking, so a missing Codecov report does not mean tests failed,
+and a green Tests workflow does not prove that coverage was uploaded. Use the
+workflow's **Unit Tests** log to distinguish those outcomes.
 
 ## Enforced checks
 
@@ -35,7 +37,8 @@ The repository's `Tests` workflow runs on pushes and pull requests targeting
 
 `make ci` mirrors those credential-free checks locally in fail-fast order and
 also rebuilds the native binaries at the end. It is the pre-submission quality
-gate documented in `AGENTS.md`.
+gate documented in `AGENTS.md`; Codecov's remote project status is additional
+and cannot be reproduced by that target.
 
 ```bash
 make ci

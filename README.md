@@ -269,13 +269,15 @@ See [yeti/OVERVIEW.md](yeti/OVERVIEW.md) and [yeti/package-managers.md](yeti/pac
 ### Testing
 
 Run `make ci` before pushing; it mirrors the hosted verify, lint, unit, race,
-and cross-architecture build gates. Coverage expectations are risk-based, not
-a repository-wide percentage target: command wrappers must cover argument
-construction, dry-run, parsing, and failure propagation; configuration and
-privileged paths must keep exhaustive consistency tests; and GTK-independent
-view state belongs in headlessly tested leaf packages. The puregotk-importing
-`internal/app`, `internal/window`, and `internal/views` packages intentionally
-remain test-binary-free because GTK libraries are unavailable on CI.
+and cross-architecture build gates. Codecov rejects project coverage
+regressions greater than one percentage point. Coverage expectations otherwise
+remain risk-based, not a repository-wide percentage target: command wrappers
+must cover argument construction, dry-run, parsing, and failure propagation;
+configuration and privileged paths must keep exhaustive consistency tests; and
+GTK-independent view state belongs in headlessly tested leaf packages. The
+puregotk-importing `internal/app`, `internal/window`, and `internal/views`
+packages intentionally remain test-binary-free because GTK libraries are
+unavailable on CI.
 
 ### Contributing
 
