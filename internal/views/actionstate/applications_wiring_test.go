@@ -28,7 +28,7 @@ func TestApplicationsPageWiresTypedSearchInstallState(t *testing.T) {
 		`generation := uh.searchRefresh.Begin()`,
 		`if !uh.searchRefresh.IsCurrent(generation)`,
 		`uh.searchResultRows.Clear(func(row *adw.ActionRow)`,
-		`row.SetSubtitle(result.Kind.DisplayName())`,
+		`pageview.SearchResult(result.Name, result.Kind.DisplayName())`,
 		`if !gate.TryStart()`,
 		`uh.confirmHomebrewInstall(result, button, gate)`,
 		`dialog.AddResponse("install", "Install")`,

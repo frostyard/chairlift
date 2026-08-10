@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/badgestate"
 	"github.com/frostyard/chairlift/internal/views/flatpakstatus"
+	"github.com/frostyard/chairlift/internal/views/pageview"
 	"github.com/frostyard/chairlift/internal/views/trustmsg"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
@@ -147,20 +147,10 @@ func (uh *UserHome) loadUntrustedTaps() {
 		uh.brewTrustRows = make(map[string]*adw.ActionRow)
 		for _, tap := range taps {
 			t := tap // capture
+			presentation := pageview.UntrustedTap(t.Name, t.Formulae, t.Casks)
 			row := adw.NewActionRow()
-			row.SetTitle(t.Name)
-
-			packages := append(append([]string{}, t.Formulae...), t.Casks...)
-			// Show unqualified names in the subtitle for readability.
-			var short []string
-			for _, p := range packages {
-				if i := strings.LastIndex(p, "/"); i >= 0 {
-					short = append(short, p[i+1:])
-				} else {
-					short = append(short, p)
-				}
-			}
-			row.SetSubtitle(fmt.Sprintf("%d installed: %s", len(short), strings.Join(short, ", ")))
+			row.SetTitle(presentation.Title)
+			row.SetSubtitle(presentation.Subtitle)
 
 			trustBtn := gtk.NewButtonWithLabel("Trust")
 			trustBtn.SetValign(gtk.AlignCenterValue)
@@ -457,16 +447,15 @@ func (uh *UserHome) loadFlatpakUpdates() {
 		}
 
 		for _, update := range allUpdates {
+			presentation := pageview.FlatpakUpdate(
+				update.Name,
+				update.ApplicationID,
+				update.NewVersion,
+				update.Installation,
+			)
 			row := adw.NewActionRow()
-			row.SetTitle(update.Name)
-			subtitle := update.ApplicationID
-			if update.NewVersion != "" {
-				subtitle = fmt.Sprintf("%s → %s", update.ApplicationID, update.NewVersion)
-			}
-			if update.Installation == "user" {
-				subtitle += " (user)"
-			}
-			row.SetSubtitle(subtitle)
+			row.SetTitle(presentation.Title)
+			row.SetSubtitle(presentation.Subtitle)
 
 			// Add update button
 			updateBtn := gtk.NewButtonWithLabel("Update")
@@ -529,16 +518,11 @@ func (uh *UserHome) loadBootcUpdateStatus(group *adw.PreferencesGroup) {
 			uh.bootcStageExpander.SetSubtitle(fmt.Sprintf("Error: %v", err))
 			return
 		}
+		version := ""
 		if staged {
-			version := status.Status.Staged.Version()
-			if version != "" {
-				uh.bootcStageExpander.SetSubtitle(fmt.Sprintf("Update %s staged — restart to apply", version))
-			} else {
-				uh.bootcStageExpander.SetSubtitle("Update staged — restart to apply")
-			}
-		} else {
-			uh.bootcStageExpander.SetSubtitle("Check for and download the latest system image")
+			version = status.Status.Staged.Version()
 		}
+		uh.bootcStageExpander.SetSubtitle(pageview.BootcUpdateSubtitle(staged, version))
 	})
 }
 
@@ -640,20 +624,11 @@ func (uh *UserHome) onBootcStageClicked() {
 				return
 			}
 
+			version := ""
 			if staged {
-				version := status.Status.Staged.Version()
-				if version != "" {
-					expander.SetSubtitle(fmt.Sprintf("Update %s staged — restart to apply", version))
-				} else {
-					expander.SetSubtitle("Update staged — restart to apply")
-				}
-			} else {
-				subtitle := "System is up to date"
-				if lastMessage != "" {
-					subtitle = lastMessage
-				}
-				expander.SetSubtitle(subtitle)
+				version = status.Status.Staged.Version()
 			}
+			expander.SetSubtitle(pageview.BootcStageResultSubtitle(staged, version, lastMessage))
 			uh.toastAdder.ShowToast(actionmsg.BootcStage(bootc.IsDryRun(), staged))
 		})
 	}()

@@ -94,6 +94,11 @@ An agent must not break these:
   UI update marshals back to the GTK main thread via
   `snowkit`'s `sgtk.RunOnMainThread(...)`. Never touch a widget directly from a
   worker goroutine.
+- **Headless view coverage stays puregotk-free.** `internal/views` cannot host
+  a test binary on ordinary CI hosts. Shared row text, page status, os-release
+  parsing, help-link ordering, and maintenance-command selection live in the
+  pure `internal/views/pageview` package; its wiring test must continue to
+  cover all six page builders.
 - **Navigation behavior has one authority.** Page order, titles, icons, and
   advertised/registered accelerators live in the pure
   `internal/navigation` package. It also decides page visibility from static

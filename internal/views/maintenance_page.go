@@ -11,6 +11,7 @@ import (
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
+	"github.com/frostyard/chairlift/internal/views/pageview"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -239,14 +240,8 @@ func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool, button
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
-			var cmd *exec.Cmd
-			if sudo {
-				cmd = exec.CommandContext(ctx, "pkexec", script)
-			} else {
-				cmd = exec.CommandContext(ctx, script)
-			}
-
-			err = cmd.Run()
+			command := pageview.MaintenanceCommand(script, sudo)
+			err = exec.CommandContext(ctx, command.Name, command.Args...).Run()
 		} else {
 			cmdline := script
 			if sudo {

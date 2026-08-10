@@ -12,6 +12,7 @@ import (
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/bundleview"
+	"github.com/frostyard/chairlift/internal/views/pageview"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -204,13 +205,10 @@ func (uh *UserHome) loadBrewBundles(paths []string) {
 		}
 
 		for _, bundle := range bundles {
+			presentation := pageview.BrewBundle(bundle.Name, bundle.Description, bundle.Path)
 			row := adw.NewActionRow()
-			row.SetTitle(bundle.Name)
-			subtitle := bundle.Path
-			if bundle.Description != "" {
-				subtitle = fmt.Sprintf("%s — %s", bundle.Description, bundle.Path)
-			}
-			row.SetSubtitle(subtitle)
+			row.SetTitle(presentation.Title)
+			row.SetSubtitle(presentation.Subtitle)
 
 			installBtn := gtk.NewButtonWithLabel("Install")
 			installBtn.SetValign(gtk.AlignCenterValue)
@@ -307,13 +305,10 @@ func (uh *UserHome) loadHomebrewPackages() {
 				uh.formulaeExpander.SetEnableExpansion(len(formulae) > 0)
 				for _, pkg := range formulae {
 					pkg := pkg
+					presentation := pageview.HomebrewPackage(pkg.Name, pkg.Version, pkg.Pinned)
 					row := adw.NewActionRow()
-					row.SetTitle(pkg.Name)
-					subtitle := pkg.Version
-					if pkg.Pinned {
-						subtitle += " • Pinned"
-					}
-					row.SetSubtitle(subtitle)
+					row.SetTitle(presentation.Title)
+					row.SetSubtitle(presentation.Subtitle)
 
 					pinLabel := "Pin"
 					if pkg.Pinned {
@@ -377,9 +372,10 @@ func (uh *UserHome) loadHomebrewPackages() {
 				uh.casksExpander.SetEnableExpansion(len(casks) > 0)
 				for _, pkg := range casks {
 					pkg := pkg
+					presentation := pageview.HomebrewPackage(pkg.Name, pkg.Version, false)
 					row := adw.NewActionRow()
-					row.SetTitle(pkg.Name)
-					row.SetSubtitle(pkg.Version)
+					row.SetTitle(presentation.Title)
+					row.SetSubtitle(presentation.Subtitle)
 
 					uninstallBtn := gtk.NewButtonWithLabel("Uninstall")
 					uninstallBtn.SetValign(gtk.AlignCenterValue)
@@ -593,13 +589,10 @@ func (uh *UserHome) loadFlatpakApplications() {
 				uh.flatpakUserExpander.SetSubtitle(fmt.Sprintf("%d installed", len(userApps)))
 				uh.flatpakUserExpander.SetEnableExpansion(len(userApps) > 0)
 				for _, app := range userApps {
+					presentation := pageview.FlatpakApplication(app.Name, app.ApplicationID, app.Version)
 					row := adw.NewActionRow()
-					row.SetTitle(app.Name)
-					subtitle := app.ApplicationID
-					if app.Version != "" {
-						subtitle = fmt.Sprintf("%s (%s)", app.ApplicationID, app.Version)
-					}
-					row.SetSubtitle(subtitle)
+					row.SetTitle(presentation.Title)
+					row.SetSubtitle(presentation.Subtitle)
 
 					// Add uninstall button
 					uninstallBtn := gtk.NewButtonFromIconName("user-trash-symbolic")
@@ -650,13 +643,10 @@ func (uh *UserHome) loadFlatpakApplications() {
 				uh.flatpakSystemExpander.SetSubtitle(fmt.Sprintf("%d installed", len(systemApps)))
 				uh.flatpakSystemExpander.SetEnableExpansion(len(systemApps) > 0)
 				for _, app := range systemApps {
+					presentation := pageview.FlatpakApplication(app.Name, app.ApplicationID, app.Version)
 					row := adw.NewActionRow()
-					row.SetTitle(app.Name)
-					subtitle := app.ApplicationID
-					if app.Version != "" {
-						subtitle = fmt.Sprintf("%s (%s)", app.ApplicationID, app.Version)
-					}
-					row.SetSubtitle(subtitle)
+					row.SetTitle(presentation.Title)
+					row.SetSubtitle(presentation.Subtitle)
 
 					// Add uninstall button (requires elevated privileges for system apps)
 					uninstallBtn := gtk.NewButtonFromIconName("user-trash-symbolic")
@@ -730,9 +720,10 @@ func (uh *UserHome) onHomebrewSearch() {
 
 			// Add result rows
 			for _, result := range results {
+				presentation := pageview.SearchResult(result.Name, result.Kind.DisplayName())
 				row := adw.NewActionRow()
-				row.SetTitle(result.Name)
-				row.SetSubtitle(result.Kind.DisplayName())
+				row.SetTitle(presentation.Title)
+				row.SetSubtitle(presentation.Subtitle)
 
 				installBtn := gtk.NewButtonWithLabel("Install")
 				installBtn.SetValign(gtk.AlignCenterValue)
