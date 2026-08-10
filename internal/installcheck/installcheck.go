@@ -1,18 +1,13 @@
-// Package installcheck contains headless, gate-enforced regression tests
-// that verify the repository's two installation paths — a source `make
-// install` and the packaged nFPM (deb/rpm/apk) layout produced from
-// .goreleaser.yaml — stay in agreement with each other and with
-// internal/updex.HelperPath, the fixed absolute path PolicyKit's
-// org.freedesktop.policykit.exec.path annotation requires (see
-// internal/updex/updex.go and data/org.frostyard.ChairLift.updex.policy).
+// Package installcheck contains headless, gate-enforced regression tests for
+// repository-level documentation, workflow, installation, packaging, and
+// PolicyKit contracts.
 //
 // This package holds no logic reachable from cmd/ or any other internal/
-// package — only shared test-time helpers used by makefile_test.go and
-// goreleaser_test.go. It imports no GTK bindings, directly or transitively,
-// so a _test.go living here never trips the gtk-headless-tests.md constraint
-// (docs/agents/skills/gtk-headless-tests.md), and it lives under
-// internal/... so it is actually exercised by gates_chunk, make ci, and CI's
-// `go test ./internal/...` filter, per
+// package, only shared test-time helpers. It imports no GTK bindings, directly
+// or transitively, so a _test.go living here never trips the
+// gtk-headless-tests.md constraint (docs/agents/skills/gtk-headless-tests.md),
+// and it lives under internal/... so it is actually exercised by gates_chunk,
+// make ci, and CI's `go test ./internal/...` filter, per
 // docs/agents/skills/gate-test-scope-is-internal-only.md.
 package installcheck
 

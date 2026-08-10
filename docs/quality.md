@@ -102,11 +102,18 @@ non-draft pull request, the workflow posts one deduplicated `@copilot` fix
 request linked to that review. A review without inline findings does not start
 a fix cycle.
 
-The workflow has read-only contents access and pull-request comment access. It
-does not check out or execute pull request code, interpolate review text into a
-shell, approve, merge, or bypass required checks. Copilot's resulting changes
-must still pass the ordinary quality gates and human review; findings that
-should not be applied must be explained on the pull request.
+`.github/workflows/ai-fix-requested.yml` handles explicit implementation
+requests on issues. When the `ai-fix-requested` label is applied to an open
+issue, it posts one deduplicated `@copilot` request linked to that issue.
+Reapplying the label does not start a duplicate fix cycle.
+
+The review workflow receives read-only contents and pull-requests write
+permissions; the issue workflow receives only issues write permission. Each
+uses its write permission only to create the request comment. Neither workflow
+checks out or executes repository code, interpolates review or issue text into
+a shell, approves, merges, or bypasses required checks. Copilot's resulting
+changes must still pass the ordinary quality gates and human review; review
+findings that should not be applied must be explained on the pull request.
 
 Reusable implementation and review prompts are available in the
 [agent prompt catalog](prompts/index.md). They are aids only; repository
