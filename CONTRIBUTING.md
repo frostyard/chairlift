@@ -34,7 +34,8 @@ make build
 Tests for packages that import puregotk cannot run on headless systems because
 GTK libraries are loaded during package initialization. Extract testable logic
 into a pure-Go package under `internal/` rather than adding tests to those
-packages.
+packages. Name ordinary unit tests so they do not begin with `TestI` or contain
+`Integration`; CI reserves those names for tests requiring a real environment.
 
 ## Validation
 
