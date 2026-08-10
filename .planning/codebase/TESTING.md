@@ -18,26 +18,31 @@ make test              # Run all tests
 go test -v ./...       # Run all tests with verbose output
 go test -v ./internal/... -coverprofile=coverage.out -covermode=atomic  # With coverage
 go test -race -short ./internal/...   # With race detector
+make e2e               # Build and run the headless GTK/install smoke suite
 ```
 
 ## Test File Organization
 
 **Location:**
-- Co-located pattern expected (tests next to source files)
-- Currently: **No test files exist in the codebase**
+- Unit tests are co-located with source under `internal/`
+- Built-binary E2E tests live under `test/e2e/` and run only through the
+  explicit `make e2e` gate
 
-**Expected Naming:**
+**Naming:**
 - `<source>_test.go` (e.g., `config_test.go` alongside `config.go`)
 
-**Expected Structure:**
+**Structure:**
 ```
 internal/
 ├── config/
 │   ├── config.go
-│   └── config_test.go      # Would go here
-├── nbc/
-│   ├── nbc.go
-│   └── nbc_test.go         # Would go here
+│   └── config_test.go
+└── bootc/
+    ├── bootc.go
+    └── bootc_test.go
+test/
+└── e2e/
+    └── e2e_test.go
 ```
 
 ## Test Structure
@@ -169,8 +174,13 @@ go tool cover -html=coverage.out -o coverage.html
 - Uses `-short` flag to reduce test duration
 
 **E2E Tests:**
-- Not currently implemented
-- Manual testing via `make run` with `--dry-run` flag
+- Live under `test/e2e/` and run with `make e2e`
+- Execute the built application help path and boot the dry-run GTK window
+  under a private D-Bus/Xvfb session
+- Stage the real `make install` layout under a temporary `DESTDIR` and
+  execute the installed privileged helper's argument-rejection paths
+- Run in the dedicated hosted E2E job because GTK4, Libadwaita, and Xvfb are
+  intentionally absent from ordinary unit-test hosts
 
 ## Common Patterns
 
@@ -261,6 +271,7 @@ func TestGroupEnabledLookup(t *testing.T) {
 | `lint` | Code quality | `golangci-lint` |
 | `unit-test` | Unit tests + coverage | `go test -v ./internal/... -coverprofile=coverage.out` |
 | `race-test` | Race condition detection | `go test -race -short ./internal/...` |
+| `e2e` | Built-binary, headless GTK startup, staged-install smoke tests | `make e2e` |
 | `verify` | Go mod, vet, gofmt checks | `go mod tidy`, `go vet`, `gofmt` |
 | `build` | Build binaries (amd64, arm64) | `make build` |
 

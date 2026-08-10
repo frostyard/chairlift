@@ -1,4 +1,4 @@
-.PHONY: all build run clean deps tidy install uninstall
+.PHONY: all build run clean deps tidy install uninstall e2e
 
 # Binary names
 BINARY_NAME=chairlift
@@ -70,6 +70,12 @@ clean:
 test:
 	$(GOTEST) -v ./...
 
+# End-to-end smoke tests require GTK4, Libadwaita, dbus-run-session, and Xvfb.
+# They run separately from ci because the ordinary unit-test gate is
+# intentionally usable on hosts without those runtime libraries.
+e2e: build
+	CHAIRLIFT_E2E_BUILD_DIR=$(abspath $(BUILD_DIR)) $(GOTEST) -v ./test/e2e
+
 # Development build with race detector (requires CGO)
 dev:
 	CGO_ENABLED=1 $(GOBUILD) -race -o $(BUILD_DIR)/$(BINARY_NAME)-dev ./cmd/chairlift
@@ -133,10 +139,9 @@ uninstall:
 	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
 
-# One command mirrors CI — runs every gate .github/workflows/test.yml runs
-# (verify → lint → unit → race → build), in fail-fast order. If this is green
-# locally, CI is green. The mill's deep gate calls this exact target so agents
-# and CI can never disagree about what "passing" means.
+# One command mirrors CI's host-independent gates (verify → lint → unit → race
+# → build), in fail-fast order. The GTK/Xvfb-dependent E2E job runs separately
+# through `make e2e`. The mill's deep gate calls this target.
 #
 # The build step reproduces CI's GOOS/GOARCH matrix (linux/amd64 and
 # linux/arm64) into per-arch subdirectories, then rebuilds natively so

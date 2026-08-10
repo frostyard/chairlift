@@ -15,13 +15,19 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
 - `make test` — `go test ./...`.
 - `make fmt` — `gofmt -s -w .`.
 - `make lint` — `golangci-lint run`.
-- `make ci` — **runs every gate CI runs, in CI's order** (go.mod tidy check,
-  `go vet`, gofmt check, lint, unit tests, race detector, build). The build
-  step reproduces CI's `linux/amd64` + `linux/arm64` matrix into
+- `make ci` — runs every **host-independent** CI gate, in CI's order (go.mod
+  tidy check, `go vet`, gofmt check, lint, unit tests, race detector, build).
+  The build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into
   `build/ci-linux-<arch>/`, then rebuilds natively, so a cross-arch-only
   compile failure cannot pass locally and break CI. Run it before pushing;
-  green locally means green in CI. The mill's deep gate calls this exact
-  target.
+  the mill's deep gate calls this exact target.
+- `make e2e` — builds both executables, checks the application's real
+  `--help` surface, starts the dry-run GTK window under a private D-Bus/Xvfb
+  session, stages `make install`, and executes the installed privileged
+  helper's rejection paths. It requires GTK4, Libadwaita,
+  `dbus-run-session`, GNU `timeout`, and `xvfb-run`; the hosted E2E job
+  installs those runtime dependencies explicitly because ordinary unit-test
+  hosts intentionally do not carry them.
 - `make install`'s default `PREFIX` is `/usr` — the only prefix under which
   the installed PolicyKit policy files land where `polkitd` reads them
   (`/usr/share/polkit-1/actions`) and the updex helper's installed
@@ -44,6 +50,11 @@ by CI and therefore protects nothing. The accident is easy to make, because
 plain unit-test names such as `TestIsValid`, `TestInitConfig`, or `TestIndexOf`
 all start with `TestI` and would be silently skipped; name them so the first
 letter after `Test` is not `I` (see the GTK-headless skill below).
+
+The separately invoked tests under `test/e2e/` are outside the
+`./internal/...` unit-test scope by design. They are enforced by the E2E
+workflow's explicit `make e2e` step; do not assume adding a test outside
+`internal/` is enough without that dedicated gate.
 
 There are no generated files and no codegen step; everything under version
 control is hand-written Go, YAML, and data assets.
