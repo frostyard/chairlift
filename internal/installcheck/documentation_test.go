@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func readRepoFile(t *testing.T, relative string) string {
@@ -98,4 +100,50 @@ func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestAIFixRequestedWorkflowIsLabelScoped(t *testing.T) {
+	path := filepath.Join(".github", "workflows", "ai-fix-requested.yml")
+	workflow := readRepoFile(t, path)
+
+	var document yaml.Node
+	if err := yaml.Unmarshal([]byte(workflow), &document); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+
+	for _, required := range []string{
+		"issues:",
+		"types: [labeled]",
+		"issues: write",
+		"github.event.issue.state == 'open'",
+		"github.event.label.name == 'ai-fix-requested'",
+		"actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd",
+		"<!-- ai-fix-requested:${issueNumber} -->",
+		"comments.some((comment) => comment.body?.includes(marker))",
+		"@copilot Please implement",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("%s does not contain required contract %q", path, required)
+		}
+	}
+
+	for _, unsafe := range []string{
+		"pull_request_target:",
+		"actions/checkout@",
+		"github.event.issue.body",
+		"github.event.issue.title",
+		"context.payload.issue.body",
+		"context.payload.issue.title",
+		"contents: write",
+		"\n        run:",
+	} {
+		if strings.Contains(workflow, unsafe) {
+			t.Errorf("%s contains unsafe or unnecessary workflow surface %q", path, unsafe)
+		}
+	}
+
+	quality := readRepoFile(t, filepath.Join("docs", "quality.md"))
+	if !strings.Contains(quality, "`.github/workflows/ai-fix-requested.yml`") {
+		t.Error("docs/quality.md does not document the AI-fix-requested workflow")
+	}
 }

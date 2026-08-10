@@ -1,0 +1,52 @@
+name: Request Copilot issue fixes
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: ai-fix-requested-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  request-fix:
+    name: Request Copilot implementation
+    if: >-
+      github.event.issue.state == 'open' &&
+      github.event.label.name == 'ai-fix-requested'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask Copilot to implement the issue
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = context.payload.issue.number;
+            const issueURL = context.payload.issue.html_url;
+            const marker = `<!-- ai-fix-requested:${issueNumber} -->`;
+
+            // Label deliveries can be retried or the label can be reapplied.
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number: issueNumber, per_page: 100 },
+            );
+            if (comments.some((comment) => comment.body?.includes(marker))) {
+              core.notice(`Issue ${issueNumber} was already dispatched.`);
+              return;
+            }
+
+            const body = [
+              marker,
+              `@copilot Please implement [issue #${issueNumber}](${issueURL}). Follow \`AGENTS.md\` and the repository review rubric, keep the change within the issue's scope, and run the relevant quality gates. Open a pull request for human review; do not merge it.`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body,
+            });
