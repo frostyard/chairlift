@@ -68,6 +68,31 @@ jobs:
       - name: Run tests with race detector
         run: go test -race -short ./internal/... -run "^Test[^I]" -skip "Integration"
 
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - name: Install headless GTK runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            dbus-x11 \
+            libadwaita-1-0 \
+            libgtk-4-1 \
+            xauth \
+            xvfb
+
+      - name: Run E2E tests
+        run: make e2e
+
   verify:
     name: Verify
     runs-on: ubuntu-latest
