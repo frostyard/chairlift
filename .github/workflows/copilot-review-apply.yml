@@ -1,0 +1,72 @@
+name: Apply Copilot review feedback
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: copilot-review-apply-${{ github.event.pull_request.number }}-${{ github.event.review.id }}
+  cancel-in-progress: false
+
+jobs:
+  request-fixes:
+    name: Request fixes for Copilot findings
+    if: >-
+      github.event.pull_request.state == 'open' &&
+      !github.event.pull_request.draft &&
+      contains(fromJSON('["copilot-pull-request-reviewer", "copilot-pull-request-reviewer[bot]"]'), github.event.review.user.login) &&
+      contains(fromJSON('["commented", "changes_requested"]'), github.event.review.state)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask Copilot to apply actionable review findings
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pullNumber = context.payload.pull_request.number;
+            const review = context.payload.review;
+            const marker = `<!-- copilot-review-apply:${review.id} -->`;
+
+            // A COMMENTED review with no inline findings needs no fix cycle.
+            const reviewComments = await github.paginate(
+              github.rest.pulls.listCommentsForReview,
+              {
+                owner,
+                repo,
+                pull_number: pullNumber,
+                review_id: review.id,
+                per_page: 100,
+              },
+            );
+            if (reviewComments.length === 0) {
+              core.notice(`Copilot review ${review.id} has no inline findings.`);
+              return;
+            }
+
+            // Delivery can be retried; dispatch at most once for each review.
+            const issueComments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number: pullNumber, per_page: 100 },
+            );
+            if (issueComments.some((comment) => comment.body?.includes(marker))) {
+              core.notice(`Review ${review.id} was already dispatched.`);
+              return;
+            }
+
+            const reviewURL = review.html_url;
+            const body = [
+              marker,
+              `@copilot Please address every actionable finding in [Copilot review ${review.id}](${reviewURL}). Follow \`AGENTS.md\` and the repository review rubric, keep the change within the pull request's existing scope, and run the relevant quality gates. If a finding should not be applied, explain why in the pull request instead of silently ignoring it.`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pullNumber,
+              body,
+            });

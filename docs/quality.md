@@ -77,6 +77,21 @@ For an agent-authored pull request, audit the signals in this order:
    repository invariants and learned skills, then record concrete findings on
    the pull request.
 
+## Automated Copilot feedback
+
+`.github/workflows/copilot-review-apply.yml` closes the feedback loop for
+Copilot pull request reviews. When the trusted Copilot reviewer submits a
+commented or changes-requested review with inline findings on an open,
+non-draft pull request, the workflow posts one deduplicated `@copilot` fix
+request linked to that review. A review without inline findings does not start
+a fix cycle.
+
+The workflow has read-only contents access and pull-request comment access. It
+does not check out or execute pull request code, interpolate review text into a
+shell, approve, merge, or bypass required checks. Copilot's resulting changes
+must still pass the ordinary quality gates and human review; findings that
+should not be applied must be explained on the pull request.
+
 Reusable implementation and review prompts are available in the
 [agent prompt catalog](prompts/index.md). They are aids only; repository
 instructions and human review remain authoritative.
