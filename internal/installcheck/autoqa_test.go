@@ -8,7 +8,7 @@ import (
 )
 
 func TestAutoQATuningConfiguration(t *testing.T) {
-	path := filepath.Join(RepoRoot(), ".github", "auto-qa-tuning.json")
+	path := filepath.Join(RepoRoot(), ".github", "policies", "auto-qa-tuning.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read Auto-QA tuning configuration: %v", err)
