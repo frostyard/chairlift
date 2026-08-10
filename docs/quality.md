@@ -2,7 +2,8 @@
 
 This page is the entry point for auditing ChairLift's current quality signals.
 It links to live reports rather than copying pass rates or coverage percentages
-that would immediately become stale.
+that would immediately become stale. The [public metrics catalog](metrics/)
+collects those read-only sources and their interpretation boundaries.
 
 [![Tests](https://github.com/frostyard/chairlift/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/frostyard/chairlift/actions/workflows/test.yml?query=branch%3Amain)
 [![Codecov](https://codecov.io/gh/frostyard/chairlift/branch/main/graph/badge.svg)](https://app.codecov.io/gh/frostyard/chairlift)
