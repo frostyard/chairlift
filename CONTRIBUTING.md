@@ -9,6 +9,8 @@ Thank you for helping improve ChairLift.
 - Open an issue before making a large behavioral or architectural change.
 - Review [AGENTS.md](AGENTS.md) for repository invariants and development
   guidance.
+- Follow the [AI security policy](docs/SECURITY-AI.md) for AI-assisted work,
+  including its data, tool, automation, and human-review boundaries.
 
 ## Local setup
 
