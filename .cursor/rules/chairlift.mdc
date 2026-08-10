@@ -1,0 +1,58 @@
+---
+description: ChairLift repository rules for implementation, tests, documentation, and review
+alwaysApply: true
+---
+
+# ChairLift agent rules
+
+Before planning or editing, read `AGENTS.md` and every file in
+`docs/agents/skills/`. Those files are authoritative; this rule is a concise
+entry point, not a replacement for them.
+
+## Architecture and safety
+
+- Write idiomatic Go. Production builds use `CGO_ENABLED=0`; GTK4,
+  Libadwaita, GLib, and graphene are loaded at runtime through puregotk.
+- Keep privileged mutations behind the existing fixed `pkexec` helpers and
+  matching PolicyKit actions. Never add arbitrary privileged command
+  execution, configurable privileged paths, or passwordless rules.
+- Run external tools off the GTK main thread. Marshal every widget update back
+  through `sgtk.RunOnMainThread(...)`.
+- Treat `internal/navigation` as the sole authority for pages, titles, icons,
+  visibility, and accelerators. Route mouse and keyboard navigation through
+  `Window.navigateToPage`.
+- Respect configuration-driven visibility. Disabled groups may leave widgets
+  unconstructed, so nil-guard every cross-group widget access.
+- Preserve known UI state across failed operations, dry runs, and stale async
+  workers. Use the existing action, refresh-generation, row, and badge-state
+  helpers rather than introducing parallel state owners.
+
+## Tests
+
+- Put decidable UI logic in a small pure-Go package under `internal/` and test
+  it there.
+- Never add `_test.go` files to packages that import puregotk directly or
+  transitively; their test binaries fail during package initialization on
+  headless CI runners.
+- Enforced tests are scoped to `./internal/...`. Do not place regression tests
+  under `cmd/` or rely on `go test ./...` alone.
+- Ordinary unit-test names must start with `Test` but not `TestI`, and must not
+  contain `Integration`; CI intentionally filters those names out.
+- Add regression coverage for the concrete failure mode and every affected
+  collection entry. Do not weaken existing checks to make a change pass.
+
+## Documentation and completion
+
+- For source changes, review and update relevant current-state documentation
+  in `AGENTS.md`, `README.md`, and `yeti/`.
+- For behavior, configuration, dependencies, or installation changes, follow
+  `docs/documentation-consistency.md`. Verify claims against live source,
+  configuration, `go.mod`, and packaging files; do not copy current-state
+  claims from historical plans.
+- Run focused tests while iterating, then run `make ci` before submitting.
+- Review `git diff` and `git status` for accidental, generated, unstaged, or
+  unrelated files.
+- Report exactly which checks ran. If a check cannot run, give the command and
+  reason instead of claiming success.
+- When review feedback identifies a defect class, inspect and fix all instances
+  of that class before resubmitting, then rerun the relevant checks.
