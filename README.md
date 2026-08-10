@@ -274,7 +274,9 @@ Libadwaita, `dbus-run-session`, GNU `timeout`, and Xvfb to execute the built
 application's help path, start its dry-run window in a private headless
 session, stage the complete install layout, and exercise the installed
 privileged helper's argument rejection. The hosted E2E job installs those
-runtime dependencies and runs the same target.
+runtime dependencies and runs the same target. The unit gate also scans every
+workflow and rejects external GitHub Actions references that are not pinned to
+full commit SHAs.
 
 Codecov rejects project coverage regressions greater than one percentage point.
 Coverage expectations otherwise remain risk-based, not a repository-wide
