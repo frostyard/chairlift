@@ -61,6 +61,7 @@ order below. Help is always retained.
 | Group | Key | Description |
 |-------|-----|-------------|
 | bootc Updates | `bootc_updates_group` | Download and stage the next bootc system image update (applies on restart); shown only when bootc-booted and the fixed `/usr/libexec/bootc-update-stage` helper is present. Non-Snow distributions must provide a trusted implementation there before enabling this group; ChairLift's system-integration package does not supply one. |
+| Native A/B Updates | `sysupdate_updates_group` | Download and stage the next native A/B (systemd-sysupdate) system image update (applies on restart), plus a read-only previous-version rollback row; shown only when the `/usr/lib/snosi/native-ab` marker and the fixed `/usr/libexec/snosi-sysupdate-stage` helper are present. The OS image ships both; ChairLift's system-integration package supplies only the PolicyKit policy. |
 | Flatpak Updates | `flatpak_updates_group` | Pending Flatpak application updates |
 | Homebrew Updates | `brew_updates_group` | Outdated Homebrew packages with upgrade buttons |
 | Untrusted Taps | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); trust a tap to resume its updates. Shown only when there is something to trust |

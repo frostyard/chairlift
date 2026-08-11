@@ -23,6 +23,8 @@ func TestViewsUseSharedBadgeCounts(t *testing.T) {
 		filepath.Join(viewsDir, "updates_page.go"): {
 			`uh.updateCounts.Set(badgestate.Bootc, 1)`,
 			`uh.updateCounts.Set(badgestate.Bootc, 0)`,
+			`uh.updateCounts.Set(badgestate.Sysupdate, 1)`,
+			`uh.updateCounts.Set(badgestate.Sysupdate, 0)`,
 			`uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))`,
 			`uh.updateCounts.Set(badgestate.Homebrew, refresh.Count)`,
 			`uh.updateCounts.Add(badgestate.Homebrew, -1)`,

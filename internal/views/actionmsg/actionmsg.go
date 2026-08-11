@@ -181,6 +181,23 @@ func BootcStage(dryRun bool, staged bool) string {
 	return "System is up to date"
 }
 
+// SysupdateStage returns the toast text for a click of the Updates page's
+// native A/B "Check for Updates" stage button, after sysupdate.StageUpdate's
+// wg.Wait() returns. It follows BootcStage's contract exactly: under
+// dry-run, sysupdate.StageUpdate never invokes pkexec and staged reflects a
+// re-read of real system state rather than anything this click did, so the
+// dry-run branch returns a single unambiguous preview string regardless of
+// staged.
+func SysupdateStage(dryRun bool, staged bool) string {
+	if dryRun {
+		return "[DRY-RUN] Preview: no changes made — system state was not checked or modified by this click"
+	}
+	if staged {
+		return "System update staged. Restart to apply."
+	}
+	return "System is up to date"
+}
+
 // TapTrustDecision is the result of deciding whether trusting a Homebrew tap
 // should mutate the Untrusted Homebrew Taps UI (remove the tap's row, hide
 // the group when empty, refresh outdated packages), and what toast to show

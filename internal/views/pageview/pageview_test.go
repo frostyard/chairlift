@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestApplicationRowsCoverEveryPresentation(t *testing.T) {
@@ -196,6 +197,118 @@ func TestBootcUpdateSubtitlesCoverEveryState(t *testing.T) {
 					got,
 					tt.want,
 				)
+			}
+		})
+	}
+}
+
+func TestSysupdateSubtitlesCoverEveryOutcome(t *testing.T) {
+	// The expected checked-time rendering is derived through the same
+	// time.Parse/Local path the formatter uses, so the assertion is
+	// timezone-independent without weakening to a substring match.
+	checkedAt := "2026-08-10T20:08:01-06:00"
+	parsed, err := time.Parse(time.RFC3339, checkedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkedClock := parsed.Local().Format("15:04")
+
+	tests := []struct {
+		name                        string
+		outcome, version, checkedAt string
+		want                        string
+	}{
+		{
+			name:    "staged with version",
+			outcome: "staged", version: "20260810200801",
+			want: "Update 20260810200801 staged — restart to apply",
+		},
+		{
+			name:    "staged without version",
+			outcome: "staged",
+			want:    "Update staged — restart to apply",
+		},
+		{
+			name:    "current with check time",
+			outcome: "current", checkedAt: checkedAt,
+			want: "System is up to date (checked " + checkedClock + ")",
+		},
+		{
+			name:    "current with unparseable check time",
+			outcome: "current", checkedAt: "not-a-time",
+			want: "System is up to date",
+		},
+		{
+			name:    "failed",
+			outcome: "failed", checkedAt: checkedAt,
+			want: "Last update check failed — use Check for Updates to retry",
+		},
+		{
+			name: "idle fresh boot",
+			want: "Check for and download the latest system image",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SysupdateUpdateSubtitle(tt.outcome, tt.version, tt.checkedAt)
+			if got != tt.want {
+				t.Fatalf("SysupdateUpdateSubtitle(%q, %q, %q) = %q, want %q",
+					tt.outcome, tt.version, tt.checkedAt, got, tt.want)
+			}
+		})
+	}
+
+	resultTests := []struct {
+		name        string
+		staged      bool
+		version     string
+		lastMessage string
+		want        string
+	}{
+		{
+			name:   "staged with version",
+			staged: true, version: "20260810200801", lastMessage: "ignored",
+			want: "Update 20260810200801 staged — restart to apply",
+		},
+		{
+			name:        "current with script message",
+			lastMessage: "No newer version available.",
+			want:        "No newer version available.",
+		},
+		{
+			name: "current without script message",
+			want: "System is up to date",
+		},
+	}
+	for _, tt := range resultTests {
+		t.Run("stage result/"+tt.name, func(t *testing.T) {
+			got := SysupdateStageResultSubtitle(tt.staged, tt.version, tt.lastMessage)
+			if got != tt.want {
+				t.Fatalf("SysupdateStageResultSubtitle(%v, %q, %q) = %q, want %q",
+					tt.staged, tt.version, tt.lastMessage, got, tt.want)
+			}
+		})
+	}
+
+	rollbackTests := []struct {
+		name    string
+		version string
+		want    string
+	}{
+		{
+			name:    "older slot version available",
+			version: "20260801000000",
+			want:    "Version 20260801000000 is on the inactive slot — choose it in the boot menu at restart to roll back",
+		},
+		{
+			name: "no rollback candidate",
+			want: "No previous version on disk",
+		},
+	}
+	for _, tt := range rollbackTests {
+		t.Run("rollback/"+tt.name, func(t *testing.T) {
+			if got := SysupdateRollbackSubtitle(tt.version); got != tt.want {
+				t.Fatalf("SysupdateRollbackSubtitle(%q) = %q, want %q", tt.version, got, tt.want)
 			}
 		})
 	}

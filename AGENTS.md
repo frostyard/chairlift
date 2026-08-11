@@ -70,8 +70,10 @@ An agent must not break these:
 - **Privilege boundary.** State-changing operations that require root go
   through `pkexec` (PolicyKit) with fixed, installed polkit policies and fixed
   helper binaries only: `pkexec /usr/libexec/bootc-update-stage` (action
-  `org.frostyard.ChairLift.bootc.stage`) and `pkexec
-  /usr/bin/chairlift-updex-helper` (`internal/updex.HelperPath`, actions
+  `org.frostyard.ChairLift.bootc.stage`), `pkexec
+  /usr/libexec/snosi-sysupdate-stage` (`internal/sysupdate.StageScriptPath`,
+  action `org.frostyard.ChairLift.sysupdate.stage`, native A/B hosts), and
+  `pkexec /usr/bin/chairlift-updex-helper` (`internal/updex.HelperPath`, actions
   `org.frostyard.ChairLift.updex.{enable-feature,disable-feature,update}`) —
   always that fixed absolute path, matching the
   `org.freedesktop.policykit.exec.path` annotation, with the updex subcommand
@@ -84,12 +86,14 @@ An agent must not break these:
   mutations around the fixed helper/policy pair.
 - **System-integration split.** The
   `frostyard-chairlift-system-integration` nFPM package contains the fixed-path
-  updex helper, both PolicyKit policies, and package-maintainer config, but not
-  the GUI or a bootc staging implementation. Distributions pairing it with a
-  user-scoped ChairLift install must provide their trusted stage helper at
-  `/usr/libexec/bootc-update-stage` before enabling `bootc_updates_group`.
-  Do not make the privileged path configurable from ChairLift's user-writable
-  configuration.
+  updex helper, all three PolicyKit policies, and package-maintainer config,
+  but not the GUI or an OS staging implementation. Distributions pairing it
+  with a user-scoped ChairLift install must provide their trusted stage helper
+  at `/usr/libexec/bootc-update-stage` before enabling `bootc_updates_group`;
+  native A/B hosts ship `/usr/libexec/snosi-sysupdate-stage` (and the
+  `/usr/lib/snosi/native-ab` marker) with the OS image, which
+  `sysupdate_updates_group` requires. Do not make the privileged path
+  configurable from ChairLift's user-writable configuration.
 - **GTK main-thread safety.** All external tool calls run in goroutines; every
   UI update marshals back to the GTK main thread via
   `snowkit`'s `sgtk.RunOnMainThread(...)`. Never touch a widget directly from a
@@ -126,11 +130,11 @@ An agent must not break these:
   pin/unpin, and every row shares one gate across its mutation controls so
   actions cannot overlap. A live success completes the old controls and starts
   a generation-guarded inventory refresh; failure or dry-run restores them.
-- **Update badge counts have one state owner.** Bootc, Flatpak, and Homebrew
-  counts live in the pure `internal/views/badgestate` package. Refreshes
-  replace a provider's count, successful row removals decrement without going
-  negative, and the displayed total is always the sum of all three providers.
-  Do not restore independent integer fields in `UserHome`.
+- **Update badge counts have one state owner.** Bootc, sysupdate, Flatpak,
+  and Homebrew counts live in the pure `internal/views/badgestate` package.
+  Refreshes replace a provider's count, successful row removals decrement
+  without going negative, and the displayed total is always the sum of all
+  four providers. Do not restore independent integer fields in `UserHome`.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget

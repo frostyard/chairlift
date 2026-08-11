@@ -32,7 +32,7 @@
 
 ### 🔧 Updates & Maintenance
 
-- **System Updates**: On bootc-based systems, download and stage the next OS image update (applied on restart) and view booted/staged/rollback deployment status
+- **System Updates**: On bootc-based systems, download and stage the next OS image update (applied on restart) and view booted/staged/rollback deployment status; on native A/B (systemd-sysupdate) installs, stage the next image the same way and see the previous version available for boot-menu rollback
 - **Homebrew Updates**: Check for and install package updates; actions show
   progress, reject repeated clicks, and refresh the outdated rows and sidebar
   badge after successful live operations
@@ -124,7 +124,7 @@ administrator-owned `/etc/chairlift/config.yml` override.
 Releases also publish a small
 `frostyard-chairlift-system-integration` deb/rpm/apk for distributions that
 deliver the GUI through a user-scoped mechanism such as the Homebrew cask. It
-installs only the fixed `/usr/bin/chairlift-updex-helper`, both PolicyKit
+installs only the fixed `/usr/bin/chairlift-updex-helper`, all three PolicyKit
 policies, and `/usr/share/chairlift/config.yml`; it does not install the GUI.
 The integration and full packages conflict intentionally because they own the
 same privileged files.
@@ -133,7 +133,10 @@ The bootc policy deliberately retains the fixed
 `/usr/libexec/bootc-update-stage` path. A distribution must provide a trusted
 stage helper at exactly that path before enabling `bootc_updates_group`; the
 integration package does not provide a distro-specific staging implementation.
-ChairLift hides the group when the helper is absent.
+ChairLift hides the group when the helper is absent. The sysupdate policy
+likewise retains the fixed `/usr/libexec/snosi-sysupdate-stage` path used by
+`sysupdate_updates_group` on native A/B installs; that helper (and the
+`/usr/lib/snosi/native-ab` marker gating the group) ship with the OS image.
 
 `PREFIX` can still be overridden (e.g. `make install PREFIX=$HOME/.local`)
 for a non-privileged, non-PolicyKit-integrated install — but the updex
@@ -156,7 +159,8 @@ Other useful targets: `make dev` (CGO-enabled build with `-race` for development
 - GTK 4 and libadwaita 1 (shared libraries, loaded at runtime by puregotk — no GTK dev headers or CGO needed to build)
 - Homebrew (optional, for package management features and tap trust)
 - Flatpak (optional)
-- `bootc` and the snow `/usr/libexec/bootc-update-stage` script (optional; enables staged system updates)
+- `bootc` and the snow `/usr/libexec/bootc-update-stage` script (optional; enables staged system updates on bootc installs)
+- The snow `/usr/libexec/snosi-sysupdate-stage` script and `/usr/lib/snosi/native-ab` marker (optional; enables staged system updates on native A/B installs)
 - `updex` features configured on the system (optional; toggled via the Features page)
 - Mission Center (optional, for system performance monitoring)
 
@@ -176,7 +180,7 @@ chairlift
    and casks, install curated bundles, and launch the configured external
    Flatpak manager
 2. **Maintenance**: System cleanup and maintenance tools (Homebrew, Flatpak, custom scripts)
-3. **Updates**: Stage bootc system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, and trust Homebrew taps
+3. **Updates**: Stage bootc or native A/B system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, and trust Homebrew taps
 4. **System**: Monitor deployment, health, and performance information
 5. **Features**: Enable, disable, and update configured system features
 6. **Help**: Documentation and support resources
@@ -278,6 +282,7 @@ chairlift/
 │   ├── homebrew/  # Homebrew CLI wrapper (incl. tap trust)
 │   ├── flatpak/   # Flatpak CLI wrapper
 │   ├── bootc/     # bootc wrapper (status reads, pkexec stage script)
+│   ├── sysupdate/ # Native A/B wrapper (state-file reads, pkexec stage script)
 │   ├── updex/     # Updex feature manager
 │   └── version/   # Build metadata (ldflags injection)
 ├── data/          # Desktop file, icons, and PolicyKit policies
@@ -290,6 +295,7 @@ See [yeti/OVERVIEW.md](yeti/OVERVIEW.md) and [yeti/package-managers.md](yeti/pac
 
 - **`internal/homebrew`**: Homebrew CLI wrapper — package listing/searching, install/uninstall, pin/unpin, bundles, updates, and Homebrew 6 tap-trust detection/management
 - **`internal/bootc`**: bootc status reads and pkexec-driven update staging via the snow `bootc-update-stage` script
+- **`internal/sysupdate`**: native A/B (systemd-sysupdate) status reads from the `/run/snosi` state files, rollback-candidate discovery from partition labels, and pkexec-driven update staging via the snow `snosi-sysupdate-stage` script
 - **`internal/views`**: GTK4/Adwaita UI — async operations dispatched via `sgtk.RunOnMainThread`, toast notifications for user feedback
 - **`internal/views/pageview`**: pure-Go row text, page status, os-release parsing, help-link ordering, and maintenance-command selection shared by all six page builders
 

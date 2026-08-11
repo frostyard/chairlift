@@ -11,6 +11,7 @@ import (
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/navigation"
+	"github.com/frostyard/chairlift/internal/sysupdate"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/views"
 	"github.com/frostyard/chairlift/internal/window"
@@ -84,6 +85,7 @@ func New() *Application {
 			flatpak.SetDryRun(true)
 			homebrew.SetDryRun(true)
 			bootc.SetDryRun(true)
+			sysupdate.SetDryRun(true)
 			updex.SetDryRun(true)
 			views.SetDryRun(true)
 			break

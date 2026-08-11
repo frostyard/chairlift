@@ -10,6 +10,7 @@ import (
 	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/sysupdate"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/badgestate"
@@ -55,6 +56,42 @@ func (uh *UserHome) buildUpdatesPage() {
 		page.Add(group)
 
 		go uh.loadBootcUpdateStatus(group)
+	}
+
+	// Native A/B (systemd-sysupdate) System Updates group - built hidden,
+	// shown asynchronously on native A/B hosts that ship the snosi stager.
+	// Mutually exclusive with the bootc group at runtime: the bootc gate
+	// requires the bootc binary (absent on native A/B images) and this gate
+	// requires the native-ab marker (absent on bootc images), so at most one
+	// "System Updates" group ever becomes visible.
+	if uh.config.IsGroupEnabled("updates_page", "sysupdate_updates_group") {
+		group := adw.NewPreferencesGroup()
+		group.SetTitle("System Updates")
+		group.SetDescription("Download and stage system image updates; staged updates apply on restart")
+		group.SetVisible(false)
+
+		uh.sysupdateStageExpander = adw.NewExpanderRow()
+		uh.sysupdateStageExpander.SetTitle("System Update")
+		uh.sysupdateStageExpander.SetSubtitle("Checking status...")
+
+		uh.sysupdateStageBtn = gtk.NewButtonWithLabel("Check for Updates")
+		uh.sysupdateStageBtn.SetValign(gtk.AlignCenterValue)
+		uh.sysupdateStageBtn.AddCssClass("suggested-action")
+		sysupdateClickedCb := func(btn gtk.Button) {
+			uh.onSysupdateStageClicked()
+		}
+		uh.sysupdateStageBtn.ConnectClicked(&sysupdateClickedCb)
+		uh.sysupdateStageExpander.AddSuffix(&uh.sysupdateStageBtn.Widget)
+
+		uh.sysupdateRollbackRow = adw.NewActionRow()
+		uh.sysupdateRollbackRow.SetTitle("Previous Version")
+		uh.sysupdateRollbackRow.SetSubtitle("Checking status...")
+
+		group.Add(&uh.sysupdateStageExpander.Widget)
+		group.Add(&uh.sysupdateRollbackRow.Widget)
+		page.Add(group)
+
+		go uh.loadSysupdateUpdateStatus(group)
 	}
 
 	// Flatpak Updates group
@@ -630,6 +667,146 @@ func (uh *UserHome) onBootcStageClicked() {
 			}
 			expander.SetSubtitle(pageview.BootcStageResultSubtitle(staged, version, lastMessage))
 			uh.toastAdder.ShowToast(actionmsg.BootcStage(bootc.IsDryRun(), staged))
+		})
+	}()
+}
+
+// loadSysupdateUpdateStatus gates the native A/B updates group and reflects
+// the /run/snosi state files in the expander subtitle, rollback row, and
+// update badge. The reads are unprivileged: the stager's state files are
+// world-readable and the rollback candidate comes from partition labels.
+func (uh *UserHome) loadSysupdateUpdateStatus(group *adw.PreferencesGroup) {
+	if !sysupdate.IsNativeABCached() || !sysupdate.StageScriptAvailable() {
+		return // group stays hidden
+	}
+
+	ctx, cancel := sysupdate.DefaultContext()
+	defer cancel()
+
+	status := sysupdate.GetStatus()
+	rollbackVersion, _ := sysupdate.RollbackVersion(ctx)
+
+	if status.IsStaged() {
+		uh.updateCounts.Set(badgestate.Sysupdate, 1)
+	} else {
+		uh.updateCounts.Set(badgestate.Sysupdate, 0)
+	}
+	uh.updateBadgeCount()
+
+	outcome, version, checkedAt := status.Presentation()
+	sgtk.RunOnMainThread(func() {
+		group.SetVisible(true)
+		uh.sysupdateStageExpander.SetSubtitle(pageview.SysupdateUpdateSubtitle(outcome, version, checkedAt))
+		uh.sysupdateRollbackRow.SetSubtitle(pageview.SysupdateRollbackSubtitle(rollbackVersion))
+	})
+}
+
+// onSysupdateStageClicked runs the snosi stager with streamed log output.
+// The script checks, downloads, and stages in one idempotent operation; the
+// staged version applies at the next reboot.
+func (uh *UserHome) onSysupdateStageClicked() {
+	button := uh.sysupdateStageBtn
+	expander := uh.sysupdateStageExpander
+
+	button.SetSensitive(false)
+	button.SetLabel("Working...")
+	expander.SetExpanded(true)
+	expander.SetSubtitle("Checking for updates...")
+
+	// Remove rows from any previous run before adding new ones, otherwise
+	// repeated clicks stack duplicate Progress/Details rows.
+	if uh.sysupdateActivityRow != nil {
+		expander.Remove(&uh.sysupdateActivityRow.Widget)
+	}
+	if uh.sysupdateLogExpander != nil {
+		expander.Remove(&uh.sysupdateLogExpander.Widget)
+	}
+
+	// Activity row with a spinner (the stage script emits no percentages,
+	// so progress is indeterminate).
+	activityRow := adw.NewActionRow()
+	activityRow.SetTitle("Progress")
+	activityRow.SetSubtitle("Running...")
+	spinner := gtk.NewSpinner()
+	spinner.Start()
+	activityRow.AddSuffix(&spinner.Widget)
+	expander.AddRow(&activityRow.Widget)
+	uh.sysupdateActivityRow = activityRow
+
+	logExpander := adw.NewExpanderRow()
+	logExpander.SetTitle("Details")
+	logExpander.SetSubtitle("View output")
+	expander.AddRow(&logExpander.Widget)
+	uh.sysupdateLogExpander = logExpander
+
+	go func() {
+		ctx, cancel := sysupdate.DefaultContext()
+		defer cancel()
+
+		progressCh := make(chan sysupdate.ProgressEvent)
+
+		var stageErr error
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stageErr = sysupdate.StageUpdate(ctx, progressCh)
+		}()
+
+		var lastMessage string
+		for event := range progressCh {
+			evt := event
+			if evt.Type == sysupdate.EventMessage {
+				lastMessage = evt.Message
+			}
+			sgtk.RunOnMainThread(func() {
+				switch evt.Type {
+				case sysupdate.EventMessage:
+					msgRow := adw.NewActionRow()
+					msgRow.SetTitle(evt.Message)
+					msgRow.SetSubtitle(time.Now().Format("15:04:05"))
+					logExpander.AddRow(&msgRow.Widget)
+					activityRow.SetSubtitle(evt.Message)
+				case sysupdate.EventComplete:
+					activityRow.SetSubtitle("Complete")
+				}
+			})
+		}
+
+		wg.Wait()
+
+		// Re-read the state files so the subtitle, rollback row, and badge
+		// reflect reality (staged vs already-current) rather than guessing
+		// from output. A stage fills the inactive slot with the newer
+		// version, so the rollback candidate must be recomputed too.
+		status := sysupdate.GetStatus()
+		rollbackCtx, rollbackCancel := sysupdate.DefaultContext()
+		rollbackVersion, _ := sysupdate.RollbackVersion(rollbackCtx)
+		rollbackCancel()
+
+		staged := status.IsStaged()
+		if staged {
+			uh.updateCounts.Set(badgestate.Sysupdate, 1)
+		} else {
+			uh.updateCounts.Set(badgestate.Sysupdate, 0)
+		}
+		uh.updateBadgeCount()
+
+		_, version, _ := status.Presentation()
+		sgtk.RunOnMainThread(func() {
+			spinner.Stop()
+			button.SetSensitive(true)
+			button.SetLabel("Check for Updates")
+			uh.sysupdateRollbackRow.SetSubtitle(pageview.SysupdateRollbackSubtitle(rollbackVersion))
+
+			if stageErr != nil {
+				expander.SetSubtitle(fmt.Sprintf("Update failed: %v", stageErr))
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", stageErr))
+				return
+			}
+
+			expander.SetSubtitle(pageview.SysupdateStageResultSubtitle(staged, version, lastMessage))
+			uh.toastAdder.ShowToast(actionmsg.SysupdateStage(sysupdate.IsDryRun(), staged))
 		})
 	}()
 }

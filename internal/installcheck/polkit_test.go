@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/frostyard/chairlift/internal/bootc"
+	"github.com/frostyard/chairlift/internal/sysupdate"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/updexhelper"
 )
@@ -166,12 +167,22 @@ func TestPolkitPoliciesMatchPrivilegedHelpers(t *testing.T) {
 			Path:        bootc.StageScriptPath,
 		},
 	})
+
+	assertPolicyActions(t, "org.frostyard.ChairLift.sysupdate.policy", []expectedPolicyAction{
+		{
+			ID:          "org.frostyard.ChairLift.sysupdate.stage",
+			Description: "Download and stage a system image update",
+			Message:     "Authentication is required to stage a system update",
+			Path:        sysupdate.StageScriptPath,
+		},
+	})
 }
 
 func TestPolkitPasswordlessRulesAreAbsent(t *testing.T) {
 	for _, name := range []string{
 		"org.frostyard.ChairLift.updex.rules",
 		"org.frostyard.ChairLift.bootc.rules",
+		"org.frostyard.ChairLift.sysupdate.rules",
 	} {
 		t.Run(name, func(t *testing.T) {
 			path := filepath.Join(RepoRoot(), "data", name)

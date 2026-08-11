@@ -77,6 +77,7 @@ archives:
       - data/icons/**/*
       - data/org.frostyard.ChairLift.bootc.policy
       - data/org.frostyard.ChairLift.updex.policy
+      - data/org.frostyard.ChairLift.sysupdate.policy
 
 
 checksum:
@@ -159,6 +160,11 @@ nfpms:
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy
         file_info:
           mode: 0644
+      # PolicyKit policy for native A/B sysupdate staging
+      - src: ./data/org.frostyard.ChairLift.sysupdate.policy
+        dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.sysupdate.policy
+        file_info:
+          mode: 0644
     formats:
       - deb
       - rpm
@@ -167,7 +173,8 @@ nfpms:
   # Root-owned companion for a user-scoped app installation such as the
   # Homebrew cask. It intentionally retains ChairLift's fixed helper and
   # PolicyKit paths. Distros enabling bootc staging must separately provide
-  # /usr/libexec/bootc-update-stage.
+  # /usr/libexec/bootc-update-stage; native A/B hosts ship
+  # /usr/libexec/snosi-sysupdate-stage with the OS image.
   - id: chairlift-system-integration
     ids:
       - chairlift-updex-helper
@@ -191,6 +198,10 @@ nfpms:
           mode: 0644
       - src: ./data/org.frostyard.ChairLift.updex.policy
         dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy
+        file_info:
+          mode: 0644
+      - src: ./data/org.frostyard.ChairLift.sysupdate.policy
+        dst: /usr/share/polkit-1/actions/org.frostyard.ChairLift.sysupdate.policy
         file_info:
           mode: 0644
     formats:

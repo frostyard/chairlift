@@ -21,6 +21,8 @@ system_page:
 updates_page:
   bootc_updates_group:
     enabled: true  # Requires /usr/libexec/bootc-update-stage
+  sysupdate_updates_group:
+    enabled: false  # Native A/B (systemd-sysupdate) hosts only; requires /usr/libexec/snosi-sysupdate-stage
   brew_updates_group:
     enabled: false  # Hide Homebrew updates (not typically used on other distros)
   brew_trust_group:

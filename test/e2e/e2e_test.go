@@ -152,6 +152,7 @@ func TestInstalledBundleAndHelperBoundary(t *testing.T) {
 		"usr/share/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg",
 		"usr/share/polkit-1/actions/org.frostyard.ChairLift.bootc.policy",
 		"usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy",
+		"usr/share/polkit-1/actions/org.frostyard.ChairLift.sysupdate.policy",
 	} {
 		if info, err := os.Stat(filepath.Join(stage, path)); err != nil {
 			t.Errorf("staged install is missing %s: %v", path, err)

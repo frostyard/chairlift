@@ -2,7 +2,7 @@
 
 ## Purpose
 
-ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, bootc system updates (staged via the snow `bootc-update-stage` script), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off.
+ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, OS system updates (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ internal/views/                 Page builders and event handlers (one file per p
 
 ### Dependency flow
 
-`cmd → app → window → views → {config, homebrew, flatpak, bootc, updex}`.
+`cmd → app → window → views → {config, homebrew, flatpak, bootc, sysupdate, updex}`.
 `app` and `window` also depend on the pure `navigation` package.
 
 External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
@@ -62,7 +62,7 @@ disabled; Help is always retained:
 |------|------|---------|
 | Applications | `applications_page.go` | Manage Homebrew formulae/casks and installed Flatpaks; launch an external manager for new Flatpak installs |
 | Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts (executed via `exec.Command`/`pkexec`) |
-| Updates | `updates_page.go` | bootc staged system updates, Flatpak updates, Homebrew outdated packages, untrusted-tap trust prompts |
+| Updates | `updates_page.go` | bootc or native A/B (systemd-sysupdate) staged system updates, Flatpak updates, Homebrew outdated packages, untrusted-tap trust prompts |
 | System | `system_page.go` | OS info (`/etc/os-release`), bootc deployment status, health monitor launch |
 | Features | `features_page.go` | Toggle system features via `updex` tool |
 | Help | `help_page.go` | Configurable links to website, issues, chat (opened via `xdg-open`) |
@@ -107,19 +107,24 @@ This applies to: `maintenanceBrewGroup`, `maintenanceFlatpakGroup`, `featuresGro
 
 bootc-related UI groups (system page's `bootc_status_group` and updates page's `bootc_updates_group`) are gated on `bootc.IsBootcBootedCached()`, which runs `bootc status --format json` once (via `sync.Once`) and reports true only when the parsed `status.booted` field is non-null. This is deliberately not a sentinel-file check: `/run/ostree-booted` is absent on snow's composefs-based deployments, so relying on it would hide the groups on every snow bootc host. `bootc status` itself exits 0 with a null `booted` entry on non-bootc hosts, so the gate must inspect the JSON body rather than the exit code.
 
+### Native A/B gate
+
+The updates page's `sysupdate_updates_group` is gated on `sysupdate.IsNativeABCached()` (an `os.Stat` of `/usr/lib/snosi/native-ab`, cached via `sync.Once`) plus `sysupdate.StageScriptAvailable()` (`/usr/libexec/snosi-sysupdate-stage` exists). Unlike the bootc case, a marker-file check is correct here: the marker is snosi's own published contract for "this host updates via systemd-sysupdate" — every snosi unit and script gates on it (`ConditionPathExists=/usr/lib/snosi/native-ab`) — whereas `/run/ostree-booted` was a foreign sentinel that snow's bootc deployments never wrote. The `bootc` binary is absent on native A/B images and `os-release`'s `IMAGE_ID` is identical across both variants, so neither is usable for this gate. The two OS-update gates are mutually exclusive at runtime: at most one "System Updates" group ever becomes visible even though both may be config-enabled and built.
+
 ### Dry-run mode
 
-The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, bootc, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
+The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, bootc, sysupdate, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
 
 **The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would *also* mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation *and* the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). Sites with no second UI mutation to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, bootc stage, and feature-update toasts) get a plain string function instead.
 
-**Intentional exception:** bootc staging's completion **toast** is dry-run-aware (`actionmsg.BootcStage`), but its expander **subtitle** deliberately is not. The subtitle is a persistent status readout of live `bootc.GetStatus()` — what deployment is actually staged/booted right now — not a per-click completion claim, so it stays accurate and unchanged in both dry-run and live mode. Only the toast, which inherently answers "what did this click just do," needed dry-run-specific wording; there is no mutation left to gate once the subtitle is deliberately excluded, which is why `BootcStage` is string-only rather than a decision struct.
+**Intentional exception:** bootc staging's completion **toast** is dry-run-aware (`actionmsg.BootcStage`), but its expander **subtitle** deliberately is not. The subtitle is a persistent status readout of live `bootc.GetStatus()` — what deployment is actually staged/booted right now — not a per-click completion claim, so it stays accurate and unchanged in both dry-run and live mode. Only the toast, which inherently answers "what did this click just do," needed dry-run-specific wording; there is no mutation left to gate once the subtitle is deliberately excluded, which is why `BootcStage` is string-only rather than a decision struct. Native A/B staging follows the identical split: `actionmsg.SysupdateStage` is the dry-run-aware toast, while the subtitle and rollback row re-read the real `/run/snosi` state files and partition labels in both modes.
 
 Per-wrapper mechanics:
 
 - **Homebrew/Flatpak**: state-changing commands are skipped entirely at the wrapper layer (return mock/empty results); ordinary package-action toasts use the plain `actionmsg` string functions (`Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BundleDump`, `Cleanup`). Homebrew search installs and installed-package uninstall/pin actions pair that text with `actionstate` decisions: live success completes the old row controls and refreshes the installed inventory, while failure or dry-run restores the controls. Brew bundle installation uses `BundleInstallDecision` with the same live-complete/dry-run-reset distinction.
 - **Updex**: `EnableFeature`/`DisableFeature`/`UpdateFeatures` skip their `pkexec` call entirely under dry-run and return empty/nil results; the helper binary itself (`cmd/chairlift-updex-helper`, dispatch logic in `internal/updexhelper`) also honors `--dry-run` for `update`, matching `enable-feature`/`disable-feature`, as defense-in-depth even though it's unreachable from the wrapper today.
 - **bootc**: `StageUpdate` short-circuits before invoking pkexec: it logs the would-be command, emits a synthetic `EventMessage` + `EventComplete` pair on the progress channel, and returns — the stage script is never actually run (see the exception above for the toast/subtitle split).
+- **sysupdate**: `StageUpdate` has the same shape as bootc's — under dry-run it logs the would-be `pkexec /usr/libexec/snosi-sysupdate-stage` command, emits the synthetic `EventMessage` + `EventComplete` pair, and never constructs an `exec.Cmd`. Status reads (`GetStatus`, `RollbackVersion`) are not dry-run-gated: they are unprivileged, side-effect-free reads of real state.
 - **Homebrew tap trust**: `trustTap` (`internal/views/updates_page.go`) computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once, after a successful `homebrew.TrustPackages` call, and gates removing the tap's row, hiding the group, and refreshing outdated packages on `decision.MutateUI`.
 - **views (custom maintenance scripts)**: `runMaintenanceAction` (`internal/views/maintenance_page.go`) calls `actionmsg.MaintenanceScript(IsDryRun(), title)` once, before spawning its goroutine, to get a `ScriptDecision{Execute, Toast}`: when `Execute` is false no `exec.Cmd` is ever constructed (no `pkexec`, no direct script exec) — only a `[DRY-RUN] Would execute: ...` log line.
 - **Features page switch confirmation**: `onFeatureToggled` (`internal/views/features_page.go`) computes `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` once, after a successful `updex.EnableFeature`/`DisableFeature` call, and branches solely on `decision.Confirm` to decide whether the switch confirms the flip (`toggle.SetActive(enabled)`) or reverts to its pre-click state (`toggle.SetActive(!enabled)`).
@@ -1008,10 +1013,15 @@ The deadline and cancellation messages differ in both functions, and neither eve
 
 ### Update badge tracking
 
-The updates page stores bootc, Flatpak, and Homebrew counts in the mutex-backed
-`badgestate.Counts` value on `UserHome`. The bootc provider is 1 when
-`bootc.GetStatus()` reports a staged deployment and 0 otherwise — a boolean
-folded into the total, not a count of available images. Provider refreshes use
+The updates page stores bootc, sysupdate, Flatpak, and Homebrew counts in the
+mutex-backed `badgestate.Counts` value on `UserHome`. The bootc provider is 1
+when `bootc.GetStatus()` reports a staged deployment and 0 otherwise — a
+boolean folded into the total, not a count of available images. The sysupdate
+provider follows the same boolean rule: 1 when `sysupdate.GetStatus().IsStaged()`
+(the `/run/snosi/update-staged` semaphore exists, or the last check recorded
+`outcome=staged`) and 0 otherwise, including after a failed check — there is
+no persistent "available but unstaged" state because the snosi stager checks
+and stages in one run. Provider refreshes use
 `Set`, so a repeated load replaces rather than accumulates; successful
 row-level Homebrew upgrades use `Add(Homebrew, -1)`, which cannot go below
 zero. `updateBadgeCount` reads the aggregate `Total` and pushes it through
@@ -1025,7 +1035,7 @@ rows), while dry-run previews restore their controls without changing either.
 
 ### Privileged operations
 
-bootc staging and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), while updex delegates to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`) via `pkexec`. Polkit policy files are installed for both: `data/org.frostyard.ChairLift.bootc.policy` and `data/org.frostyard.ChairLift.updex.policy`. ChairLift deliberately ships no `.rules` files: the policies require normal administrator authentication (`auth_admin`, with `auth_admin_keep` for an active local session) rather than granting blanket passwordless access to a login group. Source installation removes the two legacy ChairLift `.rules` files so an older passwordless rule cannot survive an upgrade. Homebrew tap trust (`brew trust`) is explicitly per-user and does *not* go through pkexec — see [package-managers.md](./package-managers.md).
+bootc staging, native A/B staging, and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), native A/B staging runs `pkexec /usr/libexec/snosi-sysupdate-stage` directly (`internal/sysupdate.StageScriptPath`, action id `org.frostyard.ChairLift.sysupdate.stage`), and updex delegates to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`) via `pkexec`. Polkit policy files are installed for all three: `data/org.frostyard.ChairLift.bootc.policy`, `data/org.frostyard.ChairLift.sysupdate.policy`, and `data/org.frostyard.ChairLift.updex.policy`. ChairLift deliberately ships no `.rules` files: the policies require normal administrator authentication (`auth_admin`, with `auth_admin_keep` for an active local session) rather than granting blanket passwordless access to a login group. Source installation removes the two legacy ChairLift `.rules` files so an older passwordless rule cannot survive an upgrade. Homebrew tap trust (`brew trust`) is explicitly per-user and does *not* go through pkexec — see [package-managers.md](./package-managers.md).
 
 **Why the helper path must be absolute, and why `PREFIX=/usr`:** `pkexec`
 resolves the program it's asked to run to an absolute path and compares it
@@ -1062,14 +1072,17 @@ contains only `chairlift-updex-helper`, and its contents contain the two
 policies plus `/usr/share/chairlift/config.yml`. The packages declare conflicts
 because they intentionally own the same privileged files.
 
-The integration package does **not** ship `bootc-update-stage`. That operation
-is distro policy, so an image that enables `bootc_updates_group` must provide a
-trusted implementation at the existing fixed
-`/usr/libexec/bootc-update-stage` path. Keeping the path fixed preserves the
-PolicyKit executable boundary; making it a user-writable config value would
-allow the GUI configuration to redirect a root execution. The page already
-gates the group on `bootc.StageScriptAvailable`, so an absent distro helper
-hides the operation.
+The integration package does **not** ship `bootc-update-stage` or
+`snosi-sysupdate-stage`. Those operations are distro policy, so an image that
+enables `bootc_updates_group` must provide a trusted implementation at the
+existing fixed `/usr/libexec/bootc-update-stage` path, and native A/B images
+ship `/usr/libexec/snosi-sysupdate-stage` (plus the `/usr/lib/snosi/native-ab`
+marker) themselves. Keeping the paths fixed preserves the PolicyKit executable
+boundary; making either a user-writable config value would allow the GUI
+configuration to redirect a root execution. The page already gates each group
+on its script-availability check (`bootc.StageScriptAvailable`,
+`sysupdate.StageScriptAvailable`), so an absent distro helper hides the
+operation.
 
 ### Maintenance action execution
 
@@ -1167,6 +1180,7 @@ page_name:
 | `system_page` | `bootc_status_group` | bootc deployment status display (gated on `bootc.IsBootcBootedCached()`) |
 | `system_page` | `health_group` | System monitor launcher (configurable `app_id`, default: Mission Center) |
 | `updates_page` | `bootc_updates_group` | bootc system updates — stage via `bootc-update-stage`, apply on restart (gated on `bootc.IsBootcBootedCached()` and stage script availability) |
+| `updates_page` | `sysupdate_updates_group` | native A/B system updates — stage via `snosi-sysupdate-stage`, apply on restart, with a read-only previous-version rollback row (gated on `sysupdate.IsNativeABCached()` and stage script availability) |
 | `updates_page` | `flatpak_updates_group` | Flatpak pending updates |
 | `updates_page` | `brew_updates_group` | Homebrew outdated packages |
 | `updates_page` | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); hidden unless there is something to trust |
@@ -1200,6 +1214,7 @@ page_name:
 - Homebrew (optional)
 - Flatpak (optional)
 - `bootc` + `/usr/libexec/bootc-update-stage` (both optional; UI gated on `bootc.IsBootcBootedCached()`, i.e. `bootc status` reporting a non-null `booted` deployment — not on any sentinel file)
+- `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` (both optional, shipped by native A/B OS images; UI gated on `sysupdate.IsNativeABCached()` and `sysupdate.StageScriptAvailable()`)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
 
 ### Key external Go dependencies

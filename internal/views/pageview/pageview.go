@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -117,6 +118,64 @@ func BootcStageResultSubtitle(staged bool, version, lastMessage string) string {
 		return lastMessage
 	}
 	return "System is up to date"
+}
+
+// SysupdateUpdateSubtitle returns the native A/B system-update expander
+// subtitle from the /run/snosi state-file presentation (the outcome grammar
+// is internal/sysupdate.Status.Presentation's): "staged" shows the pending
+// version, "current" shows the last check time, "failed" prompts a retry,
+// and anything else — including the fresh-boot no-files state — is the
+// neutral idle prompt.
+func SysupdateUpdateSubtitle(outcome, version, checkedAt string) string {
+	switch outcome {
+	case "staged":
+		if version == "" {
+			return "Update staged — restart to apply"
+		}
+		return fmt.Sprintf("Update %s staged — restart to apply", version)
+	case "current":
+		if formatted := formatCheckedAt(checkedAt); formatted != "" {
+			return fmt.Sprintf("System is up to date (checked %s)", formatted)
+		}
+		return "System is up to date"
+	case "failed":
+		return "Last update check failed — use Check for Updates to retry"
+	default:
+		return "Check for and download the latest system image"
+	}
+}
+
+// formatCheckedAt renders a stager ISO-8601 timestamp as a local wall-clock
+// time, or "" when unparseable.
+func formatCheckedAt(checkedAt string) string {
+	parsed, err := time.Parse(time.RFC3339, checkedAt)
+	if err != nil {
+		return ""
+	}
+	return parsed.Local().Format("15:04")
+}
+
+// SysupdateStageResultSubtitle returns the subtitle after a native A/B
+// staging action completes.
+func SysupdateStageResultSubtitle(staged bool, version, lastMessage string) string {
+	if staged {
+		return SysupdateUpdateSubtitle("staged", version, "")
+	}
+	if lastMessage != "" {
+		return lastMessage
+	}
+	return "System is up to date"
+}
+
+// SysupdateRollbackSubtitle returns the read-only rollback row subtitle.
+// version is the inactive slot's version only when it is older than the
+// running one (internal/sysupdate.RollbackCandidate); a staged-but-newer
+// slot or an empty slot both present as no rollback.
+func SysupdateRollbackSubtitle(version string) string {
+	if version == "" {
+		return "No previous version on disk"
+	}
+	return fmt.Sprintf("Version %s is on the inactive slot — choose it in the boot menu at restart to roll back", version)
 }
 
 // Feature returns the initial row text for an updex feature.
