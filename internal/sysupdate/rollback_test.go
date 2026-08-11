@@ -2,7 +2,7 @@ package sysupdate
 
 import "testing"
 
-func TestImageIdentityParsing(t *testing.T) {
+func TestOsReleaseImageIdentityParsing(t *testing.T) {
 	data := `PRETTY_NAME="Snow Linux"
 NAME="Snow Linux"
 ID="snow"
@@ -15,7 +15,7 @@ IMAGE_VERSION="20260810191856"
 	}
 }
 
-func TestImageIdentityUnquotedValues(t *testing.T) {
+func TestOsReleaseImageIdentityUnquotedValues(t *testing.T) {
 	imageID, version := imageIdentity([]byte("IMAGE_ID=cayo\nIMAGE_VERSION=20260101000000\n"))
 	if imageID != "cayo" || version != "20260101000000" {
 		t.Errorf("imageIdentity = (%q, %q), want (cayo, 20260101000000)", imageID, version)
