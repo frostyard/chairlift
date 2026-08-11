@@ -12,7 +12,7 @@ ChairLift provides six configurable pages:
 |------|-------------|
 | **Applications** | Search/install Homebrew formulae and casks; uninstall installed formulae/casks; pin/unpin formulae; install curated Brewfile bundles. List/uninstall Flatpaks and launch the configured external manager for Flatpak discovery and installation. |
 | **Maintenance** | Run cleanup tasks for Homebrew and Flatpak, and execute custom maintenance scripts. |
-| **Updates** | Stage bootc system updates, apply Flatpak updates, upgrade Homebrew packages, and trust Homebrew taps. |
+| **Updates** | Stage bootc or native A/B (systemd-sysupdate) system updates, apply Flatpak updates, upgrade Homebrew packages, and trust Homebrew taps. |
 | **System** | View OS information, bootc deployment status, and launch a system health monitor. |
 | **Features** | Toggle system features managed by updex. |
 | **Help** | Links to the project website, issue tracker, and community chat. |
@@ -39,8 +39,9 @@ always retained so the window always has a valid destination.
 
 Runtime visibility depends on the group:
 
-- bootc status/staging groups and unavailable Homebrew/Flatpak maintenance
-  groups are hidden when their tool-specific runtime gates fail;
+- bootc status/staging groups, the native A/B staging group, and unavailable
+  Homebrew/Flatpak maintenance groups are hidden when their tool-specific
+  runtime gates fail;
 - the Homebrew untrusted-taps group stays hidden unless actionable taps exist;
 - Features replaces its main group with an explicit unavailable message when
   Updex is not configured;
@@ -55,6 +56,7 @@ groups configuration enables, not on runtime tool availability.
 | Homebrew | Package management (formulae, casks, bundles) |
 | Flatpak | Installed-application listing/uninstall and updates; new installs are delegated to the configured external manager |
 | bootc + `/usr/libexec/bootc-update-stage` | Staged bootc system updates |
+| `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` | Staged native A/B (systemd-sysupdate) system updates |
 | Updex | System feature toggles |
 
 ## Building
@@ -90,7 +92,8 @@ configuration without installing the GUI. It intentionally conflicts with the
 self-contained `frostyard-chairlift` package. Bootc staging additionally
 requires the distribution to provide its trusted implementation at
 `/usr/libexec/bootc-update-stage`; the integration package does not supply
-one.
+one. Native A/B staging uses `/usr/libexec/snosi-sysupdate-stage`, which
+ships with the OS image itself.
 
 ### Development
 

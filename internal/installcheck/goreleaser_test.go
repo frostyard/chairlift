@@ -120,6 +120,7 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 		{"maintainer config", "config.yml", "/usr/share/chairlift/config.yml"},
 		{"updex policy", "org.frostyard.ChairLift.updex.policy", filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.updex.policy")},
 		{"bootc policy", "org.frostyard.ChairLift.bootc.policy", filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.bootc.policy")},
+		{"sysupdate policy", "org.frostyard.ChairLift.sysupdate.policy", filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.sysupdate.policy")},
 	}
 
 	for i, nfpm := range cfg.Nfpms {
@@ -179,9 +180,10 @@ func TestGoreleaserPublishesSystemIntegrationPackage(t *testing.T) {
 	}
 
 	wantIntegrationContents := map[string]string{
-		"config.yml":                           "/usr/share/chairlift/config.yml",
-		"org.frostyard.ChairLift.bootc.policy": filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.bootc.policy"),
-		"org.frostyard.ChairLift.updex.policy": filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.updex.policy"),
+		"config.yml":                               "/usr/share/chairlift/config.yml",
+		"org.frostyard.ChairLift.bootc.policy":     filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.bootc.policy"),
+		"org.frostyard.ChairLift.updex.policy":     filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.updex.policy"),
+		"org.frostyard.ChairLift.sysupdate.policy": filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.sysupdate.policy"),
 	}
 	if len(integration.Contents) != len(wantIntegrationContents) {
 		t.Errorf("%s contents has %d entries, want %d", integrationPackageName, len(integration.Contents), len(wantIntegrationContents))

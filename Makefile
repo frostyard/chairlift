@@ -123,6 +123,8 @@ install: build
 	install -Dm644 data/org.frostyard.ChairLift.bootc.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.bootc.policy
 	# Install PolicyKit policy for updex
 	install -Dm644 data/org.frostyard.ChairLift.updex.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
+	# Install PolicyKit policy for native A/B sysupdate staging
+	install -Dm644 data/org.frostyard.ChairLift.sysupdate.policy $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.sysupdate.policy
 
 # Uninstall the application
 uninstall:
@@ -138,6 +140,7 @@ uninstall:
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.bootc.rules
 	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
+	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.sysupdate.policy
 
 # One command mirrors CI's host-independent gates (verify → lint → unit → race
 # → build), in fail-fast order. The GTK/Xvfb-dependent E2E job runs separately

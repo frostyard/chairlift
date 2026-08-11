@@ -70,6 +70,13 @@ type UserHome struct {
 	bootcActivityRow   *adw.ActionRow
 	bootcLogExpander   *adw.ExpanderRow
 
+	// native A/B (sysupdate) update references
+	sysupdateStageExpander *adw.ExpanderRow
+	sysupdateStageBtn      *gtk.Button
+	sysupdateActivityRow   *adw.ActionRow
+	sysupdateLogExpander   *adw.ExpanderRow
+	sysupdateRollbackRow   *adw.ActionRow
+
 	// Features page references
 	featuresGroup            *adw.PreferencesGroup
 	featuresUnavailableGroup *adw.PreferencesGroup

@@ -20,10 +20,13 @@ func TestCountsReplaceRepeatedRefreshState(t *testing.T) {
 	if got := counts.Set(Homebrew, 3); got != (Snapshot{Count: 3, Total: 8}) {
 		t.Fatalf("Set(Homebrew, 3) = %#v", got)
 	}
+	if got := counts.Set(Sysupdate, 1); got != (Snapshot{Count: 1, Total: 9}) {
+		t.Fatalf("Set(Sysupdate, 1) = %#v", got)
+	}
 
 	// A second provider refresh replaces its previous count; it must not
 	// accumulate duplicate rows into the badge total.
-	if got := counts.Set(Flatpak, 2); got != (Snapshot{Count: 2, Total: 6}) {
+	if got := counts.Set(Flatpak, 2); got != (Snapshot{Count: 2, Total: 7}) {
 		t.Fatalf("second Set(Flatpak, 2) = %#v, want replacement total", got)
 	}
 	if got := counts.Get(Flatpak); got != 2 {
@@ -65,7 +68,7 @@ func TestCountsRejectUnknownSourceWithoutChangingTotal(t *testing.T) {
 func TestCountsConcurrentProviderUpdates(t *testing.T) {
 	var counts Counts
 	var wg sync.WaitGroup
-	for _, source := range []Source{Bootc, Flatpak, Homebrew} {
+	for _, source := range []Source{Bootc, Flatpak, Homebrew, Sysupdate} {
 		source := source
 		wg.Add(1)
 		go func() {
@@ -77,10 +80,10 @@ func TestCountsConcurrentProviderUpdates(t *testing.T) {
 	}
 	wg.Wait()
 
-	if got := counts.Total(); got != 300 {
-		t.Fatalf("Total() after concurrent updates = %d, want 300", got)
+	if got := counts.Total(); got != 400 {
+		t.Fatalf("Total() after concurrent updates = %d, want 400", got)
 	}
-	for _, source := range []Source{Bootc, Flatpak, Homebrew} {
+	for _, source := range []Source{Bootc, Flatpak, Homebrew, Sysupdate} {
 		if got := counts.Get(source); got != 100 {
 			t.Errorf("Get(%d) = %d, want 100", source, got)
 		}

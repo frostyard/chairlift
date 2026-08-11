@@ -80,6 +80,7 @@ func assertInstallsPackageLayout(t *testing.T, output, destDir string) {
 	for _, rel := range []string{
 		filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.updex.policy"),
 		filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.bootc.policy"),
+		filepath.Join(polkitActionsDir, "org.frostyard.ChairLift.sysupdate.policy"),
 	} {
 		want := filepath.Join(destDir, rel)
 		if !strings.Contains(output, want) {

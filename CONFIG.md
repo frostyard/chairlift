@@ -55,6 +55,7 @@ valid page.
 ### Updates Page (`updates_page`)
 
 - `bootc_updates_group`: System-wide bootc updates
+- `sysupdate_updates_group`: System-wide native A/B (systemd-sysupdate) updates; shown only on native A/B installs
 - `flatpak_updates_group`: Available Flatpak application updates (user and system)
 - `brew_updates_group`: Homebrew package updates and outdated packages
 - `brew_trust_group`: Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); only shown when there is something to trust

@@ -79,6 +79,7 @@ var items = []Item{
 		ConfigPage: "updates_page",
 		Groups: []string{
 			"bootc_updates_group",
+			"sysupdate_updates_group",
 			"flatpak_updates_group",
 			"brew_updates_group",
 			"brew_trust_group",

@@ -41,6 +41,9 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 				"pageview.FlatpakUpdate(",
 				"pageview.BootcUpdateSubtitle(",
 				"pageview.BootcStageResultSubtitle(",
+				"pageview.SysupdateUpdateSubtitle(",
+				"pageview.SysupdateStageResultSubtitle(",
+				"pageview.SysupdateRollbackSubtitle(",
 			},
 			retired: []string{
 				"strings.LastIndex(",
