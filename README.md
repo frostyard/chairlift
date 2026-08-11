@@ -43,6 +43,37 @@
 
 ## Installation
 
+### Installing a Release
+
+Each [ChairLift release](https://github.com/frostyard/chairlift/releases)
+provides ready-to-install packages for 64-bit Intel/AMD and Arm systems.
+Choose the package format for your distribution:
+
+| Distribution family | Full-package filename | Install command |
+|---|---|---|
+| Debian/Ubuntu | `frostyard-chairlift_<version>_<arch>.deb` (`amd64` or `arm64`) | `sudo apt install ./<downloaded-filename>` |
+| Fedora/RHEL | `frostyard-chairlift-<version>-1.<arch>.rpm` (`x86_64` or `aarch64`) | `sudo dnf install ./<downloaded-filename>` |
+| Alpine | `frostyard-chairlift_<version>_<arch>.apk` (`x86_64` or `aarch64`) | `sudo apk add --allow-untrusted ./<downloaded-filename>` |
+
+For a normal system installation, download the full `frostyard-chairlift`
+package. It includes the GUI, privileged helper, desktop assets, PolicyKit
+policies, and package-maintainer configuration.
+
+Use the similarly named `frostyard-chairlift-system-integration` package
+**only** when the ChairLift GUI is already delivered through a user-scoped
+mechanism such as the Homebrew cask. That package supplies only the root-owned
+helper, policies, and configuration needed by such an installation; it does
+not include the GUI. Never install both packages: they intentionally conflict
+because they own the same system-integration files.
+
+Download `checksums.txt` from the same release and verify the selected package
+before installing it:
+
+```bash
+package='<downloaded-package-filename>'
+grep -F "  $package" checksums.txt | sha256sum --check -
+```
+
 ### Building from Source
 
 ChairLift is written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO required):
