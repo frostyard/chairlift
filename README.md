@@ -105,13 +105,14 @@ asked to run against the absolute path
 `org.freedesktop.policykit.exec.path` annotation and its first argument
 against an `org.freedesktop.policykit.exec.argv1` annotation. Installing under
 any other prefix places those files where polkit never looks, so the privileged
-updex and bootc-staging features silently stop working (or fall back to a
+updex, bootc-staging, and sysupdate-staging features silently stop working (or fall back to a
 more restrictive, always-reprompting authentication rule). This also matches
 the layout used by ChairLift's full `frostyard-chairlift` nFPM package, so a
 source install and a full packaged install end up identical.
 
-ChairLift does not install passwordless PolicyKit rules. Bootc staging and
-updex writes use the policies' normal administrator-authentication defaults;
+ChairLift does not install passwordless PolicyKit rules. Bootc staging,
+sysupdate staging, and updex writes use the policies' normal
+administrator-authentication defaults;
 an active session may retain a successful authorization briefly. The updex
 helper accepts only `enable-feature <name> [--dry-run]`, `disable-feature
 <name> [--dry-run]`, and `update [--dry-run]`, rejecting every other argument
@@ -139,8 +140,8 @@ likewise retains the fixed `/usr/libexec/snosi-sysupdate-stage` path used by
 `/usr/lib/snosi/native-ab` marker gating the group) ship with the OS image.
 
 `PREFIX` can still be overridden (e.g. `make install PREFIX=$HOME/.local`)
-for a non-privileged, non-PolicyKit-integrated install — but the updex
-helper and bootc staging will not resolve to the fixed exec-path annotation
+for a non-privileged, non-PolicyKit-integrated install — but the updex helper,
+bootc staging, and sysupdate staging will not resolve to their fixed exec-path annotations
 in that case.
 
 `DESTDIR` layers underneath `PREFIX` as usual, unchanged by any of the
