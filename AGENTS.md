@@ -189,3 +189,9 @@ distilled from a previous automated run of
 here via `.mill.toml`); they are binding guidance, not suggestions. New skills
 are added by the mill's harvest step and reviewed like any other change in the
 PR that carries them.
+
+## Org-wide decisions
+
+Org-level conventions this repo follows are recorded as ADRs in
+frostyard/core — see [docs/org-adrs.md](docs/org-adrs.md) for the list that
+binds this repo. Change the ADR (in core) before changing behavior it covers.
