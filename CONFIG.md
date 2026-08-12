@@ -27,6 +27,12 @@ or fails schema validation. Instead, it disables every feature group, logs a
 high-signal `CONFIGURATION ERROR`, and displays a persistent error toast naming
 the file and cause. Fix the authoritative file and restart ChairLift.
 
+These semantics are decision records
+[ADR-0003](docs/adr/0003-two-tier-config-with-fail-closed-semantics.md)
+(search order and fail-closed behavior) and
+[ADR-0004](docs/adr/0004-configuration-error-diagnostic-vocabulary.md)
+(the diagnostic vocabulary).
+
 ## Configuration Format
 
 The configuration file uses YAML format with a simple structure:
@@ -189,7 +195,9 @@ install -D -m 644 config.yml debian/tmp/etc/chairlift/config.yml
   - A non-empty list, or an explicitly set scalar value, replaces the
     default outright
 - Page names, group names, and field names must match the documented schema;
-  unknown names and values of the wrong type are configuration errors
+  unknown names and values of the wrong type are configuration errors (the
+  schema is derived from the canonical config struct — decision record
+  [ADR-0005](docs/adr/0005-config-schema-reflected-from-canonical-struct.md))
 - An unreadable, malformed, or schema-invalid authoritative file fails closed:
   all feature groups are hidden, lower-priority files are ignored, and
   ChairLift reports the path and cause in both its log and a persistent toast
