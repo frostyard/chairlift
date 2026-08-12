@@ -166,7 +166,9 @@ The upgrade-failure toast text adapts to whether that UI is actually available: 
 `internal/views/`. It owns the widget-independent presentation decisions shared
 by all six page builders. The GTK files create and mutate widgets, but no longer
 reimplement the variable row text, status text, Help-link inventory, os-release
-parsing, or maintenance invocation that this package returns.
+parsing, or maintenance invocation that this package returns. The leaf-package
+layout itself is decision record
+[ADR-0007](../adr/0007-pure-leaf-packages-route-around-untestable-gtk.md).
 
 Its exported outcomes are:
 
@@ -206,7 +208,7 @@ test binary to the puregotk-importing parent package.
 
 ### View-layer toast and decision helpers (`internal/views/actionmsg`, `internal/views/trustmsg`)
 
-Two of the nine small, puregotk-free packages under `internal/views/` (the others are `internal/views/actionstate`, `internal/views/badgestate`, `internal/views/bundleview`, `internal/views/rowset`, `internal/views/flatpakstatus`, `internal/views/featurestatus` and `internal/views/pageview`, each documented in its own subsection) hold the text and, at four call sites, the accompanying UI decision that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead.
+Two of the nine small, puregotk-free packages under `internal/views/` (the others are `internal/views/actionstate`, `internal/views/badgestate`, `internal/views/bundleview`, `internal/views/rowset`, `internal/views/flatpakstatus`, `internal/views/featurestatus` and `internal/views/pageview`, each documented in its own subsection) hold the text and, at four call sites, the accompanying UI decision that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead. Decision records: [ADR-0007](../adr/0007-pure-leaf-packages-route-around-untestable-gtk.md) (the leaf-package layout) and [ADR-0009](../adr/0009-dry-run-output-convention-and-single-decision-structs.md) (the decision-struct rule these packages implement).
 
 - **`internal/views/trustmsg`** (added for issue #57) — `UpgradeMessage(pkgName string, trustGroupAvailable bool) string`, the toast shown when a Homebrew upgrade fails with an `*homebrew.UntrustedTapError`; see "Tap trust" above.
 - **`internal/views/actionmsg`** (added for issue #56 and extended for issue #8) — builds the toast text for every state-changing view action across the maintenance, applications, updates, and features pages, and, at the four call sites where the view also mutates a row/group/switch on success, the execute/complete/mutate/confirm decision itself, so the same table-driven test in `actionmsg_test.go` that checks the toast also checks the gate (see "Dry-run mode" in [overview.md](./overview.md#dry-run-mode) for the general rule this implements). Exported surface:
@@ -837,7 +839,8 @@ only maintainer config plus the bootc/updex policies, for pairing with a
 user-scoped app installation. The two package names conflict to prevent
 simultaneous ownership of the same fixed system files. The companion does not
 provide `/usr/libexec/bootc-update-stage`; a distro must bake its own trusted
-implementation at that exact policy-annotated path.
+implementation at that exact policy-annotated path. This split is decision
+record [ADR-0006](../adr/0006-split-system-integration-package-with-mutual-conflicts.md).
 
 `internal/installcheck` holds regression tests, not production code, that turn
 "verified by inspection" into real, gated checks. The first two guard the

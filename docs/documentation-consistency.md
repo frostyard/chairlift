@@ -1,5 +1,10 @@
 # Documentation Consistency Checklist
 
+The current-state vs historical classification below, and its enforcement by
+string-matching unit tests in `internal/installcheck/documentation_test.go`,
+are decision record
+[ADR-0010](adr/0010-docs-are-a-ci-gated-artifact.md).
+
 Use this checklist whenever behavior, configuration, dependencies, or
 installation layout changes:
 

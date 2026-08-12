@@ -21,9 +21,43 @@ The user-facing docs-site home is [index.md](index.md) (rendered by
 
 ### Decisions (ADRs)
 
-*(none yet — repo-local decisions get the next free number from
+Repo-local decisions get the next free number from
 [adr/TEMPLATE.md](adr/TEMPLATE.md); org-wide decisions that bind this repo
-are listed in [org-adrs.md](org-adrs.md))*
+are listed in [org-adrs.md](org-adrs.md).
+
+- [adr/0001-fixed-path-pkexec-privilege-boundary.md](adr/0001-fixed-path-pkexec-privilege-boundary.md)
+  — every root mutation goes through pkexec at hardcoded absolute paths
+  matching the polkit `exec.path`/`exec.argv1` annotations; the helper
+  re-validates full argv; no passwordless rules ever ship
+- [adr/0002-usr-prefix-is-the-only-supported-install-prefix.md](adr/0002-usr-prefix-is-the-only-supported-install-prefix.md)
+  — `PREFIX=/usr` is the only supported install prefix (polkitd's fixed
+  actions directory, pkexec's absolute path match); `DESTDIR` layers under it
+- [adr/0003-two-tier-config-with-fail-closed-semantics.md](adr/0003-two-tier-config-with-fail-closed-semantics.md)
+  — `/etc/chairlift` → `/usr/share/chairlift` → dev fallback; only absence
+  advances the search; a present-but-broken file disables every feature group
+- [adr/0004-configuration-error-diagnostic-vocabulary.md](adr/0004-configuration-error-diagnostic-vocabulary.md)
+  — fixed greppable `CONFIGURATION ERROR` log prefix, persistent toast, and
+  the stable `ErrorKind` classification vocabulary
+- [adr/0005-config-schema-reflected-from-canonical-struct.md](adr/0005-config-schema-reflected-from-canonical-struct.md)
+  — the config schema is reflected from `Config`/`defaultConfig()` yaml tags;
+  unknown keys hard-error; files are field-by-field overlays (explicit empty
+  clears, omitted inherits)
+- [adr/0006-split-system-integration-package-with-mutual-conflicts.md](adr/0006-split-system-integration-package-with-mutual-conflicts.md)
+  — self-contained `frostyard-chairlift` vs GUI-less
+  `frostyard-chairlift-system-integration`, conflicting both ways, for
+  user-scoped GUI installs such as the Homebrew cask
+- [adr/0007-pure-leaf-packages-route-around-untestable-gtk.md](adr/0007-pure-leaf-packages-route-around-untestable-gtk.md)
+  — puregotk-importing packages stay test-free; all decidable logic lives in
+  headless leaf packages with wiring tests proving the page builders use them
+- [adr/0008-e2e-readiness-is-a-log-marker-contract.md](adr/0008-e2e-readiness-is-a-log-marker-contract.md)
+  — E2E startup readiness is three exact stdout markers polled under
+  dbus-run-session + xvfb-run; the log lines are a public API
+- [adr/0009-dry-run-output-convention-and-single-decision-structs.md](adr/0009-dry-run-output-convention-and-single-decision-structs.md)
+  — per-wrapper `SetDryRun`/`IsDryRun`, fixed `[DRY-RUN]` message prefixes,
+  and single tested decision structs gating toast + UI mutation together
+- [adr/0010-docs-are-a-ci-gated-artifact.md](adr/0010-docs-are-a-ci-gated-artifact.md)
+  — documentation splits into current-state vs historical and is enforced by
+  string-matching unit tests; prose is testable
 
 ### Design
 
