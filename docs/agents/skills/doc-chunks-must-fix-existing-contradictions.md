@@ -1,14 +1,14 @@
 # A doc chunk must grep for and fix existing contradictory claims, not just add new prose
 
 **When it applies:** Planning or reviewing any chunk that documents new or
-changed behavior in a `.md` file (`CONFIG.md`, `README.md`, `yeti/*.md`,
-`AGENTS.md`) — especially when the behavior already has *some* prose written
+changed behavior in a `.md` file (`CONFIG.md`, `README.md`,
+`docs/design/*.md`, `AGENTS.md`) — especially when the behavior already has *some* prose written
 about it (an old default, an old fallback rule, an old "how this works"
 paragraph) that the change makes wrong or incomplete.
 
 **What to do:** Before scoping a doc chunk as "add a paragraph describing the
 new behavior," grep the target file (and any sibling doc that describes the
-same subsystem, e.g. `CONFIG.md` vs. `yeti/OVERVIEW.md`) for existing
+same subsystem, e.g. `CONFIG.md` vs. `docs/design/overview.md`) for existing
 sentences that state the old, now-contradicted behavior — including
 restatements in a "Notes" or FAQ-style section, which tend to repeat a claim
 in different words rather than reference the primary description once. Add

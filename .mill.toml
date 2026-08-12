@@ -25,7 +25,7 @@ deep = ["make ci"]
 
 [context]
 # Docs every agent must read before planning/implementing/reviewing.
-docs = ["AGENTS.md", "yeti/OVERVIEW.md", "yeti/package-managers.md"]
+docs = ["AGENTS.md", "docs/design/overview.md", "docs/design/package-managers.md"]
 # Durable lessons harvested from previous runs; read by all agents.
 skills_dir = "docs/agents/skills"
 

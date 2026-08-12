@@ -44,7 +44,8 @@ entry point, not a replacement for them.
 ## Documentation and completion
 
 - For source changes, review and update relevant current-state documentation
-  in `AGENTS.md`, `README.md`, and `yeti/`.
+  in `AGENTS.md`, `README.md`, and `docs/` (design docs live in
+  `docs/design/`, formerly `yeti/`; `docs/README.md` is the index).
 - For behavior, configuration, dependencies, or installation changes, follow
   `docs/documentation-consistency.md`. Verify claims against live source,
   configuration, `go.mod`, and packaging files; do not copy current-state

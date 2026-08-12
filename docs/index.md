@@ -4,6 +4,12 @@ ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://gi
 
 The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on or off.
 
+This page is the user-facing docs-site home. Contributor- and agent-facing
+documentation — architecture, ADRs, specs, and plans — is indexed in
+[docs/README.md](README.md), with
+[docs/design/overview.md](design/overview.md) as the architecture entry
+point.
+
 ## Pages
 
 ChairLift provides six configurable pages:

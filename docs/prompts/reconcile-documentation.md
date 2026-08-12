@@ -14,5 +14,5 @@ Trace the topic to its live sources:
 - go.mod for dependency versions;
 - Makefile, .goreleaser.yaml, helper constants, and PolicyKit files for commands and install paths.
 
-Update every current-state restatement in README.md, CONFIG.md, docs/, and yeti/ that is relevant. Search for old terms and contradictory claims rather than only adding a new paragraph. Run the focused tests named by docs/documentation-consistency.md when applicable, then run make ci. Report the files reconciled and the source used to verify each factual claim.
+Update every current-state restatement in README.md, CONFIG.md, and docs/ (including the design docs under docs/design/, formerly yeti/) that is relevant. Search for old terms and contradictory claims rather than only adding a new paragraph. Run the focused tests named by docs/documentation-consistency.md when applicable, then run make ci. Report the files reconciled and the source used to verify each factual claim.
 ```

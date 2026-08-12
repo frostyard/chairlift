@@ -154,19 +154,30 @@ An agent must not break these:
 
 ## Documentation
 
+All documentation lives in the `docs/` tree, in frostyard/core's
+four-category shape (core ADR-0025; the former `yeti/` AI-docs directory is
+folded in). `docs/README.md` carries the category table, the index of every
+doc, and the conventions — new docs start from their category's
+`TEMPLATE.md`, and adding a doc means indexing it there:
+
+- `docs/adr/` — why: repo-local decisions, immutable once accepted. Org-wide
+  decisions go to frostyard/core instead, per
+  [docs/org-adrs.md](docs/org-adrs.md).
+- `docs/design/` — how it fits together: living architecture docs. The entry
+  point is `docs/design/overview.md` (formerly `yeti/OVERVIEW.md`); read it
+  and `docs/design/package-managers.md` (formerly `yeti/package-managers.md`)
+  for architecture, patterns, and decision rationale before working. Write
+  them to be maximally useful to an AI agent understanding the codebase —
+  detailed architecture and rationale rather than user-facing guides.
+- `docs/specs/` — exact contracts, changed only alongside implementing code.
+- `docs/plans/` — phased plans with "Done when" outcomes.
+
 After any change to source code, update relevant documentation in `AGENTS.md`,
-`README.md`, and the `yeti/` folder. A task is not complete without reviewing
+`README.md`, and `docs/`. A task is not complete without reviewing
 and updating relevant documentation. For behavior, configuration, dependency,
 or install-layout changes, also follow
 `docs/documentation-consistency.md`; current-state claims must be checked
 against source/config/go.mod rather than copied from historical plans.
-
-**yeti/ directory** contains documentation written for AI consumption and
-context enhancement, not primarily for humans. Read `yeti/OVERVIEW.md` and
-`yeti/package-managers.md` for architecture, patterns, and decision rationale
-before working. Write content there to be maximally useful to an AI agent
-understanding the codebase — detailed architecture and rationale rather than
-user-facing guides.
 
 **.knowledge/ directory** is the repository's cross-session knowledge index.
 Read `.knowledge/README.md` before working so prior corrections, handoffs,
@@ -177,7 +188,7 @@ locations instead of duplicated into competing stores.
 agents. Read `.memory/README.md` and any learning artifacts in that directory
 before working. Record verified corrections there when a session establishes
 that a prior belief about ChairLift was wrong, and promote stable rules into
-this file, `docs/agents/skills/`, or `yeti/` as appropriate. Never record
+this file, `docs/agents/skills/`, or `docs/design/` as appropriate. Never record
 secrets or personal data because the directory is version-controlled.
 
 ## Learned agent skills

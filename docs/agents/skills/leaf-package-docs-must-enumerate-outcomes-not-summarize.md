@@ -1,7 +1,8 @@
 # Leaf-package doc prose must enumerate every distinct outcome it covers, not summarize with "every"/"all"
 
-**When it applies:** Writing or reviewing the `yeti/OVERVIEW.md` /
-`yeti/package-managers.md` prose that describes what a new puregotk-free leaf
+**When it applies:** Writing or reviewing the `docs/design/overview.md` /
+`docs/design/package-managers.md` (formerly `yeti/`) prose that describes
+what a new puregotk-free leaf
 package's exported functions decide (following the
 `flatpakstatus`/`featurestatus`/`actionmsg` pattern from
 `docs/agents/skills/gtk-headless-tests.md`), when that package has more than

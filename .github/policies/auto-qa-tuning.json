@@ -11,7 +11,7 @@
   },
   "actions": {
     "pr_acceptance_rate": [
-      "tighten affected guidance in AGENTS.md, docs/review-rubric.md, or yeti/",
+      "tighten affected guidance in AGENTS.md, docs/review-rubric.md, or docs/design/",
       "add or document a targeted local check when rework reveals a validation gap"
     ]
   },
