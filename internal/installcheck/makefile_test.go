@@ -12,7 +12,7 @@ import (
 
 // PolicyKit's polkitd is compiled with fixed actions/rules directories and
 // does not consult PREFIX or XDG_DATA_DIRS (see the Makefile's PREFIX
-// comment and yeti/OVERVIEW.md's "Privileged operations" section). ChairLift
+// comment and docs/design/overview.md's "Privileged operations" section). ChairLift
 // installs policies under actions and removes its obsolete passwordless rules
 // from rules.d during source installs.
 const (

@@ -8,8 +8,8 @@ rediscovered.
 Use this directory for deltas between what an agent believed and what the
 repository, a command, or a maintainer established as true. General
 architecture and operating rules still belong in `AGENTS.md`,
-`docs/agents/skills/`, or `yeti/`; promote a correction there once it becomes a
-stable rule.
+`docs/agents/skills/`, or `docs/design/`; promote a correction there once it
+becomes a stable rule.
 
 ## Corrections
 

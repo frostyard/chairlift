@@ -14,8 +14,9 @@ installation layout changes:
 - Check commands and installation destinations against `Makefile`,
   `.goreleaser.yaml`, fixed helper constants, and PolicyKit annotations. Run a
   `make -n install` dry run when installation text changes.
-- Treat `README-go-port.md` and files under `docs/plans/` and
-  `docs/superpowers/` as historical. Current-state claims belong in
-  `README.md`, `CONFIG.md`, `docs/index.md`, `docs/reference.md`, and `yeti/`.
+- Treat `README-go-port.md` and files under `docs/plans/` (except category
+  `TEMPLATE.md` files) and `docs/superpowers/` as historical. Current-state
+  claims belong in `README.md`, `CONFIG.md`, `docs/index.md`,
+  `docs/reference.md`, `docs/design/` (formerly `yeti/`), and `docs/specs/`.
 - Run `make ci`, then grep current-state documentation for the obsolete term,
   key, version, or path that prompted the change.

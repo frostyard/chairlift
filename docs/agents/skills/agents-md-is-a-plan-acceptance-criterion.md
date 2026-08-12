@@ -8,12 +8,13 @@ path, default, or invariant that AGENTS.md's "Repository invariants" or
 than pointing to code for.
 
 **What to do:** AGENTS.md's own documentation rule ("after any change to
-source code, update relevant documentation in AGENTS.md, README.md, and the
-`yeti/` folder") is enforced by plan review as a real, per-chunk acceptance
+source code, update relevant documentation in AGENTS.md, README.md, and
+`docs/`" — the docs tree formerly included the `yeti/` folder) is enforced by
+plan review as a real, per-chunk acceptance
 criterion — not just a closing-checklist reminder. Updating README.md and
-`yeti/` while leaving AGENTS.md's prose making the old claim (a bare helper
+`docs/` while leaving AGENTS.md's prose making the old claim (a bare helper
 name, an unstated default prefix, etc.) will be rejected even though README
-and yeti were both updated, because AGENTS.md itself is now stale and it is
+and docs were both updated, because AGENTS.md itself is now stale and it is
 one of the three named locations. When drafting a chunk's `files` list, check
 each changed invariant against AGENTS.md's current wording specifically (not
 just "did I update docs somewhere") and add AGENTS.md whenever the chunk

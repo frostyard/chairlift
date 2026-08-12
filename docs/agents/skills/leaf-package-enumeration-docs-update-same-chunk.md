@@ -4,14 +4,15 @@
 puregotk-free leaf package under `internal/views` (following the
 `internal/views/trustmsg`/`internal/views/actionmsg`/`internal/views/rowset`
 pattern from `docs/agents/skills/gtk-headless-tests.md`) — or, more generally,
-adds a new member to any collection that `yeti/OVERVIEW.md` or
-`yeti/package-managers.md` documents by an exact count or exhaustive list
+adds a new member to any collection that `docs/design/overview.md` or
+`docs/design/package-managers.md` (formerly `yeti/`) documents by an exact
+count or exhaustive list
 ("two small, puregotk-free packages...", a diagram enumerating every leaf).
 
 **What to do:** Those docs state an exact enumeration, not just descriptive
 prose, so adding a new member makes the existing sentence factually wrong the
 moment the new package exists — even if the new package's own subsection is
-also added. The binding "update AGENTS.md/README.md/yeti/ after any source
+also added. The binding "update AGENTS.md/README.md/docs/ after any source
 change" rule is enforced per chunk, so a chunk that adds the new leaf package
 but defers the enumeration-count fix to a later chunk leaves the tree
 self-contradictory in the interim and will be rejected on plan review. Fix the

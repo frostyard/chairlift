@@ -1,5 +1,8 @@
 # ChairLift Overview
 
+Living design document (formerly `yeti/OVERVIEW.md`; folded into `docs/` per
+[frostyard/core ADR-0025](https://github.com/frostyard/core/blob/main/docs/adr/0025-consolidate-repository-docs-into-docs.md)).
+
 ## Purpose
 
 ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, OS system updates (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off.
@@ -1147,7 +1150,7 @@ authoritative; a read, parse, type, or schema error disables every feature
 group and produces both a high-signal log entry and a persistent toast. If no
 file is found, all features default to enabled except
 `maintenance_cleanup_group`, which defaults to disabled. See
-[CONFIG.md](../CONFIG.md) for the full reference.
+[CONFIG.md](../../CONFIG.md) for the full reference.
 
 Both packaging paths own only the `/usr/share` candidate and may replace it on
 upgrade. Neither writes `/etc/chairlift/config.yml`; that higher-precedence

@@ -26,10 +26,10 @@ func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
 		if len(match) != 2 {
 			t.Fatal("go.mod does not contain a parseable github.com/frostyard/updex version")
 		}
-		overview := readRepoFile(t, filepath.Join("yeti", "OVERVIEW.md"))
+		overview := readRepoFile(t, filepath.Join("docs", "design", "overview.md"))
 		want := "currently pinned to " + match[1] + " in go.mod"
 		if !strings.Contains(overview, want) {
-			t.Errorf("yeti/OVERVIEW.md does not contain %q", want)
+			t.Errorf("docs/design/overview.md does not contain %q", want)
 		}
 	})
 
@@ -37,8 +37,8 @@ func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
 		for _, path := range []string{
 			filepath.Join("internal", "bootc", "stage.go"),
 			filepath.Join("internal", "views", "updates_page.go"),
-			filepath.Join("yeti", "OVERVIEW.md"),
-			filepath.Join("yeti", "package-managers.md"),
+			filepath.Join("docs", "design", "overview.md"),
+			filepath.Join("docs", "design", "package-managers.md"),
 		} {
 			if strings.Contains(readRepoFile(t, path), "EventError") {
 				t.Errorf("%s still documents or implements removed EventError", path)

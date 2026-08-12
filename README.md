@@ -291,7 +291,7 @@ chairlift/
 
 ### Key Components
 
-See [yeti/OVERVIEW.md](yeti/OVERVIEW.md) and [yeti/package-managers.md](yeti/package-managers.md) for detailed architecture notes (written for AI-assisted development, but equally useful as a deep-dive for humans).
+See [docs/design/overview.md](docs/design/overview.md) and [docs/design/package-managers.md](docs/design/package-managers.md) for detailed architecture notes (written for AI-assisted development, but equally useful as a deep-dive for humans); [docs/README.md](docs/README.md) indexes the full documentation tree.
 
 - **`internal/homebrew`**: Homebrew CLI wrapper — package listing/searching, install/uninstall, pin/unpin, bundles, updates, and Homebrew 6 tap-trust detection/management
 - **`internal/bootc`**: bootc status reads and pkexec-driven update staging via the snow `bootc-update-stage` script

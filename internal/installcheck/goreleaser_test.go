@@ -17,7 +17,7 @@ import (
 // enum value — in internal/window/window.go's about dialog) resolves to.
 // .goreleaser.yaml's top-level metadata.license and every nfpms[] entry's
 // license must agree with this constant; see
-// yeti/package-managers.md's "Install-path consistency" section for the
+// docs/design/package-managers.md's "Install-path consistency" section for the
 // MIT/GPL drift bug this guards against.
 const wantSPDXLicense = "GPL-3.0-or-later"
 
