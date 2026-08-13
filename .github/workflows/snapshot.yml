@@ -9,9 +9,11 @@ on:
     branches:
       - main
 
+# Nightlies replace the same dev tag and release. Cancel stale runs before a
+# newer one publishes so concurrent GoReleaser uploads cannot collide.
 concurrency:
-  group: chairlift-dev-release
-  cancel-in-progress: false
+  group: goreleaser-nightly
+  cancel-in-progress: true
 
 permissions:
   contents: write
