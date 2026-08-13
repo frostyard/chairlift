@@ -32,7 +32,9 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/navigation/ Canonical pages, shortcuts, and pure navigation transitions
         ├── internal/homebrew/  Homebrew CLI wrapper (JSON output parsing)
         ├── internal/flatpak/   Flatpak CLI wrapper (tabular output parsing)
-        ├── internal/bootc/     bootc wrapper (status reads, pkexec stage script, line streaming)
+        ├── internal/bootc/     bootc wrapper (status reads, fixed stage adapter)
+        ├── internal/sysupdate/ native A/B detection, status, rollback, fixed stage adapter
+        ├── internal/stageexec/ Pure-Go shared OS staging stream/event executor
         ├── internal/updex/     Updex feature manager (Go library reads, helper binary writes)
         ├── internal/updexhelper/ Puregotk-free argv-parsing/Options-building for cmd/chairlift-updex-helper
         └── internal/version/   Build metadata (ldflags injection)
@@ -992,25 +994,45 @@ Each wrapper in `internal/` follows a consistent shape:
 - Context-based timeouts. Homebrew and Flatpak both use a two-class model selected per invocation by an unexported `commandTimeout(args)` helper: 30s for read-only commands, 30m for state-changing ones (the keys of each package's `stateChangingCommands` map). updex uses 5min and bootc 30min.
 - Custom error types where needed
 
-### Streaming progress (bootc stage)
+### Shared OS staging progress (`internal/stageexec`)
 
-`bootc.StageUpdate(ctx, progressCh)` runs `pkexec /usr/libexec/bootc-update-stage`, streaming combined stdout+stderr line-by-line to the caller's channel and closing it when done:
-1. Caller creates a `chan bootc.ProgressEvent` and passes it to `StageUpdate`
+`bootc.StageUpdate` and `sysupdate.StageUpdate` retain their provider APIs and
+fixed commands — `pkexec /usr/libexec/bootc-update-stage` and `pkexec
+/usr/libexec/snosi-sysupdate-stage`, respectively — but both delegate execution
+to the pure-Go `internal/stageexec` leaf package:
+1. The caller creates the provider's `ProgressEvent` channel; both provider
+   types are aliases of `stageexec.ProgressEvent`.
 2. Each non-empty output line becomes an `EventMessage`; the channel is closed after either an `EventComplete` (success) or the function returning an error
 3. Event types: `EventMessage` and `EventComplete` — deliberately simpler than
    a step/percent model because the stage script's own output is unstructured
    log lines, not a structured progress protocol. Failures return as errors;
    they are not duplicated into the event stream.
-4. The view goroutine (`internal/views/updates_page.go`, `onBootcStageClicked`) reads events and dispatches UI updates to the main thread via `sgtk.RunOnMainThread`
+4. `stageexec.Run` owns merged stdout/stderr, non-zero exits with the last output
+   line, deadline/cancellation classification, missing bare-name or absolute-path
+   executables, direct-child kill/reap, the single success completion, and
+   channel closure. `stageexec.DryRun` owns the synthetic preview/completion and
+   closure without constructing an `exec.Cmd`.
+5. The bootc and sysupdate view goroutines read the same event contract and
+   dispatch UI updates to the main thread via `sgtk.RunOnMainThread`.
 
-**Caller-visible outcomes.** Both context-taking bootc functions classify failures with `errors.Is` against the context sentinels (never `==` on `ctx.Err()`), and `bootc.Error` has an `Err error` field plus `Unwrap() error` so callers can tell them apart:
+**Caller-visible outcomes.** Provider adapters preserve `bootc.Error` /
+`sysupdate.Error` and `NotFoundError` while carrying the shared executor's
+message and cause. Both context-taking bootc functions classify failures with
+`errors.Is` against the context sentinels, and `bootc.Error` has an `Err error`
+field plus `Unwrap() error` so callers can tell them apart:
 
-- `StageUpdate` — deadline: `*Error` "Update staging timed out" unwrapping to `context.DeadlineExceeded`; cancellation: `*Error` "Update staging was canceled" unwrapping to `context.Canceled` (or the bare `context.Canceled` when cancellation wins the race inside the streaming send, which classifies the same); non-zero exit: `*Error` "update staging failed (exit N): <last output line>" matching neither sentinel; missing `pkexec`: `*NotFoundError`.
+- Either provider's `StageUpdate` — deadline: provider `*Error` "Update staging timed out" unwrapping to `context.DeadlineExceeded`; cancellation: provider `*Error` "Update staging was canceled" unwrapping to `context.Canceled`; non-zero exit: provider `*Error` "update staging failed (exit N): <last output line>" matching neither sentinel; missing `pkexec`: provider `*NotFoundError`.
 - `GetStatus` — deadline: `*Error` "bootc status timed out" unwrapping to `context.DeadlineExceeded`; cancellation: `*Error` "bootc status was canceled" unwrapping to `context.Canceled`; non-zero exit: `*Error` "bootc status failed (exit N): <stderr>" matching neither sentinel; missing `bootc`: `*NotFoundError`. `GetStatus(ctx)` is `return getStatusFrom(ctx, bootcCommand)`; the unexported `getStatusFrom` seam exists so tests exercise all of these against a fake script without a real `bootc`.
 
 The deadline and cancellation messages differ in both functions, and neither ever surfaces as `signal: killed`.
 
-**bootc direct-kills; homebrew and flatpak kill the process group.** On cancellation `runStageStreaming` kills only the direct child (`cmd.Process.Kill()`) and sets no `Setpgid`, because the staging child runs under `pkexec` and is root-owned — an unprivileged process cannot signal it or its process group, so a group kill would fail by design. The unprivileged `internal/homebrew` and `internal/flatpak` runners do the opposite: they run in their own process group and kill the whole group so download helpers are not orphaned. The three wrappers therefore do *not* terminate processes the same way; making the privileged path group-killable is a privilege-model change.
+**OS staging direct-kills; homebrew and flatpak kill the process group.** On
+cancellation `stageexec.Run` kills only the direct child (`cmd.Process.Kill()`)
+and sets no `Setpgid`, because both staging adapters run under `pkexec` and the
+privileged child cannot be signaled as an unprivileged process group. The
+unprivileged Homebrew and Flatpak runners instead kill their whole process
+groups so download helpers are not orphaned. Making either privileged staging
+path group-killable is a privilege-model change.
 
 **Why a stage script instead of `bootc upgrade`:** upstream `bootc upgrade`'s registry-transport pull currently fails on snow's composefs images. The snow-shipped `/usr/libexec/bootc-update-stage` script works around this: `podman pull` fetches the image into containers-storage (podman's pull path works where bootc's does not), then `bootc switch --transport containers-storage` stages the already-pulled image as the next boot deployment. This keeps snow's actual upgrade logic in one place (the snosi script) rather than duplicating pull/switch orchestration in ChairLift; ChairLift only invokes the script via pkexec and streams its output. The script is idempotent — it exits 0 without staging anything when the deployment is already current.
 
@@ -1082,7 +1104,7 @@ package shapes. `frostyard-chairlift` is the existing self-contained package
 with both application binaries, desktop assets, maintainer config, and
 policies. `frostyard-chairlift-system-integration` is the root-owned companion
 for a user-scoped GUI delivery such as the Homebrew cask: its build filter
-contains only `chairlift-updex-helper`, and its contents contain the two
+contains only `chairlift-updex-helper`, and its contents contain all three
 policies plus `/usr/share/chairlift/config.yml`. The packages declare conflicts
 because they intentionally own the same privileged files.
 

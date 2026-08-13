@@ -123,7 +123,7 @@ publish stale installed state.
 
 ### Error handling
 
-`runBrewCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"brew"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `runStageStreaming` gives `internal/bootc`. No exported function takes a `context.Context`: callers get deadlines, not cancellation.
+`runBrewCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"brew"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `stageexec.Run` gives OS staging. No exported function takes a `context.Context`: callers get deadlines, not cancellation.
 
 `runBrewCommandAt` starts the command in its own process group (`cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}`) and sets `cmd.Cancel` to `syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)`, so brew's helper processes (git, curl, download workers) are killed with the command instead of being orphaned when only the direct child is signalled. `cmd.WaitDelay` (5s) bounds the wait, because those helpers inherit the stdout/stderr pipes and a straggler would otherwise hold `Wait` open indefinitely. `cmd.Run` still reaps the child.
 
@@ -407,7 +407,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 ### Error handling
 
-`runFlatpakCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `runStageStreaming` gives `internal/bootc` and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
+`runFlatpakCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `stageexec.Run` gives OS staging and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
 
 `runFlatpakCommandAt` starts the command in its own process group (`cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}`) and sets `cmd.Cancel` to `syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)`, so flatpak's download helpers (download workers, ostree pulls) are killed with the command instead of being orphaned when only the direct child is signalled. `cmd.WaitDelay` (5s) bounds the wait, because those helpers inherit the stdout/stderr pipes and a straggler would otherwise hold `Wait` open indefinitely. `cmd.Run` still reaps the child.
 
@@ -438,15 +438,43 @@ so runtimes and extensions are deliberately excluded from the results. Update
 rows and the sidebar update badge therefore only ever describe applications,
 which is what the user can act on from the applications page.
 
+## Shared OS stage executor (`internal/stageexec`)
+
+`internal/stageexec` is a pure-Go, widget-free leaf package used only by the
+fixed bootc and sysupdate staging adapters. `ProgressEvent`, `EventMessage`, and
+`EventComplete` are defined once there and exposed from both providers through
+type/constant aliases, so existing callers keep their provider-qualified API.
+
+`Run(ctx, progressCh, name, args...)` owns the complete live process contract:
+successful exit emits exactly one `EventComplete`; trimmed non-empty stdout and
+stderr lines share one ordered `EventMessage` stream; non-zero exit includes the
+exit code and last output line and emits no completion; deadline and
+cancellation return distinct errors matching their context sentinels without
+leaking `signal: killed`; missing bare names and explicit paths return
+`*stageexec.NotFoundError`; and every path closes the channel. `DryRun` emits
+the synthetic preview plus completion, closes the channel, and constructs no
+`exec.Cmd`. `stageexec_test.go` covers each outcome once against local scripts;
+the provider tests cover only fixed-path/dry-run adapters and native A/B
+detection.
+
+Cancellation deliberately kills and reaps only the direct child. Both callers
+run through `pkexec`, whose privileged child cannot be signaled by ChairLift as
+an unprivileged process group. The unprivileged Homebrew and Flatpak executors
+retain their separate process-group-kill behavior.
+
 ## bootc (`internal/bootc/`)
 
-Wraps `bootc` for OSTree/composefs system updates, split across two files: `bootc.go` (unprivileged status reads) and `stage.go` (privileged update staging). Deliberately does not shell out to any separate CLI helper binary or Go client library — status parsing and stage-script invocation are both implemented directly against `os/exec`.
+Wraps `bootc` for OSTree/composefs system updates, split across two files:
+`bootc.go` (unprivileged status reads) and `stage.go` (fixed-path privileged
+staging adapter). There is no separate CLI helper binary or Go client library;
+status parsing uses `os/exec`, while stage execution delegates to
+`internal/stageexec`.
 
 ### `GetStatus` (unprivileged)
 
 `GetStatus(ctx)` runs `bootc status --format json` with **no** `pkexec` — this is a plain read, safe to call from any goroutine (`internal/bootc/bootc.go`). Output is unmarshaled into `Status{Spec, Status: {Booted, Staged, Rollback}}`, where each of `Booted`/`Staged`/`Rollback` is a `*Deployment` (nil-safe accessors: `ImageRef()`, `Version()`, `Timestamp()`, `Digest()`).
 
-`GetStatus` is a one-line wrapper: `return getStatusFrom(ctx, bootcCommand)`. The unexported `getStatusFrom(ctx context.Context, name string) (*Status, error)` runs `<name> status --format json`, classifies the error, and parses the output. The executable name is a parameter purely so `bootc_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` on a host with no `bootc` installed — the same seam `runStageStreaming` gives staging and `runBrewCommandAt`/`runFlatpakCommandAt` give the two package-manager wrappers. The seam is unexported and its only production call site passes the fixed `bootcCommand` constant, so no caller-supplied or user-derived string can reach it.
+`GetStatus` is a one-line wrapper: `return getStatusFrom(ctx, bootcCommand)`. The unexported `getStatusFrom(ctx context.Context, name string) (*Status, error)` runs `<name> status --format json`, classifies the error, and parses the output. The executable name is a parameter purely so `bootc_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` on a host with no `bootc` installed. The seam is unexported and its only production call site passes the fixed `bootcCommand` constant, so no caller-supplied or user-derived string can reach it.
 
 Failures classify into exactly four distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`, so a wrapped cause still classifies:
 
@@ -465,20 +493,28 @@ The deadline and cancellation messages differ, and neither surfaces as `signal: 
 
 ### `StageUpdate` (privileged, streaming)
 
-`StageUpdate(ctx, progressCh)` (`internal/bootc/stage.go`) runs `pkexec /usr/libexec/bootc-update-stage` via the unexported `runStageStreaming(ctx, progressCh, name, args...)` seam (which tests drive with a local fake script instead of `pkexec`), merging stdout+stderr and streaming each trimmed non-empty line to `progressCh` as an `EventMessage`. `progressCh` is always closed before returning (`defer close`). On successful exit it sends a final `EventComplete`.
+`StageUpdate(ctx, progressCh)` (`internal/bootc/stage.go`) retains the fixed
+`pkexec /usr/libexec/bootc-update-stage` command and adapts
+`stageexec.Run`/`DryRun` errors back to `bootc.Error` and `bootc.NotFoundError`.
+Its progress types are aliases of the shared contract.
 
 Failures classify into exactly four distinct outcomes, checked in this order — `errors.Is` against `context.DeadlineExceeded`/`context.Canceled`, never `==` on `ctx.Err()`:
 
 | Condition | Result |
 |-----------|--------|
 | The context deadline expired | `*Error`, message `Update staging timed out`, unwrapping to `context.DeadlineExceeded` |
-| The context was cancelled by its owner | `*Error`, message `Update staging was canceled`, unwrapping to `context.Canceled`; if cancellation instead wins the race inside the streaming `select`, the child is killed and reaped and the bare `ctx.Err()` (`context.Canceled`) is returned, which classifies identically |
+| The context was cancelled by its owner | `*Error`, message `Update staging was canceled`, unwrapping to `context.Canceled` |
 | The script exited non-zero | `*Error`, message `update staging failed (exit N): <last output line>`, unwrapping to the `*exec.ExitError` — matching neither context sentinel |
 | `pkexec` itself is missing | `*NotFoundError` (`pkexec not found`) |
 
-The deadline and cancellation messages differ, and neither surfaces as `signal: killed`. `stage_test.go` covers all of these against fake `#!/bin/sh` scripts, so no test needs a real `pkexec` or `bootc`.
+The deadline and cancellation messages differ, and neither surfaces as
+`signal: killed`. Exhaustive process tests live in
+`internal/stageexec/stageexec_test.go`; `bootc/stage_test.go` checks the
+fixed-path dry-run adapter without a real `pkexec` or `bootc`.
 
-**Why bootc direct-kills instead of killing the process group:** on cancellation `runStageStreaming` calls `cmd.Process.Kill()` on the direct child only, and `internal/bootc` deliberately sets no `Setpgid`/`cmd.Cancel` process-group kill. The staging child runs under `pkexec` and is therefore root-owned, so this unprivileged process cannot signal it or its process group — a `syscall.Kill(-pid, SIGKILL)` would fail by design. That is the exception: the unprivileged `runBrewCommandAt` and `runFlatpakCommandAt` runners *do* kill the whole process group, because their children are owned by the same user. Making the privileged path group-killable would be a privilege-model change, not a runner change. `getStatusFrom` needs neither: `bootc status` is unprivileged and short-lived, and `exec.CommandContext`'s default kill of the direct child suffices.
+The direct-child cancellation rationale is owned by `internal/stageexec` above.
+`getStatusFrom` is separate: `bootc status` is unprivileged and short-lived, so
+`exec.CommandContext`'s default direct-child kill suffices.
 
 **Why a stage script instead of `bootc upgrade`:** upstream `bootc upgrade`'s registry-transport pull fails on snow's composefs images. The stage script works around this by using `podman pull` (whose pull path works) to fetch the image into containers-storage, then running `bootc switch --transport containers-storage` to stage the already-pulled image — `podman` does the pull, `bootc` does the switch. This keeps the actual workaround logic in one place (the snow-shipped script, source of truth in the snosi project) instead of duplicating pull/switch orchestration inside ChairLift. The script is idempotent: it exits 0 without staging anything when the deployment is already current, so `StageUpdate` doubles as both "check for update" and "apply update".
 
@@ -616,10 +652,8 @@ sysupdate target for a newer version, downloads it into the inactive
 root/verity slots via `systemd-sysupdate update`, verifies the result
 against the signed index, and writes both state files; it never reboots and
 is idempotent (exits 0 without staging when already current or when the
-candidate already sits in the inactive slot). Output streams line-by-line
-through the same `runStageStreaming` shape as bootc's, with the same
-direct-child-kill rationale (the pkexec child is root-owned, so no
-process-group signaling). The stager takes no flock; ChairLift's
+candidate already sits in the inactive slot). Output streams through `internal/stageexec`, exactly the same event, process,
+error, completion, and closure contract as bootc. The stager takes no flock; ChairLift's
 button-disable prevents UI-origin overlap, and the OS's
 `snosi-sysupdate-stage.timer` is inert by default, but a concurrent
 timer-driven run is a residual (currently theoretical) race that belongs to
@@ -631,12 +665,12 @@ the OS-owned helper to close.
 `EventComplete` (success). Same enumeration as bootc's; failures are
 returned as the function error, never as an event.
 
-### Error classification (`runStageStreaming` / `StageUpdate`)
+### Error classification (`stageexec.Run` / `StageUpdate`)
 
 | Outcome | Returned type | `errors.Is` sentinel |
 |---------|---------------|----------------------|
 | Deadline | `*Error` "Update staging timed out" | `context.DeadlineExceeded` |
-| Canceled | `*Error` "Update staging was canceled" (or bare `ctx.Err()` when the stream send loses the race) | `context.Canceled` |
+| Canceled | `*Error` "Update staging was canceled" | `context.Canceled` |
 | Missing executable | `*NotFoundError` | — (`exec.ErrNotFound` or `fs.ErrNotExist` at start) |
 | Non-zero exit | `*Error` carrying exit code + last output line | neither context sentinel |
 
@@ -819,11 +853,11 @@ blocks — with no shared code path, so nothing stops them (or
 `internal/updex.HelperPath`, the fixed absolute path `pkexec` matches against
 the policy's `exec.path` annotation) from silently drifting apart.
 
-ChairLift packages only the bootc and updex `.policy` files. It no longer
+ChairLift packages the bootc, sysupdate, and updex `.policy` files. It no longer
 ships its old `.rules` files, which returned `YES` for every active local
 member of the `sudo` group and bypassed authentication. Source installation
 explicitly removes those legacy rule paths; package upgrades remove them as
-obsolete tracked files. Both policies now use normal administrator
+obsolete tracked files. All three policies use normal administrator
 authentication, while the updex policy selects one action for each supported
 first argument and the helper validates the complete argv shape.
 
@@ -835,11 +869,12 @@ administrator and must survive package installation and upgrades unchanged.
 GoReleaser has two nFPM entries. `frostyard-chairlift` is self-contained and
 selects both `chairlift` and `chairlift-updex-helper` builds.
 `frostyard-chairlift-system-integration` selects only the helper and packages
-only maintainer config plus the bootc/updex policies, for pairing with a
+only maintainer config plus the bootc/sysupdate/updex policies, for pairing with a
 user-scoped app installation. The two package names conflict to prevent
 simultaneous ownership of the same fixed system files. The companion does not
-provide `/usr/libexec/bootc-update-stage`; a distro must bake its own trusted
-implementation at that exact policy-annotated path. This split is decision
+provide either OS stager; a distro must provide trusted implementations at
+`/usr/libexec/bootc-update-stage` and, on native A/B hosts,
+`/usr/libexec/snosi-sysupdate-stage`. This split is decision
 record [ADR-0006](../adr/0006-split-system-integration-package-with-mutual-conflicts.md).
 
 `internal/installcheck` holds regression tests, not production code, that turn
@@ -874,7 +909,8 @@ installed layout itself:
   still fails — per
   `docs/agents/skills/regression-tests-must-cover-every-collection-entry.md`),
   asserts each entry's `bindir` matches the directory of
-  `internal/updex.HelperPath`, its updex/bootc policy `contents[].dst` entries
+  `internal/updex.HelperPath`, its updex/bootc/sysupdate policy
+  `contents[].dst` entries
   equal the fixed polkit-1 actions paths, their policy/config modes remain
   `0644`, and no `.rules` content remains. It also requires every package to
   map the repository `config.yml` to
@@ -882,7 +918,7 @@ installed layout itself:
   `/etc/chairlift/config.yml`.
 - **`TestGoreleaserPublishesSystemIntegrationPackage`** requires exactly one
   full package and one integration package, verifies their build filters,
-  mutual conflicts, unique IDs, and the integration package's exact three
+  mutual conflicts, unique IDs, and the integration package's exact four
   content mappings. This prevents the companion from accidentally acquiring
   the GUI binary or losing one of the root-owned integration files.
 

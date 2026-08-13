@@ -84,6 +84,12 @@ An agent must not break these:
   deliberately per-user and does **not** use pkexec. Do not add arbitrary
   privileged command execution, broaden what pkexec runs, or route new
   mutations around the fixed helper/policy pair.
+- **OS staging execution has one owner.** `internal/stageexec` is the pure-Go
+  leaf package that owns the progress event contract, merged stdout/stderr
+  streaming, direct-child cancellation, error classification, completion event,
+  and channel closure for both `internal/bootc` and `internal/sysupdate`.
+  Provider packages retain their fixed paths, host detection, dry-run logging,
+  and public error adapters; do not copy the process loop back into either one.
 - **System-integration split.** The
   `frostyard-chairlift-system-integration` nFPM package contains the fixed-path
   updex helper, all three PolicyKit policies, and package-maintainer config,

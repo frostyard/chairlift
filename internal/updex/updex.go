@@ -149,10 +149,9 @@ func UpdateFeatures(ctx context.Context) error {
 
 // runHelper executes HelperPath via pkexec for privileged operations. pkexecPath
 // is the pkexec binary to invoke — always pkexecCommand in production, but an
-// explicit parameter (mirroring internal/bootc/stage.go's
-// runStageStreaming(ctx, ch, name, args...) pattern) so tests can substitute a
-// fake pkexec stand-in without invoking the real pkexec/polkit stack or
-// requiring root. HelperPath itself is never overridden: it is the fixed
+// explicit parameter (mirroring internal/stageexec.Run's executable seam) so
+// tests can substitute a fake pkexec stand-in without invoking the real
+// pkexec/polkit stack or requiring root. HelperPath itself is never overridden: it is the fixed
 // absolute path that must match the policy's exec.path annotation, so tests
 // assert it by inspecting the fake pkexec's captured argv rather than by
 // substituting a different one in.
