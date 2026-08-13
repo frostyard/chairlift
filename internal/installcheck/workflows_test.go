@@ -142,3 +142,24 @@ func TestWorkflowUsesLeastPrivilege(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotWorkflowUsesRollingDevConcurrency(t *testing.T) {
+	path := filepath.Join(".github", "workflows", "snapshot.yml")
+	workflow := readRepoFile(t, path)
+
+	var config struct {
+		Concurrency struct {
+			Group            string `yaml:"group"`
+			CancelInProgress bool   `yaml:"cancel-in-progress"`
+		} `yaml:"concurrency"`
+	}
+	if err := yaml.Unmarshal([]byte(workflow), &config); err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	if config.Concurrency.Group != "goreleaser-nightly" {
+		t.Errorf("concurrency group = %q, want goreleaser-nightly", config.Concurrency.Group)
+	}
+	if !config.Concurrency.CancelInProgress {
+		t.Error("cancel-in-progress = false, want true")
+	}
+}
