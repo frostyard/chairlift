@@ -178,7 +178,7 @@ When packaging ChairLift for different distributions:
 Example for Debian packaging:
 
 ```bash
-install -D -m 644 config.yml debian/tmp/etc/chairlift/config.yml
+install -D -m 644 config.yml debian/tmp/usr/share/chairlift/config.yml
 ```
 
 ## Notes
