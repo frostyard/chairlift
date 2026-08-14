@@ -46,12 +46,14 @@ internal/views/                 Page builders and event handlers (one file per p
 `app` and `window` also depend on the pure `navigation` package.
 
 External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
+
 - `gobj` — GObject type registration and instance registry
 - `sgtk.RunOnMainThread()` — main-thread dispatch for GTK safety
 
 ### Views coordinator (`internal/views/views.go`)
 
 The `views.go` file defines the central `UserHome` struct that holds references to all page widgets, config, and the `ToastAdder` interface. It provides:
+
 - `New(cfg, toastAdder)` — constructor that initializes `UserHome`
 - `ToastAdder` interface — `ShowToast(msg)`, `ShowErrorToast(msg)`, `SetUpdateBadge(count)` — implemented by Window
 
@@ -64,14 +66,14 @@ The UI defines six pages, each in its own file under `internal/views/`. Static
 configuration may omit any functional page whose builder-backed groups are all
 disabled; Help is always retained:
 
-| Page | File | Purpose |
-|------|------|---------|
-| Applications | `applications_page.go` | Manage Homebrew formulae/casks and installed Flatpaks; launch an external manager for new Flatpak installs |
-| Maintenance | `maintenance_page.go` | Homebrew/Flatpak cleanup, configurable maintenance scripts (executed via `exec.Command`/`pkexec`) |
-| Updates | `updates_page.go` | bootc or native A/B (systemd-sysupdate) staged system updates, Flatpak updates, Homebrew outdated packages, untrusted-tap trust prompts |
-| System | `system_page.go` | OS info (`/etc/os-release`), bootc deployment status, health monitor launch |
-| Features | `features_page.go` | Toggle system features via `updex` tool |
-| Help | `help_page.go` | Configurable links to website, issues, chat (opened via `xdg-open`) |
+| Page         | File                   | Purpose                                                                                                                                 |
+| ------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Applications | `applications_page.go` | Manage Homebrew formulae/casks and installed Flatpaks; launch an external manager for new Flatpak installs                              |
+| Maintenance  | `maintenance_page.go`  | Homebrew/Flatpak cleanup, configurable maintenance scripts (executed via `exec.Command`/`pkexec`)                                       |
+| Updates      | `updates_page.go`      | bootc or native A/B (systemd-sysupdate) staged system updates, Flatpak updates, Homebrew outdated packages, untrusted-tap trust prompts |
+| System       | `system_page.go`       | OS info (`/etc/os-release`), bootc deployment status, health monitor launch                                                             |
+| Features     | `features_page.go`     | Toggle system features via `updex` tool                                                                                                 |
+| Help         | `help_page.go`         | Configurable links to website, issues, chat (opened via `xdg-open`)                                                                     |
 
 ## Key Patterns
 
@@ -124,7 +126,7 @@ Decision record: [ADR-0009](../adr/0009-dry-run-output-convention-and-single-dec
 
 The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, bootc, sysupdate, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
 
-**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would *also* mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation *and* the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). Sites with no second UI mutation to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, bootc stage, and feature-update toasts) get a plain string function instead.
+**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would _also_ mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation _and_ the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). Sites with no second UI mutation to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, bootc stage, and feature-update toasts) get a plain string function instead.
 
 **Intentional exception:** bootc staging's completion **toast** is dry-run-aware (`actionmsg.BootcStage`), but its expander **subtitle** deliberately is not. The subtitle is a persistent status readout of live `bootc.GetStatus()` — what deployment is actually staged/booted right now — not a per-click completion claim, so it stays accurate and unchanged in both dry-run and live mode. Only the toast, which inherently answers "what did this click just do," needed dry-run-specific wording; there is no mutation left to gate once the subtitle is deliberately excluded, which is why `BootcStage` is string-only rather than a decision struct. Native A/B staging follows the identical split: `actionmsg.SysupdateStage` is the dry-run-aware toast, while the subtitle and rollback row re-read the real `/run/snosi` state files and partition labels in both modes.
 
@@ -192,9 +194,9 @@ YAML document, with a fixed cardinality outcome per input shape:
   `(nil, nil)` — no document, no error. This matches `Load()`'s existing
   "absent config" fallback semantics elsewhere in the package.
 - A single well-formed document returns its `*yaml.Node` (`Kind ==
-  yaml.DocumentNode`, one child under `Content`) and a nil `*LoadError`.
+yaml.DocumentNode`, one child under `Content`) and a nil `*LoadError`.
 - A malformed first document returns `(nil, err)` with `err.Kind ==
-  KindParseType`, `err.Path` copied verbatim, `err.Err` set to yaml.v3's own
+KindParseType`, `err.Path` copied verbatim, `err.Err` set to yaml.v3's own
   parser error, and `err.Detail` set to that same error's message — which
   yaml.v3 always renders as `"yaml: line N: ..."`, so the reported line is
   visible in `Detail` without a second look at `Err`.
@@ -206,7 +208,7 @@ YAML document, with a fixed cardinality outcome per input shape:
 - Any other second document — well-formed or malformed — is rejected the
   same way: a well-formed second document has no parser error to wrap, so
   `Err` is left nil and `Detail` names that document's own starting line
-  instead; a malformed second document preserves *that* document's parser
+  instead; a malformed second document preserves _that_ document's parser
   error and line in `Err`/`Detail`, just like a malformed first document
   would.
 
@@ -297,7 +299,7 @@ operand by `validateMergeOperand`, reproducing `gopkg.in/yaml.v3` v3.0.1
 `decode.go`'s `merge`/`failWantMap` rule exactly rather than accepting any
 value ordinary YAML content would allow. A merge operand is accepted only
 as one of: a `yaml.MappingNode` literal; a `yaml.AliasNode` whose
-*immediate* `Alias` target is a `yaml.MappingNode`; or a `yaml.SequenceNode`
+_immediate_ `Alias` target is a `yaml.MappingNode`; or a `yaml.SequenceNode`
 each of whose entries is itself one of the two prior shapes. Everything
 else is rejected as `KindParseType` — a scalar operand, an alias to a
 sequence or a scalar, a sequence containing a scalar or a nested sequence,
@@ -305,7 +307,7 @@ and a sequence containing an alias to a non-mapping all fail
 (`isMergeOperandMapping` is the single-alias-hop predicate both the direct
 and sequence-entry checks share). The immediate-target rule produces a
 deliberate asymmetry: an alias-to-alias-to-mapping chain is perfectly valid
-as an *ordinary* mapping value (the generic traversal above only requires a
+as an _ordinary_ mapping value (the generic traversal above only requires a
 non-nil `Alias` target of any kind) but is rejected as a merge operand,
 because yaml.v3 itself only unwraps one alias hop before deciding a merge
 value is not a mapping. All four of `isMergeKey`'s recognized tag forms —
@@ -387,12 +389,12 @@ reproduce yaml.v3's own duplicate-key guard exactly, while
 `effectiveKeyIdentity` intentionally includes it because merge-precedence
 resolution must not let a `!!str "1"` entry silently discard or be
 discarded by an `!!int 1` entry from another merge source. A complex key's
-identity is used only to decide *precedence* — which candidate wins, and
+identity is used only to decide _precedence_ — which candidate wins, and
 whether two explicit complex keys collide (see below) — never to compute
-it: a *winning* complex key is still fully resolved and emitted
+it: a _winning_ complex key is still fully resolved and emitted
 structurally, alias-free, by `emitEffectiveNode` like any other node
 (charged against `maxEffectiveOutputNodes` like everything else it
-emits), while a *losing* complex key (impossible for two candidates to
+emits), while a _losing_ complex key (impossible for two candidates to
 tie on, since distinct complex-key nodes always have distinct pointers,
 but reachable when the complex key belongs to a losing merge candidate's
 value) is never dereferenced, resolved, or emitted at all.
@@ -405,7 +407,7 @@ value) is never dereferenced, resolved, or emitted at all.
 doc)` first and returns that error unchanged on failure — Detail and Path
 byte-identical to what `validateSourceGraph` itself would return for the
 same input — so a caller cannot use `resolveEffective` to bypass
-source-graph validation, and `doc == nil` returns `(nil, nil)` only *after*
+source-graph validation, and `doc == nil` returns `(nil, nil)` only _after_
 that successful validation, matching `parseYAMLDocument`'s valid
 empty-input result.
 
@@ -420,7 +422,7 @@ copy and allocating a distinct `*yaml.Node` each time (mutating the result
 never mutates `doc`). A `yaml.AliasNode` is never copied as itself: the
 unexported `dereferenceAliasTarget` follows its (possibly multi-hop) `Alias`
 chain to the non-alias target first, and the emitted node carries that
-*target's* metadata, not the alias node's own — this applies identically
+_target's_ metadata, not the alias node's own — this applies identically
 whether the alias appears in mapping value position or as a mapping key.
 Because the output must stay alias-free, a single source node reached
 through more than one alias becomes more than one independent fresh copy in
@@ -446,7 +448,7 @@ charge, and each independent copy an expanded alias produces is charged
 separately (an alias node itself is never charged, since it is dereferenced
 to its target before the budget check runs). The check happens in
 `emitEffectiveNode`'s first statements for each node — incrementing and
-comparing a per-call counter *before* allocating a `*yaml.Node` for that
+comparing a per-call counter _before_ allocating a `*yaml.Node` for that
 node or recursing into its `Content` — so the 100,001st attempted emission
 fails before its own allocation and before any of its descendants are ever
 visited, which is what makes an exponential alias expansion (a compact,
@@ -485,12 +487,12 @@ retained explicit entry, in `m`'s source `Content` order, skipping any
 recognized merge directive (`isMergeKey`); second, every inherited
 candidate, discovered by merge directives in source `Content` order, each
 directive's sequence operands left to right (`mergeOperandMappings`
-unwraps a direct mapping, or an alias's *immediate* target, matching
+unwraps a direct mapping, or an alias's _immediate_ target, matching
 `validateMergeOperand`'s already-accepted shapes), and each operand
 mapping's own `effectiveEntries` computed recursively — so a merge nested
 inside a merge operand is fully flattened before its candidates are
 considered here. The combined candidate list is then deduplicated by
-`effectiveKeyIdentity`, keeping the *first* candidate for each identity.
+`effectiveKeyIdentity`, keeping the _first_ candidate for each identity.
 Because explicit entries are always listed first, this yields
 explicit-over-merged precedence; because merge candidates are discovered in
 directive-then-sequence-then-recursive order, it yields
@@ -540,12 +542,12 @@ replacement for, `checkDuplicateMappingKeys`'s tag-blind `Kind`+`Value`
 duplicate-key validation above, which `validateSourceGraph` still runs
 first, unchanged: `effectiveEntriesWithMemo` additionally scans each
 mapping's own retained explicit entries (the same entries its first pass
-collects) for two whose `effectiveKeyIdentity` compare equal *after* alias
+collects) for two whose `effectiveKeyIdentity` compare equal _after_ alias
 dereferencing — catching, for example, a literal scalar key and an alias
 key targeting an anchored scalar with the same resolved tag and value,
 which `checkDuplicateMappingKeys` cannot catch because the alias node's
 own `Kind` and `Value` differ from its target's. Finding such a pair sets
-`effectiveEmitState.collided` and records the *later* key (in source
+`effectiveEmitState.collided` and records the _later_ key (in source
 `Content` order) as `collisionKey`, aborting the whole `resolveEffective`
 call — exactly like a node-budget overflow aborts it — without
 inventorying or emitting anything further; `resolveEffective` then returns
@@ -553,7 +555,7 @@ inventorying or emitting anything further; `resolveEffective` then returns
 `KindParseType` `*LoadError` with a nil `Err` and a `Detail` reusing the
 same `collectSourceInventory`/`attributeSourceLines` line-attribution pair
 (own line, else nearest positive-line ancestor over all paths, else `1`)
-as the output-limit error above. The rule applies only to two *explicit*
+as the output-limit error above. The rule applies only to two _explicit_
 keys of one source mapping: an inherited merge candidate colliding with an
 explicit key of the same identity is ordinary suppression (the existing
 first-candidate dedup pass), not this error, since only an explicit
@@ -594,7 +596,7 @@ node's first-encounter active nearest positive-line ancestor.
 `attributeSourceLines` gives every reachable node a source line to report
 in a bounds-limit error: a node's own `Line` when positive; otherwise the
 line of a positive-line ancestor at the minimum number of content edges
-from it over *all* root-reachable paths, not merely the path the traversal
+from it over _all_ root-reachable paths, not merely the path the traversal
 happened to discover it by first; otherwise `1`, the deterministic
 fallback for a wholly synthetic graph with no line metadata anywhere. This
 is a multi-source breadth-first search in the parent→child direction,
@@ -649,7 +651,7 @@ ancestors up to the graph's root does too; `checkSourcePathVisitLimit`
 therefore does not report the first over-limit node found in discovery
 order (which would almost always be the root itself, carrying no useful
 attribution) but instead walks `inv.nodes` in discovery order for the
-*boundary* node — one whose own count exceeds 128 but whose every direct
+_boundary_ node — one whose own count exceeds 128 but whose every direct
 child does not, i.e. the exact point along an offending path where the
 count first crosses the limit — and reports `attributeSourceLines`' line
 for that node, naming the 128-visit limit; this stays deterministic even
@@ -669,7 +671,7 @@ come from the `yaml` struct tags on `Config`'s exported fields (via the
 unexported `yamlFieldNames` helper, in struct declaration order); group names
 for a page come from that page's map key set in `defaultConfig()` (via the
 unexported `schemaPageGroups` helper, sorted lexicographically for a stable
-API since map iteration order is not deterministic). `rawConfig` is *not* a
+API since map iteration order is not deterministic). `rawConfig` is _not_ a
 schema authority here — it is `Config`'s pointer-typed YAML-decoding mirror
 (see above), and a dedicated reflection test
 (`TestRawConfigMatchesConfigFields`) proves its exported fields, field order,
@@ -732,24 +734,24 @@ Every reachable outcome of that pipeline classifies to exactly one of three
 results — `KindParseType`, `KindSchema`, or a valid decoded/no-op result —
 per this decision table:
 
-| Effective input | Result |
-|---|---|
-| malformed YAML, second document, or source duplicate | `KindParseType` |
-| cyclic, malformed, source-path-over-budget, or effective-output-over-budget graph | `KindParseType` |
-| empty document or top-level null | valid no-op overlay |
-| top-level scalar or sequence | `KindParseType` |
-| unknown top-level page | `KindSchema` |
-| known page with null | valid no-op for that page |
-| known page with scalar or sequence | `KindParseType` |
-| unknown group under a known page | `KindSchema` |
-| known group with null | valid no-op for that group |
-| known group with scalar or sequence | `KindParseType` |
-| unknown group field | `KindSchema` |
-| `actions` value that is not null or a sequence | `KindParseType` |
-| action entry that is null or otherwise not a mapping | `KindParseType` |
-| unknown action field | `KindSchema` |
-| known field that cannot decode into its declared Go type | `KindParseType` |
-| valid effective document | decoded `*rawConfig` |
+| Effective input                                                                   | Result                     |
+| --------------------------------------------------------------------------------- | -------------------------- |
+| malformed YAML, second document, or source duplicate                              | `KindParseType`            |
+| cyclic, malformed, source-path-over-budget, or effective-output-over-budget graph | `KindParseType`            |
+| empty document or top-level null                                                  | valid no-op overlay        |
+| top-level scalar or sequence                                                      | `KindParseType`            |
+| unknown top-level page                                                            | `KindSchema`               |
+| known page with null                                                              | valid no-op for that page  |
+| known page with scalar or sequence                                                | `KindParseType`            |
+| unknown group under a known page                                                  | `KindSchema`               |
+| known group with null                                                             | valid no-op for that group |
+| known group with scalar or sequence                                               | `KindParseType`            |
+| unknown group field                                                               | `KindSchema`               |
+| `actions` value that is not null or a sequence                                    | `KindParseType`            |
+| action entry that is null or otherwise not a mapping                              | `KindParseType`            |
+| unknown action field                                                              | `KindSchema`               |
+| known field that cannot decode into its declared Go type                          | `KindParseType`            |
+| valid effective document                                                          | decoded `*rawConfig`       |
 
 The first four rows are produced by stages 1-2 (`parseYAMLDocument`,
 `validateSourceGraph`, `resolveEffective`) and always take precedence: a
@@ -834,7 +836,7 @@ its top-level node shape into exactly one of these outcomes:
   `validatePageEntries` (interpretation I3's per-entry order: key shape,
   then name membership, then value shape):
   - A mapping key whose effective node is not a scalar with `ShortTag() ==
-    "!!str"` — an integer, boolean, or null scalar; a custom-tagged scalar;
+"!!str"` — an integer, boolean, or null scalar; a custom-tagged scalar;
     a sequence; a mapping; or an alias to any of those (already
     dereferenced into a copy of its target by `resolveEffective`) — is
     rejected as `KindParseType` via the unexported `validatorKeyShapeError`
@@ -987,6 +989,7 @@ and the toast call both occur on the GTK main thread.
 ### Package manager wrapper pattern
 
 Each wrapper in `internal/` follows a consistent shape:
+
 - Module-level `dryRun` flag with `SetDryRun()`/`IsDryRun()`
 - `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`) for use from views during async startup
 - Homebrew, Flatpak, and Updex implement both `IsInstalled()` and `IsInstalledCached()`
@@ -1000,6 +1003,7 @@ Each wrapper in `internal/` follows a consistent shape:
 fixed commands — `pkexec /usr/libexec/bootc-update-stage` and `pkexec
 /usr/libexec/snosi-sysupdate-stage`, respectively — but both delegate execution
 to the pure-Go `internal/stageexec` leaf package:
+
 1. The caller creates the provider's `ProgressEvent` channel; both provider
    types are aliases of `stageexec.ProgressEvent`.
 2. Each non-empty output line becomes an `EventMessage`; the channel is closed after either an `EventComplete` (success) or the function returning an error
@@ -1071,7 +1075,7 @@ Decision records: [ADR-0001](../adr/0001-fixed-path-pkexec-privilege-boundary.md
 [ADR-0006](../adr/0006-split-system-integration-package-with-mutual-conflicts.md)
 (the system-integration package split).
 
-bootc staging, native A/B staging, and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), native A/B staging runs `pkexec /usr/libexec/snosi-sysupdate-stage` directly (`internal/sysupdate.StageScriptPath`, action id `org.frostyard.ChairLift.sysupdate.stage`), and updex delegates to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`) via `pkexec`. Polkit policy files are installed for all three: `data/org.frostyard.ChairLift.bootc.policy`, `data/org.frostyard.ChairLift.sysupdate.policy`, and `data/org.frostyard.ChairLift.updex.policy`. ChairLift deliberately ships no `.rules` files: the policies require normal administrator authentication (`auth_admin`, with `auth_admin_keep` for an active local session) rather than granting blanket passwordless access to a login group. Source installation removes the two legacy ChairLift `.rules` files so an older passwordless rule cannot survive an upgrade. Homebrew tap trust (`brew trust`) is explicitly per-user and does *not* go through pkexec — see [package-managers.md](./package-managers.md).
+bootc staging, native A/B staging, and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), native A/B staging runs `pkexec /usr/libexec/snosi-sysupdate-stage` directly (`internal/sysupdate.StageScriptPath`, action id `org.frostyard.ChairLift.sysupdate.stage`), and updex delegates to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`) via `pkexec`. Polkit policy files are installed for all three: `data/org.frostyard.ChairLift.bootc.policy`, `data/org.frostyard.ChairLift.sysupdate.policy`, and `data/org.frostyard.ChairLift.updex.policy`. ChairLift deliberately ships no `.rules` files: the policies require normal administrator authentication (`auth_admin`, with `auth_admin_keep` for an active local session) rather than granting blanket passwordless access to a login group. Source installation removes the two legacy ChairLift `.rules` files so an older passwordless rule cannot survive an upgrade. Homebrew tap trust (`brew trust`) is explicitly per-user and does _not_ go through pkexec — see [package-managers.md](./package-managers.md).
 
 **Why the helper path must be absolute, and why `PREFIX=/usr`:** `pkexec`
 resolves the program it's asked to run to an absolute path and compares it
@@ -1123,6 +1127,7 @@ operation.
 ### Maintenance action execution
 
 Configurable maintenance scripts (from `config.yml` `actions` entries) are executed via `runMaintenanceAction()` in `internal/views/maintenance_page.go`. The pattern:
+
 1. `decision := actionmsg.MaintenanceScript(IsDryRun(), title)` is computed once, before the goroutine, from the views-level dry-run flag (see "Dry-run mode" above)
 2. Button is disabled and label set to "Running..."
 3. A goroutine checks `decision.Execute`: when true it spawns the script via `exec.CommandContext` (5-minute timeout), using `pkexec` wrapper if `sudo: true`, exactly as before; when false (dry-run) it constructs no `exec.Cmd` at all and just logs `[DRY-RUN] Would execute: ...`
@@ -1204,41 +1209,41 @@ page_name:
   group_name:
     enabled: true/false
     # Optional per-group fields:
-    app_id: "..."          # External app to launch
-    actions:               # Custom scripts (updates/maintenance)
+    app_id: "..." # External app to launch
+    actions: # Custom scripts (updates/maintenance)
       - title: "..."
         script: "/path/to/script"
         sudo: true/false
-    bundles_paths: [...]   # Homebrew bundle directories
-    website: "..."         # Help page URLs
+    bundles_paths: [...] # Homebrew bundle directories
+    website: "..." # Help page URLs
     issues: "..."
     chat: "..."
 ```
 
 ### Key config groups
 
-| Page | Group | Controls |
-|------|-------|----------|
-| `system_page` | `system_info_group` | OS info from `/etc/os-release` |
-| `system_page` | `bootc_status_group` | bootc deployment status display (gated on `bootc.IsBootcBootedCached()`) |
-| `system_page` | `health_group` | System monitor launcher (configurable `app_id`, default: Mission Center) |
-| `updates_page` | `bootc_updates_group` | bootc system updates — stage via `bootc-update-stage`, apply on restart (gated on `bootc.IsBootcBootedCached()` and stage script availability) |
-| `updates_page` | `sysupdate_updates_group` | native A/B system updates — stage via `snosi-sysupdate-stage`, apply on restart, with a read-only previous-version rollback row (gated on `sysupdate.IsNativeABCached()` and stage script availability) |
-| `updates_page` | `flatpak_updates_group` | Flatpak pending updates |
-| `updates_page` | `brew_updates_group` | Homebrew outdated packages |
-| `updates_page` | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); hidden unless there is something to trust |
-| `applications_page` | `flatpak_user_group` | User Flatpak applications with uninstall actions |
-| `applications_page` | `flatpak_system_group` | System Flatpak applications with uninstall actions |
-| `applications_page` | `brew_group` | Installed Homebrew formulae/casks with uninstall and formula pin/unpin actions |
-| `applications_page` | `brew_search_group` | Typed Homebrew formula/cask search and confirmed install |
-| `applications_page` | `brew_bundles_group` | Curated `*.Brewfile` bundles discovered from every configured `bundles_paths` directory, with guarded install actions |
-| `applications_page` | `applications_installed_group` | External Flatpak-manager launcher for discovery/install (configurable `app_id`, default: Bazaar); ChairLift has no direct Flatpak-install UI |
-| `maintenance_page` | `maintenance_cleanup_group` | Custom cleanup scripts (5min timeout, pkexec for sudo); **disabled by default** |
-| `maintenance_page` | `maintenance_brew_group` | Homebrew cleanup (deferred visibility) |
-| `maintenance_page` | `maintenance_flatpak_group` | Flatpak unused cleanup (deferred visibility) |
-| `maintenance_page` | `maintenance_optimization_group` | System optimization (placeholder) |
-| `features_page` | `features_group` | Updex feature toggles |
-| `help_page` | `help_resources_group` | Configurable links (website, issues, chat) |
+| Page                | Group                            | Controls                                                                                                                                                                                                |
+| ------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `system_page`       | `system_info_group`              | OS info from `/etc/os-release`                                                                                                                                                                          |
+| `system_page`       | `bootc_status_group`             | bootc deployment status display (gated on `bootc.IsBootcBootedCached()`)                                                                                                                                |
+| `system_page`       | `health_group`                   | System monitor launcher (configurable `app_id`, default: Mission Center)                                                                                                                                |
+| `updates_page`      | `bootc_updates_group`            | bootc system updates — stage via `bootc-update-stage`, apply on restart (gated on `bootc.IsBootcBootedCached()` and stage script availability)                                                          |
+| `updates_page`      | `sysupdate_updates_group`        | native A/B system updates — stage via `snosi-sysupdate-stage`, apply on restart, with a read-only previous-version rollback row (gated on `sysupdate.IsNativeABCached()` and stage script availability) |
+| `updates_page`      | `flatpak_updates_group`          | Flatpak pending updates                                                                                                                                                                                 |
+| `updates_page`      | `brew_updates_group`             | Homebrew outdated packages                                                                                                                                                                              |
+| `updates_page`      | `brew_trust_group`               | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); hidden unless there is something to trust                                                                                       |
+| `applications_page` | `flatpak_user_group`             | User Flatpak applications with uninstall actions                                                                                                                                                        |
+| `applications_page` | `flatpak_system_group`           | System Flatpak applications with uninstall actions                                                                                                                                                      |
+| `applications_page` | `brew_group`                     | Installed Homebrew formulae/casks with uninstall and formula pin/unpin actions                                                                                                                          |
+| `applications_page` | `brew_search_group`              | Typed Homebrew formula/cask search and confirmed install                                                                                                                                                |
+| `applications_page` | `brew_bundles_group`             | Curated `*.Brewfile` bundles discovered from every configured `bundles_paths` directory, with guarded install actions                                                                                   |
+| `applications_page` | `applications_installed_group`   | External Flatpak-manager launcher for discovery/install (configurable `app_id`, default: Bazaar); ChairLift has no direct Flatpak-install UI                                                            |
+| `maintenance_page`  | `maintenance_cleanup_group`      | Custom cleanup scripts (5min timeout, pkexec for sudo); **disabled by default**                                                                                                                         |
+| `maintenance_page`  | `maintenance_brew_group`         | Homebrew cleanup (deferred visibility)                                                                                                                                                                  |
+| `maintenance_page`  | `maintenance_flatpak_group`      | Flatpak unused cleanup (deferred visibility)                                                                                                                                                            |
+| `maintenance_page`  | `maintenance_optimization_group` | System optimization (placeholder)                                                                                                                                                                       |
+| `features_page`     | `features_group`                 | Updex feature toggles                                                                                                                                                                                   |
+| `help_page`         | `help_resources_group`           | Configurable links (website, issues, chat)                                                                                                                                                              |
 
 ## Build and Release
 
@@ -1262,13 +1267,13 @@ page_name:
 
 ### Key external Go dependencies
 
-| Module | Purpose |
-|--------|---------|
-| `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO) |
-| `github.com/frostyard/snowkit` | GObject registration, main-thread dispatch |
-| `github.com/frostyard/updex` | Updex Go library for feature reads and helper binary (currently pinned to v1.3.0 in go.mod) |
-| `gopkg.in/yaml.v3` | YAML config parsing |
-| `golang.org/x/text` | Title-casing OS release info keys |
+| Module                           | Purpose                                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO)                                                              |
+| `github.com/frostyard/snowkit`   | GObject registration, main-thread dispatch                                                  |
+| `github.com/frostyard/updex`     | Updex Go library for feature reads and helper binary (currently pinned to v1.5.0 in go.mod) |
+| `gopkg.in/yaml.v3`               | YAML config parsing                                                                         |
+| `golang.org/x/text`              | Title-casing OS release info keys                                                           |
 
 There is no separate Go client library dependency for bootc: status/stage types (`Status`, `Deployment`, `ProgressEvent`, etc.) are defined locally in `internal/bootc`, parsed directly from `bootc status --format json` and the stage script's line output.
 
