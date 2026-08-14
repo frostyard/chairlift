@@ -21,7 +21,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: "1.26.6"
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -42,7 +42,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: "1.26.6"
 
       - name: Download dependencies
         run: go mod download
@@ -70,7 +70,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: "1.26.6"
 
       - name: Download dependencies
         run: go mod download
@@ -90,7 +90,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: "1.26.6"
 
       - name: Install headless GTK runtime
         run: |
@@ -117,7 +117,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: "1.26.6"
 
       - name: Verify go.mod is tidy
         run: |
@@ -148,7 +148,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26"
+          go-version: "1.26.6"
 
       - name: Build binary
         run: |
