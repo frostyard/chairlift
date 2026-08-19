@@ -20,6 +20,7 @@ The ones that bind ChairLift:
 - [ADR-0021 — SHA-pinned actions and least-privilege CI workflows](https://github.com/frostyard/core/blob/main/docs/adr/0021-sha-pinned-actions-and-least-privilege-ci.md) — enforced by internal/installcheck/workflows_test.go
 - [ADR-0022 — make ci is the canonical gate; TestI* is reserved](https://github.com/frostyard/core/blob/main/docs/adr/0022-make-ci-gate-and-test-naming-filter.md) — make ci, the Test[^I] filter, internal/installcheck pattern
 - [ADR-0025 — One docs/ tree per repository, in core's four-category shape](https://github.com/frostyard/core/blob/main/docs/adr/0025-consolidate-repository-docs-into-docs.md) — docs/{adr,design,specs,plans} + indexed docs/README.md; yeti/ folded into docs/design/
+- [ADR-0041 — Retire copilot-review-apply where Snowcat gates review](https://github.com/frostyard/core/blob/main/docs/adr/0041-retire-copilot-review-apply-where-snowcat-gates-review.md) — Copilot review findings route to people; Snowcat remains the only automated worker-PR fixer
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

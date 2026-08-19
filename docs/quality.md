@@ -102,27 +102,18 @@ For an agent-authored pull request, audit the signals in this order:
    repository invariants and learned skills, then record concrete findings on
    the pull request.
 
-## Automated Copilot feedback
-
-`.github/workflows/copilot-review-apply.yml` closes the feedback loop for
-Copilot pull request reviews. When the trusted Copilot reviewer submits a
-commented or changes-requested review with inline findings on an open,
-non-draft pull request, the workflow posts one deduplicated `@copilot` fix
-request linked to that review. A review without inline findings does not start
-a fix cycle.
+## Automated issue implementation
 
 `.github/workflows/ai-fix-requested.yml` handles explicit implementation
 requests on issues. When the `ai-fix-requested` label is applied to an open
 issue, it posts one deduplicated `@copilot` request linked to that issue.
 Reapplying the label does not start a duplicate fix cycle.
 
-The review workflow receives read-only contents and pull-requests write
-permissions; the issue workflow receives only issues write permission. Each
-uses its write permission only to create the request comment. Neither workflow
-checks out or executes repository code, interpolates review or issue text into
-a shell, approves, merges, or bypasses required checks. Copilot's resulting
-changes must still pass the ordinary quality gates and human review; review
-findings that should not be applied must be explained on the pull request.
+The workflow receives only issues write permission and uses it only to create
+the request comment. It does not check out or execute repository code,
+interpolate issue text into a shell, approve, merge, or bypass required checks.
+Copilot's resulting changes must still pass the ordinary quality gates and
+human review.
 
 ## Automated issue triage
 
