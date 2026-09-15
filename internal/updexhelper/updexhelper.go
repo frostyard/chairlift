@@ -1,7 +1,7 @@
 // Package updexhelper holds the argv-parsing and Options-building logic for
 // cmd/chairlift-updex-helper, the privileged helper binary invoked via
 // pkexec to perform updex write operations. It is deliberately free of any
-// puregotk/GTK import (only stdlib plus github.com/frostyard/updex/updex),
+// puregotk/GTK import (only stdlib plus github.com/frostyard/updex/v2/updex),
 // so its logic can be unit-tested on a headless host — a test binary for a
 // package that imports puregotk panics while resolving GTK/graphene shared
 // libraries at package init, before any test function runs. See
@@ -13,9 +13,11 @@
 package updexhelper
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 
-	"github.com/frostyard/updex/updex"
+	"github.com/frostyard/updex/v2/updex"
 )
 
 const (
@@ -94,4 +96,16 @@ func DisableOptions(dryRun bool) updex.DisableFeatureOptions {
 // parsed --dry-run flag for this one subcommand.
 func UpdateOptions(dryRun bool) updex.UpdateFeaturesOptions {
 	return updex.UpdateFeaturesOptions{DryRun: dryRun}
+}
+
+// WriteResult serializes a successful SDK result and preserves every SDK
+// error for the helper's fatal path, including final sysext refresh failures.
+func WriteResult(w io.Writer, value any, err error) error {
+	if err != nil {
+		return err
+	}
+	if err := json.NewEncoder(w).Encode(value); err != nil {
+		return fmt.Errorf("failed to encode JSON: %w", err)
+	}
+	return nil
 }

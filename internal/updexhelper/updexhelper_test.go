@@ -1,9 +1,14 @@
 package updexhelper
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/frostyard/updex/v2/updex"
 )
 
 func TestParseInvocationAcceptsSupportedShapes(t *testing.T) {
@@ -97,38 +102,59 @@ func TestSupportedCommandsIsCompleteAndImmutable(t *testing.T) {
 	}
 }
 
-// TestEnableOptions asserts DryRun is set to exactly the bool passed, for
-// both true and false.
 func TestEnableOptions(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
 		got := EnableOptions(dryRun)
-		if got.DryRun != dryRun {
-			t.Errorf("EnableOptions(%v).DryRun = %v, want %v", dryRun, got.DryRun, dryRun)
+		want := updex.EnableFeatureOptions{DryRun: dryRun}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("EnableOptions(%v) = %+v, want %+v", dryRun, got, want)
 		}
 	}
 }
 
-// TestDisableOptions asserts DryRun is set to exactly the bool passed, for
-// both true and false.
 func TestDisableOptions(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
 		got := DisableOptions(dryRun)
-		if got.DryRun != dryRun {
-			t.Errorf("DisableOptions(%v).DryRun = %v, want %v", dryRun, got.DryRun, dryRun)
+		want := updex.DisableFeatureOptions{DryRun: dryRun}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("DisableOptions(%v) = %+v, want %+v", dryRun, got, want)
 		}
 	}
 }
 
-// TestUpdateOptions asserts DryRun is set to exactly the bool passed, for
-// both true and false. This is the direct fix for
-// cmd/chairlift-updex-helper/main.go's update case previously constructing
-// a zero-value updex.UpdateFeaturesOptions{} and silently dropping
-// --dry-run.
 func TestUpdateOptions(t *testing.T) {
 	for _, dryRun := range []bool{true, false} {
 		got := UpdateOptions(dryRun)
-		if got.DryRun != dryRun {
-			t.Errorf("UpdateOptions(%v).DryRun = %v, want %v", dryRun, got.DryRun, dryRun)
+		want := updex.UpdateFeaturesOptions{DryRun: dryRun}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("UpdateOptions(%v) = %+v, want %+v", dryRun, got, want)
 		}
+	}
+}
+
+func TestWriteResultPreservesRefreshFailure(t *testing.T) {
+	refreshErr := errors.New("sysext refresh failed")
+	result := updex.FeatureActionResult{
+		Feature:      "desktop",
+		RefreshError: refreshErr.Error(),
+	}
+	var out bytes.Buffer
+
+	err := WriteResult(&out, result, refreshErr)
+	if !errors.Is(err, refreshErr) {
+		t.Fatalf("WriteResult error = %v, want refresh error", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("WriteResult wrote success output %q for refresh failure", out.String())
+	}
+}
+
+func TestWriteResultEncodesSuccess(t *testing.T) {
+	var out bytes.Buffer
+	if err := WriteResult(&out, map[string]bool{"success": true}, nil); err != nil {
+		t.Fatalf("WriteResult: %v", err)
+	}
+	if got := out.String(); !strings.Contains(got, `"success":true`) {
+		t.Fatalf("WriteResult output = %q, want JSON success", got)
 	}
 }

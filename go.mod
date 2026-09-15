@@ -5,7 +5,7 @@ go 1.26.6
 require (
 	codeberg.org/puregotk/puregotk v0.0.0-20260512093256-2a5b38c3a1c6
 	github.com/frostyard/snowkit v0.1.0
-	github.com/frostyard/updex v1.5.0
+	github.com/frostyard/updex/v2 v2.0.1
 	golang.org/x/text v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -14,7 +14,7 @@ require (
 	codeberg.org/puregotk/purego v0.0.0-20260224095105-2513c838cb80 // indirect
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
 	github.com/cloudflare/circl v1.6.5 // indirect
-	github.com/frostyard/std v0.2.0 // indirect
+	github.com/frostyard/std v0.2.2 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/kr/pretty v0.3.1 // indirect

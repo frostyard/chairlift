@@ -22,9 +22,9 @@ func readRepoFile(t *testing.T, relative string) string {
 func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
 	t.Run("updex version comes from go.mod", func(t *testing.T) {
 		goMod := readRepoFile(t, "go.mod")
-		match := regexp.MustCompile(`(?m)^\s*github\.com/frostyard/updex\s+(v\S+)`).FindStringSubmatch(goMod)
+		match := regexp.MustCompile(`(?m)^\s*github\.com/frostyard/updex/v2\s+(v\S+)`).FindStringSubmatch(goMod)
 		if len(match) != 2 {
-			t.Fatal("go.mod does not contain a parseable github.com/frostyard/updex version")
+			t.Fatal("go.mod does not contain a parseable github.com/frostyard/updex/v2 version")
 		}
 		overview := readRepoFile(t, filepath.Join("docs", "design", "overview.md"))
 		want := "currently pinned to " + match[1] + " in go.mod"
