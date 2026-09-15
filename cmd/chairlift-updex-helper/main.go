@@ -5,13 +5,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
 	"github.com/frostyard/chairlift/internal/updexhelper"
-	"github.com/frostyard/updex/updex"
+	"github.com/frostyard/updex/v2/updex"
 )
 
 const defaultTimeout = 5 * time.Minute
@@ -41,14 +40,8 @@ func main() {
 }
 
 func outputJSON(v any, err error) {
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
-	enc := json.NewEncoder(os.Stdout)
-	if err := enc.Encode(v); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to encode JSON: %v\n", err)
-		os.Exit(1)
+	if err := updexhelper.WriteResult(os.Stdout, v, err); err != nil {
+		fatal(err.Error())
 	}
 }
 

@@ -198,3 +198,73 @@ func TestDryRunStateAndDefaultContext(t *testing.T) {
 		t.Fatalf("DefaultContext deadline remaining = %v, want approximately %v", remaining, DefaultTimeout)
 	}
 }
+
+func TestPartitionFeatureChecksRetainsSuccessfulComponents(t *testing.T) {
+	aggregateErr := errors.New("one or more components failed to check")
+	checks := []FeatureCheck{
+		{
+			Feature: "desktop",
+			Results: []CheckResult{
+				{Component: "shell", CurrentVersion: "1.0", NewestVersion: "2.0", UpdateAvailable: true},
+				{Component: "theme", Error: "manifest unavailable"},
+			},
+		},
+	}
+
+	got, failures, err := partitionFeatureChecks(checks, aggregateErr)
+	if err != nil {
+		t.Fatalf("partitionFeatureChecks returned aggregate error: %v", err)
+	}
+	want := []FeatureCheck{{
+		Feature: "desktop",
+		Results: []CheckResult{
+			{Component: "shell", CurrentVersion: "1.0", NewestVersion: "2.0", UpdateAvailable: true},
+		},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("filtered checks = %+v, want %+v", got, want)
+	}
+	wantFailures := []componentCheckError{{
+		Feature:   "desktop",
+		Component: "theme",
+		Message:   "manifest unavailable",
+	}}
+	if !reflect.DeepEqual(failures, wantFailures) {
+		t.Fatalf("component failures = %+v, want %+v", failures, wantFailures)
+	}
+}
+
+func TestPartitionFeatureChecksPreservesAllFailedV1Behavior(t *testing.T) {
+	aggregateErr := errors.New("one or more components failed to check")
+	checks := []FeatureCheck{{
+		Feature: "desktop",
+		Results: []CheckResult{
+			{Component: "shell", Error: "manifest unavailable"},
+			{Component: "theme", Error: "signature invalid"},
+		},
+	}}
+
+	got, failures, err := partitionFeatureChecks(checks, aggregateErr)
+	if err != nil {
+		t.Fatalf("partitionFeatureChecks returned aggregate error: %v", err)
+	}
+	want := []FeatureCheck{{Feature: "desktop", Results: []CheckResult{}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("filtered checks = %+v, want v1-compatible empty feature results %+v", got, want)
+	}
+	if len(failures) != 2 {
+		t.Fatalf("component failure count = %d, want 2", len(failures))
+	}
+}
+
+func TestPartitionFeatureChecksPropagatesRequestFailure(t *testing.T) {
+	requestErr := errors.New("failed to load feature definitions")
+
+	got, failures, err := partitionFeatureChecks(nil, requestErr)
+	if !errors.Is(err, requestErr) {
+		t.Fatalf("partitionFeatureChecks error = %v, want %v", err, requestErr)
+	}
+	if len(got) != 0 || len(failures) != 0 {
+		t.Fatalf("request failure returned checks=%+v failures=%+v, want none", got, failures)
+	}
+}

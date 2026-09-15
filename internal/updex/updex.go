@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/frostyard/chairlift/internal/updexhelper"
-	updexapi "github.com/frostyard/updex/updex"
+	updexapi "github.com/frostyard/updex/v2/updex"
 )
 
 const (
@@ -123,10 +123,55 @@ func ListFeatures(ctx context.Context) ([]Feature, error) {
 // CheckFeatures checks enabled features for available updates
 func CheckFeatures(ctx context.Context) ([]FeatureCheck, error) {
 	checks, err := getClient().CheckFeatures(ctx, updexapi.CheckFeaturesOptions{})
+	checks, componentErrors, err := partitionFeatureChecks(checks, err)
+	for _, componentErr := range componentErrors {
+		log.Printf(
+			"Feature update component check failed: feature=%q component=%q: %s",
+			componentErr.Feature,
+			componentErr.Component,
+			componentErr.Message,
+		)
+	}
 	if err != nil {
 		return nil, &Error{Message: fmt.Sprintf("failed to check features: %v", err)}
 	}
 	return checks, nil
+}
+
+type componentCheckError struct {
+	Feature   string
+	Component string
+	Message   string
+}
+
+// partitionFeatureChecks preserves Updex v1's partial-failure behavior while
+// retaining v2's structured component errors for diagnostics. A request-level
+// error is returned only when no component result explains it.
+func partitionFeatureChecks(checks []FeatureCheck, err error) ([]FeatureCheck, []componentCheckError, error) {
+	filtered := make([]FeatureCheck, 0, len(checks))
+	var componentErrors []componentCheckError
+
+	for _, check := range checks {
+		results := make([]CheckResult, 0, len(check.Results))
+		for _, result := range check.Results {
+			if result.Error == "" {
+				results = append(results, result)
+				continue
+			}
+			componentErrors = append(componentErrors, componentCheckError{
+				Feature:   check.Feature,
+				Component: result.Component,
+				Message:   result.Error,
+			})
+		}
+		check.Results = results
+		filtered = append(filtered, check)
+	}
+
+	if len(componentErrors) == 0 {
+		return filtered, nil, err
+	}
+	return filtered, componentErrors, nil
 }
 
 // EnableFeature enables a feature for download

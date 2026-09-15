@@ -12,10 +12,10 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/frostyard/snowkit v0.1.0 h1:SQVxfJ+76TC2mLcZ9OVjGfAILRMr19Ar6CQEeWBVtZ8=
 github.com/frostyard/snowkit v0.1.0/go.mod h1:Wm3EZbySuCbsAp+OJtA7KzZ1BFjuqvUCn3R1MkMKbDo=
-github.com/frostyard/std v0.2.0 h1:zO+DRuR5uBUguhiVLjp1gzuPeXmnGTclFwThr9g5VaY=
-github.com/frostyard/std v0.2.0/go.mod h1:K/gk2IXCe/YAGed8MlVaAdlvmAmOzrif2b9pJkZ7mHc=
-github.com/frostyard/updex v1.5.0 h1:GSfuwOgPS9YUSvQwbeBDn4jMiJ5s7rDrmCEJlI5S/rM=
-github.com/frostyard/updex v1.5.0/go.mod h1:kfm0oyJZRuEWIJey9KoJxVrAwDRTwEiw0z3i3vX+U5U=
+github.com/frostyard/std v0.2.2 h1:6xjnD/FX1hwho9Y1yK20hNPxt7oj8DSzWgM0aH1vmpQ=
+github.com/frostyard/std v0.2.2/go.mod h1:BkFhrobnjPYLAeZ58JJmaxly4MNims1KzoWdg4HHuNo=
+github.com/frostyard/updex/v2 v2.0.1 h1:CR3CKv2QHkVclKsg1Fu6t8kAHkv+1fG/xxP2y361QVM=
+github.com/frostyard/updex/v2 v2.0.1/go.mod h1:Hagiq9CQItmqiCLLqDjmqvOXVl026YP7+wn/OnAKcgo=
 github.com/hashicorp/go-version v1.9.0 h1:CeOIz6k+LoN3qX9Z0tyQrPtiB1DFYRPfCIBtaXPSCnA=
 github.com/hashicorp/go-version v1.9.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
 github.com/klauspost/compress v1.19.2 h1:hMRETovs/pu/dVWN7zIT1PGG8t509MwT6bO7XSi26R8=

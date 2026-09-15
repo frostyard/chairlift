@@ -1271,7 +1271,7 @@ page_name:
 | -------------------------------- | ------------------------------------------------------------------------------------------- |
 | `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO)                                                              |
 | `github.com/frostyard/snowkit`   | GObject registration, main-thread dispatch                                                  |
-| `github.com/frostyard/updex`     | Updex Go library for feature reads and helper binary (currently pinned to v1.5.0 in go.mod) |
+| `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.0.1 in go.mod) |
 | `gopkg.in/yaml.v3`               | YAML config parsing                                                                         |
 | `golang.org/x/text`              | Title-casing OS release info keys                                                           |
 

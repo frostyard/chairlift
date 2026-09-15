@@ -706,14 +706,14 @@ initial gate + reveal.
 
 ## Updex (`internal/updex/updex.go`)
 
-Manages system features (add-on software/configuration modules). Unlike other wrappers, updex does **not** shell out to a CLI for reads. It uses the `github.com/frostyard/updex/updex` Go library directly for read operations, with a singleton `*updexapi.Client`. Write operations that require root are delegated via pkexec to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`, built from `cmd/chairlift-updex-helper/main.go`) — never a bare, `$PATH`-resolved name, since `pkexec` matches the resolved absolute path against `data/org.frostyard.ChairLift.updex.policy`'s `org.freedesktop.policykit.exec.path` annotation to select the right action; see [overview.md](./overview.md#privileged-operations) for the full rationale and the matching `PREFIX=/usr` Makefile requirement.
+Manages system features (add-on software/configuration modules). Unlike other wrappers, updex does **not** shell out to a CLI for reads. It uses the `github.com/frostyard/updex/v2/updex` Go library directly for read operations, with a singleton `*updexapi.Client`. Write operations that require root are delegated via pkexec to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`, built from `cmd/chairlift-updex-helper/main.go`) — never a bare, `$PATH`-resolved name, since `pkexec` matches the resolved absolute path against `data/org.frostyard.ChairLift.updex.policy`'s `org.freedesktop.policykit.exec.path` annotation to select the right action; see [overview.md](./overview.md#privileged-operations) for the full rationale and the matching `PREFIX=/usr` Makefile requirement.
 
 ### Key types
 
-Type aliases to `github.com/frostyard/updex/updex`:
+Type aliases to `github.com/frostyard/updex/v2/updex`:
 - **`Feature`** (`FeatureInfo`) — name, description, enabled flag, documentation URL
 - **`FeatureCheck`** (`CheckFeaturesResult`) — feature name plus `Results []CheckResult`, one entry per component, each carrying its own update-available flag and versions. There is no feature-level update flag: a feature has an update when *any* of its components does (see [`internal/views/featurestatus`](#view-layer-feature-update-status-internalviewsfeaturestatus))
-- **`CheckResult`** — component name, current/available versions
+- **`CheckResult`** — component name, current/available versions, and a structured per-component error when that component could not be checked
 
 ### Operations
 
@@ -722,10 +722,21 @@ Type aliases to `github.com/frostyard/updex/updex`:
 | `IsInstalled()` | Go library: `client.Features()` | Direct | 3s | Checks if updex features are configured |
 | `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
 | `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
-| `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Returns `[]FeatureCheck` |
+| `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Preserves successful components when v2 reports structured partial failures, logs failed-component metadata, and returns `[]FeatureCheck`; true request failures still return an error |
 | `EnableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper enable-feature <name>` | pkexec | 5min | State-changing |
 | `DisableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
 | `UpdateFeatures()` | `pkexec /usr/bin/chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features |
+
+Updex v2 returns populated results plus an aggregate error when any component
+check fails. `partitionFeatureChecks` removes only the error-bearing component
+entries, returns their feature/component/error metadata for logging, and
+suppresses that aggregate error; an error with no structured component failure
+remains a whole-request failure. This preserves the v1 behavior in which
+successful components still contribute to the update count. When every
+component fails, the affected rows remain unchanged and the existing group
+description still says "all up to date" while the component failures are
+logged. That wording is a known compatibility limitation; presenting an
+explicit partial-failure state is a separate product change.
 
 `updex_test.go` drives all three public write operations through a fake
 `pkexec` on `PATH` and asserts that argv always begins with the fixed
@@ -742,7 +753,7 @@ A small standalone binary that accepts commands (`enable-feature`, `disable-feat
 `main.go` itself is thin dispatch only: strict `os.Args` parsing and each
 subcommand's `Options` struct live in `internal/updexhelper`
 (`internal/updexhelper/updexhelper.go`), a package with no puregotk import —
-only stdlib plus `github.com/frostyard/updex/updex`. That's what makes the
+only stdlib plus `github.com/frostyard/updex/v2/updex`. That's what makes the
 logic testable at all: neither `gates_chunk` nor `make ci` ever runs `go test
 ./...`, both are scoped to `go test ./internal/...`, so a `_test.go` under
 `cmd/chairlift-updex-helper` would never execute under any gate this repo
@@ -750,8 +761,12 @@ actually runs. `ParseInvocation` accepts only `enable-feature <name>
 [--dry-run]`, `disable-feature <name> [--dry-run]`, and `update [--dry-run]`;
 `SupportedCommands` is the complete first-argument surface matched by the
 PolicyKit actions. `EnableOptions`, `DisableOptions`, and `UpdateOptions` set
-`DryRun` exactly. Tests cover every accepted/rejected argv shape, the immutable
-command inventory, and all three option builders.
+`DryRun` exactly while leaving every other v2 option at its zero value.
+`WriteResult` serializes successful SDK results and returns SDK errors unchanged
+to `main`'s non-zero fatal path, including final sysext refresh failures. Tests
+cover every accepted/rejected argv shape, the immutable command inventory, all
+three complete option structs, successful JSON output, and refresh-error
+propagation.
 
 ## Cross-cutting: dry-run
 
