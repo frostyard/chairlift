@@ -34,6 +34,11 @@ jobs:
         with:
           go-version: stable
 
+      # The rolling dev prerelease is the last step. It is not published to
+      # the APT repository and dispatches no image build: apt-publisher
+      # publishes tag releases only, and it dispatches `build` to the image
+      # repositories after those packages are live (frostyard/core ADR-0055,
+      # ADR-0056).
       - name: Run GoReleaser Snapshot
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -43,12 +48,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-
-      - name: Kickoff snow
-        if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-        continue-on-error: true
-        uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
-        with:
-          token: ${{ secrets.ORG_PAT }}
-          repository: frostyard/snow
-          event-type: build

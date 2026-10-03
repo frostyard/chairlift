@@ -157,6 +157,24 @@ An agent must not break these:
   human-readable version or source ref in a trailing comment and update both
   intentionally. Local actions referenced with `./` are exempt. The
   `internal/installcheck` workflow scan enforces this across every workflow.
+- **Debian packages publish only through frostyard/apt-publisher.**
+  `.github/workflows/release.yml` runs on tag pushes. GoReleaser creates the
+  GitHub release, then `actions/attest-build-provenance` attests
+  `checksums.txt`, the archives and every package. The last step sends a
+  `publish-deb` `repository_dispatch` to `frostyard/apt-publisher` with the
+  repository and tag, authenticated by `APT_PUBLISH_TOKEN`. That step has no
+  guard and is not `continue-on-error`
+  ([frostyard/core ADR-0055](https://github.com/frostyard/core/blob/main/docs/adr/0055-publish-debian-packages-through-the-apt-publisher.md)).
+  apt-publisher verifies each `.deb` against this tag's provenance and
+  publishes it. It then dispatches `build` to the image repositories
+  registered for chairlift
+  ([ADR-0056](https://github.com/frostyard/core/blob/main/docs/adr/0056-rebuild-images-after-apt-publication.md)).
+  No chairlift workflow holds signing or R2 credentials or dispatches `build`
+  itself, and `snapshot.yml` publishes only the rolling `dev` prerelease, never
+  to the APT repository. apt-publisher refuses a release containing a `.deb`
+  whose package name is not registered for `frostyard/chairlift` in its
+  `config/producers.tsv`, so register a new deb-producing `nfpms` entry there
+  first. `internal/installcheck/release_workflow_test.go` pins this contract.
 
 ## Documentation
 

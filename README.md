@@ -55,6 +55,10 @@ Choose the package format for your distribution:
 | Fedora/RHEL | `frostyard-chairlift-<version>-1.<arch>.rpm` (`x86_64` or `aarch64`) | `sudo dnf install ./<downloaded-filename>` |
 | Alpine | `frostyard-chairlift_<version>_<arch>.apk` (`x86_64` or `aarch64`) | `sudo apk add --allow-untrusted ./<downloaded-filename>` |
 
+Tag releases also publish the `.deb` packages to Frostyard's APT repository,
+`https://repository.frostyard.org/debian/`, from which Snow Linux images
+install ChairLift.
+
 For a normal system installation, download the full `frostyard-chairlift`
 package. It includes the GUI, privileged helper, desktop assets, PolicyKit
 policies, and package-maintainer configuration.

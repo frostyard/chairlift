@@ -891,6 +891,12 @@ provide either OS stager; a distro must provide trusted implementations at
 `/usr/libexec/bootc-update-stage` and, on native A/B hosts,
 `/usr/libexec/snosi-sysupdate-stage`. This split is decision
 record [ADR-0006](../adr/0006-split-system-integration-package-with-mutual-conflicts.md).
+Both package names must be registered for `frostyard/chairlift` in
+frostyard/apt-publisher's `config/producers.tsv`: apt-publisher publishes every
+`.deb` of a tag release and refuses the whole release if one carries an
+unregistered name.
+`TestGoreleaserDebPackagesAreRegisteredForApt` fails when a deb-producing
+`nfpms[]` entry is added or renamed, so the registration changes first.
 
 `internal/installcheck` holds regression tests, not production code, that turn
 "verified by inspection" into real, gated checks. The first two guard the
