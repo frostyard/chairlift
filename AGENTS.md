@@ -44,6 +44,14 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   installs; every nFPM entry carrying policies must retain the same fixed
   paths.
 
+Every Makefile target is a command, not a file, so every target is declared
+`.PHONY`. Otherwise make compares the target with the file system: the
+top-level `test/` directory once made `make test`, and therefore `make bump`,
+print `'test' is up to date` and run no tests. When adding a target, add it
+to `.PHONY`; `internal/installcheck/makefile_phony_test.go` fails when a
+target is missing from `.PHONY` or `.PHONY` names a target that does not
+exist.
+
 CI (`.github/workflows/test.yml`) filters tests with `-run "^Test[^I]"
 -skip "Integration"`. That filter excludes *any* test whose name begins `TestI`
 — not only `TestIntegration` — or contains `Integration` anywhere. Those names

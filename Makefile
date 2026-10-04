@@ -1,4 +1,4 @@
-.PHONY: all build run clean deps tidy install uninstall e2e
+.PHONY: all build build-app build-helper run clean deps tidy test e2e dev install-deps fmt lint build-linux-amd64 build-linux-arm64 install uninstall bump
 
 # Binary names
 BINARY_NAME=chairlift
