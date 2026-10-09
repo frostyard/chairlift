@@ -14,8 +14,8 @@ github.com/frostyard/snowkit v0.1.0 h1:SQVxfJ+76TC2mLcZ9OVjGfAILRMr19Ar6CQEeWBVt
 github.com/frostyard/snowkit v0.1.0/go.mod h1:Wm3EZbySuCbsAp+OJtA7KzZ1BFjuqvUCn3R1MkMKbDo=
 github.com/frostyard/std v0.2.2 h1:6xjnD/FX1hwho9Y1yK20hNPxt7oj8DSzWgM0aH1vmpQ=
 github.com/frostyard/std v0.2.2/go.mod h1:BkFhrobnjPYLAeZ58JJmaxly4MNims1KzoWdg4HHuNo=
-github.com/frostyard/updex/v2 v2.0.1 h1:CR3CKv2QHkVclKsg1Fu6t8kAHkv+1fG/xxP2y361QVM=
-github.com/frostyard/updex/v2 v2.0.1/go.mod h1:Hagiq9CQItmqiCLLqDjmqvOXVl026YP7+wn/OnAKcgo=
+github.com/frostyard/updex/v2 v2.0.2 h1:U2zBtLC91ZwGzTVY+k22NUJKcaDCZ1OW/ccaZMwMq2s=
+github.com/frostyard/updex/v2 v2.0.2/go.mod h1:Hagiq9CQItmqiCLLqDjmqvOXVl026YP7+wn/OnAKcgo=
 github.com/hashicorp/go-version v1.9.0 h1:CeOIz6k+LoN3qX9Z0tyQrPtiB1DFYRPfCIBtaXPSCnA=
 github.com/hashicorp/go-version v1.9.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
 github.com/klauspost/compress v1.19.2 h1:hMRETovs/pu/dVWN7zIT1PGG8t509MwT6bO7XSi26R8=
