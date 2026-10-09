@@ -5,7 +5,7 @@ go 1.26.6
 require (
 	codeberg.org/puregotk/puregotk v0.0.0-20260512093256-2a5b38c3a1c6
 	github.com/frostyard/snowkit v0.1.0
-	github.com/frostyard/updex/v2 v2.0.1
+	github.com/frostyard/updex/v2 v2.0.2
 	golang.org/x/text v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
 )
