@@ -151,7 +151,7 @@ func TestAIFixRequestedWorkflowIsLabelScoped(t *testing.T) {
 		"issues: write",
 		"github.event.issue.state == 'open'",
 		"github.event.label.name == 'ai-fix-requested'",
-		"actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd",
+		"actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3",
 		"<!-- ai-fix-requested:${issueNumber} -->",
 		"comments.some((comment) => comment.body?.includes(marker))",
 		"@copilot Please implement",
