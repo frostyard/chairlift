@@ -17,8 +17,8 @@ const (
 
 func TestUpdexDependencyUsesCorrectedV2Module(t *testing.T) {
 	goMod := readRepoFile(t, "go.mod")
-	if !strings.Contains(goMod, "\n\t"+updexModulePath+" v2.0.1\n") {
-		t.Fatalf("go.mod must require %s v2.0.1", updexModulePath)
+	if !strings.Contains(goMod, "\n\t"+updexModulePath+" v2.0.2\n") {
+		t.Fatalf("go.mod must require %s v2.0.2", updexModulePath)
 	}
 	if strings.Contains(goMod, "\n\tgithub.com/frostyard/updex v") {
 		t.Fatal("go.mod still requires the Updex v1 module")
