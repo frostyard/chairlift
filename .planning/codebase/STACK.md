@@ -1,6 +1,7 @@
 # Technology Stack
 
 **Analysis Date:** 2026-01-26
+**Updated:** 2026-10-22 (removed obsolete package-manager library references, #234)
 
 ## Languages
 
@@ -39,8 +40,9 @@
 **Internal Libraries (Frostyard):**
 
 - `github.com/frostyard/nbc` v0.14.0 - NBC bootc container installer types
-- `github.com/frostyard/pm` v0.2.1 - Package manager abstraction (Flatpak, Snap, Homebrew)
-- `github.com/frostyard/pm/progress` v0.1.0 - Progress reporting for package operations
+
+Flatpak and Homebrew are wrapped directly in `internal/flatpak` and
+`internal/homebrew`; there is no package-manager library.
 
 **Build/Release:**
 
@@ -56,7 +58,6 @@
 
 - `puregotk` - Enables GTK4/Libadwaita UI without CGO
 - `frostyard/nbc` - Provides types for NBC bootc system status and updates
-- `frostyard/pm` - Unified package manager interface for Flatpak, Snap, Homebrew
 
 **Infrastructure:**
 
@@ -118,7 +119,6 @@ make bump           # Create new version tag and push
   - `nbc` - NBC bootc management
   - `updex` - system feature management
   - `flatpak` - Flatpak package management
-  - `snap` - Snap package management
   - `brew` - Homebrew package management
 
 **Deployment:**

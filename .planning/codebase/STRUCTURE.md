@@ -1,6 +1,7 @@
 # Codebase Structure
 
 **Analysis Date:** 2026-01-26
+**Updated:** 2026-10-22 (removed obsolete package-manager library references, #234)
 
 ## Directory Layout
 
@@ -12,7 +13,8 @@ chairlift/
 │   ├── app/                # GTK Application lifecycle
 │   ├── config/             # YAML configuration loading
 │   ├── nbc/                # nbc CLI wrapper (bootc updates)
-│   ├── pm/                 # Package manager wrapper (Flatpak, Snap, Homebrew)
+│   ├── flatpak/            # flatpak CLI wrapper (applications, updates)
+│   ├── homebrew/           # brew CLI wrapper (packages, bundles, tap trust)
 │   ├── updex/              # updex CLI wrapper (feature management)
 │   ├── version/            # Build version info
 │   ├── views/              # Page content and UI logic
@@ -65,10 +67,15 @@ chairlift/
 - Contains: Feature listing, enable/disable, and update operations
 - Key files: `internal/updex/updex.go`
 
-**internal/pm/:**
-- Purpose: Package manager abstraction (wraps frostyard/pm library)
-- Contains: Flatpak, Snap, Homebrew operations with dry-run support
-- Key files: `internal/pm/wrapper.go`
+**internal/flatpak/:**
+- Purpose: Flatpak CLI wrapper
+- Contains: Application and update listing, install/uninstall/update, unused removal, info and remotes with dry-run support
+- Key files: `internal/flatpak/flatpak.go`
+
+**internal/homebrew/:**
+- Purpose: Homebrew CLI wrapper
+- Contains: Formulae/cask listing, search, install/uninstall/upgrade/pin, cleanup, Brew bundle discovery, and tap trust with dry-run support
+- Key files: `internal/homebrew/homebrew.go`, `internal/homebrew/bundles.go`, `internal/homebrew/trust.go`
 
 **internal/version/:**
 - Purpose: Build-time version information
@@ -101,7 +108,8 @@ chairlift/
 
 **Tool Wrappers:**
 - `internal/nbc/nbc.go`: NBC wrapper (515 lines)
-- `internal/pm/wrapper.go`: PM library wrapper (1048 lines)
+- `internal/flatpak/flatpak.go`: Flatpak wrapper (488 lines)
+- `internal/homebrew/homebrew.go`: Homebrew wrapper (473 lines)
 - `internal/updex/updex.go`: Updex wrapper (178 lines)
 
 **Build:**
@@ -116,7 +124,7 @@ chairlift/
 - Wrapper pattern: `wrapper.go` for facade packages
 
 **Directories:**
-- Lowercase, short names: `app`, `nbc`, `pm`
+- Lowercase, short names: `app`, `nbc`, `flatpak`
 - Match package name exactly
 
 **Go Packages:**
@@ -146,10 +154,11 @@ chairlift/
 5. Use from views via goroutines with `runOnMainThread()` callbacks
 
 **New Package Manager Support:**
-1. Extend `internal/pm/wrapper.go`
-2. Add module-level manager, mutex, availability cache
-3. Implement Initialize{PM}, {PM}IsInstalled functions
-4. Call from `internal/app/app.go` during activation
+1. Create a package in `internal/{tool}/` following `internal/flatpak` and `internal/homebrew`
+2. Add `SetDryRun`/`IsDryRun`, and an availability check with a cached variant (`IsInstalledCached` using `sync.Once`)
+3. Implement `commandTimeout(args)` from a `stateChangingCommands` map: 30s for reads, 30m for mutations
+4. Call `SetDryRun` from `internal/app/app.go` during init
+5. Use from views via goroutines with `sgtk.RunOnMainThread()` callbacks
 
 **New Configuration Option:**
 1. Add field to appropriate struct in `internal/config/config.go`
