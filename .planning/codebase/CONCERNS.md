@@ -1,6 +1,7 @@
 # Codebase Concerns
 
 **Analysis Date:** 2026-01-26
+**Updated:** 2026-10-22 (removed obsolete package-manager library references, #234)
 
 ## Tech Debt
 
@@ -16,24 +17,8 @@
   - `internal/views/userhome.go:1345-1350` - `openURL()` logs but never opens URLs
   - `internal/views/userhome.go:1347-1350` - `runMaintenanceAction()` has `// TODO: Execute the script`
   - `internal/views/userhome.go:964-970` - "Optimization tools - Coming soon" placeholder
-  - `internal/pm/wrapper.go:325-334` - `FlatpakUninstallUnused()` returns placeholder text
-  - `internal/pm/wrapper.go:199-209` - `ListFlatpakUpdates()` returns empty list with TODO
-- Impact: Users clicking "Run" buttons, URLs, or expecting Flatpak updates detection get no action
-- Fix approach: Implement `xdg-open` for URLs, shell execution for scripts, use pm library for Flatpak updates
-
-**Missing Update Detection:**
-- Issue: `ListFlatpakUpdates()` always returns empty, waiting for pm library support
-- Files: `internal/pm/wrapper.go:199-209`
-- Impact: Flatpak update badge always shows 0, users don't know updates are available
-- Fix approach: Either implement directly via `flatpak remote-ls --updates` or wait for pm library
-
-**Duplicate `runOnMainThread` Functions:**
-- Issue: Same function defined in two packages with identical logic
-- Files:
-  - `internal/views/userhome.go:36-55`
-  - `internal/pm/wrapper.go:409-418`
-- Impact: Code duplication, potential for divergence, harder maintenance
-- Fix approach: Extract to shared utility package `internal/gtkutil/gtkutil.go`
+- Impact: Users clicking "Run" buttons, or expecting maintenance actions, get no action
+- Fix approach: Implement `xdg-open` for URLs and shell execution for scripts
 
 ## Known Bugs
 
@@ -89,23 +74,17 @@
 - Risk: App IDs, package names passed to shell commands
 - Files:
   - `internal/views/userhome.go:1327` - `exec.Command("gtk-launch", appID)`
-  - `internal/pm/wrapper.go` - package names passed to brew/flatpak
+  - `internal/flatpak/flatpak.go`, `internal/homebrew/homebrew.go` - application IDs and package names passed to flatpak/brew
 - Current mitigation: IDs come from system queries, not user input
 - Recommendations: Validate app IDs match expected patterns before execution
 
 ## Performance Bottlenecks
 
-**Blocking Initialization:**
-- Problem: PM manager availability checks block on external commands
-- Files: `internal/pm/wrapper.go:81-93`, `internal/pm/wrapper.go:445-457`, `internal/pm/wrapper.go:619-631`
-- Cause: Each manager calls out to its CLI to check availability
-- Improvement path: Already async via goroutines, but `time.Sleep(200ms)` in `userhome.go:169` is a code smell. Consider using channels/sync.WaitGroup
-
 **Serial Package Listing:**
-- Problem: Loading Homebrew formulae and casks makes separate calls
-- Files: `internal/views/userhome.go:1846-1890`
-- Cause: Two separate `ListHomebrewFormulae()` and `ListHomebrewCasks()` calls
-- Improvement path: pm library returns all in one call, but code filters twice; could optimize to single iteration
+- Problem: Loading Homebrew formulae and casks makes separate CLI calls, one after the other
+- Files: `internal/views/applications_page.go:286-355`
+- Cause: `brew info --installed --json=v2` needs one call per namespace (`--formula`, `--cask`)
+- Improvement path: Run both calls concurrently under the same `brewPackagesRefresh` generation
 
 **Large List Rendering:**
 - Problem: Adding hundreds of rows to GTK ListBox/ExpanderRow in loop
@@ -152,11 +131,6 @@
 - Impact: Breaking changes could require significant refactoring
 - Migration plan: Monitor for stable release, pin version carefully
 
-**frostyard/pm Library:**
-- Risk: Incomplete API (no update detection, no unused removal for Flatpak)
-- Impact: Features marked as TODO waiting on library updates
-- Migration plan: Contribute upstream or implement workarounds
-
 **frostyard/nbc Library:**
 - Risk: Internal library, types imported directly
 - Impact: Tightly coupled to specific nbc version
@@ -171,10 +145,6 @@
 **Maintenance Script Execution:**
 - Problem: `runMaintenanceAction()` is a stub
 - Blocks: Cleanup actions, admin maintenance tasks
-
-**Flatpak Update Detection:**
-- Problem: Always returns empty list
-- Blocks: Users knowing Flatpak updates are available
 
 ## Test Coverage Gaps
 
@@ -198,7 +168,7 @@
 
 **Recommended Test Priority:**
 1. `internal/config/config.go` - Pure Go, easy to test
-2. `internal/pm/wrapper.go` - Mock pm.Manager interface
+2. `internal/flatpak/flatpak.go`, `internal/homebrew/homebrew.go` - drive a fake `flatpak`/`brew` on `PATH`
 3. `internal/nbc/nbc.go` - Mock exec.Command
 4. `internal/updex/updex.go` - Mock exec.Command
 

@@ -1,6 +1,7 @@
 # Coding Conventions
 
 **Analysis Date:** 2026-01-26
+**Updated:** 2026-10-22 (removed obsolete package-manager library references, #234)
 
 ## Naming Patterns
 
@@ -65,7 +66,8 @@ import (
     "os"
 
     "github.com/frostyard/chairlift/internal/nbc"
-    "github.com/frostyard/chairlift/internal/pm"
+    "github.com/frostyard/chairlift/internal/flatpak"
+    "github.com/frostyard/chairlift/internal/homebrew"
     "github.com/frostyard/chairlift/internal/updex"
     "github.com/frostyard/chairlift/internal/window"
 
@@ -190,7 +192,7 @@ func (uh *UserHome) cleanupProgressUI() {
 **Return Values:**
 
 - Return pointer for structs: `func GetStatus() (*StatusOutput, error)`
-- Return slices directly (not pointers): `func ListInstalledSnaps() ([]SnapApplication, error)`
+- Return slices directly (not pointers): `func ListUserApplications() ([]Application, error)`
 - Return empty collection instead of nil when no error: `return []HomebrewPackage{}, nil`
 
 ## Module Design

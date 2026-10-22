@@ -1,24 +1,27 @@
 # External Integrations
 
 **Analysis Date:** 2026-01-26
+**Updated:** 2026-10-22 (removed obsolete package-manager library references, #234)
 
 ## APIs & External Services
 
-**Package Management (via frostyard/pm library):**
-- Flatpak - Install, uninstall, update, list packages
-  - SDK/Client: `github.com/frostyard/pm` (Lister, Installer, Uninstaller, Upgrader interfaces)
-  - Auth: None (uses system flatpak command)
-  - Wrapper: `internal/pm/wrapper.go`
+**Package Management (direct CLI wrappers, no client library):**
+- Flatpak - List applications, list updates, install, uninstall, update, remove unused runtimes, inspect applications and remotes
+  - CLI: `flatpak list`, `flatpak remote-ls --updates`, `flatpak install -y`, `flatpak uninstall -y`, `flatpak update -y`, `flatpak uninstall --unused -y`, `flatpak info --show-metadata`, `flatpak remotes`
+  - Implementation: `internal/flatpak/flatpak.go`
+  - Auth: None (unprivileged, no pkexec)
+  - Operations: `ListUserApplications`, `ListSystemApplications`, `ListUpdates`, `Install`, `Uninstall`, `Update`, `UninstallUnused`, `GetRemotes`, `Info`
 
-- Snap - Install, list packages
-  - SDK/Client: `github.com/frostyard/pm`
-  - Auth: None (uses system snapd)
-  - Wrapper: `internal/pm/wrapper.go`
+- Homebrew - List installed formulae and casks, list outdated, search, install, uninstall, upgrade, update, pin/unpin, cleanup, Brew bundles, tap trust
+  - CLI: `brew info --installed --json=v2`, `brew outdated --json=v2`, `brew search --formula|--cask`, `brew install|uninstall [--cask]`, `brew upgrade`, `brew update`, `brew pin|unpin`, `brew cleanup`, `brew bundle dump|install`, `brew trust`, `brew tap-info --installed --json`
+  - Implementation: `internal/homebrew/homebrew.go`, `internal/homebrew/bundles.go`, `internal/homebrew/trust.go`
+  - Auth: None (unprivileged, no pkexec); `brew trust` is per-user state in `~/.homebrew/trust.json`
+  - Operations: `ListInstalledFormulae`, `ListInstalledCasks`, `ListOutdated`, `Search`, `Install`, `Uninstall`, `Upgrade`, `Update`, `Pin`, `Unpin`, `Cleanup`, `BundleDump`, `BundleInstall`, `AvailableBundles`, `ListUntrustedTaps`, `TrustPackages`
 
-- Homebrew - Install, uninstall, update, upgrade, search, cleanup
-  - SDK/Client: `github.com/frostyard/pm`
-  - Auth: None (uses system brew command)
-  - Wrapper: `internal/pm/wrapper.go`
+Snap support was removed (PR #52). ChairLift has no Snap operations.
+
+See `../../docs/design/package-managers.md` for the canonical description of
+both wrappers, including timeouts, error handling, and dry-run behavior.
 
 **NBC Bootc Container System:**
 - NBC (`nbc`) - System status, update checking, updates, cache management
@@ -53,7 +56,7 @@
 - PolicyKit (pkexec) for privileged operations
   - PolicyKit policies in `data/org.frostyard.ChairLift.*.policy`
   - PolicyKit rules in `data/org.frostyard.ChairLift.*.rules`
-  - Used for: nbc operations, updex feature enable/disable/update, snap operations
+  - Used for: nbc operations, updex feature enable/disable/update
 
 **Operations Requiring Elevation:**
 - NBC: update, download, install, cache clear/remove
@@ -113,10 +116,9 @@
 
 ## External Commands Executed
 
-**Package Managers (via exec.Command):**
-- `flatpak` - via pm library
-- `snap` - via pm library
-- `brew` - via pm library, direct calls for cleanup/bundle/outdated
+**Package Managers (direct `os/exec` calls):**
+- `flatpak` - `internal/flatpak`, all operations
+- `brew` - `internal/homebrew`, all operations including cleanup, bundles, tap trust, and outdated
 
 **System Tools:**
 - `nbc` - NBC bootc operations (with pkexec for state changes)
@@ -126,7 +128,7 @@
 
 **Progress Reporting:**
 - NBC commands stream JSON Lines (`--json` flag)
-- PM library uses ProgressReporter interface
+- Flatpak and Homebrew commands return their final output; neither streams progress events
 
 ## Dry-Run Mode
 
