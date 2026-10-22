@@ -1,6 +1,6 @@
 module github.com/frostyard/chairlift
 
-go 1.26.6
+go 1.26.10
 
 require (
 	codeberg.org/puregotk/puregotk v0.0.0-20260512093256-2a5b38c3a1c6

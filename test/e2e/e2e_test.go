@@ -231,8 +231,13 @@ func stopProcessGroup(t *testing.T, cmd *exec.Cmd, done <-chan error) {
 	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
 		t.Errorf("terminate ChairLift smoke process group: %v", err)
 	}
+	// A deliberate shutdown makes Wait report the signal, so the exit status
+	// is logged rather than treated as a test failure.
 	select {
-	case <-done:
+	case waitErr := <-done:
+		if waitErr != nil {
+			t.Logf("ChairLift smoke process stopped: %v", waitErr)
+		}
 		return
 	case <-time.After(shutdownTimeout):
 	}
@@ -240,7 +245,9 @@ func stopProcessGroup(t *testing.T, cmd *exec.Cmd, done <-chan error) {
 	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 		t.Errorf("kill ChairLift smoke process group: %v", err)
 	}
-	<-done
+	if waitErr := <-done; waitErr != nil {
+		t.Logf("ChairLift smoke process killed: %v", waitErr)
+	}
 }
 
 func repoRoot(t *testing.T) string {
