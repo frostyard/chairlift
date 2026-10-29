@@ -208,7 +208,7 @@ test binary to the puregotk-importing parent package.
 
 ### View-layer toast and decision helpers (`internal/views/actionmsg`, `internal/views/trustmsg`)
 
-Two of the nine small, puregotk-free packages under `internal/views/` (the others are `internal/views/actionstate`, `internal/views/badgestate`, `internal/views/bundleview`, `internal/views/rowset`, `internal/views/flatpakstatus`, `internal/views/featurestatus` and `internal/views/pageview`, each documented in its own subsection) hold the text and, at four call sites, the accompanying UI decision that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead. Decision records: [ADR-0007](../adr/0007-pure-leaf-packages-route-around-untestable-gtk.md) (the leaf-package layout) and [ADR-0009](../adr/0009-dry-run-output-convention-and-single-decision-structs.md) (the decision-struct rule these packages implement).
+Two of the nine small, puregotk-free packages under `internal/views/` (the others are `internal/views/actionstate`, `internal/views/badgestate`, `internal/views/bundleview`, `internal/views/rowset`, `internal/views/flatpakstatus`, `internal/views/featurestatus` and `internal/views/pageview`, each documented in its own subsection) hold the text and, at five call sites, the accompanying UI decision that view handlers use once a wrapper call returns. Both follow `docs/agents/skills/gtk-headless-tests.md`'s prescribed fix: `internal/views` itself cannot host a `_test.go` (puregotk panics resolving GTK/graphene shared libraries at package init, before any test runs), so the decidable logic is extracted into a pure package and table-tested there instead. Decision records: [ADR-0007](../adr/0007-pure-leaf-packages-route-around-untestable-gtk.md) (the leaf-package layout) and [ADR-0009](../adr/0009-dry-run-output-convention-and-single-decision-structs.md) (the decision-struct rule these packages implement).
 
 - **`internal/views/trustmsg`** (added for issue #57) — `UpgradeMessage(pkgName string, trustGroupAvailable bool) string`, the toast shown when a Homebrew upgrade fails with an `*homebrew.UntrustedTapError`; see "Tap trust" above.
 - **`internal/views/actionmsg`** (added for issue #56 and extended for issue #8) — builds the toast text for every state-changing view action across the maintenance, applications, updates, and features pages, and, at the four call sites where the view also mutates a row/group/switch on success, the execute/complete/mutate/confirm decision itself, so the same table-driven test in `actionmsg_test.go` that checks the toast also checks the gate (see "Dry-run mode" in [overview.md](./overview.md#dry-run-mode) for the general rule this implements). Exported surface:
@@ -225,9 +225,9 @@ Two of the nine small, puregotk-free packages under `internal/views/` (the other
   - `TapTrustDecision{MutateUI bool; Toast string}` + `TapTrust(dryRun bool, tapName string) TapTrustDecision` — gates whether `trustTap` removes the tap's row, hides the group, and refreshes outdated packages (c3)
   - `BootcStage(dryRun bool, staged bool) string` — bootc stage-button completion toast; string-only since the subtitle stays live in both modes and there is no mutation left to gate (c4)
   - `FeatureToggleDecision{Confirm bool; Toast string}` + `FeatureToggle(dryRun, enable bool, name string) FeatureToggleDecision` — gates whether `onFeatureToggled`'s switch confirms the flip or reverts it (c5)
-  - `FeatureUpdate(dryRun bool) string` — Features page "Update" button toast (c5)
+  - `FeatureUpdateDecision{Toast string; Persistent bool}` + `FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) FeatureUpdateDecision` — Features page "Update" button toast and whether it persists as an error toast. It reads the per-feature results because updex returns a nil error when a feature is held (see the Updex section's "Update results"). Decision table: dry-run gives the preview; an error with no results gives "Features merged, but activation did not finish. Reboot to finish." for `*updex.ActivationIncompleteError` or "Update failed: <err>" for any other error (both persistent); nil results with a nil error, and `*updex.ResultsUnreadableError`, give "Feature update finished, but ChairLift could not read the results. See the log for details." (persistent; the outcome is unknown, so no success claim); empty results give "No enabled features to update."; only updated (and current) features keep the old text exactly; only current features give "Features are already up to date."; anything else joins, in order, "Updated: a, b.", "Waiting for a newer OS image: c (reason); ...", "Held by a rollback: e (reason).", "Failed: f (reason); ...", then "Changes apply after reboot." (when something updated and activation is complete), then the activation sentence or, when no feature failed, "Update failed: <err>"; persistent when any feature waits, is held or failed, or the error is set
 
-  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`, `FeatureUpdate`) select toast wording only. Where an application action also changes row controls or requests an inventory refresh, the separate tested `actionstate` decision owns that UI-side effect. The four decision-struct functions in `actionmsg` exist because their call sites have no wrapper- or `actionstate`-level gate for the *second* effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch.
+  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`) select toast wording only. Where an application action also changes row controls or requests an inventory refresh, the separate tested `actionstate` decision owns that UI-side effect. The five decision-struct functions in `actionmsg` exist because their call sites have no wrapper- or `actionstate`-level gate for the *second* effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch; and the Features Update toast must read the per-feature results to tell a real update from a held one.
 
 ### View-layer update action state (`internal/views/actionstate`)
 
@@ -714,6 +714,8 @@ Type aliases to `github.com/frostyard/updex/v2/updex`:
 - **`Feature`** (`FeatureInfo`) — name, description, enabled flag, documentation URL
 - **`FeatureCheck`** (`CheckFeaturesResult`) — feature name plus `Results []CheckResult`, one entry per component, each carrying its own update-available flag and versions. There is no feature-level update flag: a feature has an update when *any* of its components does (see [`internal/views/featurestatus`](#view-layer-feature-update-status-internalviewsfeaturestatus))
 - **`CheckResult`** — component name, current/available versions, and a structured per-component error when that component could not be checked
+- **`FeatureUpdate`** (`UpdateFeaturesResult`) — feature name plus `Results []TransferUpdate`, the per-feature result of the update command; `RefreshSkipped` is host-wide
+- **`TransferUpdate`** (`UpdateResult`) — one component's update result: `Downloaded`, `Linked`, `Installed`, `Held`, `NeedsImage`, `NotLinked`, `Error`, `NextActionMessage`
 
 ### Operations
 
@@ -725,7 +727,51 @@ Type aliases to `github.com/frostyard/updex/v2/updex`:
 | `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Preserves successful components when v2 reports structured partial failures, logs failed-component metadata, and returns `[]FeatureCheck`; true request failures still return an error |
 | `EnableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper enable-feature <name>` | pkexec | 5min | State-changing |
 | `DisableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
-| `UpdateFeatures()` | `pkexec /usr/bin/chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features |
+| `UpdateFeatures()` | `pkexec /usr/bin/chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features; returns `([]FeatureUpdate, error)` (see "Update results") |
+
+### Update results
+
+Since updex v2.1.0, `Client.UpdateFeatures` returns a nil error when the
+next-boot image gate holds a feature or a rollback record holds it. The
+transfer result then carries `NeedsImage` ("needs image >= X") or
+`NotLinked` (with `Installed` false, nothing linked), or `Held` (the old links
+stay; `Installed` is true when the held link names a version). A nil error
+therefore does not mean every feature updated. updex v2.1.3 can also return an error that wraps
+`sysext.ErrActivationIncomplete`: the extensions merged, but activation did
+not finish, and a reboot finishes it. On a per-transfer failure updex returns
+the results and an error together.
+
+The helper prints the results on stdout in every one of those cases
+(`updexhelper.WriteUpdateResult`) and exits 0, 1, or 3 (see the exit-code
+contract in [overview.md](./overview.md#privileged-operations)).
+The helper writes the JSON to the real stdout only: `main` sets
+`os.Stdout = os.Stderr` before the SDK runs, because the SDK's
+`sysext.DefaultRunner` sends `systemd-sysext`, `systemd-sysusers` and
+`systemd-tmpfiles` output to `os.Stdout`, which would otherwise come before the
+JSON. `updex.UpdateFeatures` parses stdout with `parseUpdateResults`: first the
+whole trimmed stdout as a JSON array, then the last non-empty line (a helper
+from an older ChairLift could have child text before its JSON). Empty stdout,
+`null`, or no decodable array is a parse error, logged. The helper error wins:
+with a non-nil helper error the parsed results (or nil) come back with it. When
+the helper exits 0 and the parse fails, the result is nil results with
+`*ResultsUnreadableError`: the outcome is unknown and must not read as success.
+Exit code 3 gives
+`*ActivationIncompleteError`; any other non-zero exit gives `*Error`
+("command failed (exit N): stderr"), so a helper from an older ChairLift,
+which prints nothing on stdout on failure, gives the old "Update failed: ..."
+behaviour. Under dry-run no helper runs and the result is nil, nil.
+`runHelper` returns the captured stdout also when the helper exits non-zero.
+
+`SummarizeUpdate` (`internal/updex/summary.go`, no puregotk import) classifies
+each feature as one `UpdateClass`, by this precedence: `ClassFailed` (any
+transfer has `Error`; reason: the first `Error`) > `ClassWaitingForImage` (any
+transfer has `NeedsImage` or `NotLinked`; reason: each `NeedsImage` transfer as
+"component: needs image >= X" joined with ", ", or, when only `NotLinked`
+transfers exist, the first `NextActionMessage` without its "not linked: "
+prefix) > `ClassHeld` (any `Held`; reason: the first `NextActionMessage`) >
+`ClassUpdated` (any `Downloaded` or `Linked`) > `ClassCurrent`. The summary
+also keeps the host-wide `RefreshSkipped` text. `actionmsg.FeatureUpdate`
+turns the summary into the toast.
 
 Updex v2 returns populated results plus an aggregate error when any component
 check fails. `partitionFeatureChecks` removes only the error-bearing component
@@ -742,7 +788,7 @@ explicit partial-failure state is a separate product change.
 `pkexec` on `PATH` and asserts that argv always begins with the fixed
 `HelperPath`, followed by the exact subcommand/name shape. It also covers
 missing-pkexec, non-zero/stderr, timeout, default-context, and wrapper dry-run
-outcomes. Multi-component update aggregation remains in the pure
+outcomes. A scripted fake `pkexec` also covers `UpdateFeatures` for exit 0 with JSON, exit 1 with JSON and stderr, exit 3 with JSON, exit 1 with empty stdout (an older helper) and exit 0 with child-process text before the JSON, with bad JSON and with empty stdout (both `*ResultsUnreadableError`), and exit 3 with text before the JSON; `TestParseUpdateResults` covers the whole-stdout and last-line forms; `summary_test.go` covers every `SummarizeUpdate` class and the precedence. Multi-component update aggregation remains in the pure
 `internal/views/featurestatus` package, where every result is inspected and
 the full decision table is tested without constructing GTK widgets.
 
@@ -753,7 +799,7 @@ A small standalone binary that accepts commands (`enable-feature`, `disable-feat
 `main.go` itself is thin dispatch only: strict `os.Args` parsing and each
 subcommand's `Options` struct live in `internal/updexhelper`
 (`internal/updexhelper/updexhelper.go`), a package with no puregotk import —
-only stdlib plus `github.com/frostyard/updex/v2/updex`. That's what makes the
+only stdlib plus `github.com/frostyard/updex/v2/updex` and `.../sysext`. That's what makes the
 logic testable at all: neither `gates_chunk` nor `make ci` ever runs `go test
 ./...`, both are scoped to `go test ./internal/...`, so a `_test.go` under
 `cmd/chairlift-updex-helper` would never execute under any gate this repo
@@ -763,10 +809,18 @@ actually runs. `ParseInvocation` accepts only `enable-feature <name>
 PolicyKit actions. `EnableOptions`, `DisableOptions`, and `UpdateOptions` set
 `DryRun` exactly while leaving every other v2 option at its zero value.
 `WriteResult` serializes successful SDK results and returns SDK errors unchanged
-to `main`'s non-zero fatal path, including final sysext refresh failures. Tests
+to `main`'s non-zero fatal path, including final sysext refresh failures; it
+stays in use for `enable-feature` and `disable-feature`. The `update` command
+uses `WriteUpdateResult`, which also writes non-nil results when the SDK error is
+non-nil, then returns the error; `main` prints the error on stderr and exits
+with `ExitCode(err)`: `ExitActivationIncomplete` (3) when the error wraps
+`sysext.ErrActivationIncomplete`, else `ExitFailure` (1). `internal/updexhelper`
+imports only stdlib, `github.com/frostyard/updex/v2/updex` and
+`github.com/frostyard/updex/v2/sysext`. Tests
 cover every accepted/rejected argv shape, the immutable command inventory, all
-three complete option structs, successful JSON output, and refresh-error
-propagation.
+three complete option structs, successful JSON output, refresh-error
+propagation, `ExitCode` (nil, plain, wrapped and joined
+`ErrActivationIncomplete`) and `WriteUpdateResult` (results written on error, nothing written for nil results).
 
 ## Cross-cutting: dry-run
 
@@ -778,7 +832,7 @@ Every wrapper has `SetDryRun(bool)` and `IsDryRun() bool`. Behavior varies by wr
 | Flatpak | Skips state-changing commands, returns mock message | Yes |
 | bootc | `StageUpdate` never invokes pkexec; emits synthetic `EventMessage`+`EventComplete` and returns. The Updates page's stage button shows an explicit `actionmsg.BootcStage(bootc.IsDryRun(), staged)` preview toast, distinct from its normal staged/up-to-date toasts; the expander subtitle intentionally stays live (from `bootc.GetStatus()`) in both modes | Yes |
 | sysupdate | `StageUpdate` never invokes pkexec; emits synthetic `EventMessage`+`EventComplete` and returns. The stage button's toast is `actionmsg.SysupdateStage(sysupdate.IsDryRun(), staged)`; the expander subtitle and rollback row stay live (from the `/run/snosi` state files and partition labels) in both modes | Yes |
-| Updex | Skips helper execution, returns empty results; the helper binary itself (`cmd/chairlift-updex-helper`, via `internal/updexhelper`) also honors `--dry-run` for all three subcommands, defense-in-depth even though `updex.runHelper` never invokes pkexec under dry-run | Yes |
+| Updex | Skips helper execution, returns nil results and a nil error (the Update toast is the `actionmsg.FeatureUpdate` preview); the helper binary itself (`cmd/chairlift-updex-helper`, via `internal/updexhelper`) also honors `--dry-run` for all three subcommands, defense-in-depth even though `updex.runHelper` never invokes pkexec under dry-run | Yes |
 | views (custom maintenance scripts) | `runMaintenanceAction` never constructs an `exec.Cmd` (no `pkexec`, no direct script exec); logs `[DRY-RUN] Would execute: ...` instead | Yes |
 
 Custom maintenance scripts (config.yml `actions` entries) have no wrapper package of their own, so `internal/views` carries its own `SetDryRun`/`IsDryRun` (`internal/views/dryrun.go`) rather than reusing one of the above. Unlike the other wrappers, the execution gate for this one is not just an `if IsDryRun()` branch inline in the view: `internal/views/actionmsg.MaintenanceScript(dryRun, title)` returns a `ScriptDecision{Execute, Toast}` computed once, before the goroutine spawns, and both the "does it execute" question and the toast text come from that single tested function call — not two independently-maintained conditionals. See "View-layer toast and decision helpers" above for the full `actionmsg`/`trustmsg` function and type list.
@@ -856,7 +910,7 @@ including row removal and control restoration, remain inside
 
 The Updates page's bootc "Check for Updates" stage button (`onBootcStageClicked`, `internal/views/updates_page.go`) follows the same `actionmsg` pattern, with one difference from the buttons above: unlike `Install`/`Upgrade`/etc., whose completion text is selected purely by `dryRun`, `BootcStage(dryRun, staged)` also takes the live `staged` result from the post-`wg.Wait()` `bootc.GetStatus()` re-read, because the non-dry-run branch still needs to pick between the "staged" and "up to date" strings. Under dry-run, `staged` is ignored entirely and a single preview string is returned instead — see "Dry-run behavior" under bootc above for why. The expander's `SetSubtitle` calls in the same code block are *not* routed through `actionmsg`; they keep reading live `GetStatus()` output unconditionally, since the subtitle is a persistent status display rather than a per-click completion claim.
 
-The Features page's per-feature switch (`onFeatureToggled`, `internal/views/features_page.go`) follows the same decision-struct pattern as maintenance-script execution and tap trust: on a successful `updex.EnableFeature`/`DisableFeature` call, `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` is computed once, and the switch's visual state is driven solely by `decision.Confirm` — `toggle.SetActive(enabled)` (confirming the flip) when `Confirm` is true, `toggle.SetActive(!enabled)` (reverting to the pre-click state) when it is false. Under dry-run, `updex.runHelper` returns before ever invoking pkexec, so nothing was actually toggled and the switch must not visually confirm a change that did not happen — this is the other "switch/list implies a state change after a preview" bug (the tap-trust row-removal case is the same pattern in Homebrew's Untrusted Taps list). The Update button (`onUpdateFeaturesClicked`) has no equivalent mutation to gate — its `SetSensitive`/`SetLabel` reset is unconditional in both modes — so its toast is a plain string, `actionmsg.FeatureUpdate(updex.IsDryRun())`.
+The Features page's per-feature switch (`onFeatureToggled`, `internal/views/features_page.go`) follows the same decision-struct pattern as maintenance-script execution and tap trust: on a successful `updex.EnableFeature`/`DisableFeature` call, `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` is computed once, and the switch's visual state is driven solely by `decision.Confirm` — `toggle.SetActive(enabled)` (confirming the flip) when `Confirm` is true, `toggle.SetActive(!enabled)` (reverting to the pre-click state) when it is false. Under dry-run, `updex.runHelper` returns before ever invoking pkexec, so nothing was actually toggled and the switch must not visually confirm a change that did not happen — this is the other "switch/list implies a state change after a preview" bug (the tap-trust row-removal case is the same pattern in Homebrew's Untrusted Taps list). The Update button (`onUpdateFeaturesClicked`) has no switch to confirm — its `SetSensitive`/`SetLabel` reset is unconditional in both modes — but its toast depends on the results: the worker goroutine calls `updex.UpdateFeatures`, logs the error and every feature and transfer outcome with `log.Printf`, computes `decision := actionmsg.FeatureUpdate(updex.IsDryRun(), results, err)`, and inside the single `sgtk.RunOnMainThread` closure resets the button and shows `decision.Toast` with `ShowErrorToast` when `decision.Persistent`, else `ShowToast`.
 
 ## Install-path consistency (`internal/installcheck`)
 

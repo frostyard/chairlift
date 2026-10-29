@@ -1,8 +1,11 @@
 package actionmsg
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/frostyard/chairlift/internal/updex"
 )
 
 // TestBundleDump covers both dry-run states for the Brewfile-dump toast text.
@@ -696,41 +699,208 @@ func TestFeatureToggle(t *testing.T) {
 	}
 }
 
-// TestFeatureUpdate covers both dry-run states for the Features page
-// "Update" button toast text.
+// TestFeatureUpdate is the decision table of FeatureUpdate: one row per rule,
+// with exact strings.
 func TestFeatureUpdate(t *testing.T) {
+	transfer := func(mods ...func(*updex.TransferUpdate)) updex.TransferUpdate {
+		u := updex.TransferUpdate{Component: "comp"}
+		for _, m := range mods {
+			m(&u)
+		}
+		return u
+	}
+	updated := func(name string) updex.FeatureUpdate {
+		return updex.FeatureUpdate{Feature: name, Results: []updex.TransferUpdate{
+			transfer(func(u *updex.TransferUpdate) { u.Downloaded = true; u.Linked = true; u.Installed = true }),
+		}}
+	}
+	current := func(name string) updex.FeatureUpdate {
+		return updex.FeatureUpdate{Feature: name, Results: []updex.TransferUpdate{
+			transfer(func(u *updex.TransferUpdate) { u.Installed = true }),
+		}}
+	}
+	waiting := func(name, comp, image string) updex.FeatureUpdate {
+		return updex.FeatureUpdate{Feature: name, Results: []updex.TransferUpdate{
+			transfer(func(u *updex.TransferUpdate) { u.Component = comp; u.NeedsImage = image }),
+		}}
+	}
+	held := func(name, msg string) updex.FeatureUpdate {
+		return updex.FeatureUpdate{Feature: name, Results: []updex.TransferUpdate{
+			transfer(func(u *updex.TransferUpdate) { u.Held = true; u.NextActionMessage = msg }),
+		}}
+	}
+	failed := func(name, msg string) updex.FeatureUpdate {
+		return updex.FeatureUpdate{Feature: name, Results: []updex.TransferUpdate{
+			transfer(func(u *updex.TransferUpdate) { u.Error = msg }),
+		}}
+	}
+	activation := &updex.ActivationIncompleteError{Message: "command failed (exit 3): merged"}
+	wrapped := &updex.Error{Message: "command failed (exit 1): boom"}
+
 	tests := []struct {
-		name         string
-		dryRun       bool
-		wantExact    string
-		wantContains []string
+		name           string
+		dryRun         bool
+		results        []updex.FeatureUpdate
+		err            error
+		wantToast      string
+		wantPersistent bool
 	}{
 		{
-			name:      "live run reports fixed completion message",
-			dryRun:    false,
-			wantExact: "Features updated. Changes apply after reboot.",
+			name:      "dry-run previews and is not persistent",
+			dryRun:    true,
+			wantToast: "[DRY-RUN] Preview: features would be updated — no changes made",
 		},
 		{
-			name:         "dry-run previews without claiming completion",
-			dryRun:       true,
-			wantContains: []string{"no changes made"},
+			name:      "dry-run ignores results and error",
+			dryRun:    true,
+			results:   []updex.FeatureUpdate{failed("f", "boom")},
+			err:       wrapped,
+			wantToast: "[DRY-RUN] Preview: features would be updated — no changes made",
+		},
+		{
+			name:           "activation incomplete without results",
+			err:            activation,
+			wantToast:      "Features merged, but activation did not finish. Reboot to finish.",
+			wantPersistent: true,
+		},
+		{
+			name:           "activation incomplete with empty results",
+			results:        []updex.FeatureUpdate{},
+			err:            fmt.Errorf("wrapped: %w", activation),
+			wantToast:      "Features merged, but activation did not finish. Reboot to finish.",
+			wantPersistent: true,
+		},
+		{
+			name:           "other error without results (old helper)",
+			err:            wrapped,
+			wantToast:      "Update failed: command failed (exit 1): boom",
+			wantPersistent: true,
+		},
+		{
+			name:           "nil results and nil error do not claim success",
+			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
+			wantPersistent: true,
+		},
+		{
+			name:           "unreadable results error",
+			err:            &updex.ResultsUnreadableError{Message: "cannot read update results: boom"},
+			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
+			wantPersistent: true,
+		},
+		{
+			name:           "wrapped unreadable results error with empty results",
+			results:        []updex.FeatureUpdate{},
+			err:            fmt.Errorf("wrapped: %w", &updex.ResultsUnreadableError{Message: "x"}),
+			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
+			wantPersistent: true,
+		},
+		{
+			name:      "empty results report no features",
+			results:   []updex.FeatureUpdate{},
+			wantToast: "No enabled features to update.",
+		},
+		{
+			name:      "all updated keeps the old text exactly",
+			results:   []updex.FeatureUpdate{updated("a"), updated("b")},
+			wantToast: "Features updated. Changes apply after reboot.",
+		},
+		{
+			name:      "updated and current keep the old text exactly",
+			results:   []updex.FeatureUpdate{updated("a"), current("b")},
+			wantToast: "Features updated. Changes apply after reboot.",
+		},
+		{
+			name:      "only current",
+			results:   []updex.FeatureUpdate{current("a"), current("b")},
+			wantToast: "Features are already up to date.",
+		},
+		{
+			name:           "waiting for image only",
+			results:        []updex.FeatureUpdate{waiting("c", "app", "needs image >= 5"), current("a")},
+			wantToast:      "Waiting for a newer OS image: c (app: needs image >= 5).",
+			wantPersistent: true,
+		},
+		{
+			name:           "held only",
+			results:        []updex.FeatureUpdate{held("e", "held at 1 by a rollback of 2")},
+			wantToast:      "Held by a rollback: e (held at 1 by a rollback of 2).",
+			wantPersistent: true,
+		},
+		{
+			name:           "failed only with the aggregate error already covered by the reasons",
+			results:        []updex.FeatureUpdate{failed("f", "download failed"), failed("g", "no space")},
+			err:            wrapped,
+			wantToast:      "Failed: f (download failed); g (no space).",
+			wantPersistent: true,
+		},
+		{
+			name: "every sentence in order",
+			results: []updex.FeatureUpdate{
+				updated("a"), updated("b"),
+				waiting("c", "app", "needs image >= 5"), waiting("d", "lib", "needs image >= 6"),
+				held("e", "held"),
+				failed("f", "x"), failed("g", "y"),
+				current("h"),
+			},
+			err: wrapped,
+			wantToast: "Updated: a, b. " +
+				"Waiting for a newer OS image: c (app: needs image >= 5); d (lib: needs image >= 6). " +
+				"Held by a rollback: e (held). " +
+				"Failed: f (x); g (y). " +
+				"Changes apply after reboot.",
+			wantPersistent: true,
+		},
+		{
+			name:           "updated and waiting with nil error",
+			results:        []updex.FeatureUpdate{updated("a"), waiting("c", "app", "needs image >= 5")},
+			wantToast:      "Updated: a. Waiting for a newer OS image: c (app: needs image >= 5). Changes apply after reboot.",
+			wantPersistent: true,
+		},
+		{
+			name:           "updated with activation incomplete drops the reboot sentence",
+			results:        []updex.FeatureUpdate{updated("a")},
+			err:            activation,
+			wantToast:      "Updated: a. Extensions merged, but activation did not finish. Reboot to finish.",
+			wantPersistent: true,
+		},
+		{
+			name:           "failed with activation incomplete",
+			results:        []updex.FeatureUpdate{updated("a"), failed("f", "x")},
+			err:            fmt.Errorf("joined: %w", activation),
+			wantToast:      "Updated: a. Failed: f (x). Extensions merged, but activation did not finish. Reboot to finish.",
+			wantPersistent: true,
+		},
+		{
+			name:           "other error with no failed feature appends the error",
+			results:        []updex.FeatureUpdate{updated("a")},
+			err:            wrapped,
+			wantToast:      "Updated: a. Changes apply after reboot. Update failed: command failed (exit 1): boom",
+			wantPersistent: true,
+		},
+		{
+			name:           "other error with only current features",
+			results:        []updex.FeatureUpdate{current("a")},
+			err:            wrapped,
+			wantToast:      "Update failed: command failed (exit 1): boom",
+			wantPersistent: true,
+		},
+		{
+			name:           "activation incomplete with only current features",
+			results:        []updex.FeatureUpdate{current("a")},
+			err:            activation,
+			wantToast:      "Extensions merged, but activation did not finish. Reboot to finish.",
+			wantPersistent: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FeatureUpdate(tt.dryRun)
-
-			if tt.wantExact != "" && got != tt.wantExact {
-				t.Errorf("FeatureUpdate(%v) = %q, want %q", tt.dryRun, got, tt.wantExact)
+			got := FeatureUpdate(tt.dryRun, tt.results, tt.err)
+			if got.Toast != tt.wantToast {
+				t.Errorf("Toast = %q, want %q", got.Toast, tt.wantToast)
 			}
-			if tt.dryRun && !strings.Contains(got, "Preview") && !strings.Contains(got, "[DRY-RUN]") {
-				t.Errorf("FeatureUpdate(%v) = %q, want it to contain %q or %q", tt.dryRun, got, "Preview", "[DRY-RUN]")
-			}
-			for _, want := range tt.wantContains {
-				if !strings.Contains(got, want) {
-					t.Errorf("FeatureUpdate(%v) = %q, want it to contain %q", tt.dryRun, got, want)
-				}
+			if got.Persistent != tt.wantPersistent {
+				t.Errorf("Persistent = %v, want %v", got.Persistent, tt.wantPersistent)
 			}
 		})
 	}

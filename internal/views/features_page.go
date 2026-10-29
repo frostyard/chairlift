@@ -218,18 +218,43 @@ func (uh *UserHome) onUpdateFeaturesClicked(button *gtk.Button) {
 		ctx, cancel := updex.DefaultContext()
 		defer cancel()
 
-		err := updex.UpdateFeatures(ctx)
+		results, err := updex.UpdateFeatures(ctx)
+		logFeatureUpdate(results, err)
+		decision := actionmsg.FeatureUpdate(updex.IsDryRun(), results, err)
 
 		sgtk.RunOnMainThread(func() {
 			button.SetSensitive(true)
 			button.SetLabel("Update")
 
-			if err != nil {
-				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
+			if decision.Persistent {
+				uh.toastAdder.ShowErrorToast(decision.Toast)
 				return
 			}
-
-			uh.toastAdder.ShowToast(actionmsg.FeatureUpdate(updex.IsDryRun()))
+			uh.toastAdder.ShowToast(decision.Toast)
 		})
 	}()
+}
+
+// logFeatureUpdate logs the update's error, each feature's classified outcome
+// and each transfer's result, so a held or failed feature is diagnosable from
+// the log after its toast is gone. It touches no widget.
+func logFeatureUpdate(results []updex.FeatureUpdate, err error) {
+	if err != nil {
+		log.Printf("Feature update returned an error: %v", err)
+	}
+	summary := updex.SummarizeUpdate(results)
+	for _, outcome := range summary.Features {
+		log.Printf("Feature update: feature=%q outcome=%s reason=%q", outcome.Feature, outcome.Class, outcome.Reason)
+	}
+	for _, feature := range results {
+		for _, t := range feature.Results {
+			log.Printf(
+				"Feature update: feature=%q component=%q version=%q downloaded=%v linked=%v installed=%v held=%v needs_image=%q not_linked=%v error=%q message=%q",
+				feature.Feature, t.Component, t.Version, t.Downloaded, t.Linked, t.Installed, t.Held, t.NeedsImage, t.NotLinked, t.Error, t.NextActionMessage,
+			)
+		}
+	}
+	if summary.RefreshSkipped != "" {
+		log.Printf("Feature update: sysext refresh skipped: %s", summary.RefreshSkipped)
+	}
 }
