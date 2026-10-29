@@ -71,6 +71,33 @@ workflow's explicit `make e2e` step; do not assume adding a test outside
 There are no generated files and no codegen step; everything under version
 control is hand-written Go, YAML, and data assets.
 
+## Releases and dependencies
+
+- **Tags.** Release tags are `vMAJOR.MINOR.PATCH` (`git tag -l 'v*'`; latest
+  v0.11.2). `.svu.yml` sets `tag.prefix: "v"`, `v0: true` and `always: true`.
+- **Version rule.** `make bump` builds, tests, formats and lints, refuses a
+  dirty tree, then tags `$(svu next)` with an annotated tag and pushes it to
+  `origin`. [svu](https://github.com/caarlos0/svu) derives the next version
+  from the commit messages since the last tag (Conventional Commits). `v0: true`
+  keeps the major version at 0.
+- **Who tags.** Brian. Agents never run `make bump`, create or push a tag, or
+  cut a release.
+- **What a tag does.** A tag push runs `.github/workflows/release.yml`:
+  GoReleaser Pro (`release --clean`), build-provenance attestation, then a
+  `publish-deb` dispatch to `frostyard/apt-publisher`. See the APT-publishing
+  invariant above. `snapshot.yml` only refreshes the rolling `dev` prerelease.
+- **Internal dependencies** (`go.mod`): `github.com/frostyard/snowkit`
+  (direct, GObject/main-thread helpers), `github.com/frostyard/updex/v2`
+  (direct, feature SDK and the helper's engine) and `github.com/frostyard/std`
+  (indirect, pulled in by updex). Take versions from `go.mod`, never from
+  prose. Other frostyard pins: the `frostyard/apt-publisher` dispatch in
+  `release.yml`, and `docs/org-adrs.md` for org ADRs in frostyard/core. After
+  an updex bump, read the SDK source in `GOMODCACHE` for changed behavior
+  (the operation lock, image gates) before merging.
+- **Consumers.** Snow Linux images (`frostyard/snosi`) install the `.deb` from
+  `https://repository.frostyard.org/debian/` (README.md); apt-publisher
+  dispatches the image rebuilds. Other consumers: not stated.
+
 ## Repository invariants
 
 An agent must not break these:
