@@ -183,7 +183,9 @@ func tableCases() []caseSpec {
 
 // waitingCases is one entry per shape of the waiting branch: a waiting
 // component with and without an update flag of its own, a waiting component
-// beside a normally updatable one, and two waiting components in input order.
+// beside a normally updatable one, the only waiting component last or in the
+// middle after an updatable one (detection must not look at index 0 only), and
+// two waiting components in input order.
 func waitingCases() []caseSpec {
 	return []caseSpec{
 		{
@@ -211,6 +213,30 @@ func waitingCases() []caseSpec {
 			results: []updex.CheckResult{
 				resWaiting("comp", "1.0", "2.0", true, needsImageNew),
 				res("other", "1.0", "2.0", true),
+				res("third", "1.0", "1.0", false),
+			},
+			want:        "f — waiting for a newer OS image (comp: needs image >= 20270101000000)",
+			wantOK:      true,
+			branch:      branchWaiting,
+			wantWaiting: true,
+		},
+		{
+			name: "the only waiting component is last, after an update",
+			results: []updex.CheckResult{
+				res("other", "1.0", "2.0", true),
+				res("third", "1.0", "1.0", false),
+				resWaiting("comp", "1.0", "1.0", false, needsImageNew),
+			},
+			want:        "f — waiting for a newer OS image (comp: needs image >= 20270101000000)",
+			wantOK:      true,
+			branch:      branchWaiting,
+			wantWaiting: true,
+		},
+		{
+			name: "the only waiting component is in the middle, after an update",
+			results: []updex.CheckResult{
+				res("other", "1.0", "2.0", true),
+				resWaiting("comp", "1.0", "2.0", true, needsImageNew),
 				res("third", "1.0", "1.0", false),
 			},
 			want:        "f — waiting for a newer OS image (comp: needs image >= 20270101000000)",
