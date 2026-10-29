@@ -10,10 +10,27 @@
 // the single Feature call so the subtitle and the update decision cannot drift
 // apart (the same reason flatpakstatus.Subtitle returns a Result struct).
 //
+// A feature can instead WAIT for a newer OS image. When a component's check
+// result carries NeedsImage ("needs image >= X"), its newest staged image is
+// not linked and the next `features update` will not link it, because its
+// UPDEX_MIN_IMAGE_VERSION is above the image that boots next (updex ADR-0016).
+// That is not an error and it is not an update: nothing of that feature is
+// linked until a newer OS image boots. Because updex links nothing of a feature
+// when one of its transfers needs an image, ONE waiting component makes the
+// whole feature wait.
+//
+// The waiting branch therefore has precedence over every update branch: a
+// feature with a waiting component returns Status.WaitingForImage true and
+// Status.HasUpdate false even when another component reports UpdateAvailable,
+// and its subtitle names every waiting component and its image. A waiting
+// feature is not counted as an update and is counted separately, in the group
+// description's featuresWaiting argument.
+//
 // The update count in the group description is a count of FEATURES, not of
 // components: a feature with three outdated components counts once. The
 // sentence's first number is a feature count, so its second number must be one
-// too or the sentence is incoherent.
+// too or the sentence is incoherent. featuresWaiting is a feature count for the
+// same reason.
 //
 // The package is separate from internal/views because internal/views can never
 // host a _test.go: the Go GTK bindings it imports (puregotk) dlopen the GTK,
@@ -33,6 +50,7 @@ package featurestatus
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/frostyard/chairlift/internal/updex"
 )
@@ -44,7 +62,13 @@ type Status struct {
 	// Subtitle is the text to show under the feature row's title.
 	Subtitle string
 	// HasUpdate reports whether any component of the feature has an update.
+	// It is false when WaitingForImage is true: a feature that waits for a
+	// newer OS image is not updatable now, so it is not an update.
 	HasUpdate bool
+	// WaitingForImage reports whether a component of the feature needs a newer
+	// OS image. The callers use it to count the feature separately from the
+	// updatable ones, never as an update.
+	WaitingForImage bool
 }
 
 // Feature derives the row state for the feature called name from the check
@@ -57,6 +81,23 @@ type Status struct {
 func Feature(name string, results []updex.CheckResult) (Status, bool) {
 	if len(results) == 0 {
 		return Status{}, false
+	}
+
+	// The waiting branch comes first and wins over every update branch: one
+	// component that needs a newer OS image keeps the whole feature unlinked.
+	waits := make([]string, 0, len(results))
+	for _, res := range results {
+		if res.NeedsImage != "" {
+			waits = append(waits, res.Component+": "+res.NeedsImage)
+		}
+	}
+	if len(waits) > 0 {
+		return Status{
+			Subtitle: fmt.Sprintf("%s — waiting for a newer OS image (%s)",
+				name, strings.Join(waits, ", ")),
+			HasUpdate:       false,
+			WaitingForImage: true,
+		}, true
 	}
 
 	updates := make([]updex.CheckResult, 0, len(results))
@@ -110,16 +151,38 @@ func commonVersion(results []updex.CheckResult) (string, bool) {
 }
 
 // GroupDescription is the features group's description after a check that
-// completed. featuresWithUpdates is a count of features, not of components.
-func GroupDescription(totalFeatures, featuresWithUpdates int) string {
-	switch featuresWithUpdates {
-	case 0:
+// completed. featuresWithUpdates and featuresWaiting are counts of features,
+// not of components, and they are disjoint: a waiting feature is never also
+// counted as an update.
+func GroupDescription(totalFeatures, featuresWithUpdates, featuresWaiting int) string {
+	switch {
+	case featuresWithUpdates == 0 && featuresWaiting == 0:
 		return fmt.Sprintf("%s — all up to date", available(totalFeatures))
-	case 1:
-		return fmt.Sprintf("%s (1 update)", available(totalFeatures))
+	case featuresWaiting == 0:
+		return fmt.Sprintf("%s (%s)", available(totalFeatures), updateTail(featuresWithUpdates))
+	case featuresWithUpdates == 0:
+		return fmt.Sprintf("%s (%s)", available(totalFeatures), waitingTail(featuresWaiting))
 	default:
-		return fmt.Sprintf("%s (%d updates)", available(totalFeatures), featuresWithUpdates)
+		return fmt.Sprintf("%s (%s, %s)", available(totalFeatures),
+			updateTail(featuresWithUpdates), waitingTail(featuresWaiting))
 	}
+}
+
+// updateTail is the update fragment of the group description, singular for one
+// feature. GroupDescription never calls it with 0, which has its own
+// "all up to date" sentence.
+func updateTail(featuresWithUpdates int) string {
+	if featuresWithUpdates == 1 {
+		return "1 update"
+	}
+	return fmt.Sprintf("%d updates", featuresWithUpdates)
+}
+
+// waitingTail is the waiting fragment of the group description. Its wording
+// matches the update action's own phrase, so a row and a toast describe the
+// same wait with the same words; only the number changes between one and many.
+func waitingTail(featuresWaiting int) string {
+	return fmt.Sprintf("%d waiting for a newer OS image", featuresWaiting)
 }
 
 // GroupDescriptionCheckFailed is the features group's description when the
