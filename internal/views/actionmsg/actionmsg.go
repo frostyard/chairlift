@@ -14,10 +14,9 @@
 // packages. See docs/agents/skills/gtk-headless-tests.md.
 //
 // Functions whose result only selects display text (BundleDump, Cleanup,
-// Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage,
-// FeatureUpdate) return a plain string: the state-changing/no-op decision for
-// those actions is already made and already tested inside their wrapper
-// package (internal/homebrew, internal/flatpak, internal/bootc,
+// Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage) return a plain string: the
+// state-changing/no-op decision for those actions is already made and already
+// tested inside their wrapper package (internal/homebrew, internal/flatpak, internal/bootc,
 // internal/updex).
 // Functions whose result gates a further decision return a decision struct,
 // precisely so the gated decision — not just the wording of the toast that
@@ -27,12 +26,19 @@
 // or resets after a dry-run preview. TapTrust decides whether the Untrusted
 // Homebrew Taps view removes a row, changes group visibility, and refreshes.
 // FeatureToggle decides whether a feature switch confirms its new visual
-// state. Those latter three UI-side decisions have no wrapper-package
-// equivalent even though the wrappers already gate their underlying
-// command.
+// state. FeatureUpdate decides the toast text and whether it persists from
+// the update's per-feature results. Those latter UI-side decisions have no
+// wrapper-package equivalent even though the wrappers already gate their
+// underlying command.
 package actionmsg
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/frostyard/chairlift/internal/updex"
+)
 
 // BundleDump returns the toast text for a Homebrew Brewfile dump. When dryRun
 // is true, homebrew.BundleDump itself never runs `brew bundle dump` (bundle
@@ -323,16 +329,126 @@ func FeatureToggle(dryRun bool, enable bool, name string) FeatureToggleDecision 
 	}
 }
 
-// FeatureUpdate returns the toast text for the Features page's "Update"
-// button (onUpdateFeaturesClicked). The wrapper package (internal/updex)
-// already skips the state-changing update via updex.runHelper's own
-// dry-run short-circuit before pkexec, so this function only selects which
-// string to show: a preview when dryRun is true, or a fixed completion
-// message when the update actually ran. The button's own SetSensitive/
-// SetLabel reset is unconditional and unaffected by dryRun.
-func FeatureUpdate(dryRun bool) string {
+// FeatureUpdateDecision is the result of deciding what the Features page's
+// "Update" button reports: the toast text, and whether the toast must stay
+// on screen (an error toast) because something needs the user's attention.
+type FeatureUpdateDecision struct {
+	// Toast is the completion message to show.
+	Toast string
+	// Persistent is true when any feature waits for a newer OS image, is
+	// held by a rollback, or failed, or when the update returned an error.
+	// The caller shows it with ShowErrorToast; otherwise with ShowToast.
+	Persistent bool
+}
+
+// Fixed FeatureUpdate texts. featureUpdatedText is the pre-v2.1 text and
+// must stay exactly the same for the all-updated case.
+const (
+	featureUpdatedText    = "Features updated. Changes apply after reboot."
+	featureCurrentText    = "Features are already up to date."
+	featureNoneText       = "No enabled features to update."
+	featureRebootText     = "Changes apply after reboot."
+	featureActivationText = "Extensions merged, but activation did not finish. Reboot to finish."
+)
+
+// FeatureUpdate decides the toast for the Features page's "Update" button
+// (onUpdateFeaturesClicked) from updex.UpdateFeatures's results and error.
+// updex returns a nil error when the next-boot image gate or a rollback
+// record holds a feature, so the results, not the error alone, say what
+// happened. The dry-run preview comes first: updex.runHelper never invokes
+// pkexec under dry-run, so there are no results to read.
+//
+// Decision table, first match wins:
+//
+//	dryRun                          preview text, not persistent
+//	err, no results                 *ActivationIncompleteError: "Features merged, but
+//	                                activation did not finish. Reboot to finish.";
+//	                                other: "Update failed: <err>"; both persistent
+//	nil results, nil err            old "Features updated..." text (unparsable or
+//	                                empty stdout from a successful helper)
+//	empty results, nil err          "No enabled features to update."
+//	only Updated/Current, nil err   old "Features updated..." text, exactly
+//	only Current, nil err           "Features are already up to date."
+//	otherwise                       sentences "Updated: ..." / "Waiting for a newer OS
+//	                                image: ..." / "Held by a rollback: ..." / "Failed:
+//	                                ...", then "Changes apply after reboot." when
+//	                                something updated and activation is complete, then
+//	                                the activation sentence or "Update failed: <err>"
+//	                                (only when no feature failed); persistent when any
+//	                                feature waits, is held or failed, or err is set
+func FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) FeatureUpdateDecision {
 	if dryRun {
-		return "[DRY-RUN] Preview: features would be updated — no changes made"
+		return FeatureUpdateDecision{Toast: "[DRY-RUN] Preview: features would be updated — no changes made"}
 	}
-	return "Features updated. Changes apply after reboot."
+
+	var activation *updex.ActivationIncompleteError
+	activationIncomplete := errors.As(err, &activation)
+
+	if err != nil && len(results) == 0 {
+		if activationIncomplete {
+			return FeatureUpdateDecision{
+				Toast:      "Features merged, but activation did not finish. Reboot to finish.",
+				Persistent: true,
+			}
+		}
+		return FeatureUpdateDecision{Toast: fmt.Sprintf("Update failed: %v", err), Persistent: true}
+	}
+	if results == nil {
+		return FeatureUpdateDecision{Toast: featureUpdatedText}
+	}
+	if len(results) == 0 {
+		return FeatureUpdateDecision{Toast: featureNoneText}
+	}
+
+	summary := updex.SummarizeUpdate(results)
+	updated := summary.Of(updex.ClassUpdated)
+	waiting := summary.Of(updex.ClassWaitingForImage)
+	held := summary.Of(updex.ClassHeld)
+	failed := summary.Of(updex.ClassFailed)
+
+	if err == nil && len(waiting) == 0 && len(held) == 0 && len(failed) == 0 {
+		if len(updated) > 0 {
+			return FeatureUpdateDecision{Toast: featureUpdatedText}
+		}
+		return FeatureUpdateDecision{Toast: featureCurrentText}
+	}
+
+	var sentences []string
+	if len(updated) > 0 {
+		sentences = append(sentences, "Updated: "+joinOutcomes(updated, ", ", false)+".")
+	}
+	if len(waiting) > 0 {
+		sentences = append(sentences, "Waiting for a newer OS image: "+joinOutcomes(waiting, "; ", true)+".")
+	}
+	if len(held) > 0 {
+		sentences = append(sentences, "Held by a rollback: "+joinOutcomes(held, "; ", true)+".")
+	}
+	if len(failed) > 0 {
+		sentences = append(sentences, "Failed: "+joinOutcomes(failed, "; ", true)+".")
+	}
+	if len(updated) > 0 && !activationIncomplete {
+		sentences = append(sentences, featureRebootText)
+	}
+	switch {
+	case activationIncomplete:
+		sentences = append(sentences, featureActivationText)
+	case err != nil && len(failed) == 0:
+		sentences = append(sentences, fmt.Sprintf("Update failed: %v", err))
+	}
+
+	return FeatureUpdateDecision{Toast: strings.Join(sentences, " "), Persistent: true}
+}
+
+// joinOutcomes lists feature names, each followed by its reason in
+// parentheses when withReason is set and the reason is not empty.
+func joinOutcomes(outcomes []updex.FeatureOutcome, sep string, withReason bool) string {
+	parts := make([]string, 0, len(outcomes))
+	for _, o := range outcomes {
+		if withReason && o.Reason != "" {
+			parts = append(parts, fmt.Sprintf("%s (%s)", o.Feature, o.Reason))
+			continue
+		}
+		parts = append(parts, o.Feature)
+	}
+	return strings.Join(parts, sep)
 }

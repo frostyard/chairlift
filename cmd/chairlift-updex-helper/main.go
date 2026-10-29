@@ -35,7 +35,12 @@ func main() {
 		outputJSON(result, err)
 	case updexhelper.CommandUpdate:
 		results, err := client.UpdateFeatures(ctx, updexhelper.UpdateOptions(invocation.DryRun))
-		outputJSON(results, err)
+		if err := updexhelper.WriteUpdateResult(os.Stdout, results, err); err != nil {
+			// Results, when any, are already on stdout. The exit code tells
+			// the GUI which failure this is (see updexhelper.ExitCode).
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(updexhelper.ExitCode(err))
+		}
 	}
 }
 
@@ -47,5 +52,5 @@ func outputJSON(v any, err error) {
 
 func fatal(msg string) {
 	fmt.Fprintln(os.Stderr, msg)
-	os.Exit(1)
+	os.Exit(updexhelper.ExitFailure)
 }

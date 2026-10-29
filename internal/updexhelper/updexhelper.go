@@ -1,7 +1,8 @@
 // Package updexhelper holds the argv-parsing and Options-building logic for
 // cmd/chairlift-updex-helper, the privileged helper binary invoked via
 // pkexec to perform updex write operations. It is deliberately free of any
-// puregotk/GTK import (only stdlib plus github.com/frostyard/updex/v2/updex),
+// puregotk/GTK import (only stdlib plus github.com/frostyard/updex/v2/updex and
+// github.com/frostyard/updex/v2/sysext),
 // so its logic can be unit-tested on a headless host — a test binary for a
 // package that imports puregotk panics while resolving GTK/graphene shared
 // libraries at package init, before any test function runs. See
@@ -14,9 +15,11 @@ package updexhelper
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
+	"github.com/frostyard/updex/v2/sysext"
 	"github.com/frostyard/updex/v2/updex"
 )
 
@@ -24,6 +27,19 @@ const (
 	CommandEnableFeature  = "enable-feature"
 	CommandDisableFeature = "disable-feature"
 	CommandUpdate         = "update"
+)
+
+// Exit codes of cmd/chairlift-updex-helper. Exit 0 means success. The GUI
+// (internal/updex) maps these codes to its error types, and an older GUI
+// treats every non-zero exit as a failure, so each new code must stay a
+// failure code. pkexec passes the helper's exit code through unchanged.
+const (
+	// ExitFailure is any failure: invalid argv, an SDK error, an encode error.
+	ExitFailure = 1
+	// ExitActivationIncomplete means the update's links and extensions are
+	// in place and merged, but the activation did not finish
+	// (sysext.ErrActivationIncomplete); a reboot finishes it.
+	ExitActivationIncomplete = 3
 )
 
 // Invocation is a validated privileged-helper command. PolicyKit selects an
@@ -108,4 +124,34 @@ func WriteResult(w io.Writer, value any, err error) error {
 		return fmt.Errorf("failed to encode JSON: %w", err)
 	}
 	return nil
+}
+
+// ExitCode maps an SDK error to the helper's process exit code: 0 for nil,
+// ExitActivationIncomplete when err wraps sysext.ErrActivationIncomplete
+// (through %w and errors.Join alike), and ExitFailure otherwise.
+func ExitCode(err error) int {
+	switch {
+	case err == nil:
+		return 0
+	case errors.Is(err, sysext.ErrActivationIncomplete):
+		return ExitActivationIncomplete
+	default:
+		return ExitFailure
+	}
+}
+
+// WriteUpdateResult serializes the update command's results. Unlike
+// WriteResult it also writes non-nil results when err is non-nil: updex
+// returns the per-feature results together with an aggregate error when a
+// transfer failed or the final refresh left activation incomplete, and the
+// GUI needs those results to say what happened. It writes nothing when
+// results is nil. It returns err when non-nil, else any encode error, so the
+// caller's fatal path and exit code still reflect the SDK failure.
+func WriteUpdateResult(w io.Writer, results []updex.UpdateFeaturesResult, err error) error {
+	if results != nil {
+		if encErr := json.NewEncoder(w).Encode(results); encErr != nil && err == nil {
+			return fmt.Errorf("failed to encode JSON: %w", encErr)
+		}
+	}
+	return err
 }

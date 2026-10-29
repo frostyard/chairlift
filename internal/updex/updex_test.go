@@ -3,6 +3,7 @@ package updex
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -79,8 +80,8 @@ func TestEnableDisableUpdateFeaturesDryRunNeverInvokePkexec(t *testing.T) {
 	if err := DisableFeature(ctx, "demo"); err != nil {
 		t.Errorf("DisableFeature dry-run: %v", err)
 	}
-	if err := UpdateFeatures(ctx); err != nil {
-		t.Errorf("UpdateFeatures dry-run: %v", err)
+	if results, err := UpdateFeatures(ctx); err != nil || results != nil {
+		t.Errorf("UpdateFeatures dry-run = %v, %v; want nil, nil", results, err)
 	}
 }
 
@@ -115,7 +116,10 @@ func TestPrivilegedOperationsUseExactHelperArguments(t *testing.T) {
 		},
 		{
 			name: "update features",
-			run:  UpdateFeatures,
+			run: func(ctx context.Context) error {
+				_, err := UpdateFeatures(ctx)
+				return err
+			},
 			want: []string{HelperPath, "update"},
 		},
 	}
@@ -178,6 +182,129 @@ func TestRunHelperClassifiesFailures(t *testing.T) {
 			t.Fatalf("error = %T (%v), want timed-out *Error", err, err)
 		}
 	})
+}
+
+// writeScriptPkexec writes a fake pkexec that prints stdoutJSON on stdout and
+// stderrText on stderr, then exits with exitCode.
+func writeScriptPkexec(t *testing.T, stdoutJSON, stderrText string, exitCode int) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "out"), []byte(stdoutJSON), 0o644); err != nil {
+		t.Fatalf("writing fake stdout: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "err"), []byte(stderrText), 0o644); err != nil {
+		t.Fatalf("writing fake stderr: %v", err)
+	}
+	path := filepath.Join(dir, "fake-pkexec")
+	script := fmt.Sprintf("#!/bin/sh\ncat '%s/out'\ncat '%s/err' >&2\nexit %d\n", dir, dir, exitCode)
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("writing fake pkexec: %v", err)
+	}
+	return path
+}
+
+func TestUpdateFeaturesResultsAndErrorClassification(t *testing.T) {
+	SetDryRun(false)
+	t.Cleanup(func() { SetDryRun(false) })
+
+	const oneFeature = `[{"feature":"desktop","results":[{"component":"app","version":"2","downloaded":true,"installed":true,"linked":true}]}]`
+	wantOne := []FeatureUpdate{{
+		Feature: "desktop",
+		Results: []TransferUpdate{{Component: "app", Version: "2", Downloaded: true, Installed: true, Linked: true}},
+	}}
+
+	tests := []struct {
+		name        string
+		stdout      string
+		stderr      string
+		exit        int
+		want        []FeatureUpdate
+		wantErrType string // "", "error", "activation"
+		wantErrText string
+	}{
+		{name: "exit 0 with results", stdout: oneFeature, want: wantOne},
+		{name: "exit 0 with empty array", stdout: "[]\n", want: []FeatureUpdate{}},
+		{name: "exit 0 with empty stdout", stdout: ""},
+		{name: "exit 0 with unparsable stdout", stdout: "not json"},
+		{
+			name: "exit 1 with results and stderr", stdout: oneFeature, stderr: "one or more components failed", exit: 1,
+			want: wantOne, wantErrType: "error", wantErrText: "exit 1",
+		},
+		{
+			name: "exit 3 with results", stdout: oneFeature, stderr: "extensions merged, but activation did not finish", exit: 3,
+			want: wantOne, wantErrType: "activation", wantErrText: "exit 3",
+		},
+		{
+			name: "exit 3 without results", stderr: "extensions merged, but activation did not finish", exit: 3,
+			wantErrType: "activation", wantErrText: "activation did not finish",
+		},
+		{
+			name: "exit 1 with empty stdout from an old helper", stderr: "boom", exit: 1,
+			wantErrType: "error", wantErrText: "boom",
+		},
+		{
+			name: "exit 1 with unparsable stdout", stdout: "{", stderr: "boom", exit: 1,
+			wantErrType: "error", wantErrText: "boom",
+		},
+		{
+			name: "other exit code stays a plain error", stdout: oneFeature, exit: 126,
+			want: wantOne, wantErrType: "error", wantErrText: "exit 126",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pkexec := writeScriptPkexec(t, tt.stdout, tt.stderr, tt.exit)
+			got, err := updateFeatures(context.Background(), pkexec)
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("results = %#v, want %#v", got, tt.want)
+			}
+			var plain *Error
+			var activation *ActivationIncompleteError
+			switch tt.wantErrType {
+			case "":
+				if err != nil {
+					t.Fatalf("error = %v, want nil", err)
+				}
+			case "error":
+				if !errors.As(err, &plain) || errors.As(err, &activation) {
+					t.Fatalf("error = %T (%v), want *Error", err, err)
+				}
+			case "activation":
+				if !errors.As(err, &activation) || errors.As(err, &plain) {
+					t.Fatalf("error = %T (%v), want *ActivationIncompleteError", err, err)
+				}
+			}
+			if tt.wantErrText != "" && !strings.Contains(err.Error(), tt.wantErrText) {
+				t.Errorf("error = %q, want it to contain %q", err, tt.wantErrText)
+			}
+		})
+	}
+}
+
+func TestUpdateFeaturesDryRunNeverRunsPkexecSeam(t *testing.T) {
+	SetDryRun(true)
+	t.Cleanup(func() { SetDryRun(false) })
+
+	results, err := updateFeatures(context.Background(), filepath.Join(t.TempDir(), "pkexec-should-never-run"))
+	if results != nil || err != nil {
+		t.Fatalf("updateFeatures dry-run = %v, %v; want nil, nil", results, err)
+	}
+}
+
+func TestRunHelperReturnsStdoutOnNonZeroExit(t *testing.T) {
+	SetDryRun(false)
+	t.Cleanup(func() { SetDryRun(false) })
+
+	pkexec := writeScriptPkexec(t, "partial\n", "failed", 1)
+	stdout, stderr, err := runHelper(context.Background(), pkexec, "update")
+	if err == nil {
+		t.Fatal("runHelper error = nil, want failure")
+	}
+	if stdout != "partial\n" || stderr != "failed" {
+		t.Fatalf("stdout/stderr = %q/%q, want partial/failed", stdout, stderr)
+	}
 }
 
 func TestDryRunStateAndDefaultContext(t *testing.T) {

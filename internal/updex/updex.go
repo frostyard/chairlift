@@ -6,9 +6,11 @@ package updex
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -60,6 +62,19 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
+// ActivationIncompleteError is returned by UpdateFeatures when the helper
+// exits with updexhelper.ExitActivationIncomplete: the feature links are in
+// place and the extensions merged, but the activation did not finish, and a
+// reboot finishes it. It is a failure to an older caller, which only sees a
+// non-nil error.
+type ActivationIncompleteError struct {
+	Message string
+}
+
+func (e *ActivationIncompleteError) Error() string {
+	return e.Message
+}
+
 // NotFoundError is returned when updex features are not configured
 type NotFoundError struct {
 	Message string
@@ -74,6 +89,10 @@ type (
 	Feature      = updexapi.FeatureInfo
 	CheckResult  = updexapi.CheckResult
 	FeatureCheck = updexapi.CheckFeaturesResult
+	// FeatureUpdate is one feature's result of the update command.
+	FeatureUpdate = updexapi.UpdateFeaturesResult
+	// TransferUpdate is one transfer's result inside a FeatureUpdate.
+	TransferUpdate = updexapi.UpdateResult
 )
 
 // Singleton API client
@@ -186,10 +205,41 @@ func DisableFeature(ctx context.Context, name string) error {
 	return err
 }
 
-// UpdateFeatures downloads enabled features
-func UpdateFeatures(ctx context.Context) error {
-	_, _, err := runHelper(ctx, pkexecCommand, updexhelper.CommandUpdate)
-	return err
+// UpdateFeatures downloads enabled features and returns the helper's
+// per-feature results. A nil error does not mean every feature updated: a
+// feature held by the next-boot image gate or a rollback record reports so in
+// its results (see SummarizeUpdate).
+//
+// The helper prints its results on stdout and exits 0 on success. On failure
+// the results still come back next to the error when the helper printed them:
+// a *ActivationIncompleteError (exit 3) means the extensions merged but
+// activation did not finish; any other exit gives *Error. A helper from an
+// older ChairLift prints nothing on failure, so the results are nil then.
+// Unparsable stdout is logged and treated as no results. Under dry-run no
+// helper runs, and the results and the error are both nil.
+func UpdateFeatures(ctx context.Context) ([]FeatureUpdate, error) {
+	return updateFeatures(ctx, pkexecCommand)
+}
+
+// updateFeatures is UpdateFeatures with the pkexec binary as a test seam.
+func updateFeatures(ctx context.Context, pkexecPath string) ([]FeatureUpdate, error) {
+	stdout, _, err := runHelper(ctx, pkexecPath, updexhelper.CommandUpdate)
+	return parseUpdateResults(stdout), err
+}
+
+// parseUpdateResults decodes the helper's JSON array of feature results. It
+// returns nil for empty stdout and, after logging, for stdout that is not a
+// JSON array.
+func parseUpdateResults(stdout string) []FeatureUpdate {
+	if strings.TrimSpace(stdout) == "" {
+		return nil
+	}
+	var results []FeatureUpdate
+	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
+		log.Printf("updex helper: cannot parse update results: %v", err)
+		return nil
+	}
+	return results
 }
 
 // runHelper executes HelperPath via pkexec for privileged operations. pkexecPath
@@ -200,6 +250,11 @@ func UpdateFeatures(ctx context.Context) error {
 // absolute path that must match the policy's exec.path annotation, so tests
 // assert it by inspecting the fake pkexec's captured argv rather than by
 // substituting a different one in.
+//
+// When the helper exits non-zero, the captured stdout is still returned next
+// to the error: the update command prints its results also on failure. Exit
+// code updexhelper.ExitActivationIncomplete gives *ActivationIncompleteError,
+// any other code *Error.
 func runHelper(ctx context.Context, pkexecPath string, args ...string) (string, string, error) {
 	if dryRun {
 		args = append(args, "--dry-run")
@@ -228,7 +283,11 @@ func runHelper(ctx context.Context, pkexecPath string, args ...string) (string, 
 			return "", stderr.String(), &NotFoundError{Message: "pkexec or chairlift-updex-helper not found"}
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", stderr.String(), &Error{Message: fmt.Sprintf("command failed (exit %d): %s", exitErr.ExitCode(), stderr.String())}
+			msg := fmt.Sprintf("command failed (exit %d): %s", exitErr.ExitCode(), stderr.String())
+			if exitErr.ExitCode() == updexhelper.ExitActivationIncomplete {
+				return stdout.String(), stderr.String(), &ActivationIncompleteError{Message: msg}
+			}
+			return stdout.String(), stderr.String(), &Error{Message: msg}
 		}
 		return "", stderr.String(), &Error{Message: err.Error()}
 	}
