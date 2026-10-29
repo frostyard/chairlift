@@ -330,8 +330,9 @@ func FeatureToggle(dryRun bool, enable bool, name string) FeatureToggleDecision 
 }
 
 // FeatureUpdateDecision is the result of deciding what the Features page's
-// "Update" button reports: the toast text, and whether the toast must stay
-// on screen (an error toast) because something needs the user's attention.
+// "Update" button reports: the toast text, whether the toast must stay
+// on screen (an error toast) because something needs the user's attention, and
+// whether the update check must run again.
 type FeatureUpdateDecision struct {
 	// Toast is the completion message to show.
 	Toast string
@@ -339,6 +340,17 @@ type FeatureUpdateDecision struct {
 	// held by a rollback, or failed, or when the update returned an error.
 	// The caller shows it with ShowErrorToast; otherwise with ShowToast.
 	Persistent bool
+	// Recheck is true when the caller must run the feature update check again
+	// after showing the toast, so the rows show the state AFTER the update: a
+	// feature whose staged image was linked and a feature that now waits for a
+	// newer OS image both stop reading as "update available".
+	//
+	// It is true for every outcome that ran the update, errors and failures
+	// included, because a failed run can still change state in part (one
+	// feature updated, another failed). It is false only for dry-run, where no
+	// helper ran, no state changed, and the check would only report what the
+	// startup check already said.
+	Recheck bool
 }
 
 // Fixed FeatureUpdate texts. featureUpdatedText is the pre-v2.1 text and
@@ -380,9 +392,13 @@ const (
 //	                                the activation sentence or "Update failed: <err>"
 //	                                (only when no feature failed); persistent when any
 //	                                feature waits, is held or failed, or err is set
+//
+// Recheck is true on every row but the dry-run row: the update ran and may have
+// changed the system in part even when it failed, so the caller must check the
+// features again to show their state after the update.
 func FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) FeatureUpdateDecision {
 	if dryRun {
-		return FeatureUpdateDecision{Toast: "[DRY-RUN] Preview: features would be updated — no changes made"}
+		return FeatureUpdateDecision{Toast: "[DRY-RUN] Preview: features would be updated — no changes made", Recheck: false}
 	}
 
 	var activation *updex.ActivationIncompleteError
@@ -392,21 +408,22 @@ func FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) Featur
 
 	if err != nil && len(results) == 0 {
 		if errors.As(err, &unreadable) {
-			return FeatureUpdateDecision{Toast: featureUnreadableText, Persistent: true}
+			return FeatureUpdateDecision{Toast: featureUnreadableText, Persistent: true, Recheck: true}
 		}
 		if activationIncomplete {
 			return FeatureUpdateDecision{
 				Toast:      "Features merged, but activation did not finish. Reboot to finish.",
 				Persistent: true,
+				Recheck:    true,
 			}
 		}
-		return FeatureUpdateDecision{Toast: fmt.Sprintf("Update failed: %v", err), Persistent: true}
+		return FeatureUpdateDecision{Toast: fmt.Sprintf("Update failed: %v", err), Persistent: true, Recheck: true}
 	}
 	if results == nil {
-		return FeatureUpdateDecision{Toast: featureUnreadableText, Persistent: true}
+		return FeatureUpdateDecision{Toast: featureUnreadableText, Persistent: true, Recheck: true}
 	}
 	if len(results) == 0 {
-		return FeatureUpdateDecision{Toast: featureNoneText}
+		return FeatureUpdateDecision{Toast: featureNoneText, Recheck: true}
 	}
 
 	summary := updex.SummarizeUpdate(results)
@@ -417,9 +434,9 @@ func FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) Featur
 
 	if err == nil && len(waiting) == 0 && len(held) == 0 && len(failed) == 0 {
 		if len(updated) > 0 {
-			return FeatureUpdateDecision{Toast: featureUpdatedText}
+			return FeatureUpdateDecision{Toast: featureUpdatedText, Recheck: true}
 		}
-		return FeatureUpdateDecision{Toast: featureCurrentText}
+		return FeatureUpdateDecision{Toast: featureCurrentText, Recheck: true}
 	}
 
 	var sentences []string
@@ -445,7 +462,7 @@ func FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) Featur
 		sentences = append(sentences, fmt.Sprintf("Update failed: %v", err))
 	}
 
-	return FeatureUpdateDecision{Toast: strings.Join(sentences, " "), Persistent: true}
+	return FeatureUpdateDecision{Toast: strings.Join(sentences, " "), Persistent: true, Recheck: true}
 }
 
 // joinOutcomes lists feature names, each followed by its reason in

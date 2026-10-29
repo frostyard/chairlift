@@ -81,6 +81,14 @@ type UserHome struct {
 	featuresGroup            *adw.PreferencesGroup
 	featuresUnavailableGroup *adw.PreferencesGroup
 	featureRows              map[string]*adw.ActionRow
+	// featureBaseSubtitles holds each row's subtitle before any update check
+	// ran (pageview.Feature's presentation). The re-check gives it back to every
+	// feature the check did not answer for, so a stale "update available" from
+	// an earlier check cannot outlive the update that removed it.
+	featureBaseSubtitles map[string]string
+	// featureCheck is the generation gate of the feature update check, so an
+	// older check that finishes late cannot replace a newer one's rows.
+	featureCheck actionstate.RefreshGate
 
 	// Groups with deferred visibility
 	maintenanceBrewGroup    *adw.PreferencesGroup
