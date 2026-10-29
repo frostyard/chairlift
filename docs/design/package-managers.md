@@ -821,9 +821,13 @@ entries, returns their feature/component/error metadata for logging, and
 suppresses that aggregate error; an error with no structured component failure
 remains a whole-request failure. This preserves the v1 behavior in which
 successful components still contribute to the update count. When every
-component fails, the affected rows remain unchanged and the existing group
-description still says "all up to date" while the component failures are
-logged. That wording is a known compatibility limitation; presenting an
+component of a feature fails, `Summarize` leaves that feature out of `Rows`,
+so `checkFeatureUpdates` gives its row the base subtitle back (the
+`pageview.Feature` text it had before any check), and the group description
+still says "all up to date" when no other feature has an update or a wait,
+while the component failures are logged. A whole-request failure is different:
+the check returns an error, every row keeps its current subtitle, and the
+description becomes `GroupDescriptionCheckFailed`. That wording is a known compatibility limitation; presenting an
 explicit partial-failure state is a separate product change.
 
 `updex_test.go` drives all three public write operations through a fake
