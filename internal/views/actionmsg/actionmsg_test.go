@@ -744,24 +744,30 @@ func TestFeatureUpdate(t *testing.T) {
 		err            error
 		wantToast      string
 		wantPersistent bool
+		// wantRecheck is the expected FeatureUpdateDecision.Recheck: false for
+		// the dry-run rows, true for every row that ran the update.
+		wantRecheck bool
 	}{
 		{
-			name:      "dry-run previews and is not persistent",
-			dryRun:    true,
-			wantToast: "[DRY-RUN] Preview: features would be updated — no changes made",
+			name:        "dry-run previews and is not persistent",
+			dryRun:      true,
+			wantToast:   "[DRY-RUN] Preview: features would be updated — no changes made",
+			wantRecheck: false,
 		},
 		{
-			name:      "dry-run ignores results and error",
-			dryRun:    true,
-			results:   []updex.FeatureUpdate{failed("f", "boom")},
-			err:       wrapped,
-			wantToast: "[DRY-RUN] Preview: features would be updated — no changes made",
+			name:        "dry-run ignores results and error",
+			dryRun:      true,
+			results:     []updex.FeatureUpdate{failed("f", "boom")},
+			err:         wrapped,
+			wantToast:   "[DRY-RUN] Preview: features would be updated — no changes made",
+			wantRecheck: false,
 		},
 		{
 			name:           "activation incomplete without results",
 			err:            activation,
 			wantToast:      "Features merged, but activation did not finish. Reboot to finish.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "activation incomplete with empty results",
@@ -769,23 +775,27 @@ func TestFeatureUpdate(t *testing.T) {
 			err:            fmt.Errorf("wrapped: %w", activation),
 			wantToast:      "Features merged, but activation did not finish. Reboot to finish.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "other error without results (old helper)",
 			err:            wrapped,
 			wantToast:      "Update failed: command failed (exit 1): boom",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "nil results and nil error do not claim success",
 			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "unreadable results error",
 			err:            &updex.ResultsUnreadableError{Message: "cannot read update results: boom"},
 			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "wrapped unreadable results error with empty results",
@@ -793,38 +803,45 @@ func TestFeatureUpdate(t *testing.T) {
 			err:            fmt.Errorf("wrapped: %w", &updex.ResultsUnreadableError{Message: "x"}),
 			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
-			name:      "empty results report no features",
-			results:   []updex.FeatureUpdate{},
-			wantToast: "No enabled features to update.",
+			name:        "empty results report no features",
+			results:     []updex.FeatureUpdate{},
+			wantToast:   "No enabled features to update.",
+			wantRecheck: true,
 		},
 		{
-			name:      "all updated keeps the old text exactly",
-			results:   []updex.FeatureUpdate{updated("a"), updated("b")},
-			wantToast: "Features updated. Changes apply after reboot.",
+			name:        "all updated keeps the old text exactly",
+			results:     []updex.FeatureUpdate{updated("a"), updated("b")},
+			wantToast:   "Features updated. Changes apply after reboot.",
+			wantRecheck: true,
 		},
 		{
-			name:      "updated and current keep the old text exactly",
-			results:   []updex.FeatureUpdate{updated("a"), current("b")},
-			wantToast: "Features updated. Changes apply after reboot.",
+			name:        "updated and current keep the old text exactly",
+			results:     []updex.FeatureUpdate{updated("a"), current("b")},
+			wantToast:   "Features updated. Changes apply after reboot.",
+			wantRecheck: true,
 		},
 		{
-			name:      "only current",
-			results:   []updex.FeatureUpdate{current("a"), current("b")},
-			wantToast: "Features are already up to date.",
+			name:        "only current",
+			results:     []updex.FeatureUpdate{current("a"), current("b")},
+			wantToast:   "Features are already up to date.",
+			wantRecheck: true,
 		},
 		{
 			name:           "waiting for image only",
 			results:        []updex.FeatureUpdate{waiting("c", "app", "needs image >= 5"), current("a")},
 			wantToast:      "Waiting for a newer OS image: c (app: needs image >= 5).",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "held only",
 			results:        []updex.FeatureUpdate{held("e", "held at 1 by a rollback of 2")},
 			wantToast:      "Held by a rollback: e (held at 1 by a rollback of 2).",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "failed only with the aggregate error already covered by the reasons",
@@ -832,6 +849,7 @@ func TestFeatureUpdate(t *testing.T) {
 			err:            wrapped,
 			wantToast:      "Failed: f (download failed); g (no space).",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name: "every sentence in order",
@@ -849,12 +867,14 @@ func TestFeatureUpdate(t *testing.T) {
 				"Failed: f (x); g (y). " +
 				"Changes apply after reboot.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "updated and waiting with nil error",
 			results:        []updex.FeatureUpdate{updated("a"), waiting("c", "app", "needs image >= 5")},
 			wantToast:      "Updated: a. Waiting for a newer OS image: c (app: needs image >= 5). Changes apply after reboot.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "updated with activation incomplete drops the reboot sentence",
@@ -862,6 +882,7 @@ func TestFeatureUpdate(t *testing.T) {
 			err:            activation,
 			wantToast:      "Updated: a. Extensions merged, but activation did not finish. Reboot to finish.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "failed with activation incomplete",
@@ -869,6 +890,7 @@ func TestFeatureUpdate(t *testing.T) {
 			err:            fmt.Errorf("joined: %w", activation),
 			wantToast:      "Updated: a. Failed: f (x). Extensions merged, but activation did not finish. Reboot to finish.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "other error with no failed feature appends the error",
@@ -876,6 +898,7 @@ func TestFeatureUpdate(t *testing.T) {
 			err:            wrapped,
 			wantToast:      "Updated: a. Changes apply after reboot. Update failed: command failed (exit 1): boom",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "other error with only current features",
@@ -883,6 +906,7 @@ func TestFeatureUpdate(t *testing.T) {
 			err:            wrapped,
 			wantToast:      "Update failed: command failed (exit 1): boom",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 		{
 			name:           "activation incomplete with only current features",
@@ -890,6 +914,7 @@ func TestFeatureUpdate(t *testing.T) {
 			err:            activation,
 			wantToast:      "Extensions merged, but activation did not finish. Reboot to finish.",
 			wantPersistent: true,
+			wantRecheck:    true,
 		},
 	}
 
@@ -901,6 +926,9 @@ func TestFeatureUpdate(t *testing.T) {
 			}
 			if got.Persistent != tt.wantPersistent {
 				t.Errorf("Persistent = %v, want %v", got.Persistent, tt.wantPersistent)
+			}
+			if got.Recheck != tt.wantRecheck {
+				t.Errorf("Recheck = %v, want %v", got.Recheck, tt.wantRecheck)
 			}
 		})
 	}

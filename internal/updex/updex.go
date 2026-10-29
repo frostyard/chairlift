@@ -113,9 +113,15 @@ var (
 	apiClient  *updexapi.Client
 )
 
+// getClient returns the client of the read-only check side: the Features page
+// lists and checks features with it as the ordinary, unprivileged user. Its
+// bootc runner is checkBootcRunner (see bootcrunner.go), which turns an
+// unprivileged "bootc status" failure into a comparison with the booted OS
+// image; every write goes through the root helper instead, which keeps the
+// real bootc and the fail-closed answer.
 func getClient() *updexapi.Client {
 	clientOnce.Do(func() {
-		apiClient = updexapi.NewClient(updexapi.ClientConfig{})
+		apiClient = updexapi.NewClient(updexapi.ClientConfig{BootcRunner: newCheckBootcRunner()})
 	})
 	return apiClient
 }

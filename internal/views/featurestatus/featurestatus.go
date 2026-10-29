@@ -26,11 +26,26 @@
 // feature is not counted as an update and is counted separately, in the group
 // description's featuresWaiting argument.
 //
+// Below both of them sits a feature whose new version is linked and takes
+// effect at the next boot: a component's check result carries PendingReboot
+// when the systemd-sysext link names a version other than the merged one. That
+// is neither an update nor a wait, and it is not nothing: the row says
+// "changes apply after reboot" with the same words as the update action's own
+// toast. Status.PendingReboot is true then, and the feature is counted as
+// neither an update nor a wait.
+//
 // The update count in the group description is a count of FEATURES, not of
 // components: a feature with three outdated components counts once. The
 // sentence's first number is a feature count, so its second number must be one
 // too or the sentence is incoherent. featuresWaiting is a feature count for the
 // same reason.
+//
+// Summarize applies Feature to a whole check at once: it keeps the rows whose
+// feature the page has, ignores a check entry for any other feature, and counts
+// the resulting rows rather than the check entries. A name it does not answer
+// for is deliberately absent from its result, so the caller can give that row
+// its base subtitle back instead of leaving an earlier check's "update
+// available" in place after an update changed the state.
 //
 // The package is separate from internal/views because internal/views can never
 // host a _test.go: the Go GTK bindings it imports (puregotk) dlopen the GTK,
@@ -69,14 +84,23 @@ type Status struct {
 	// OS image. The callers use it to count the feature separately from the
 	// updatable ones, never as an update.
 	WaitingForImage bool
+	// PendingReboot reports whether the feature has no update and no wait but a
+	// component whose new version is linked and becomes active at the next
+	// boot. The callers count such a feature as neither an update nor a wait.
+	PendingReboot bool
 }
 
 // Feature derives the row state for the feature called name from the check
 // results of all of its components.
 //
+// Its branches, in precedence order: a component needs a newer OS image (the
+// feature waits), a component has an update, a component is linked and pending
+// a reboot, and finally the agreed-version or up-to-date subtitle.
+//
 // The second return value is false when results is empty: the check reported
-// nothing about this feature, so the caller must leave the row's existing
-// subtitle untouched and must not count the feature. The returned Status is
+// nothing about this feature, so the caller must not derive a status from it
+// and must not count the feature (Summarize leaves it out of Rows, and the
+// Features page gives the row its base subtitle back). The returned Status is
 // then meaningless and is not part of the caller contract.
 func Feature(name string, results []updex.CheckResult) (Status, bool) {
 	if len(results) == 0 {
@@ -106,11 +130,26 @@ func Feature(name string, results []updex.CheckResult) (Status, bool) {
 			updates = append(updates, res)
 		}
 	}
+	if len(updates) > 0 {
+		return Status{
+			Subtitle:  subtitleText(name, results, updates),
+			HasUpdate: true,
+		}, true
+	}
 
-	return Status{
-		Subtitle:  subtitleText(name, results, updates),
-		HasUpdate: len(updates) > 0,
-	}, true
+	// A linked version that the next boot merges is not an update and not a
+	// wait, so it is reported with the same words as the update action's
+	// "Changes apply after reboot." toast.
+	for _, res := range results {
+		if res.PendingReboot {
+			return Status{
+				Subtitle:      fmt.Sprintf("%s — changes apply after reboot", name),
+				PendingReboot: true,
+			}, true
+		}
+	}
+
+	return Status{Subtitle: subtitleText(name, results, updates)}, true
 }
 
 func subtitleText(name string, results, updates []updex.CheckResult) string {
@@ -148,6 +187,66 @@ func commonVersion(results []updex.CheckResult) (string, bool) {
 		}
 	}
 	return version, true
+}
+
+// Summary is the whole check turned into rows: the derived status of every
+// feature the check answered for, plus the two feature counts the group
+// description needs.
+type Summary struct {
+	// Rows holds one Status per feature of the check, keyed by feature name.
+	// A feature with no result from the check is absent, and so is a check
+	// entry for a feature that is not one of the rows' names.
+	Rows map[string]Status
+	// Updates is the number of features in Rows with HasUpdate, not the number
+	// of updatable components.
+	Updates int
+	// Waiting is the number of features in Rows with WaitingForImage, again a
+	// feature count. A feature that waits is never also counted in Updates,
+	// and a feature that only pends a reboot is counted in neither.
+	Waiting int
+}
+
+// Summarize derives the rows of names from the check results, and counts them.
+//
+// names are the features the page has rows for; a check entry for any other
+// feature is ignored and is neither in Rows nor counted. A feature whose check
+// reported no components is absent from Rows, so the caller can tell it apart
+// from a feature whose check said something.
+//
+// The caller must give such a name its base subtitle back: a name that is not
+// in Rows keeps whatever the row already shows otherwise, and an earlier
+// check's "update available" would stay after the update that removed it.
+//
+// Both counts come from Rows, so a feature is counted once however many check
+// entries name it (the last entry wins, as the row's subtitle does).
+func Summarize(names []string, checks []updex.FeatureCheck) Summary {
+	known := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		known[name] = struct{}{}
+	}
+
+	summary := Summary{Rows: make(map[string]Status, len(names))}
+	for _, check := range checks {
+		if _, ok := known[check.Feature]; !ok {
+			continue
+		}
+		status, ok := Feature(check.Feature, check.Results)
+		if !ok {
+			continue
+		}
+		summary.Rows[check.Feature] = status
+	}
+
+	for _, status := range summary.Rows {
+		if status.HasUpdate {
+			summary.Updates++
+		}
+		if status.WaitingForImage {
+			summary.Waiting++
+		}
+	}
+
+	return summary
 }
 
 // GroupDescription is the features group's description after a check that

@@ -58,6 +58,11 @@ are listed in [org-adrs.md](org-adrs.md).
 - [adr/0010-docs-are-a-ci-gated-artifact.md](adr/0010-docs-are-a-ci-gated-artifact.md)
   — documentation splits into current-state vs historical and is enforced by
   string-matching unit tests; prose is testable
+- [adr/0011-unprivileged-feature-check-compares-with-the-booted-image.md](adr/0011-unprivileged-feature-check-compares-with-the-booted-image.md)
+  — the unprivileged feature check gives updex a bootc runner that turns a
+  root-only `bootc status` failure into the existing os-release fallback, so a
+  row can show that it waits for a newer OS image; the root helper keeps the
+  real bootc and fails closed
 
 ### Design
 

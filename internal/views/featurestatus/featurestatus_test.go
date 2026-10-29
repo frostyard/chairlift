@@ -14,7 +14,7 @@ import (
 // differing between cases.
 const featureName = "f"
 
-// branch identifies which of the six subtitle branches a case exercises. The
+// branch identifies which of the seven subtitle branches a case exercises. The
 // distinctness assertion compares one representative case per branch.
 type branch string
 
@@ -26,6 +26,7 @@ const (
 	branchCommon       branch = "no updates, agreed version"
 	branchMixed        branch = "no updates, no agreed version"
 	branchWaiting      branch = "at least one component needs a newer OS image"
+	branchPending      branch = "no update, no wait, a component pends a reboot"
 )
 
 // needsImageNew and needsImageOld are updex's own NeedsImage phrases: the
@@ -45,6 +46,10 @@ type caseSpec struct {
 	// cases set it; every other case leaves it false, so the table asserts that
 	// no ordinary outcome is ever reported as waiting.
 	wantWaiting bool
+	// wantPending is the expected Status.PendingReboot. Only the pending-reboot
+	// cases set it, so the table asserts that no other outcome is ever reported
+	// as pending a reboot.
+	wantPending bool
 }
 
 func res(component, current, newest string, update bool) updex.CheckResult {
@@ -62,6 +67,17 @@ func res(component, current, newest string, update bool) updex.CheckResult {
 func resWaiting(component, current, newest string, update bool, needsImage string) updex.CheckResult {
 	result := res(component, current, newest, update)
 	result.NeedsImage = needsImage
+	return result
+}
+
+// resPending builds a check result whose new version is linked and becomes
+// active at the next boot. The update flag is independent of PendingReboot on
+// purpose: updex can report both at once, and the update still wins.
+func resPending(component, current, newest string, update bool) updex.CheckResult {
+	result := res(component, current, newest, update)
+	result.RunningVersion = "1.0.0"
+	result.LinkedVersion = "2.0.0"
+	result.PendingReboot = true
 	return result
 }
 
@@ -178,7 +194,7 @@ func tableCases() []caseSpec {
 		},
 	}
 
-	return append(cases, waitingCases()...)
+	return append(append(cases, waitingCases()...), pendingCases()...)
 }
 
 // waitingCases is one entry per shape of the waiting branch: a waiting
@@ -260,6 +276,83 @@ func waitingCases() []caseSpec {
 	}
 }
 
+// pendingCases is one entry per shape of the pending-reboot branch: one
+// pending component, several, a pending component beside an update (the update
+// wins), a pending component beside a waiting one (the wait wins), and the only
+// pending component in the middle or last after ordinary components (detection
+// must not look at index 0 only).
+func pendingCases() []caseSpec {
+	return []caseSpec{
+		{
+			name: "one component pends a reboot",
+			results: []updex.CheckResult{
+				resPending("comp", "1.0", "2.0", false),
+			},
+			want:        "f — changes apply after reboot",
+			wantOK:      true,
+			branch:      branchPending,
+			wantPending: true,
+		},
+		{
+			name: "several components pend a reboot",
+			results: []updex.CheckResult{
+				resPending("comp", "1.0", "2.0", false),
+				res("other", "1.0", "1.0", false),
+				resPending("third", "3.0", "4.0", false),
+			},
+			want:        "f — changes apply after reboot",
+			wantOK:      true,
+			branch:      branchPending,
+			wantPending: true,
+		},
+		{
+			name: "a pending component beside an update still reads as the update",
+			results: []updex.CheckResult{
+				resPending("comp", "1.0", "2.0", true),
+				res("other", "1.0", "1.0", false),
+			},
+			want:   "f — update available for comp (v1.0 → v2.0)",
+			wantOK: true,
+			branch: branchOneVersioned,
+		},
+		{
+			name: "a pending component beside a waiting one reads as the wait",
+			results: []updex.CheckResult{
+				resPending("comp", "1.0", "2.0", false),
+				resWaiting("other", "1.0", "1.0", false, needsImageNew),
+			},
+			want:        "f — waiting for a newer OS image (other: needs image >= 20270101000000)",
+			wantOK:      true,
+			branch:      branchWaiting,
+			wantWaiting: true,
+		},
+		{
+			name: "the only pending component is in the middle",
+			results: []updex.CheckResult{
+				res("other", "1.0", "1.0", false),
+				resPending("comp", "1.0", "2.0", false),
+				res("third", "1.0", "1.0", false),
+			},
+			want:        "f — changes apply after reboot",
+			wantOK:      true,
+			branch:      branchPending,
+			wantPending: true,
+		},
+		{
+			name: "the only pending component is last",
+			results: []updex.CheckResult{
+				res("other", "1.0", "1.0", false),
+				res("third", "2.0", "2.0", false),
+				resPending("comp", "1.0", "2.0", false),
+			},
+			want:        "f — changes apply after reboot",
+			wantOK:      true,
+			branch:      branchPending,
+			wantPending: true,
+		},
+	}
+}
+
 func TestFeatureTable(t *testing.T) {
 	for _, tc := range tableCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -280,6 +373,11 @@ func TestFeatureTable(t *testing.T) {
 			if got.WaitingForImage != tc.wantWaiting {
 				t.Errorf("Feature(%q, %#v).WaitingForImage = %t, want %t",
 					featureName, tc.results, got.WaitingForImage, tc.wantWaiting)
+			}
+
+			if got.PendingReboot != tc.wantPending {
+				t.Errorf("Feature(%q, %#v).PendingReboot = %t, want %t",
+					featureName, tc.results, got.PendingReboot, tc.wantPending)
 			}
 
 			// HasUpdate is an OR across EVERY element, not a look at index 0,
@@ -361,6 +459,35 @@ func TestFeatureWaitingForImageTable(t *testing.T) {
 	}
 }
 
+// TestFeaturePendingRebootIsNeitherAnUpdateNorAWait asserts the whole pending
+// Status, and that its words are the update toast's own words.
+func TestFeaturePendingRebootIsNeitherAnUpdateNorAWait(t *testing.T) {
+	results := []updex.CheckResult{
+		res("other", "1.0", "1.0", false),
+		resPending("comp", "1.0", "2.0", false),
+	}
+
+	got, ok := Feature(featureName, results)
+	if !ok {
+		t.Fatalf("Feature(%q, %#v) ok = false, want true", featureName, results)
+	}
+	if !got.PendingReboot {
+		t.Errorf("Feature(%q, %#v).PendingReboot = false, want true", featureName, results)
+	}
+	if got.HasUpdate {
+		t.Errorf("Feature(%q, %#v).HasUpdate = true, want false: a pending reboot is not an update",
+			featureName, results)
+	}
+	if got.WaitingForImage {
+		t.Errorf("Feature(%q, %#v).WaitingForImage = true, want false: a pending reboot is not a wait",
+			featureName, results)
+	}
+	const want = "f — changes apply after reboot"
+	if got.Subtitle != want {
+		t.Errorf("Feature(%q, %#v).Subtitle = %q, want %q", featureName, results, got.Subtitle, want)
+	}
+}
+
 func TestFeatureWithZeroComponentsIsSkipped(t *testing.T) {
 	for _, results := range [][]updex.CheckResult{nil, {}} {
 		// The caller contract is "leave the row alone"; the Status is not
@@ -425,8 +552,8 @@ func TestSubtitleBranchesArePairwiseDistinct(t *testing.T) {
 		seen[tc.branch] = got.Subtitle
 	}
 
-	if len(seen) != 6 {
-		t.Fatalf("covered %d subtitle branches, want all 6", len(seen))
+	if len(seen) != 7 {
+		t.Fatalf("covered %d subtitle branches, want all 7", len(seen))
 	}
 
 	for a, subA := range seen {
@@ -709,5 +836,200 @@ func TestWaitingTail(t *testing.T) {
 		if got := waitingTail(n); got != want {
 			t.Errorf("waitingTail(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+// check builds one check entry: a feature name and its components' results.
+func check(name string, results ...updex.CheckResult) updex.FeatureCheck {
+	return updex.FeatureCheck{Feature: name, Results: results}
+}
+
+// summarizeCases is one entry per shape Summarize must decide: which names it
+// answers for, which check entries it ignores, and how it counts. The entries
+// that must be counted are placed first, in the middle and last, and one case
+// has the only countable entries after an unknown and an empty one, so a
+// first-element-only implementation fails.
+func summarizeCases() []struct {
+	name        string
+	names       []string
+	checks      []updex.FeatureCheck
+	wantUpdates int
+	wantWaiting int
+	// wantRows maps every expected row name to whether that row must report a
+	// pending reboot. len(wantRows) is the expected number of rows.
+	wantRows map[string]bool
+} {
+	return []struct {
+		name        string
+		names       []string
+		checks      []updex.FeatureCheck
+		wantUpdates int
+		wantWaiting int
+		wantRows    map[string]bool
+	}{
+		{
+			name:  "a check entry for a name the page has no row for is ignored",
+			names: []string{"a"},
+			checks: []updex.FeatureCheck{
+				check("a", res("comp", "1.0", "2.0", true)),
+				check("b", res("comp", "1.0", "2.0", true)),
+			},
+			wantUpdates: 1,
+			wantRows:    map[string]bool{"a": false},
+		},
+		{
+			name:  "a feature whose check reported no components is not a row",
+			names: []string{"a", "b"},
+			checks: []updex.FeatureCheck{
+				check("a", res("comp", "1.0", "2.0", true)),
+				check("b"),
+			},
+			wantUpdates: 1,
+			wantRows:    map[string]bool{"a": false},
+		},
+		{
+			name:  "a feature with no check entry at all is not a row",
+			names: []string{"a", "b", "c"},
+			checks: []updex.FeatureCheck{
+				check("a", res("comp", "1.0", "1.0", false)),
+			},
+			wantRows: map[string]bool{"a": false},
+		},
+		{
+			name:  "updates, waits and pending reboots are counted apart",
+			names: []string{"a", "b", "c"},
+			checks: []updex.FeatureCheck{
+				check("a", res("comp", "1.0", "2.0", true)),
+				check("b", resWaiting("comp", "1.0", "2.0", true, needsImageNew)),
+				check("c", resPending("comp", "1.0", "2.0", false)),
+			},
+			wantUpdates: 1,
+			wantWaiting: 1,
+			wantRows:    map[string]bool{"a": false, "b": false, "c": true},
+		},
+		{
+			name:  "a duplicate entry for one feature is counted once, last entry wins",
+			names: []string{"a"},
+			checks: []updex.FeatureCheck{
+				check("a", res("comp", "1.0", "2.0", true)),
+				check("a", res("comp", "2.0", "2.0", false)),
+			},
+			wantRows: map[string]bool{"a": false},
+		},
+		{
+			name:  "a duplicate entry for one waiting feature is counted once",
+			names: []string{"a"},
+			checks: []updex.FeatureCheck{
+				check("a", resWaiting("comp", "1.0", "2.0", true, needsImageNew)),
+				check("a", resWaiting("comp", "1.0", "2.0", true, needsImageNew)),
+			},
+			wantWaiting: 1,
+			wantRows:    map[string]bool{"a": false},
+		},
+		{
+			name:  "the countable entries are not the first ones",
+			names: []string{"a", "b", "c", "d"},
+			checks: []updex.FeatureCheck{
+				check("zzz", res("comp", "1.0", "2.0", true)),
+				check("a"),
+				check("b", res("comp", "1.0", "1.0", false)),
+				check("c", res("comp", "1.0", "2.0", true)),
+				check("d", resWaiting("comp", "1.0", "2.0", true, needsImageNew)),
+			},
+			wantUpdates: 1,
+			wantWaiting: 1,
+			wantRows:    map[string]bool{"b": false, "c": false, "d": false},
+		},
+		{
+			name:     "no check entries at all",
+			names:    []string{"a"},
+			checks:   nil,
+			wantRows: map[string]bool{},
+		},
+	}
+}
+
+func TestSummarize(t *testing.T) {
+	for _, tc := range summarizeCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Summarize(tc.names, tc.checks)
+
+			if len(got.Rows) != len(tc.wantRows) {
+				t.Fatalf("Summarize rows = %v, want %d rows (%v)", got.Rows, len(tc.wantRows), tc.wantRows)
+			}
+			for name, wantPending := range tc.wantRows {
+				status, ok := got.Rows[name]
+				if !ok {
+					t.Errorf("Summarize rows have no %q, want a row for every feature the check answered for", name)
+					continue
+				}
+				if status.PendingReboot != wantPending {
+					t.Errorf("row %q PendingReboot = %t, want %t", name, status.PendingReboot, wantPending)
+				}
+				if status.Subtitle == "" {
+					t.Errorf("row %q has an empty subtitle", name)
+				}
+			}
+			for _, name := range tc.names {
+				if _, want := tc.wantRows[name]; want {
+					continue
+				}
+				if _, ok := got.Rows[name]; ok {
+					t.Errorf("rows contain %q, want no row for a feature the check did not answer for", name)
+				}
+			}
+
+			if got.Updates != tc.wantUpdates {
+				t.Errorf("Summarize Updates = %d, want %d", got.Updates, tc.wantUpdates)
+			}
+			if got.Waiting != tc.wantWaiting {
+				t.Errorf("Summarize Waiting = %d, want %d", got.Waiting, tc.wantWaiting)
+			}
+		})
+	}
+}
+
+// TestSummarizeCountsEveryRowNotOnlyTheFirst asserts the counts iterate all of
+// Rows: a single first-element implementation would report one update and one
+// waiting feature here instead of two of each.
+func TestSummarizeCountsEveryRowNotOnlyTheFirst(t *testing.T) {
+	got := Summarize(
+		[]string{"a", "b", "c", "d"},
+		[]updex.FeatureCheck{
+			check("a", res("comp", "1.0", "2.0", true)),
+			check("b", res("comp", "1.0", "2.0", true)),
+			check("c", resWaiting("comp", "1.0", "2.0", true, needsImageNew)),
+			check("d", resWaiting("comp", "1.0", "2.0", true, needsImageNew)),
+		},
+	)
+
+	if got.Updates != 2 {
+		t.Errorf("Summarize Updates = %d, want 2", got.Updates)
+	}
+	if got.Waiting != 2 {
+		t.Errorf("Summarize Waiting = %d, want 2", got.Waiting)
+	}
+	if len(got.Rows) != 4 {
+		t.Errorf("Summarize rows = %d, want 4", len(got.Rows))
+	}
+}
+
+// TestSummarizePendingRebootIsCountedInNeitherCount follows the group
+// description: a pending reboot is a real state, but it is not an update and
+// not a wait, so it changes no number.
+func TestSummarizePendingRebootIsCountedInNeitherCount(t *testing.T) {
+	got := Summarize(
+		[]string{"a"},
+		[]updex.FeatureCheck{check("a", resPending("comp", "1.0", "2.0", false))},
+	)
+
+	if !got.Rows["a"].PendingReboot {
+		t.Fatalf("Summarize row a PendingReboot = false, want true")
+	}
+	if got.Updates != 0 {
+		t.Errorf("Summarize Updates = %d, want 0: a pending reboot is not an update", got.Updates)
+	}
+	if got.Waiting != 0 {
+		t.Errorf("Summarize Waiting = %d, want 0: a pending reboot is not a wait", got.Waiting)
 	}
 }

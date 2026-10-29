@@ -103,6 +103,7 @@ func (uh *UserHome) loadFeatures() {
 
 		uh.featuresGroup.SetDescription(pageview.FeatureGroupDescription(len(features)))
 		uh.featureRows = make(map[string]*adw.ActionRow)
+		uh.featureBaseSubtitles = make(map[string]string, len(features))
 
 		for _, feat := range features {
 			presentation := pageview.Feature(feat.Name, feat.Description)
@@ -126,21 +127,30 @@ func (uh *UserHome) loadFeatures() {
 			row.SetActivatableWidget(&toggle.Widget)
 			uh.featuresGroup.Add(&row.Widget)
 			uh.featureRows[feat.Name] = row
+			uh.featureBaseSubtitles[feat.Name] = presentation.Subtitle
 		}
 
-		// Check for updates after rendering the feature list
-		go uh.checkFeatureUpdates(len(features))
+		// Check for updates after rendering the feature list.
+		generation := uh.featureCheck.Begin()
+		go uh.checkFeatureUpdates(generation, len(features))
 	})
 }
 
-// checkFeatureUpdates checks enabled features for available updates
-func (uh *UserHome) checkFeatureUpdates(totalFeatures int) {
+// checkFeatureUpdates checks enabled features for available updates and applies
+// the result to the rows of the generation it belongs to. generation comes from
+// uh.featureCheck, so a check that a newer one has already replaced publishes
+// nothing.
+func (uh *UserHome) checkFeatureUpdates(generation uint64, totalFeatures int) {
 	ctx, cancel := updex.DefaultContext()
 	defer cancel()
 
 	checks, err := updex.CheckFeatures(ctx)
 
 	sgtk.RunOnMainThread(func() {
+		if !uh.featureCheck.IsCurrent(generation) {
+			return
+		}
+
 		if err != nil {
 			log.Printf("Feature update check failed: %v", err)
 			if uh.featuresGroup != nil {
@@ -149,32 +159,41 @@ func (uh *UserHome) checkFeatureUpdates(totalFeatures int) {
 			return
 		}
 
-		updateCount := 0
-		waitingCount := 0
-		for _, check := range checks {
-			row, ok := uh.featureRows[check.Feature]
-			if !ok {
+		names := make([]string, 0, len(uh.featureRows))
+		for name := range uh.featureRows {
+			names = append(names, name)
+		}
+
+		summary := featurestatus.Summarize(names, checks)
+		for name, row := range uh.featureRows {
+			// A feature the check did not answer for gets its base subtitle
+			// back: the earlier check's text, or "update available" before the
+			// update, would otherwise stay after an update changed the state.
+			if status, ok := summary.Rows[name]; ok {
+				row.SetSubtitle(status.Subtitle)
 				continue
 			}
-
-			status, ok := featurestatus.Feature(check.Feature, check.Results)
-			if !ok {
-				continue
-			}
-
-			row.SetSubtitle(status.Subtitle)
-			if status.HasUpdate {
-				updateCount++
-			}
-			if status.WaitingForImage {
-				waitingCount++
-			}
+			row.SetSubtitle(uh.featureBaseSubtitles[name])
 		}
 
 		if uh.featuresGroup != nil {
-			uh.featuresGroup.SetDescription(featurestatus.GroupDescription(totalFeatures, updateCount, waitingCount))
+			uh.featuresGroup.SetDescription(featurestatus.GroupDescription(totalFeatures, summary.Updates, summary.Waiting))
 		}
 	})
+}
+
+// recheckFeatureUpdates runs the feature update check again on a fresh
+// generation. It is the reason a row stops reading "update available" after an
+// update: the check that first ran at startup says that before any image is
+// staged, and only a new check reads the staged, not yet linked image as
+// waiting for a newer OS image. Main thread only, because it reads the row map.
+func (uh *UserHome) recheckFeatureUpdates() {
+	if uh.featuresGroup == nil || uh.featureRows == nil {
+		return
+	}
+
+	generation := uh.featureCheck.Begin()
+	go uh.checkFeatureUpdates(generation, len(uh.featureRows))
 }
 
 // onFeatureToggled handles enabling/disabling a feature
@@ -232,9 +251,16 @@ func (uh *UserHome) onUpdateFeaturesClicked(button *gtk.Button) {
 
 			if decision.Persistent {
 				uh.toastAdder.ShowErrorToast(decision.Toast)
-				return
+			} else {
+				uh.toastAdder.ShowToast(decision.Toast)
 			}
-			uh.toastAdder.ShowToast(decision.Toast)
+
+			// The rows still show the state of the startup check, which read
+			// "update available" because nothing was staged yet. Check again so
+			// they show what the update did.
+			if decision.Recheck {
+				uh.recheckFeatureUpdates()
+			}
 		})
 	}()
 }

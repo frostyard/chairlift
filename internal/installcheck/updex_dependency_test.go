@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	updexModulePath = "github.com/frostyard/updex/v2"
-	updexSDKPath    = updexModulePath + "/updex"
+	updexModulePath      = "github.com/frostyard/updex/v2"
+	updexSDKPath         = updexModulePath + "/updex"
+	updexImageCompatPath = updexModulePath + "/imagecompat"
 )
 
 func TestUpdexDependencyUsesCorrectedV2Module(t *testing.T) {
@@ -26,8 +27,14 @@ func TestUpdexDependencyUsesCorrectedV2Module(t *testing.T) {
 
 	imports := activeUpdexImports(t)
 	wantImports := map[string]string{
-		filepath.Join("cmd", "chairlift-updex-helper", "main.go"):       updexSDKPath,
-		filepath.Join("internal", "updex", "updex.go"):                  updexSDKPath,
+		filepath.Join("cmd", "chairlift-updex-helper", "main.go"): updexSDKPath,
+		filepath.Join("internal", "updex", "updex.go"):            updexSDKPath,
+		// The read-only check client's bootc runner wraps imagecompat's own
+		// BootcRunner so an unprivileged "bootc status" failure falls back to
+		// the booted os-release image version (docs/adr/0011); the root helper
+		// is deliberately not on this list.
+		filepath.Join("internal", "updex", "bootcrunner.go"):            updexImageCompatPath,
+		filepath.Join("internal", "updex", "bootcrunner_test.go"):       updexImageCompatPath,
 		filepath.Join("internal", "updexhelper", "updexhelper.go"):      updexSDKPath,
 		filepath.Join("internal", "updexhelper", "updexhelper_test.go"): updexSDKPath,
 	}
