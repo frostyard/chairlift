@@ -150,6 +150,7 @@ func (uh *UserHome) checkFeatureUpdates(totalFeatures int) {
 		}
 
 		updateCount := 0
+		waitingCount := 0
 		for _, check := range checks {
 			row, ok := uh.featureRows[check.Feature]
 			if !ok {
@@ -165,10 +166,13 @@ func (uh *UserHome) checkFeatureUpdates(totalFeatures int) {
 			if status.HasUpdate {
 				updateCount++
 			}
+			if status.WaitingForImage {
+				waitingCount++
+			}
 		}
 
 		if uh.featuresGroup != nil {
-			uh.featuresGroup.SetDescription(featurestatus.GroupDescription(totalFeatures, updateCount))
+			uh.featuresGroup.SetDescription(featurestatus.GroupDescription(totalFeatures, updateCount, waitingCount))
 		}
 	})
 }
