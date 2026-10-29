@@ -117,7 +117,13 @@ func TestPrivilegedOperationsUseExactHelperArguments(t *testing.T) {
 		{
 			name: "update features",
 			run: func(ctx context.Context) error {
+				// The fake pkexec prints no results, so the update outcome is
+				// unreadable; the test only asserts argv.
 				_, err := UpdateFeatures(ctx)
+				var unreadable *ResultsUnreadableError
+				if errors.As(err, &unreadable) {
+					return nil
+				}
 				return err
 			},
 			want: []string{HelperPath, "update"},
@@ -219,16 +225,29 @@ func TestUpdateFeaturesResultsAndErrorClassification(t *testing.T) {
 		stderr      string
 		exit        int
 		want        []FeatureUpdate
-		wantErrType string // "", "error", "activation"
+		wantErrType string // "", "error", "activation", "unreadable"
 		wantErrText string
 	}{
 		{name: "exit 0 with results", stdout: oneFeature, want: wantOne},
 		{name: "exit 0 with empty array", stdout: "[]\n", want: []FeatureUpdate{}},
-		{name: "exit 0 with empty stdout", stdout: ""},
-		{name: "exit 0 with unparsable stdout", stdout: "not json"},
+		{
+			name:   "exit 0 with child-process text before the JSON line",
+			stdout: "Created symlink /etc/x\nsome tool output\n" + oneFeature + "\n",
+			want:   wantOne,
+		},
+		{name: "exit 0 with empty stdout", wantErrType: "unreadable", wantErrText: "no results"},
+		{name: "exit 0 with whitespace stdout", stdout: " \n\n", wantErrType: "unreadable", wantErrText: "no results"},
+		{name: "exit 0 with bad JSON", stdout: "not json", wantErrType: "unreadable", wantErrText: "cannot read update results"},
+		{name: "exit 0 with text and bad last line", stdout: oneFeature + "\ntrailing text", wantErrType: "unreadable"},
+		{name: "exit 0 with JSON null", stdout: "null\n", wantErrType: "unreadable", wantErrText: "null"},
 		{
 			name: "exit 1 with results and stderr", stdout: oneFeature, stderr: "one or more components failed", exit: 1,
 			want: wantOne, wantErrType: "error", wantErrText: "exit 1",
+		},
+		{
+			name:   "exit 3 with child-process text before the JSON line",
+			stdout: "merged 2 extensions\n" + oneFeature + "\n", stderr: "activation", exit: 3,
+			want: wantOne, wantErrType: "activation", wantErrText: "exit 3",
 		},
 		{
 			name: "exit 3 with results", stdout: oneFeature, stderr: "extensions merged, but activation did not finish", exit: 3,
@@ -262,6 +281,7 @@ func TestUpdateFeaturesResultsAndErrorClassification(t *testing.T) {
 			}
 			var plain *Error
 			var activation *ActivationIncompleteError
+			var unreadable *ResultsUnreadableError
 			switch tt.wantErrType {
 			case "":
 				if err != nil {
@@ -270,6 +290,10 @@ func TestUpdateFeaturesResultsAndErrorClassification(t *testing.T) {
 			case "error":
 				if !errors.As(err, &plain) || errors.As(err, &activation) {
 					t.Fatalf("error = %T (%v), want *Error", err, err)
+				}
+			case "unreadable":
+				if !errors.As(err, &unreadable) || errors.As(err, &plain) || errors.As(err, &activation) {
+					t.Fatalf("error = %T (%v), want *ResultsUnreadableError", err, err)
 				}
 			case "activation":
 				if !errors.As(err, &activation) || errors.As(err, &plain) {
@@ -393,5 +417,36 @@ func TestPartitionFeatureChecksPropagatesRequestFailure(t *testing.T) {
 	}
 	if len(got) != 0 || len(failures) != 0 {
 		t.Fatalf("request failure returned checks=%+v failures=%+v, want none", got, failures)
+	}
+}
+
+func TestParseUpdateResults(t *testing.T) {
+	const line = `[{"feature":"f","results":[]}]`
+	want := []FeatureUpdate{{Feature: "f", Results: []TransferUpdate{}}}
+	tests := []struct {
+		name    string
+		stdout  string
+		want    []FeatureUpdate
+		wantErr bool
+	}{
+		{name: "whole stdout", stdout: line + "\n", want: want},
+		{name: "last line after text", stdout: "text\n\nmore text\n" + line + "\n", want: want},
+		{name: "empty array", stdout: "[]", want: []FeatureUpdate{}},
+		{name: "pretty printed array", stdout: "[\n {\"feature\":\"f\",\"results\":[]}\n]\n", want: want},
+		{name: "empty", stdout: "", wantErr: true},
+		{name: "text only", stdout: "text\nmore\n", wantErr: true},
+		{name: "object, not array", stdout: `{"feature":"f"}`, wantErr: true},
+		{name: "null", stdout: "null", wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseUpdateResults(tt.stdout)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("results = %#v, want %#v", got, tt.want)
+			}
+		})
 	}
 }

@@ -225,7 +225,7 @@ Two of the nine small, puregotk-free packages under `internal/views/` (the other
   - `TapTrustDecision{MutateUI bool; Toast string}` + `TapTrust(dryRun bool, tapName string) TapTrustDecision` — gates whether `trustTap` removes the tap's row, hides the group, and refreshes outdated packages (c3)
   - `BootcStage(dryRun bool, staged bool) string` — bootc stage-button completion toast; string-only since the subtitle stays live in both modes and there is no mutation left to gate (c4)
   - `FeatureToggleDecision{Confirm bool; Toast string}` + `FeatureToggle(dryRun, enable bool, name string) FeatureToggleDecision` — gates whether `onFeatureToggled`'s switch confirms the flip or reverts it (c5)
-  - `FeatureUpdateDecision{Toast string; Persistent bool}` + `FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) FeatureUpdateDecision` — Features page "Update" button toast and whether it persists as an error toast. It reads the per-feature results because updex returns a nil error when a feature is held (see the Updex section's "Update results"). Decision table: dry-run gives the preview; an error with no results gives "Features merged, but activation did not finish. Reboot to finish." for `*updex.ActivationIncompleteError` or "Update failed: <err>" for any other error (both persistent); nil results with a nil error, the unparsable-stdout case, keep "Features updated. Changes apply after reboot."; empty results give "No enabled features to update."; only updated (and current) features keep the old text exactly; only current features give "Features are already up to date."; anything else joins, in order, "Updated: a, b.", "Waiting for a newer OS image: c (reason); ...", "Held by a rollback: e (reason).", "Failed: f (reason); ...", then "Changes apply after reboot." (when something updated and activation is complete), then the activation sentence or, when no feature failed, "Update failed: <err>"; persistent when any feature waits, is held or failed, or the error is set
+  - `FeatureUpdateDecision{Toast string; Persistent bool}` + `FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) FeatureUpdateDecision` — Features page "Update" button toast and whether it persists as an error toast. It reads the per-feature results because updex returns a nil error when a feature is held (see the Updex section's "Update results"). Decision table: dry-run gives the preview; an error with no results gives "Features merged, but activation did not finish. Reboot to finish." for `*updex.ActivationIncompleteError` or "Update failed: <err>" for any other error (both persistent); nil results with a nil error, and `*updex.ResultsUnreadableError`, give "Feature update finished, but ChairLift could not read the results. See the log for details." (persistent; the outcome is unknown, so no success claim); empty results give "No enabled features to update."; only updated (and current) features keep the old text exactly; only current features give "Features are already up to date."; anything else joins, in order, "Updated: a, b.", "Waiting for a newer OS image: c (reason); ...", "Held by a rollback: e (reason).", "Failed: f (reason); ...", then "Changes apply after reboot." (when something updated and activation is complete), then the activation sentence or, when no feature failed, "Update failed: <err>"; persistent when any feature waits, is held or failed, or the error is set
 
   The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`) select toast wording only. Where an application action also changes row controls or requests an inventory refresh, the separate tested `actionstate` decision owns that UI-side effect. The five decision-struct functions in `actionmsg` exist because their call sites have no wrapper- or `actionstate`-level gate for the *second* effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch; and the Features Update toast must read the per-feature results to tell a real update from a held one.
 
@@ -734,8 +734,9 @@ Type aliases to `github.com/frostyard/updex/v2/updex`:
 Since updex v2.1.0, `Client.UpdateFeatures` returns a nil error when the
 next-boot image gate holds a feature or a rollback record holds it. The
 transfer result then carries `NeedsImage` ("needs image >= X") or
-`NotLinked`, or `Held`, with `Installed` false. A nil error therefore does not
-mean every feature updated. updex v2.1.3 can also return an error that wraps
+`NotLinked` (with `Installed` false, nothing linked), or `Held` (the old links
+stay; `Installed` is true when the held link names a version). A nil error
+therefore does not mean every feature updated. updex v2.1.3 can also return an error that wraps
 `sysext.ErrActivationIncomplete`: the extensions merged, but activation did
 not finish, and a reboot finishes it. On a per-transfer failure updex returns
 the results and an error together.
@@ -743,10 +744,18 @@ the results and an error together.
 The helper prints the results on stdout in every one of those cases
 (`updexhelper.WriteUpdateResult`) and exits 0, 1, or 3 (see the exit-code
 contract in [overview.md](./overview.md#privileged-operations)).
-`updex.UpdateFeatures` parses stdout as a JSON array whenever it is not empty,
-on success and on failure, so it returns the results next to the error. Stdout
-that does not parse is logged: on exit 0 the result is nil results with a nil
-error; on failure it is nil results with the error. Exit code 3 gives
+The helper writes the JSON to the real stdout only: `main` sets
+`os.Stdout = os.Stderr` before the SDK runs, because the SDK's
+`sysext.DefaultRunner` sends `systemd-sysext`, `systemd-sysusers` and
+`systemd-tmpfiles` output to `os.Stdout`, which would otherwise come before the
+JSON. `updex.UpdateFeatures` parses stdout with `parseUpdateResults`: first the
+whole trimmed stdout as a JSON array, then the last non-empty line (a helper
+from an older ChairLift could have child text before its JSON). Empty stdout,
+`null`, or no decodable array is a parse error, logged. The helper error wins:
+with a non-nil helper error the parsed results (or nil) come back with it. When
+the helper exits 0 and the parse fails, the result is nil results with
+`*ResultsUnreadableError`: the outcome is unknown and must not read as success.
+Exit code 3 gives
 `*ActivationIncompleteError`; any other non-zero exit gives `*Error`
 ("command failed (exit N): stderr"), so a helper from an older ChairLift,
 which prints nothing on stdout on failure, gives the old "Update failed: ..."
@@ -779,7 +788,7 @@ explicit partial-failure state is a separate product change.
 `pkexec` on `PATH` and asserts that argv always begins with the fixed
 `HelperPath`, followed by the exact subcommand/name shape. It also covers
 missing-pkexec, non-zero/stderr, timeout, default-context, and wrapper dry-run
-outcomes. A scripted fake `pkexec` also covers `UpdateFeatures` for exit 0 with JSON, exit 1 with JSON and stderr, exit 3 with JSON, exit 1 with empty stdout (an older helper) and exit 0 with unparsable JSON; `summary_test.go` covers every `SummarizeUpdate` class and the precedence. Multi-component update aggregation remains in the pure
+outcomes. A scripted fake `pkexec` also covers `UpdateFeatures` for exit 0 with JSON, exit 1 with JSON and stderr, exit 3 with JSON, exit 1 with empty stdout (an older helper) and exit 0 with child-process text before the JSON, with bad JSON and with empty stdout (both `*ResultsUnreadableError`), and exit 3 with text before the JSON; `TestParseUpdateResults` covers the whole-stdout and last-line forms; `summary_test.go` covers every `SummarizeUpdate` class and the precedence. Multi-component update aggregation remains in the pure
 `internal/views/featurestatus` package, where every result is inspected and
 the full decision table is tested without constructing GTK widgets.
 

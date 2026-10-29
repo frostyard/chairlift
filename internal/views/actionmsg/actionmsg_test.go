@@ -777,8 +777,22 @@ func TestFeatureUpdate(t *testing.T) {
 			wantPersistent: true,
 		},
 		{
-			name:      "nil results and nil error keep the old text",
-			wantToast: "Features updated. Changes apply after reboot.",
+			name:           "nil results and nil error do not claim success",
+			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
+			wantPersistent: true,
+		},
+		{
+			name:           "unreadable results error",
+			err:            &updex.ResultsUnreadableError{Message: "cannot read update results: boom"},
+			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
+			wantPersistent: true,
+		},
+		{
+			name:           "wrapped unreadable results error with empty results",
+			results:        []updex.FeatureUpdate{},
+			err:            fmt.Errorf("wrapped: %w", &updex.ResultsUnreadableError{Message: "x"}),
+			wantToast:      "Feature update finished, but ChairLift could not read the results. See the log for details.",
+			wantPersistent: true,
 		},
 		{
 			name:      "empty results report no features",

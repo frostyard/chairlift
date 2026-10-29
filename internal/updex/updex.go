@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
@@ -72,6 +73,17 @@ type ActivationIncompleteError struct {
 }
 
 func (e *ActivationIncompleteError) Error() string {
+	return e.Message
+}
+
+// ResultsUnreadableError is returned by UpdateFeatures when the helper exited
+// 0 but its stdout held no readable results array. The update outcome is
+// unknown: the caller must not report success.
+type ResultsUnreadableError struct {
+	Message string
+}
+
+func (e *ResultsUnreadableError) Error() string {
 	return e.Message
 }
 
@@ -215,31 +227,64 @@ func DisableFeature(ctx context.Context, name string) error {
 // a *ActivationIncompleteError (exit 3) means the extensions merged but
 // activation did not finish; any other exit gives *Error. A helper from an
 // older ChairLift prints nothing on failure, so the results are nil then.
-// Unparsable stdout is logged and treated as no results. Under dry-run no
-// helper runs, and the results and the error are both nil.
+// When the helper exits 0 but stdout has no readable results array, the
+// result is nil and a *ResultsUnreadableError (see parseUpdateResults for the
+// accepted forms). Under dry-run no helper runs, and the results and the
+// error are both nil.
 func UpdateFeatures(ctx context.Context) ([]FeatureUpdate, error) {
 	return updateFeatures(ctx, pkexecCommand)
 }
 
 // updateFeatures is UpdateFeatures with the pkexec binary as a test seam.
+//
+// The helper error always wins: with a non-nil error it is returned with
+// whatever results parsed (or nil). When the helper exits 0 and stdout holds
+// no readable results array, the update outcome is unknown, so the result is
+// nil and a *ResultsUnreadableError, never a success.
 func updateFeatures(ctx context.Context, pkexecPath string) ([]FeatureUpdate, error) {
 	stdout, _, err := runHelper(ctx, pkexecPath, updexhelper.CommandUpdate)
-	return parseUpdateResults(stdout), err
+	if dryRun {
+		return nil, err
+	}
+	results, parseErr := parseUpdateResults(stdout)
+	if err != nil {
+		if parseErr != nil {
+			log.Printf("updex helper: cannot read update results of a failed run: %v", parseErr)
+		}
+		return results, err
+	}
+	if parseErr != nil {
+		log.Printf("updex helper: cannot read update results: %v", parseErr)
+		return nil, &ResultsUnreadableError{Message: fmt.Sprintf("cannot read update results: %v", parseErr)}
+	}
+	return results, nil
 }
 
 // parseUpdateResults decodes the helper's JSON array of feature results. It
-// returns nil for empty stdout and, after logging, for stdout that is not a
-// JSON array.
-func parseUpdateResults(stdout string) []FeatureUpdate {
-	if strings.TrimSpace(stdout) == "" {
-		return nil
+// decodes the whole trimmed stdout first. When that fails it tries the last
+// non-empty line: a helper from an older ChairLift could have child-process
+// text before its JSON, which json.Encoder ends with a newline. Empty stdout
+// and stdout without a decodable array give an error and nil results.
+func parseUpdateResults(stdout string) ([]FeatureUpdate, error) {
+	trimmed := strings.TrimSpace(stdout)
+	if trimmed == "" {
+		return nil, errors.New("helper printed no results")
 	}
 	var results []FeatureUpdate
-	if err := json.Unmarshal([]byte(stdout), &results); err != nil {
-		log.Printf("updex helper: cannot parse update results: %v", err)
-		return nil
+	err := json.Unmarshal([]byte(trimmed), &results)
+	if err == nil && results != nil {
+		return results, nil
 	}
-	return results
+	if err == nil {
+		err = errors.New("helper printed null instead of a results array")
+	}
+	if idx := strings.LastIndexByte(trimmed, '\n'); idx >= 0 {
+		var last []FeatureUpdate
+		if lastErr := json.Unmarshal([]byte(strings.TrimSpace(trimmed[idx+1:])), &last); lastErr == nil && last != nil {
+			return last, nil
+		}
+	}
+	return nil, err
 }
 
 // runHelper executes HelperPath via pkexec for privileged operations. pkexecPath

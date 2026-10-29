@@ -15,7 +15,18 @@ import (
 
 const defaultTimeout = 5 * time.Minute
 
+// resultOut is the real stdout. main keeps it for the JSON result and
+// points os.Stdout at stderr, so nothing else can write to the result stream.
+var resultOut = os.Stdout
+
 func main() {
+	// The updex SDK runs systemd-sysext, systemd-sysusers and systemd-tmpfiles
+	// with cmd.Stdout = os.Stdout (sysext.DefaultRunner.exec), read when the SDK
+	// builds the command. Their text would come before the JSON result and make
+	// stdout unparsable for the GUI. Redirect os.Stdout to stderr before the SDK
+	// runs; only the JSON result goes to resultOut.
+	os.Stdout = os.Stderr
+
 	invocation, err := updexhelper.ParseInvocation(os.Args[1:])
 	if err != nil {
 		fatal(err.Error())
@@ -35,7 +46,7 @@ func main() {
 		outputJSON(result, err)
 	case updexhelper.CommandUpdate:
 		results, err := client.UpdateFeatures(ctx, updexhelper.UpdateOptions(invocation.DryRun))
-		if err := updexhelper.WriteUpdateResult(os.Stdout, results, err); err != nil {
+		if err := updexhelper.WriteUpdateResult(resultOut, results, err); err != nil {
 			// Results, when any, are already on stdout. The exit code tells
 			// the GUI which failure this is (see updexhelper.ExitCode).
 			fmt.Fprintln(os.Stderr, err.Error())
@@ -45,7 +56,7 @@ func main() {
 }
 
 func outputJSON(v any, err error) {
-	if err := updexhelper.WriteResult(os.Stdout, v, err); err != nil {
+	if err := updexhelper.WriteResult(resultOut, v, err); err != nil {
 		fatal(err.Error())
 	}
 }

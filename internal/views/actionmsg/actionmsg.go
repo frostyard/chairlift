@@ -347,6 +347,7 @@ const (
 	featureUpdatedText    = "Features updated. Changes apply after reboot."
 	featureCurrentText    = "Features are already up to date."
 	featureNoneText       = "No enabled features to update."
+	featureUnreadableText = "Feature update finished, but ChairLift could not read the results. See the log for details."
 	featureRebootText     = "Changes apply after reboot."
 	featureActivationText = "Extensions merged, but activation did not finish. Reboot to finish."
 )
@@ -363,9 +364,12 @@ const (
 //	dryRun                          preview text, not persistent
 //	err, no results                 *ActivationIncompleteError: "Features merged, but
 //	                                activation did not finish. Reboot to finish.";
-//	                                other: "Update failed: <err>"; both persistent
-//	nil results, nil err            old "Features updated..." text (unparsable or
-//	                                empty stdout from a successful helper)
+//	                                *ResultsUnreadableError: "Feature update finished,
+//	                                but ChairLift could not read the results. See the
+//	                                log for details."; other: "Update failed: <err>";
+//	                                all persistent
+//	nil results, nil err            the same unreadable text, persistent: the outcome
+//	                                is unknown, so it must not claim success
 //	empty results, nil err          "No enabled features to update."
 //	only Updated/Current, nil err   old "Features updated..." text, exactly
 //	only Current, nil err           "Features are already up to date."
@@ -384,7 +388,12 @@ func FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) Featur
 	var activation *updex.ActivationIncompleteError
 	activationIncomplete := errors.As(err, &activation)
 
+	var unreadable *updex.ResultsUnreadableError
+
 	if err != nil && len(results) == 0 {
+		if errors.As(err, &unreadable) {
+			return FeatureUpdateDecision{Toast: featureUnreadableText, Persistent: true}
+		}
 		if activationIncomplete {
 			return FeatureUpdateDecision{
 				Toast:      "Features merged, but activation did not finish. Reboot to finish.",
@@ -394,7 +403,7 @@ func FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) Featur
 		return FeatureUpdateDecision{Toast: fmt.Sprintf("Update failed: %v", err), Persistent: true}
 	}
 	if results == nil {
-		return FeatureUpdateDecision{Toast: featureUpdatedText}
+		return FeatureUpdateDecision{Toast: featureUnreadableText, Persistent: true}
 	}
 	if len(results) == 0 {
 		return FeatureUpdateDecision{Toast: featureNoneText}

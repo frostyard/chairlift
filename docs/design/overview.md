@@ -1112,6 +1112,22 @@ treats every non-zero exit as failure, which stays safe for code 3; a newer
 GUI with an older helper sees exit 1 with empty stdout and shows the plain
 "Update failed: ..." toast.
 
+The helper keeps stdout for the JSON result alone. The updex SDK runs
+`systemd-sysext`, `systemd-sysusers` and `systemd-tmpfiles` with
+`cmd.Stdout = os.Stdout`, and their text would come before the JSON. So
+`main` keeps the real stdout for the result (all three commands write to it)
+and sets `os.Stdout = os.Stderr` before the SDK runs: child-process output goes
+to stderr. The GUI still reads defensively, for helpers from older ChairLift
+versions: `updex.UpdateFeatures` decodes the whole trimmed stdout as a JSON
+array, then falls back to the last non-empty line (the JSON ends with a
+newline). When the helper exits 0 and no array can be read (empty stdout, bad
+JSON, `null`), the outcome is unknown: the result is nil results with
+`*updex.ResultsUnreadableError`, logged, and the Features toast says "Feature
+update finished, but ChairLift could not read the results. See the log for
+details." as a persistent error toast. It never claims success. When the helper
+exits non-zero, the helper error wins (`*ActivationIncompleteError` or
+`*Error`) and any results that did parse come with it.
+
 Separately, `polkitd` reads application policies from the fixed directory
 `/usr/share/polkit-1/actions` — not `$XDG_DATA_DIRS`, not any
 `$PREFIX`-derived path — so the Makefile's `install`/`uninstall` targets
