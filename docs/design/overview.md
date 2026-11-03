@@ -1084,22 +1084,32 @@ device needs a restart, a shutdown, or nothing, and that ChairLift will not
 restart the computer itself. The install response is `adw.ResponseDestructiveValue`,
 and closing the dialog is the `cancel` response, so the page gate is released.
 
-On confirm the handler calls `fwupd.InstallAndVerify`, which installs and then
-asks fwupd for the device state again: `fwupdmgr update` can exit 0 without
-flashing a device, so the exit status alone cannot be trusted.
-`fwupd.VerifyInstall` classifies that list as `InstallVerified` (the device
-left the list, or now offers a different version), `InstallNotApplied` (the same
-release is still offered) or `InstallUnverified` (the query failed).
+On confirm the handler calls `fwupd.InstallAndVerify`. `fwupdmgr update` can
+exit 0 without flashing a device, and neither a missing update offer nor a
+different offered version proves a flash, so the install is followed by
+`fwupdmgr get-devices --json` — the device's own report. `fwupd.VerifyInstall`
+classifies it, first match wins: a failed state query is `InstallUnverified`
+with its error text; a device that is not listed is `InstallUnverified` because
+it can be restarting; `UpdateState` of `needs-reboot` or `pending` is
+`InstallStaged`; the new version is `InstallFlashed`; `UpdateState` of `failed`
+or `failed-transient` is `InstallNotApplied`; the old version is
+`InstallNotApplied`; anything else is `InstallUnverified` and names the version
+the device reports. `InstallUnverified` is the zero value of `InstallResult`, so
+an unknown outcome cannot read as a success. The `get-updates` list is read
+afterwards only to rebuild the rows.
+
 `actionmsg.FirmwareInstall` turns the report into one decision:
 `decision.PublishList` publishes `report.Updates` as the new list,
-`decision.RestoreControl` restores the Install button, and `decision.IsError`
-selects the error toast. The view removes no row by identity and never
-decrements the badge: a verified list is published whole, so a device that still
-has an update stays visible and the badge is the new installable count. Taking a
-fresh `firmwareRefresh` generation before publishing makes any load still in
-flight stale. The page gate resets last, in every case. Every call is
-unprivileged — fwupd's own PolicyKit actions authorize the daemon — which is
-decision record
+`decision.RestoreControl` restores the Install button, `decision.IsError`
+selects the error toast, and `decision.CompletedLabel` records a finished
+install (`Installed` or `Restart required`) on the old button when the list
+could not be read, which then also shows the list error in the subtitle. The
+view removes no row by identity and never decrements the badge: the published
+list is the whole list, so a device that still has an update stays visible and
+the badge is the new installable count. Taking a fresh `firmwareRefresh`
+generation before publishing makes any load still in flight stale. The page gate
+resets last, in every case. Every call is unprivileged — fwupd's own PolicyKit
+actions authorize the daemon — which is decision record
 [ADR-0012](../adr/0012-firmware-updates-use-fwupds-own-polkit.md).
 
 ### Update badge tracking

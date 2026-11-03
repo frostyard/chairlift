@@ -184,28 +184,46 @@ type FirmwareInstallDecision struct {
 	// RestoreControl is true when the row's Install button becomes clickable
 	// again, because the device is still updatable or the outcome is unknown.
 	RestoreControl bool
-	// PublishList is true when the verification query returned an
-	// authoritative device list — the install was verified, or fwupd reported
-	// that it did not apply the update and the devices must stay reachable.
-	// The caller publishes report.Updates; that list is the refresh.
+	// PublishList is true when the update-list query returned an authoritative
+	// device list. The caller publishes report.Updates; that list is the
+	// refresh. It is set for every live outcome whose list could be read,
+	// whatever the install result was.
 	PublishList bool
+	// CompletedLabel is the button label to set when the install finished but
+	// the new list could not be read, so no fresh row replaces the old one.
+	// The button stays insensitive: the action is done and must not repeat.
+	// It is empty in every other case.
+	CompletedLabel string
 }
 
 // FirmwareInstall decides the toast, its severity, whether the install button
-// comes back, and whether the verified device list is published.
+// comes back, whether the verified device list is published, and what the
+// button says when the list could not be read.
+//
+// The outcome comes from the device's own report (internal/fwupd's
+// VerifyInstall), never from the exit status and never from the shape of the
+// update offer: a device that vanished from the offer list, or that now offers
+// a different version, proves nothing.
 //
 // Decision table, first match wins:
 //
 //	installErr != nil   "Firmware install failed: <err>", error toast, button
 //	                    restored: nothing ran, so the row must stay usable
 //	dryRun              the preview text, button restored: fwupdmgr never ran
-//	verified            the installed text naming a restart, a shutdown, or
-//	                    nothing afterwards; the verified list is published
+//	flashed             the installed text naming a restart, a shutdown, or
+//	                    nothing afterwards
+//	staged              "Firmware for <name> is ready. Restart the computer to
+//	                    finish."
 //	not applied         "Firmware for <name> was not installed: <reason>",
-//	                    error toast, list published so the device stays listed
+//	                    error toast
 //	unverified          "fwupdmgr finished for <name>, but ChairLift could not
-//	                    check the result: <reason>", error toast, button
-//	                    restored: the outcome is unknown, so no success claim
+//	                    check the result: <reason>", error toast
+//
+// For every live result, PublishList is true exactly when the update list could
+// be read (report.ListErr == nil). When that list failed, the old rows stay,
+// so a finished install labels its button "Installed" or "Restart required"
+// and keeps it insensitive, while a not-applied or unverified outcome restores
+// the button instead.
 func FirmwareInstall(dryRun bool, installErr error, report fwupd.InstallReport, name string, needsReboot, needsShutdown bool) FirmwareInstallDecision {
 	if installErr != nil {
 		return FirmwareInstallDecision{
@@ -222,26 +240,54 @@ func FirmwareInstall(dryRun bool, installErr error, report fwupd.InstallReport, 
 	}
 
 	switch report.Result {
+	case fwupd.InstallFlashed:
+		return completedFirmwareDecision(
+			installedFirmwareToast(name, needsReboot, needsShutdown),
+			"Installed",
+			report.ListErr,
+		)
+	case fwupd.InstallStaged:
+		return completedFirmwareDecision(
+			fmt.Sprintf("Firmware for %s is ready. Restart the computer to finish.", name),
+			"Restart required",
+			report.ListErr,
+		)
 	case fwupd.InstallNotApplied:
-		return FirmwareInstallDecision{
-			Toast:       fmt.Sprintf("Firmware for %s was not installed: %s", name, report.Reason),
-			IsError:     true,
-			PublishList: true,
-		}
-	case fwupd.InstallVerified:
-		return FirmwareInstallDecision{
-			Toast:       installedFirmwareToast(name, needsReboot, needsShutdown),
-			PublishList: true,
-		}
+		return unfinishedFirmwareDecision(
+			fmt.Sprintf("Firmware for %s was not installed: %s", name, report.Reason),
+			report.ListErr,
+		)
 	default:
 		// InstallUnverified, and any future result ChairLift does not know:
 		// the outcome is unknown, so it must not read as a success.
-		return FirmwareInstallDecision{
-			Toast:          fmt.Sprintf("fwupdmgr finished for %s, but ChairLift could not check the result: %s", name, report.Reason),
-			IsError:        true,
-			RestoreControl: true,
-		}
+		return unfinishedFirmwareDecision(
+			fmt.Sprintf("fwupdmgr finished for %s, but ChairLift could not check the result: %s", name, report.Reason),
+			report.ListErr,
+		)
 	}
+}
+
+// completedFirmwareDecision builds the decision for an install the device
+// confirmed. With a readable list the fresh rows replace the old button; with
+// a failed list the label records the finished action and the button stays
+// insensitive.
+func completedFirmwareDecision(toast, completedLabel string, listErr error) FirmwareInstallDecision {
+	decision := FirmwareInstallDecision{Toast: toast, PublishList: listErr == nil}
+	if listErr != nil {
+		decision.CompletedLabel = completedLabel
+	}
+	return decision
+}
+
+// unfinishedFirmwareDecision builds the decision for an outcome that is not a
+// finished install: an error toast, and a clickable button again whenever no
+// fresh list replaces the old row.
+func unfinishedFirmwareDecision(toast string, listErr error) FirmwareInstallDecision {
+	decision := FirmwareInstallDecision{Toast: toast, IsError: true, PublishList: listErr == nil}
+	if listErr != nil {
+		decision.RestoreControl = true
+	}
+	return decision
 }
 
 // installedFirmwareToast returns the completion text for a verified install,

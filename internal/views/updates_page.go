@@ -735,6 +735,15 @@ func (uh *UserHome) installFirmwareUpdate(update fwupd.Update, button *gtk.Butto
 			// cannot replace this verified list.
 			uh.firmwareRefresh.Begin()
 			uh.publishFirmwareList(report.Updates)
+		} else if report.ListErr != nil {
+			// The rows cannot be rebuilt, so the old ones stay and the
+			// expander says why the list is out of date.
+			uh.applyFirmwareStatus(pageview.FirmwareUpdatesSubtitle(0, report.ListErr, uh.firmwareRows.Len()))
+		}
+		if decision.CompletedLabel != "" {
+			// The install finished but the new rows could not be read: the old
+			// button records it and stays insensitive.
+			button.SetLabel(decision.CompletedLabel)
 		}
 		if decision.RestoreControl {
 			button.SetSensitive(true)

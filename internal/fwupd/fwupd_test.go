@@ -371,81 +371,180 @@ func TestFwupdIsInstalledMissingBinary(t *testing.T) {
 	}
 }
 
-// verificationScript builds a fake fwupdmgr that answers the install with exit
-// 0 and the update query with listBody, following the real client's two
-// subcommands.
-func verificationScript(t *testing.T, listBody string) string {
+// installVerifyScript builds a fake fwupdmgr that answers the install with exit
+// 0, and each query with the supplied body, following the real client's
+// subcommands ($1).
+func installVerifyScript(t *testing.T, devicesBody, updatesBody string) string {
 	t.Helper()
 	return fakeFwupdmgr(t, `case "$1" in
 update)
 	exit 0
 	;;
+get-devices)
+`+devicesBody+`
+	;;
 get-updates)
-`+listBody+`
+`+updatesBody+`
 	;;
 esac`)
 }
 
-// listedUpdate is one device with an update, as fwupdmgr would report it.
+// deviceStateDoc is a `get-devices --json` document with one device.
+func deviceStateDoc(version, updateState, updateError string) string {
+	state := ""
+	if updateState != "" {
+		state = `"UpdateState":"` + updateState + `",`
+	}
+	updateErr := ""
+	if updateError != "" {
+		updateErr = `"UpdateError":"` + updateError + `",`
+	}
+	return `echo '{"Devices":[{"DeviceId":"` + deviceID + `","Name":"Dock","Version":"` + version + `",` + state + updateErr + `"Releases":[]}]}'`
+}
+
+// listedUpdate is one device with an update, as `get-updates` would report it.
 func listedUpdate(flags string, version string) string {
 	return `{"Devices":[{"DeviceId":"` + deviceID + `","Name":"Dock","Vendor":"Frostyard","Version":"1.0","Flags":` + flags + `,"Releases":[{"Version":"` + version + `","Summary":"Firmware"}]}]}`
 }
 
-func TestVerifyInstallTable(t *testing.T) {
-	installable := Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true}
-	blocked := Update{
-		DeviceID:    deviceID,
-		NewVersion:  "2.0",
-		Installable: false,
-		Reason:      "Needs attention: System is on battery",
+func TestParseDeviceStateTable(t *testing.T) {
+	data := []byte(`{"Devices":[
+		{"DeviceId":"` + deviceID + `","Version":"1.0","UpdateState":"needs-reboot","UpdateError":""},
+		{"DeviceId":"9999999999999999999999999999999999999999","Version":"9.0"}
+	]}`)
+
+	state, found, err := ParseDeviceState(data, deviceID)
+	if err != nil {
+		t.Fatalf("ParseDeviceState: %v", err)
 	}
-	other := Update{DeviceID: "9999999999999999999999999999999999999999", NewVersion: "9.0", Installable: true}
+	if !found {
+		t.Fatal("found = false, want true")
+	}
+	want := DeviceState{Version: "1.0", UpdateState: "needs-reboot"}
+	if state != want {
+		t.Errorf("state = %#v, want %#v", state, want)
+	}
+
+	if _, found, err := ParseDeviceState(data, "3333333333333333333333333333333333333333"); err != nil {
+		t.Errorf("ParseDeviceState for a missing device = %v, want nil", err)
+	} else if found {
+		t.Error("found = true for a device that is not listed")
+	}
+
+	if _, _, err := ParseDeviceState([]byte("not json"), deviceID); err == nil {
+		t.Error("ParseDeviceState(bad JSON) = nil error, want a parse failure")
+	}
+}
+
+// TestVerifyInstallRules covers rules a to g, including the counterexample
+// where the update offer changed although the device was not flashed.
+func TestVerifyInstallRules(t *testing.T) {
+	before := Update{
+		DeviceID:       deviceID,
+		CurrentVersion: "1.0",
+		NewVersion:     "2.0",
+		Installable:    true,
+	}
+	blockedBefore := before
+	blockedBefore.Installable = false
+	blockedBefore.Reason = "Needs attention: System is on battery"
 
 	tests := []struct {
 		name       string
-		after      []Update
-		listErr    error
+		before     Update
+		state      DeviceState
+		found      bool
+		stateErr   error
 		wantResult InstallResult
 		wantReason string
 	}{
 		{
-			name:       "device left the list",
-			after:      nil,
-			wantResult: InstallVerified,
+			name:       "a: the state query failed",
+			before:     before,
+			stateErr:   errors.New("failed to connect to daemon"),
+			wantResult: InstallUnverified,
+			wantReason: "failed to connect to daemon",
 		},
 		{
-			name:       "device now offers a different version",
-			after:      []Update{{DeviceID: deviceID, NewVersion: "3.0", Installable: true}},
-			wantResult: InstallVerified,
+			name:       "b: the device is not listed",
+			before:     before,
+			wantResult: InstallUnverified,
+			wantReason: "fwupd does not show the device now; it can be restarting",
 		},
 		{
-			name:       "only another device is listed",
-			after:      []Update{other},
-			wantResult: InstallVerified,
+			name:       "c: the device needs a restart",
+			before:     before,
+			state:      DeviceState{Version: "1.0", UpdateState: "needs-reboot"},
+			found:      true,
+			wantResult: InstallStaged,
 		},
 		{
-			name:       "the same release is still offered",
-			after:      []Update{installable},
+			name:       "c: the device state is pending",
+			before:     before,
+			state:      DeviceState{Version: "1.0", UpdateState: "pending"},
+			found:      true,
+			wantResult: InstallStaged,
+		},
+		{
+			name:       "d: the device reports the new version",
+			before:     before,
+			state:      DeviceState{Version: "2.0"},
+			found:      true,
+			wantResult: InstallFlashed,
+		},
+		{
+			name:       "e: the device reports a failed update",
+			before:     before,
+			state:      DeviceState{Version: "1.0", UpdateState: "failed", UpdateError: "failed to decompress"},
+			found:      true,
+			wantResult: InstallNotApplied,
+			wantReason: "failed to decompress",
+		},
+		{
+			name:       "e: a failed update without a recorded error",
+			before:     before,
+			state:      DeviceState{Version: "1.0", UpdateState: "failed-transient"},
+			found:      true,
+			wantResult: InstallNotApplied,
+			wantReason: "the update failed",
+		},
+		{
+			name:       "f: the device still reports the old version",
+			before:     before,
+			state:      DeviceState{Version: "1.0"},
+			found:      true,
 			wantResult: InstallNotApplied,
 			wantReason: "fwupd did not install the update",
 		},
 		{
-			name:       "the same release is offered and blocked",
-			after:      []Update{blocked},
+			name:       "f: the update error wins",
+			before:     before,
+			state:      DeviceState{Version: "1.0", UpdateError: "insufficient power"},
+			found:      true,
+			wantResult: InstallNotApplied,
+			wantReason: "insufficient power",
+		},
+		{
+			name:       "f: a blocked device keeps its own reason",
+			before:     blockedBefore,
+			state:      DeviceState{Version: "1.0"},
+			found:      true,
 			wantResult: InstallNotApplied,
 			wantReason: "Needs attention: System is on battery",
 		},
 		{
-			name:       "the query failed",
-			listErr:    errors.New("failed to connect to daemon"),
+			name:       "g: an unknown version is not a success",
+			before:     before,
+			state:      DeviceState{Version: "1.5"},
+			found:      true,
 			wantResult: InstallUnverified,
-			wantReason: "failed to connect to daemon",
+			wantReason: "the device now reports version 1.5",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, reason := VerifyInstall(deviceID, "2.0", tt.after, tt.listErr)
+			result, reason := VerifyInstall(tt.before, tt.state, tt.found, tt.stateErr)
 			if result != tt.wantResult {
 				t.Errorf("VerifyInstall() result = %v, want %v", result, tt.wantResult)
 			}
@@ -456,25 +555,44 @@ func TestVerifyInstallTable(t *testing.T) {
 	}
 }
 
-func TestFwupdInstallAndVerifyVerified(t *testing.T) {
-	useFakeExecutable(t, verificationScript(t, `echo '{"Devices":[]}'`))
+func TestFwupdInstallAndVerifyFlashed(t *testing.T) {
+	useFakeExecutable(t, installVerifyScript(t, deviceStateDoc("2.0", "", ""), `echo '{"Devices":[]}'`))
 
-	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, CurrentVersion: "1.0", NewVersion: "2.0", Installable: true})
 	if err != nil {
 		t.Fatalf("InstallAndVerify: %v", err)
 	}
-	if report.Result != InstallVerified {
-		t.Errorf("Result = %v, want InstallVerified", report.Result)
+	if report.Result != InstallFlashed {
+		t.Errorf("Result = %v, want InstallFlashed", report.Result)
 	}
-	if len(report.Updates) != 0 {
-		t.Errorf("Updates = %#v, want none", report.Updates)
+	if report.ListErr != nil {
+		t.Errorf("ListErr = %v, want nil", report.ListErr)
 	}
 }
 
-func TestFwupdInstallAndVerifyNotApplied(t *testing.T) {
-	useFakeExecutable(t, verificationScript(t, `echo '`+listedUpdate(`["updatable"]`, "2.0")+`'`))
+func TestFwupdInstallAndVerifyStaged(t *testing.T) {
+	useFakeExecutable(t, installVerifyScript(t, deviceStateDoc("1.0", "needs-reboot", ""), `echo '{"Devices":[]}'`))
 
-	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, CurrentVersion: "1.0", NewVersion: "2.0", Installable: true})
+	if err != nil {
+		t.Fatalf("InstallAndVerify: %v", err)
+	}
+	if report.Result != InstallStaged {
+		t.Errorf("Result = %v, want InstallStaged", report.Result)
+	}
+}
+
+// TestFwupdInstallAndVerifyChangedOfferIsNotAnInstall is the counterexample
+// from the review: the update offer changed to 3.0 and the device is blocked
+// now, but the device still reports version 1.0, so nothing was flashed.
+func TestFwupdInstallAndVerifyChangedOfferIsNotAnInstall(t *testing.T) {
+	useFakeExecutable(t, installVerifyScript(
+		t,
+		deviceStateDoc("1.0", "", ""),
+		`echo '`+listedUpdate(`["updatable-hidden"]`, "3.0")+`'`,
+	))
+
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, CurrentVersion: "1.0", NewVersion: "2.0", Installable: true})
 	if err != nil {
 		t.Fatalf("InstallAndVerify: %v", err)
 	}
@@ -484,31 +602,31 @@ func TestFwupdInstallAndVerifyNotApplied(t *testing.T) {
 	if report.Reason != "fwupd did not install the update" {
 		t.Errorf("Reason = %q", report.Reason)
 	}
-	if len(report.Updates) != 1 {
-		t.Errorf("Updates = %#v, want the device to stay listed", report.Updates)
+	if len(report.Updates) != 1 || report.Updates[0].NewVersion != "3.0" {
+		t.Errorf("Updates = %#v, want the new offer published", report.Updates)
 	}
 }
 
-func TestFwupdInstallAndVerifyNotAppliedBlocked(t *testing.T) {
-	useFakeExecutable(t, verificationScript(t, `echo '`+listedUpdate(`["updatable-hidden"]`, "2.0")+`'`))
+func TestFwupdInstallAndVerifyDeviceAbsent(t *testing.T) {
+	useFakeExecutable(t, installVerifyScript(t, `echo '{"Devices":[]}'`, `echo '{"Devices":[]}'`))
 
-	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, CurrentVersion: "1.0", NewVersion: "2.0", Installable: true})
 	if err != nil {
 		t.Fatalf("InstallAndVerify: %v", err)
 	}
-	if report.Result != InstallNotApplied {
-		t.Fatalf("Result = %v, want InstallNotApplied", report.Result)
+	if report.Result != InstallUnverified {
+		t.Fatalf("Result = %v, want InstallUnverified", report.Result)
 	}
-	if report.Reason != "This device cannot be updated now" {
-		t.Errorf("Reason = %q, want the device's own blocked reason", report.Reason)
+	if report.Reason != "fwupd does not show the device now; it can be restarting" {
+		t.Errorf("Reason = %q", report.Reason)
 	}
 }
 
-func TestFwupdInstallAndVerifyUnverified(t *testing.T) {
-	useFakeExecutable(t, verificationScript(t, `echo "failed to connect to daemon" >&2
-	exit 1`))
+func TestFwupdInstallAndVerifyDeviceQueryFails(t *testing.T) {
+	useFakeExecutable(t, installVerifyScript(t, `echo "failed to connect to daemon" >&2
+	exit 1`, `echo '{"Devices":[]}'`))
 
-	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, CurrentVersion: "1.0", NewVersion: "2.0", Installable: true})
 	if err != nil {
 		t.Fatalf("InstallAndVerify: %v", err)
 	}
@@ -518,8 +636,21 @@ func TestFwupdInstallAndVerifyUnverified(t *testing.T) {
 	if !strings.Contains(report.Reason, "failed to connect to daemon") {
 		t.Errorf("Reason = %q, want the query's stderr", report.Reason)
 	}
+}
+
+func TestFwupdInstallAndVerifyKeepsFlashedResultWhenListFails(t *testing.T) {
+	useFakeExecutable(t, installVerifyScript(t, deviceStateDoc("2.0", "", ""), `echo "no daemon" >&2
+	exit 1`))
+
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, CurrentVersion: "1.0", NewVersion: "2.0", Installable: true})
+	if err != nil {
+		t.Fatalf("InstallAndVerify: %v", err)
+	}
+	if report.Result != InstallFlashed {
+		t.Errorf("Result = %v, want InstallFlashed", report.Result)
+	}
 	if report.ListErr == nil {
-		t.Error("ListErr = nil, want the query's error")
+		t.Error("ListErr = nil, want the list error")
 	}
 }
 
@@ -532,28 +663,40 @@ exit 1`))
 	}
 }
 
-func TestFwupdInstallAndVerifyDryRunSkipsQuery(t *testing.T) {
+func TestFwupdInstallAndVerifyDryRunSkipsQueries(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "queried")
 	useFakeExecutable(t, fakeFwupdmgr(t, `case "$1" in
 update)
 	exit 0
 	;;
-get-updates)
+*)
 	touch "`+marker+`"
-	echo '{"Devices":[]}'
+	exit 0
 	;;
 esac`))
 	SetDryRun(true)
 	t.Cleanup(func() { SetDryRun(false) })
 
-	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, CurrentVersion: "1.0", NewVersion: "2.0", Installable: true})
 	if err != nil {
 		t.Fatalf("InstallAndVerify under dry-run = %v, want nil", err)
 	}
 	if report.Result != InstallUnverified || report.Reason != "" || report.Updates != nil || report.ListErr != nil {
-		t.Errorf("report = %#v, want a zero report (InstallUnverified, fail closed)", report)
+		t.Errorf("report = %#v, want a zero report", report)
 	}
 	if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("the fake fwupdmgr was queried under dry-run (stat %s = %v)", marker, statErr)
+	}
+}
+
+func TestFwupdGetDeviceStateRejectsInvalidDeviceID(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	useFakeExecutable(t, fakeFwupdmgr(t, `touch "`+marker+`"`))
+
+	if _, _, err := GetDeviceState("--force"); err == nil {
+		t.Fatal("GetDeviceState(--force) = nil error, want a rejection")
+	}
+	if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("the fake fwupdmgr ran for an invalid device id (stat %s = %v)", marker, statErr)
 	}
 }

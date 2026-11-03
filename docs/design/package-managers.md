@@ -239,7 +239,7 @@ Two of the nine small, puregotk-free packages under `internal/views/` (the other
   - `SelfUpdate(dryRun bool, tool string) string` — Homebrew self-update ("Update Homebrew" button) toast (c3)
   - `TapTrustDecision{MutateUI bool; Toast string}` + `TapTrust(dryRun bool, tapName string) TapTrustDecision` — gates whether `trustTap` removes the tap's row, hides the group, and refreshes outdated packages (c3)
   - `BootcStage(dryRun bool, staged bool) string` — bootc stage-button completion toast; string-only since the subtitle stays live in both modes and there is no mutation left to gate (c4)
-  - `FirmwareInstallDecision{Toast string; IsError bool; RestoreControl bool; PublishList bool}` + `FirmwareInstall(dryRun bool, installErr error, report fwupd.InstallReport, name string, needsReboot, needsShutdown bool) FirmwareInstallDecision` — fwupd firmware install decision, built from the wrapper's own verification rather than from an exit status. Decision table: an install error gives `Firmware install failed: <err>` with an error toast and the button restored; dry-run gives the `[DRY-RUN] Preview: firmware for <device> would be installed — no changes made` preview with the button restored; a verified install gives the completion text naming the restart, the shutdown, or nothing afterwards and publishes the list; a not-applied install gives `Firmware for <name> was not installed: <reason>` with an error toast and publishes the list; an unverified install gives `fwupdmgr finished for <name>, but ChairLift could not check the result: <reason>` with an error toast and the button restored
+  - `FirmwareInstallDecision{Toast string; IsError bool; RestoreControl bool; PublishList bool; CompletedLabel string}` + `FirmwareInstall(dryRun bool, installErr error, report fwupd.InstallReport, name string, needsReboot, needsShutdown bool) FirmwareInstallDecision` — fwupd firmware install decision, built from the device's own report rather than from an exit status or the shape of the update offer. Decision table: an install error gives `Firmware install failed: <err>` with an error toast and the button restored; dry-run gives the `[DRY-RUN] Preview: firmware for <device> would be installed — no changes made` preview with the button restored; a flashed install gives the completion text naming the restart, the shutdown, or nothing afterwards; a staged install gives `Firmware for <name> is ready. Restart the computer to finish.`; a not-applied install gives `Firmware for <name> was not installed: <reason>` with an error toast; an unverified install gives `fwupdmgr finished for <name>, but ChairLift could not check the result: <reason>` with an error toast. `PublishList` is true for every live result whose `report.ListErr` is nil. With a failed list the old rows stay, so a flashed or staged install sets `CompletedLabel` (`Installed` or `Restart required`) and keeps its button insensitive, while a not-applied or unverified result restores the button
   - `FeatureToggleDecision{Confirm bool; Toast string}` + `FeatureToggle(dryRun, enable bool, name string) FeatureToggleDecision` — gates whether `onFeatureToggled`'s switch confirms the flip or reverts it (c5)
   - `FeatureUpdateDecision{Toast string; Persistent bool; Recheck bool}` + `FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) FeatureUpdateDecision` — Features page "Update" button toast, whether it persists as an error toast, and whether the caller must run the update check again. `Recheck` is true for every outcome that ran the update — errors and failures included, because a failed run can still change state in part — and false only for the dry-run preview, where nothing ran; the page then calls `recheckFeatureUpdates` after showing the toast, so the rows show the state after the update instead of the startup check's state (see the `featurestatus` section's re-check paragraph). It reads the per-feature results because updex returns a nil error when a feature is held (see the Updex section's "Update results"). Decision table: dry-run gives the preview; an error with no results gives "Features merged, but activation did not finish. Reboot to finish." for `*updex.ActivationIncompleteError` or "Update failed: <err>" for any other error (both persistent); nil results with a nil error, and `*updex.ResultsUnreadableError`, give "Feature update finished, but ChairLift could not read the results. See the log for details." (persistent; the outcome is unknown, so no success claim); empty results give "No enabled features to update."; only updated (and current) features keep the old text exactly; only current features give "Features are already up to date."; anything else joins, in order, "Updated: a, b.", "Waiting for a newer OS image: c (reason); ...", "Held by a rollback: e (reason).", "Failed: f (reason); ...", then "Changes apply after reboot." (when something updated and activation is complete), then the activation sentence or, when no feature failed, "Update failed: <err>"; persistent when any feature waits, is held or failed, or the error is set
 
@@ -489,13 +489,19 @@ path uses `pkexec` — decision record
   devices" below) and is empty for an installable device.
 - **`Error`** — message plus an underlying cause, so `errors.Is` classifies a
   deadline or a cancellation while the message stays readable.
-- **`InstallResult`** — the classification of a verification query:
-  `InstallVerified` (the device left the list, or now offers a different
-  version), `InstallNotApplied` (the same release is still offered, so nothing
-  was flashed) and `InstallUnverified` (the query failed, so the outcome is
-  unknown). `InstallUnverified` is the zero value, so a report that nothing
-  filled in fails closed. `InstallReport` carries the result, its reason, the verified
-  `[]Update` list, and the query's error.
+- **`DeviceState`** — what the device itself reports: `Version` (the installed
+  version now), `UpdateState` (`pending`, `success`, `failed`,
+  `failed-transient`, `needs-reboot`, or absent) and `UpdateError`. It comes
+  from `fwupdmgr get-devices --json`, which lists every device.
+- **`InstallResult`** — the classification of the device's own report:
+  `InstallUnverified` (the state could not be read or matches no rule),
+  `InstallFlashed` (the device reports the new version), `InstallStaged` (the
+  device reports `needs-reboot` or `pending`, so the flash applies at the next
+  restart while the version is still the old one) and `InstallNotApplied` (the
+  device still reports the old version). `InstallUnverified` is the zero value,
+  so a report that nothing filled in fails closed. `InstallReport` carries the
+  result, its reason, the `[]Update` list used to rebuild the rows, and that
+  list's error.
 
 ### Operations
 
@@ -503,8 +509,10 @@ path uses `pkexec` — decision record
 |----------|------------|---------|-------|
 | `ListUpdates()` | `fwupdmgr get-updates --json` | 60s | Read-only; parses `{"Devices":[…]}` |
 | `Install(deviceID)` | `fwupdmgr update --no-reboot-check <deviceID>` | 30m | State-changing, dry-run aware; validates the id first |
-| `InstallAndVerify(update)` | that install, then `get-updates --json` | 30m + 60s | Install error returned as the error; dry-run returns a zero report and makes no query |
-| `VerifyInstall(deviceID, newVersion, after, listErr)` | none | — | Pure: classifies a verification list |
+| `GetDeviceState(deviceID)` | `fwupdmgr get-devices --json` | 60s | Read-only; validates the id first; exit 2 means the device is not listed |
+| `InstallAndVerify(update)` | that install, then `get-devices --json` and `get-updates --json` | 30m + 60s | Install error returned as the error; dry-run returns a zero report and makes no query |
+| `VerifyInstall(before, state, found, stateErr)` | none | — | Pure: classifies the device's own state |
+| `ParseDeviceState(data, deviceID)` | none | — | Pure: JSON plus an id in, `DeviceState` and found out |
 | `IsInstalled()` / `IsInstalledCached()` | `exec.LookPath("fwupdmgr")` | — | Cached with `sync.Once` for the async startup gate |
 | `ParseUpdates(data)` | none | — | Pure: JSON in, `[]Update` out |
 | `SetDryRun(bool)` / `IsDryRun()` | none | — | Module-level flag set once in `app.New()` |
@@ -545,17 +553,29 @@ it cannot be applied.
 
 `fwupdmgr update` can exit 0 without flashing a device: the lid closes, the host
 leaves battery power, or an update error appears while the confirmation dialog
-is open. A zero exit therefore proves nothing, and `InstallAndVerify` always
-follows the install with a second `ListUpdates` query.
+is open. Neither a missing update offer nor a different offered version proves a
+flash either — a device can leave the update list without being written, and a
+new offer can appear for a device that was never touched. Only the device itself
+is evidence, so `InstallAndVerify` reads `fwupdmgr get-devices --json` after the
+install and passes the result to `VerifyInstall`. The `get-updates` list is read
+afterwards for one purpose only: rebuilding the rows.
 
-`VerifyInstall` classifies the result in this order, first match wins:
+`VerifyInstall` applies these rules in this order, first match wins:
 
-| Condition | Result | Reason |
-|-----------|--------|--------|
-| the verification query failed | `InstallUnverified` | the query's error text |
-| no update for the device id in the new list | `InstallVerified` | — |
-| an update for the device id with a different `NewVersion` | `InstallVerified` | — |
-| the same `NewVersion` still offered | `InstallNotApplied` | that update's `Reason` when it is not installable, otherwise `fwupd did not install the update` |
+| Rule | Condition | Result | Reason |
+|------|-----------|--------|--------|
+| a | the state query failed | `InstallUnverified` | the state query's error text |
+| b | the device is not listed | `InstallUnverified` | `fwupd does not show the device now; it can be restarting` |
+| c | `UpdateState` is `needs-reboot` or `pending` | `InstallStaged` | — |
+| d | `Version` equals the offered new version (and is not empty) | `InstallFlashed` | — |
+| e | `UpdateState` is `failed` or `failed-transient` | `InstallNotApplied` | `UpdateError`, or `the update failed` |
+| f | `Version` equals the device's old version | `InstallNotApplied` | `UpdateError`, else the device's own blocked reason, else `fwupd did not install the update` |
+| g | anything else | `InstallUnverified` | `the device now reports version <Version>` |
+
+`InstallUnverified` is the zero value of `InstallResult`, so an unknown outcome
+can never read as a success. A staged result is a real install that still needs
+a restart: a UEFI capsule reports `needs-reboot` while its version stays the old
+one.
 
 `InstallAndVerify` returns the install error as its error, so a failed command
 and a command that changed nothing stay distinguishable. Under dry-run it
@@ -604,11 +624,16 @@ case.
 
 The install flow keeps no row identity and never patches the list: there is no
 row removal and no `Add(Firmware, -1)`. `actionmsg.FirmwareInstall` decides
-`PublishList`, `RestoreControl` and `IsError`; when `PublishList` is set the
+`PublishList`, `RestoreControl`, `IsError` and `CompletedLabel`. When
+`PublishList` is set — for every live result whose `report.ListErr` is nil — the
 handler takes a fresh `firmwareRefresh` generation (which makes any load still
-in flight stale) and publishes `report.Updates`. That verified list *is* the
-refresh, and it is why a device that still has an update appears again.
-`actionstate.PackageUpgrade` is not used on this path.
+in flight stale) and publishes `report.Updates`. That list is the refresh, and
+it is why a device that still has an update appears again. When the list could
+not be read, the rows stay as they are, the expander shows the list error through
+`pageview.FirmwareUpdatesSubtitle(0, report.ListErr, uh.firmwareRows.Len())`, and
+a finished install sets `CompletedLabel` on its button (`Installed` or
+`Restart required`) and keeps it insensitive. `actionstate.PackageUpgrade` is
+not used on this path.
 
 ### Dry-run behavior
 

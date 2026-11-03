@@ -65,15 +65,28 @@ Five constraints make that safe and unambiguous:
    empty, and its `UpdateError` is empty. Any other device stays in the list
    with no install control and a visible reason, because fwupdmgr would skip it
    and exit 0. ChairLift must not turn that exit into a success message.
-5. **Every install is verified before ChairLift reports it.** The device state
-   can change while the confirmation dialog is open, so after `fwupdmgr update`
-   ChairLift runs the update query again and classifies the result
-   (`fwupd.VerifyInstall`): a device that no longer has the update, or that now
-   has a different version, is verified; the same release still offered is not
-   applied, with the device's own reason when fwupd reports one; a failed query
-   is unverified. Only a verified result is reported as an install. A published
-   list is always replaced whole, never patched by removing one row, so a device
-   that still has an update remains visible and the badge is the new count.
+5. **Every install is verified from the device itself before ChairLift reports
+   it.** The device state can change while the confirmation dialog is open, and
+   neither a missing update offer nor a different offered version proves a
+   flash. After `fwupdmgr update` ChairLift therefore reads the device's own
+   state with `fwupdmgr get-devices --json` and classifies it
+   (`fwupd.VerifyInstall`), first match wins:
+   a. the state query failed — unverified, with the error text;
+   b. the device is not listed — unverified, because it can be restarting;
+   c. `UpdateState` is `needs-reboot` or `pending` — staged, which is what a
+      UEFI capsule reports while its version is still the old one;
+   d. the device version equals the new release — flashed;
+   e. `UpdateState` is `failed` or `failed-transient` — not applied;
+   f. the device version equals the old version — not applied, with the
+      device's update error, its own blocked reason, or a generic sentence;
+   g. anything else — unverified, naming the version the device reports.
+
+   `InstallUnverified` is the zero value of `InstallResult`, so an unknown
+   outcome can never read as a success. Only a flashed or staged result is
+   reported as an install. The update list read afterwards rebuilds the rows
+   and decides nothing; it is always replaced whole, never patched by removing
+   one row, so a device that still has an update remains visible and the badge
+   is the new count.
 
 The group `firmware_updates_group` is off by default. It is built hidden and
 shown only when fwupdmgr is present. It stays disabled in the shipped
@@ -92,16 +105,18 @@ restart warning is the only protection against a device that needs a restart
 after the flash, so it must stay in the confirmation body.
 
 Harder: a zero exit says only that fwupdmgr finished, not that a device was
-flashed. fwupdmgr can exit 0 without a flash, so ChairLift offers Install only
-for installable devices and verifies each install with a second query. The
-published list is the whole verified list, so a device that still has an update
-appears again, and a failed verification is reported as an error instead of a
-success.
+flashed. fwupdmgr can exit 0 without a flash, a device can leave the update list
+without being written, and a new offered version can appear for a device that
+was never touched, so ChairLift offers Install only for installable devices and
+trusts only the device's own report afterwards. A staged update stays "restart
+required" until the restart, which the user performs. A failed or unreadable
+verification is an error toast, never a success.
 
 New obligations: the device id validator must not be relaxed,
-`--no-reboot-check` must stay in the argument list, the verification query must
-stay after every install, and the installable test (flag, problems, update
-error) must stay in step with fwupd. A future change
+`--no-reboot-check` must stay in the argument list, the device-state query must
+stay after every install, `InstallUnverified` must stay the zero value of
+`InstallResult`, and the installable test (flag, problems, update error) must
+stay in step with fwupd. A future change
 that adds a privileged firmware path must first supersede this ADR.
 
 ## Alternatives considered
