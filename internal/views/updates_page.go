@@ -9,6 +9,7 @@ import (
 
 	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/flatpak"
+	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/sysupdate"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
@@ -92,6 +93,28 @@ func (uh *UserHome) buildUpdatesPage() {
 		page.Add(group)
 
 		go uh.loadSysupdateUpdateStatus(group)
+	}
+
+	// Firmware Updates group (fwupd) - built hidden, shown asynchronously
+	// when the fwupdmgr client is present, even when there are no updates (the
+	// expander then reads "Firmware is up to date"). Every call is
+	// unprivileged: the fwupd daemon authorizes the install with its own
+	// PolicyKit actions (ADR-0012).
+	if uh.config.IsGroupEnabled("updates_page", "firmware_updates_group") {
+		group := adw.NewPreferencesGroup()
+		group.SetTitle("Firmware Updates")
+		group.SetDescription("Device firmware from the Linux Vendor Firmware Service, installed through fwupd")
+		group.SetVisible(false)
+
+		uh.firmwareGroup = group
+		uh.firmwareExpander = adw.NewExpanderRow()
+		uh.firmwareExpander.SetTitle("Available Updates")
+		uh.firmwareExpander.SetSubtitle("Checking...")
+		group.Add(&uh.firmwareExpander.Widget)
+
+		page.Add(group)
+
+		go uh.loadFirmwareUpdates()
 	}
 
 	// Flatpak Updates group
@@ -526,6 +549,212 @@ func (uh *UserHome) loadFlatpakUpdates() {
 			uh.flatpakUpdatesExpander.AddRow(&row.Widget)
 			uh.flatpakUpdateRows = append(uh.flatpakUpdateRows, row)
 		}
+	})
+}
+
+// installableCount counts the updates fwupd reports as updatable now. Blocked
+// devices stay in the list but not in the badge.
+func installableCount(updates []fwupd.Update) int {
+	count := 0
+	for _, update := range updates {
+		if update.Installable {
+			count++
+		}
+	}
+	return count
+}
+
+// loadFirmwareUpdates loads the firmware update list. Runs in a goroutine; the
+// group stays hidden when fwupdmgr is not installed. The load is
+// generation-guarded so a slow query cannot replace a newer list.
+func (uh *UserHome) loadFirmwareUpdates() {
+	group := uh.firmwareGroup
+	if uh.firmwareExpander == nil || group == nil {
+		return
+	}
+
+	if !fwupd.IsInstalledCached() {
+		return // group stays hidden
+	}
+
+	generation := uh.firmwareRefresh.Begin()
+
+	updates, err := fwupd.ListUpdates()
+	if err != nil {
+		log.Printf("Error loading firmware updates: %v", err)
+	}
+
+	sgtk.RunOnMainThread(func() {
+		if !uh.firmwareRefresh.IsCurrent(generation) {
+			return
+		}
+		group.SetVisible(true)
+		if err != nil {
+			// No rows this time, but rows from an earlier load stay
+			// reachable. The count is not lowered: a failed query says
+			// nothing about the devices, and it must never claim the
+			// firmware is up to date.
+			uh.applyFirmwareStatus(pageview.FirmwareUpdatesSubtitle(0, err, uh.firmwareRows.Len()))
+			return
+		}
+		uh.publishFirmwareList(updates)
+	})
+}
+
+// publishFirmwareList replaces the firmware rows from an authoritative device
+// list, sets the badge to the installable count, and sets the subtitle from the
+// full list. It is the single place that publishes firmware rows, so a load and
+// a verified install cannot drift apart. Main thread only.
+func (uh *UserHome) publishFirmwareList(updates []fwupd.Update) {
+	expander := uh.firmwareExpander
+	if expander == nil {
+		return
+	}
+
+	// The badge counts what the user can install; the expander subtitle
+	// counts everything fwupd lists.
+	uh.updateCounts.Set(badgestate.Firmware, installableCount(updates))
+	uh.updateBadgeCount()
+
+	uh.firmwareRows.Clear(func(row *adw.ActionRow) {
+		expander.Remove(&row.Widget)
+	})
+	for _, update := range updates {
+		uh.addFirmwareRow(expander, update)
+	}
+
+	uh.applyFirmwareStatus(pageview.FirmwareUpdatesSubtitle(len(updates), nil, uh.firmwareRows.Len()))
+}
+
+// applyFirmwareStatus sets the firmware expander's subtitle and expansion
+// state. Main thread only; the expander is nil when the group is disabled.
+func (uh *UserHome) applyFirmwareStatus(status pageview.Status) {
+	if uh.firmwareExpander == nil {
+		return
+	}
+	uh.firmwareExpander.SetSubtitle(status.Subtitle)
+	uh.firmwareExpander.SetEnableExpansion(status.Expandable)
+}
+
+// addFirmwareRow adds one device's update row. An installable device gets an
+// Install button; a device fwupd cannot update now gets no button and shows
+// the reason instead. Main thread only.
+func (uh *UserHome) addFirmwareRow(expander *adw.ExpanderRow, update fwupd.Update) {
+	var presentation pageview.Row
+	if update.Installable {
+		presentation = pageview.FirmwareUpdate(
+			update.DeviceName,
+			update.Vendor,
+			update.CurrentVersion,
+			update.NewVersion,
+		)
+	} else {
+		presentation = pageview.FirmwareBlockedUpdate(
+			update.DeviceName,
+			update.Vendor,
+			update.CurrentVersion,
+			update.NewVersion,
+			update.Reason,
+		)
+	}
+
+	row := adw.NewActionRow()
+	row.SetTitle(presentation.Title)
+	row.SetSubtitle(presentation.Subtitle)
+
+	if update.Installable {
+		installBtn := gtk.NewButtonWithLabel("Install")
+		installBtn.SetValign(gtk.AlignCenterValue)
+		clickedCb := func(_ gtk.Button) {
+			if !uh.firmwareInstallGate.TryStart() {
+				uh.toastAdder.ShowToast("Another firmware update is installing")
+				return
+			}
+			uh.confirmFirmwareInstall(update, installBtn)
+		}
+		installBtn.ConnectClicked(&clickedCb)
+		row.AddSuffix(&installBtn.Widget)
+	}
+
+	expander.AddRow(&row.Widget)
+	uh.firmwareRows.Add(row)
+}
+
+// confirmFirmwareInstall asks for confirmation before installing one device's
+// firmware, then runs the install. Every outcome warns about power and says
+// that ChairLift will not restart the computer. The page-wide install gate is
+// already held when this runs.
+func (uh *UserHome) confirmFirmwareInstall(update fwupd.Update, button *gtk.Button) {
+	heading, body := pageview.FirmwareInstallConfirmation(
+		update.DeviceName,
+		update.NewVersion,
+		update.NeedsReboot,
+		update.NeedsShutdown,
+	)
+	dialog := adw.NewAlertDialog(heading, body)
+	dialog.AddResponse("cancel", "Cancel")
+	dialog.AddResponse("install", "Install")
+	dialog.SetResponseAppearance("install", adw.ResponseDestructiveValue)
+	dialog.SetCloseResponse("cancel")
+
+	responseCb := func(_ adw.AlertDialog, response string) {
+		if response != "install" {
+			// Cancelled: the page must offer an install again.
+			uh.firmwareInstallGate.Reset()
+			return
+		}
+		button.SetSensitive(false)
+		button.SetLabel("Installing...")
+		go uh.installFirmwareUpdate(update, button)
+	}
+	dialog.ConnectResponse(&responseCb)
+	dialog.Present(&uh.updatesPrefsPage.Widget)
+}
+
+// installFirmwareUpdate installs one device's firmware, then asks fwupd what
+// happened. fwupdmgr can exit 0 without a flash, so the decision comes from
+// actionmsg.FirmwareInstall and the verification list, not from the exit
+// status. Rows are never removed by row identity: a verified list is published
+// whole, so a device that still has an update stays visible. The page-wide gate
+// is reset last, in every case.
+func (uh *UserHome) installFirmwareUpdate(update fwupd.Update, button *gtk.Button) {
+	report, installErr := fwupd.InstallAndVerify(update)
+	dryRun := fwupd.IsDryRun()
+	decision := actionmsg.FirmwareInstall(
+		dryRun,
+		installErr,
+		report,
+		update.DeviceName,
+		update.NeedsReboot,
+		update.NeedsShutdown,
+	)
+
+	sgtk.RunOnMainThread(func() {
+		if decision.PublishList {
+			// A newer generation makes any load still in flight stale, so it
+			// cannot replace this verified list.
+			uh.firmwareRefresh.Begin()
+			uh.publishFirmwareList(report.Updates)
+		} else if report.ListErr != nil {
+			// The rows cannot be rebuilt, so the old ones stay and the
+			// expander says why the list is out of date.
+			uh.applyFirmwareStatus(pageview.FirmwareUpdatesSubtitle(0, report.ListErr, uh.firmwareRows.Len()))
+		}
+		if decision.CompletedLabel != "" {
+			// The install finished but the new rows could not be read: the old
+			// button records it and stays insensitive.
+			button.SetLabel(decision.CompletedLabel)
+		}
+		if decision.RestoreControl {
+			button.SetSensitive(true)
+			button.SetLabel("Install")
+		}
+		if decision.IsError {
+			uh.toastAdder.ShowErrorToast(decision.Toast)
+		} else {
+			uh.toastAdder.ShowToast(decision.Toast)
+		}
+		uh.firmwareInstallGate.Reset()
 	})
 }
 

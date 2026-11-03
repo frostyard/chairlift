@@ -1,10 +1,12 @@
 package actionmsg
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/updex"
 )
 
@@ -929,6 +931,151 @@ func TestFeatureUpdate(t *testing.T) {
 			}
 			if got.Recheck != tt.wantRecheck {
 				t.Errorf("Recheck = %v, want %v", got.Recheck, tt.wantRecheck)
+			}
+		})
+	}
+}
+
+// TestFirmwareInstall covers every row of the decision table, including the
+// four live results with and without a readable update list.
+func TestFirmwareInstall(t *testing.T) {
+	const name = "ThinkPad Embedded Controller"
+	listErr := errors.New("fwupdmgr command failed: no daemon")
+
+	tests := []struct {
+		name          string
+		dryRun        bool
+		installErr    error
+		report        fwupd.InstallReport
+		needsReboot   bool
+		needsShutdown bool
+		want          FirmwareInstallDecision
+	}{
+		{
+			name:       "install error restores the button",
+			installErr: errors.New("device not found"),
+			want: FirmwareInstallDecision{
+				Toast:          "Firmware install failed: device not found",
+				IsError:        true,
+				RestoreControl: true,
+			},
+		},
+		{
+			name:   "dry-run previews without claiming an install",
+			dryRun: true,
+			report: fwupd.InstallReport{Result: fwupd.InstallNotApplied},
+			want: FirmwareInstallDecision{
+				Toast:          "[DRY-RUN] Preview: firmware for ThinkPad Embedded Controller would be installed — no changes made",
+				RestoreControl: true,
+			},
+		},
+		{
+			name:        "flashed install that needs a restart",
+			report:      fwupd.InstallReport{Result: fwupd.InstallFlashed},
+			needsReboot: true,
+			want: FirmwareInstallDecision{
+				Toast:       "Firmware for ThinkPad Embedded Controller installed. Restart to finish.",
+				PublishList: true,
+			},
+		},
+		{
+			name:          "flashed install that needs a shutdown",
+			report:        fwupd.InstallReport{Result: fwupd.InstallFlashed},
+			needsShutdown: true,
+			want: FirmwareInstallDecision{
+				Toast:       "Firmware for ThinkPad Embedded Controller installed. Shut down to finish.",
+				PublishList: true,
+			},
+		},
+		{
+			name:   "flashed install that needs nothing afterwards",
+			report: fwupd.InstallReport{Result: fwupd.InstallFlashed},
+			want: FirmwareInstallDecision{
+				Toast:       "Firmware for ThinkPad Embedded Controller installed",
+				PublishList: true,
+			},
+		},
+		{
+			name:   "flashed install whose list could not be read",
+			report: fwupd.InstallReport{Result: fwupd.InstallFlashed, ListErr: listErr},
+			want: FirmwareInstallDecision{
+				Toast:          "Firmware for ThinkPad Embedded Controller installed",
+				CompletedLabel: "Installed",
+			},
+		},
+		{
+			name:   "staged install that waits for a restart",
+			report: fwupd.InstallReport{Result: fwupd.InstallStaged},
+			want: FirmwareInstallDecision{
+				Toast:       "Firmware for ThinkPad Embedded Controller is ready. Restart the computer to finish.",
+				PublishList: true,
+			},
+		},
+		{
+			name:   "staged install whose list could not be read",
+			report: fwupd.InstallReport{Result: fwupd.InstallStaged, ListErr: listErr},
+			want: FirmwareInstallDecision{
+				Toast:          "Firmware for ThinkPad Embedded Controller is ready. Restart the computer to finish.",
+				CompletedLabel: "Restart required",
+			},
+		},
+		{
+			name: "install fwupd did not apply keeps the device listed",
+			report: fwupd.InstallReport{
+				Result: fwupd.InstallNotApplied,
+				Reason: "Needs attention: System is on battery",
+			},
+			want: FirmwareInstallDecision{
+				Toast:       "Firmware for ThinkPad Embedded Controller was not installed: Needs attention: System is on battery",
+				IsError:     true,
+				PublishList: true,
+			},
+		},
+		{
+			name: "not-applied install whose list could not be read",
+			report: fwupd.InstallReport{
+				Result:  fwupd.InstallNotApplied,
+				Reason:  "fwupd did not install the update",
+				ListErr: listErr,
+			},
+			want: FirmwareInstallDecision{
+				Toast:          "Firmware for ThinkPad Embedded Controller was not installed: fwupd did not install the update",
+				IsError:        true,
+				RestoreControl: true,
+			},
+		},
+		{
+			name: "unverified outcome is not a success claim",
+			report: fwupd.InstallReport{
+				Result: fwupd.InstallUnverified,
+				Reason: "fwupdmgr does not show the device now; it can be restarting",
+			},
+			want: FirmwareInstallDecision{
+				Toast:       "fwupdmgr finished for ThinkPad Embedded Controller, but ChairLift could not check the result: fwupdmgr does not show the device now; it can be restarting",
+				IsError:     true,
+				PublishList: true,
+			},
+		},
+		{
+			name: "unverified outcome with an unreadable list restores the button",
+			report: fwupd.InstallReport{
+				Result:  fwupd.InstallUnverified,
+				Reason:  "fwupdmgr command failed: no daemon",
+				ListErr: listErr,
+			},
+			want: FirmwareInstallDecision{
+				Toast:          "fwupdmgr finished for ThinkPad Embedded Controller, but ChairLift could not check the result: fwupdmgr command failed: no daemon",
+				IsError:        true,
+				RestoreControl: true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FirmwareInstall(tt.dryRun, tt.installErr, tt.report, name, tt.needsReboot, tt.needsShutdown)
+			if got != tt.want {
+				t.Fatalf("FirmwareInstall() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}

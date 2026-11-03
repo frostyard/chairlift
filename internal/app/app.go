@@ -9,6 +9,7 @@ import (
 
 	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/flatpak"
+	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/navigation"
 	"github.com/frostyard/chairlift/internal/sysupdate"
@@ -83,6 +84,7 @@ func New() *Application {
 			log.Println("Running in dry-run mode")
 			app.dryRun = true
 			flatpak.SetDryRun(true)
+			fwupd.SetDryRun(true)
 			homebrew.SetDryRun(true)
 			bootc.SetDryRun(true)
 			sysupdate.SetDryRun(true)

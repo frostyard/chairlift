@@ -37,6 +37,11 @@
   progress, reject repeated clicks, and refresh the outdated rows and sidebar
   badge after successful live operations
 - **Outdated Packages**: View and upgrade packages that have newer versions available
+- **Firmware Updates**: Install device firmware from the Linux Vendor Firmware
+  Service with fwupd, one device at a time, after a confirmation that warns
+  about power and the restart or shutdown the device needs. No root path of
+  ChairLift's own is involved: the fwupd daemon authorizes the install with its
+  own PolicyKit actions. Off by default until a hardware test passes
 - **System Maintenance**: Keep your system running smoothly
 
 ---
@@ -163,6 +168,7 @@ Other useful targets: `make dev` (CGO-enabled build with `-race` for development
 - Go (see `go.mod` for the toolchain version)
 - GTK 4 and libadwaita 1 (shared libraries, loaded at runtime by puregotk — no GTK dev headers or CGO needed to build)
 - Homebrew (optional, for package management features and tap trust)
+- fwupd (optional, for firmware updates; the group is off by default)
 - Flatpak (optional)
 - `bootc` and the snow `/usr/libexec/bootc-update-stage` script (optional; enables staged system updates on bootc installs)
 - The snow `/usr/libexec/snosi-sysupdate-stage` script and `/usr/lib/snosi/native-ab` marker (optional; enables staged system updates on native A/B installs)
@@ -185,7 +191,7 @@ chairlift
    and casks, install curated bundles, and launch the configured external
    Flatpak manager
 2. **Maintenance**: System cleanup and maintenance tools (Homebrew, Flatpak, custom scripts)
-3. **Updates**: Stage bootc or native A/B system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, and trust Homebrew taps
+3. **Updates**: Stage bootc or native A/B system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, install firmware updates, and trust Homebrew taps
 4. **System**: Monitor deployment, health, and performance information
 5. **Features**: Enable, disable, and update configured system features
 6. **Help**: Documentation and support resources
@@ -286,6 +292,7 @@ chairlift/
 │   ├── config/    # YAML config loading, feature group enablement
 │   ├── homebrew/  # Homebrew CLI wrapper (incl. tap trust)
 │   ├── flatpak/   # Flatpak CLI wrapper
+│   ├── fwupd/     # fwupd CLI wrapper (unprivileged firmware updates)
 │   ├── bootc/     # bootc wrapper (status reads, pkexec stage script)
 │   ├── sysupdate/ # Native A/B wrapper (state-file reads, pkexec stage script)
 │   ├── updex/     # Updex feature manager
@@ -299,6 +306,7 @@ chairlift/
 See [docs/design/overview.md](docs/design/overview.md) and [docs/design/package-managers.md](docs/design/package-managers.md) for detailed architecture notes (written for AI-assisted development, but equally useful as a deep-dive for humans); [docs/README.md](docs/README.md) indexes the full documentation tree.
 
 - **`internal/homebrew`**: Homebrew CLI wrapper — package listing/searching, install/uninstall, pin/unpin, bundles, updates, and Homebrew 6 tap-trust detection/management
+- **`internal/fwupd`**: unprivileged firmware updates — lists devices with an update from `fwupdmgr get-updates --json` and installs one device with `fwupdmgr update --no-reboot-check <id>`; fwupd's own PolicyKit actions authorize the daemon
 - **`internal/bootc`**: bootc status reads and pkexec-driven update staging via the snow `bootc-update-stage` script
 - **`internal/sysupdate`**: native A/B (systemd-sysupdate) status reads from the `/run/snosi` state files, rollback-candidate discovery from partition labels, and pkexec-driven update staging via the snow `snosi-sysupdate-stage` script
 - **`internal/views`**: GTK4/Adwaita UI — async operations dispatched via `sgtk.RunOnMainThread`, toast notifications for user feedback

@@ -2,6 +2,7 @@ package pageview
 
 import (
 	"bufio"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -420,6 +421,220 @@ func TestSystemDigestShortening(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := ShortDigest(tt.digest); got != tt.want {
 				t.Fatalf("ShortDigest(%q) = %q, want %q", tt.digest, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFirmwareUpdateRows(t *testing.T) {
+	tests := []struct {
+		name                       string
+		deviceName, vendor         string
+		currentVersion, newVersion string
+		want                       Row
+	}{
+		{
+			name:           "vendor and both versions",
+			deviceName:     "ThinkPad Embedded Controller",
+			vendor:         "Lenovo",
+			currentVersion: "1.2",
+			newVersion:     "1.3",
+			want:           Row{Title: "ThinkPad Embedded Controller", Subtitle: "Lenovo · 1.2 → 1.3"},
+		},
+		{
+			name:           "no vendor keeps the transition",
+			deviceName:     "Thunderbolt Dock",
+			currentVersion: "1.0",
+			newVersion:     "2.0",
+			want:           Row{Title: "Thunderbolt Dock", Subtitle: "1.0 → 2.0"},
+		},
+		{
+			name:       "no current version keeps the new one",
+			deviceName: "Thunderbolt Dock",
+			vendor:     "Frostyard",
+			newVersion: "2.0",
+			want:       Row{Title: "Thunderbolt Dock", Subtitle: "Frostyard · 2.0"},
+		},
+		{
+			name:           "no new version keeps the current one",
+			deviceName:     "Thunderbolt Dock",
+			vendor:         "Frostyard",
+			currentVersion: "1.0",
+			want:           Row{Title: "Thunderbolt Dock", Subtitle: "Frostyard · 1.0"},
+		},
+		{
+			name: "empty device name falls back to a generic title",
+			want: Row{Title: "Unknown device"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FirmwareUpdate(tt.deviceName, tt.vendor, tt.currentVersion, tt.newVersion)
+			if got != tt.want {
+				t.Fatalf("FirmwareUpdate() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFirmwareBlockedUpdateRows(t *testing.T) {
+	tests := []struct {
+		name                       string
+		deviceName, vendor         string
+		currentVersion, newVersion string
+		reason                     string
+		want                       Row
+	}{
+		{
+			name:           "blocked device keeps its version text and adds the reason",
+			deviceName:     "ThinkPad Embedded Controller",
+			vendor:         "Lenovo",
+			currentVersion: "1.2",
+			newVersion:     "1.3",
+			reason:         "Needs attention: Not enough battery power",
+			want: Row{
+				Title:    "ThinkPad Embedded Controller",
+				Subtitle: "Lenovo · 1.2 → 1.3 · Needs attention: Not enough battery power",
+			},
+		},
+		{
+			name:       "blocked device without vendor or versions",
+			deviceName: "Keyboard",
+			reason:     "This device cannot be updated now",
+			want:       Row{Title: "Keyboard", Subtitle: "This device cannot be updated now"},
+		},
+		{
+			name:       "empty reason keeps the normal text",
+			deviceName: "Keyboard",
+			vendor:     "Frostyard",
+			newVersion: "1.1",
+			want:       Row{Title: "Keyboard", Subtitle: "Frostyard · 1.1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FirmwareBlockedUpdate(tt.deviceName, tt.vendor, tt.currentVersion, tt.newVersion, tt.reason)
+			if got != tt.want {
+				t.Fatalf("FirmwareBlockedUpdate() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFirmwareUpdateSubtitleStates(t *testing.T) {
+	tests := []struct {
+		name           string
+		count          int
+		err            error
+		retainedRows   int
+		wantSubtitle   string
+		wantExpandable bool
+	}{
+		{name: "none", count: 0, wantSubtitle: "Firmware is up to date"},
+		{name: "one", count: 1, wantSubtitle: "1 firmware update available", wantExpandable: true},
+		{name: "several", count: 3, wantSubtitle: "3 firmware updates available", wantExpandable: true},
+		{
+			name:         "error with no retained rows cannot expand",
+			count:        0,
+			err:          errors.New("could not reach the daemon"),
+			wantSubtitle: "Error checking firmware updates: could not reach the daemon",
+		},
+		{
+			name:           "error with retained rows keeps them reachable",
+			count:          0,
+			err:            errors.New("could not reach the daemon"),
+			retainedRows:   2,
+			wantSubtitle:   "Error checking firmware updates: could not reach the daemon",
+			wantExpandable: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FirmwareUpdatesSubtitle(tt.count, tt.err, tt.retainedRows)
+			want := Status{Subtitle: tt.wantSubtitle, Expandable: tt.wantExpandable}
+			if got != want {
+				t.Fatalf("FirmwareUpdatesSubtitle() = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
+func TestFirmwareInstallConfirmation(t *testing.T) {
+	const powerWarning = "Do not turn off or unplug the computer during the update. Keep the power connected."
+	const noRestart = "ChairLift will not restart the computer for you."
+
+	tests := []struct {
+		name                       string
+		deviceName, newVersion     string
+		needsReboot, needsShutdown bool
+		wantHeading                string
+		wantBody                   []string
+		absentBody                 []string
+	}{
+		{
+			name:        "restart needed",
+			deviceName:  "ThinkPad Embedded Controller",
+			newVersion:  "1.3",
+			needsReboot: true,
+			wantHeading: "Install firmware for ThinkPad Embedded Controller?",
+			wantBody: []string{
+				"Version 1.3 will be installed.",
+				powerWarning,
+				"The computer must restart to finish the update.",
+				noRestart,
+			},
+			absentBody: []string{"must shut down", "disconnect while they update"},
+		},
+		{
+			name:          "shutdown needed",
+			deviceName:    "Thunderbolt Dock",
+			newVersion:    "2.0",
+			needsShutdown: true,
+			wantHeading:   "Install firmware for Thunderbolt Dock?",
+			wantBody: []string{
+				powerWarning,
+				"The computer must shut down to finish the update.",
+				noRestart,
+			},
+			absentBody: []string{"must restart", "disconnect while they update"},
+		},
+		{
+			name:        "no restart or shutdown",
+			deviceName:  "Keyboard",
+			newVersion:  "1.1",
+			wantHeading: "Install firmware for Keyboard?",
+			wantBody: []string{
+				powerWarning,
+				"Some devices restart or disconnect while they update.",
+				noRestart,
+			},
+			absentBody: []string{"must restart", "must shut down"},
+		},
+		{
+			name:        "unknown device without a version",
+			wantHeading: "Install firmware for Unknown device?",
+			wantBody:    []string{powerWarning, noRestart},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			heading, body := FirmwareInstallConfirmation(tt.deviceName, tt.newVersion, tt.needsReboot, tt.needsShutdown)
+			if heading != tt.wantHeading {
+				t.Errorf("heading = %q, want %q", heading, tt.wantHeading)
+			}
+			for _, want := range tt.wantBody {
+				if !strings.Contains(body, want) {
+					t.Errorf("body = %q, want it to contain %q", body, want)
+				}
+			}
+			for _, absent := range tt.absentBody {
+				if strings.Contains(body, absent) {
+					t.Errorf("body = %q, must not contain %q", body, absent)
+				}
 			}
 		})
 	}

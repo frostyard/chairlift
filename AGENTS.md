@@ -116,9 +116,14 @@ An agent must not break these:
   reject unsupported argv because PolicyKit does not validate arguments after
   action selection. ChairLift ships no passwordless PolicyKit rules; normal
   administrator authentication applies. Homebrew tap trust (`brew trust`) is
-  deliberately per-user and does **not** use pkexec. Do not add arbitrary
-  privileged command execution, broaden what pkexec runs, or route new
-  mutations around the fixed helper/policy pair.
+  deliberately per-user and does **not** use pkexec. Firmware installs are the
+  other unprivileged mutation: they call
+  `fwupdmgr update --no-reboot-check <DeviceId>` directly and fwupd's own
+  PolicyKit actions authorize the daemon
+  ([ADR-0012](docs/adr/0012-firmware-updates-use-fwupds-own-polkit.md)), so
+  never route them through pkexec or add a helper or policy for them. Do not
+  add arbitrary privileged command execution, broaden what pkexec runs, or
+  route new mutations around the fixed helper/policy pair.
 - **OS staging execution has one owner.** `internal/stageexec` is the pure-Go
   leaf package that owns the progress event contract, merged stdout/stderr
   streaming, direct-child cancellation, error classification, completion event,
@@ -171,11 +176,12 @@ An agent must not break these:
   pin/unpin, and every row shares one gate across its mutation controls so
   actions cannot overlap. A live success completes the old controls and starts
   a generation-guarded inventory refresh; failure or dry-run restores them.
-- **Update badge counts have one state owner.** Bootc, sysupdate, Flatpak,
-  and Homebrew counts live in the pure `internal/views/badgestate` package.
-  Refreshes replace a provider's count, successful row removals decrement
-  without going negative, and the displayed total is always the sum of all
-  four providers. Do not restore independent integer fields in `UserHome`.
+- **Update badge counts have one state owner.** Bootc, sysupdate, firmware,
+  Flatpak, and Homebrew counts live in the pure `internal/views/badgestate`
+  package. Refreshes replace a provider's count, successful row removals
+  decrement without going negative, and the displayed total is always the sum
+  of all five providers. Do not restore independent integer fields in
+  `UserHome`.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget
