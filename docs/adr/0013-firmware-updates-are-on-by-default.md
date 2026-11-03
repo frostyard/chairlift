@@ -1,14 +1,7 @@
 # 0013 — Firmware updates are on by default
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-03
-
-<!--
-Proposed until Brian's test on real hardware passes (PR body of the change
-that adds this ADR). On acceptance, set Status to Accepted, record the date
-and the hardware in Context, and set ADR-0012's Status to "Accepted; its
-default-off paragraph is superseded by 0013".
--->
 
 ## Context
 
@@ -26,17 +19,18 @@ will flash now, and the device-state verification after each install.
 The group is already safe on a host without fwupd: it is built hidden and shown
 only when `fwupd.IsInstalledCached()` is true.
 
+The test on real hardware passed on 2026-11-03 (desk ask T746a). Brian ran
+the test steps of chairlift#258: a list of devices compared with
+`fwupdmgr get-updates`, a dry-run install confirmation, and an optional
+install, at the tester's choice, on a device whose vendor ships firmware
+through the Linux Vendor Firmware Service.
+
 ## Decision
 
 `firmware_updates_group` is enabled by default. `defaultConfig()` sets
 `Enabled: true`, and `config.yml` and `config.bootc-example.yml` set
 `enabled: true`. The only group that stays off by default is
 `maintenance_cleanup_group`.
-
-This decision takes effect only after a test on real hardware passes. The test
-is a list of devices, a dry-run confirmation, and, at the tester's choice, one
-install on a device whose vendor ships firmware through the Linux Vendor
-Firmware Service.
 
 This ADR supersedes the last paragraph of ADR-0012's Decision ("The group
 `firmware_updates_group` is off by default …") and nothing else.

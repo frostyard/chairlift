@@ -1,6 +1,6 @@
 # 0012 — Firmware updates use fwupd's own PolicyKit actions
 
-- **Status:** Accepted
+- **Status:** Accepted; its default-off paragraph is superseded by [0013](0013-firmware-updates-are-on-by-default.md)
 - **Date:** 2026-11-03
 
 ## Context
