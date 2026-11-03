@@ -28,6 +28,8 @@ func TestViewsUseSharedBadgeCounts(t *testing.T) {
 			`uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))`,
 			`uh.updateCounts.Set(badgestate.Homebrew, refresh.Count)`,
 			`uh.updateCounts.Add(badgestate.Homebrew, -1)`,
+			`uh.updateCounts.Set(badgestate.Firmware, installableCount(updates))`,
+			`uh.updateCounts.Add(badgestate.Firmware, -1)`,
 		},
 	}
 	for path, required := range checks {

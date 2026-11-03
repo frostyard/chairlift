@@ -3,7 +3,7 @@
 Living design document (formerly `yeti/package-managers.md`; folded into
 `docs/` per [frostyard/core ADR-0025](https://github.com/frostyard/core/blob/main/docs/adr/0025-consolidate-repository-docs-into-docs.md)).
 
-Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts in two classes — 30s for read-only commands, 30m for state-changing ones, selected per invocation by each package's `commandTimeout(args)` helper from its `stateChangingCommands` map. All are called from `internal/views/` page builders. The cached availability check is important for the deferred-visibility startup pattern — multiple goroutines may check the same tool, and the result should only be computed once.
+Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts in two classes — 30s for read-only commands, 30m for state-changing ones, selected per invocation by each package's `commandTimeout(args)` helper from its `stateChangingCommands` map. `internal/fwupd` keeps the same two classes but passes a constant per call, because it has exactly one read command and one state-changing command and therefore needs no selector (see its section below). All are called from `internal/views/` page builders. The cached availability check is important for the deferred-visibility startup pattern — multiple goroutines may check the same tool, and the result should only be computed once.
 
 ## Homebrew (`internal/homebrew/homebrew.go`)
 
@@ -182,6 +182,19 @@ Its exported outcomes are:
   `FlatpakUpdate` always includes the application ID, adds the version arrow
   only when a new version exists, and adds the user-installation suffix only
   for user updates.
+- `FirmwareUpdate` titles the row with the device name (falling back to
+  `Unknown device`) and builds the subtitle from the parts that exist —
+  `Vendor · 1.2 → 1.3` — omitting an empty vendor and keeping only the version
+  that is known. `FirmwareUpdatesSubtitle` returns a `Status` for the firmware
+  expander: `Firmware is up to date` for zero updates, singular or plural
+  "update available" text otherwise, and `Error checking firmware updates: <err>`
+  with no expansion when the query failed. `FirmwareInstallConfirmation`
+  returns the confirmation dialog's heading and body; the body always carries
+  the power warning, then the restart sentence, the shutdown sentence, or the
+  "some devices restart or disconnect" sentence, and always ends with
+  `ChairLift will not restart the computer for you.` `FirmwareBlockedUpdate`
+  returns the same row text for a device fwupd cannot flash now, appending the
+  reason after ` · `; that row has no install control.
 - `BootcUpdateSubtitle` distinguishes not staged, staged without a version,
   and staged with a version. `BootcStageResultSubtitle` returns that staged
   text after a staged action, otherwise preserves the stage script's final
@@ -224,10 +237,11 @@ Two of the nine small, puregotk-free packages under `internal/views/` (the other
   - `SelfUpdate(dryRun bool, tool string) string` — Homebrew self-update ("Update Homebrew" button) toast (c3)
   - `TapTrustDecision{MutateUI bool; Toast string}` + `TapTrust(dryRun bool, tapName string) TapTrustDecision` — gates whether `trustTap` removes the tap's row, hides the group, and refreshes outdated packages (c3)
   - `BootcStage(dryRun bool, staged bool) string` — bootc stage-button completion toast; string-only since the subtitle stays live in both modes and there is no mutation left to gate (c4)
+  - `FirmwareInstall(dryRun bool, name string, needsReboot, needsShutdown bool) string` — fwupd firmware install toast: a `[DRY-RUN] Preview: firmware for <device> would be installed — no changes made` preview, or the completion message naming the restart, the shutdown, or nothing afterwards. String-only: `actionstate.PackageUpgrade` owns the row/control/badge decision, exactly as it does for a Homebrew upgrade row
   - `FeatureToggleDecision{Confirm bool; Toast string}` + `FeatureToggle(dryRun, enable bool, name string) FeatureToggleDecision` — gates whether `onFeatureToggled`'s switch confirms the flip or reverts it (c5)
   - `FeatureUpdateDecision{Toast string; Persistent bool; Recheck bool}` + `FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) FeatureUpdateDecision` — Features page "Update" button toast, whether it persists as an error toast, and whether the caller must run the update check again. `Recheck` is true for every outcome that ran the update — errors and failures included, because a failed run can still change state in part — and false only for the dry-run preview, where nothing ran; the page then calls `recheckFeatureUpdates` after showing the toast, so the rows show the state after the update instead of the startup check's state (see the `featurestatus` section's re-check paragraph). It reads the per-feature results because updex returns a nil error when a feature is held (see the Updex section's "Update results"). Decision table: dry-run gives the preview; an error with no results gives "Features merged, but activation did not finish. Reboot to finish." for `*updex.ActivationIncompleteError` or "Update failed: <err>" for any other error (both persistent); nil results with a nil error, and `*updex.ResultsUnreadableError`, give "Feature update finished, but ChairLift could not read the results. See the log for details." (persistent; the outcome is unknown, so no success claim); empty results give "No enabled features to update."; only updated (and current) features keep the old text exactly; only current features give "Features are already up to date."; anything else joins, in order, "Updated: a, b.", "Waiting for a newer OS image: c (reason); ...", "Held by a rollback: e (reason).", "Failed: f (reason); ...", then "Changes apply after reboot." (when something updated and activation is complete), then the activation sentence or, when no feature failed, "Update failed: <err>"; persistent when any feature waits, is held or failed, or the error is set
 
-  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`) select toast wording only. Where an application action also changes row controls or requests an inventory refresh, the separate tested `actionstate` decision owns that UI-side effect. The five decision-struct functions in `actionmsg` exist because their call sites have no wrapper- or `actionstate`-level gate for the *second* effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch; and the Features Update toast must read the per-feature results to tell a real update from a held one.
+  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`, `FirmwareInstall`) select toast wording only. Where an application action also changes row controls or requests an inventory refresh, the separate tested `actionstate` decision owns that UI-side effect. The five decision-struct functions in `actionmsg` exist because their call sites have no wrapper- or `actionstate`-level gate for the *second* effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch; and the Features Update toast must read the per-feature results to tell a real update from a held one.
 
 ### View-layer update action state (`internal/views/actionstate`)
 
@@ -274,10 +288,10 @@ clear/add bookkeeping; no `_test.go` is added to `internal/views`.
 `internal/views/badgestate` is one of the nine puregotk-free leaf packages
 under `internal/views`. `Counts` replaces the three independent integer fields
 that previously lived on `UserHome` with one mutex-protected owner for Bootc,
-Sysupdate, Flatpak, and Homebrew update counts. `Set(source, count)` models a completed
+Sysupdate, Firmware, Flatpak, and Homebrew update counts. `Set(source, count)` models a completed
 provider refresh and replaces that provider's prior value; `Add(source,
 delta)` models an immediate row-level change such as a successful Homebrew
-upgrade. Both clamp negative results to zero and return an atomic
+upgrade or firmware install. Both clamp negative results to zero and return an atomic
 `Snapshot{Count, Total}`. `Get` and `Total` provide locked reads.
 
 The view still performs widget mutation through `sgtk.RunOnMainThread`; the
@@ -285,7 +299,9 @@ leaf package owns only integers and synchronization. `badgestate_test.go`
 proves the zero value, multi-provider totals, replacement rather than
 accumulation across repeated refreshes, decrement/clamping behavior, unknown
 source rejection, and concurrent changes under the race detector.
-`wiring_test.go` verifies `views.go` and `updates_page.go` route all four
+`TestCountsCoverEveryProvider` pins the five providers and the `sourceCount`
+sentinel, so a new provider cannot be added without a test.
+`wiring_test.go` verifies `views.go` and `updates_page.go` route all five
 providers and the displayed total through this owner, and rejects the retired
 independent count fields.
 
@@ -446,6 +462,131 @@ spelled. It passes `--app` — matching the precedent set by `listApplications` 
 so runtimes and extensions are deliberately excluded from the results. Update
 rows and the sidebar update badge therefore only ever describe applications,
 which is what the user can act on from the applications page.
+
+## fwupd (`internal/fwupd/fwupd.go`)
+
+Wraps the unprivileged `fwupdmgr` client of the Linux Vendor Firmware Service.
+Every call is a D-Bus request to the `fwupd` daemon; the daemon does the work
+and authorizes it with its own PolicyKit actions (`org.freedesktop.fwupd.update-internal`,
+`org.freedesktop.fwupd.update-hotplug`, and others). ChairLift ships no
+PolicyKit policy file and no helper binary for firmware, and nothing on this
+path uses `pkexec` — decision record
+[ADR-0012](../adr/0012-firmware-updates-use-fwupds-own-polkit.md).
+
+### Key types
+
+- **`Update`** — `DeviceID`, `DeviceName`, `Vendor`, `CurrentVersion`,
+  `NewVersion`, `Summary`, plus `NeedsReboot` and `NeedsShutdown`. The last two
+  come from the device's `needs-reboot` and `needs-shutdown` flags; they drive
+  the confirmation dialog and the completion toast, because ChairLift never
+  restarts or shuts down the computer itself.
+- **`Update.Installable` and `Update.Reason`** — the blocked-device pair.
+  `Installable` is true only when the flags contain `updatable`, `Problems` is
+  empty, and `UpdateError` is empty, which is exactly when `fwupdmgr update`
+  would flash the device. `Reason` explains why it is false (see "Blocked
+  devices" below) and is empty for an installable device.
+- **`Error`** — message plus an underlying cause, so `errors.Is` classifies a
+  deadline or a cancellation while the message stays readable.
+
+### Operations
+
+| Function | CLI command | Timeout | Notes |
+|----------|------------|---------|-------|
+| `ListUpdates()` | `fwupdmgr get-updates --json` | 60s | Read-only; parses `{"Devices":[…]}` |
+| `Install(deviceID)` | `fwupdmgr update --no-reboot-check <deviceID>` | 30m | State-changing, dry-run aware; validates the id first |
+| `IsInstalled()` / `IsInstalledCached()` | `exec.LookPath("fwupdmgr")` | — | Cached with `sync.Once` for the async startup gate |
+| `ParseUpdates(data)` | none | — | Pure: JSON in, `[]Update` out |
+| `SetDryRun(bool)` / `IsDryRun()` | none | — | Module-level flag set once in `app.New()` |
+
+Unlike Homebrew and Flatpak, fwupd has no `stateChangingCommands` map and no
+`commandTimeout(args)`: there is exactly one read command and one state-changing
+command, so each caller passes its own timeout constant.
+
+### Parsing rules
+
+`ParseUpdates` reads the devices in fwupd's order and keeps a device only when
+it has at least one release and a well-formed `DeviceId`. Releases are newest
+first, so `Releases[0]` is the offered version; its `Version` and `Summary`
+become `NewVersion` and `Summary`, while the device's `Version` becomes
+`CurrentVersion`. Unknown JSON keys are ignored: `fwupdmgr` emits far more
+fields than the page shows, and a newer client must not break the parse. A
+device with no `Releases` key or an empty one has nothing to install and is
+skipped.
+
+### Blocked devices
+
+`fwupdmgr get-updates --json` lists devices that it will not flash now. Such a
+device has no `updatable` flag (for example only `updatable-hidden`: the laptop
+lid is closed, or the host is on battery), or a non-empty `Problems` array, or
+a non-empty `UpdateError` string. `fwupdmgr update <id>` skips such a device and
+still exits 0, so a view that reacts to the exit status alone would report a
+flash that never happened.
+
+`ParseUpdates` therefore keeps these devices in the list, sets `Installable`
+false, and fills `Reason` from the most specific source available:
+`UpdateError` when it is set, otherwise `Needs attention: ` plus the problems
+joined with `, `, otherwise `This device cannot be updated now`. Only a device
+fails the id or release check and is dropped; a blocked device is never
+dropped, because removing it would hide an update without telling the user why
+it cannot be applied.
+
+### Exit-code rule
+
+`ListUpdates` treats exit status **2** as an empty list with a nil error:
+older fwupdmgr versions use it for "no updatable devices" (stderr "No updatable
+devices"), and `{"Devices":[]}` with exit 0 is the newer form. Any other
+non-zero exit is an `*Error` whose message carries the command's stderr, so the
+expander can say that the check failed instead of claiming the firmware is up
+to date.
+
+### Device-id validation
+
+`Install` rejects any id that is not 40 lowercase hexadecimal characters
+(`^[0-9a-f]{40}$`, the format fwupd itself accepts) before it builds a command;
+the returned `*Error` names the id constraint and no process runs. PolicyKit
+does not inspect the arguments of the daemon's actions, so a value such as
+`--force` must never reach `fwupdmgr`'s argv. The validator is the argument
+injection defense for this wrapper.
+
+### View rules
+
+`loadFirmwareUpdates` (`internal/views/updates_page.go`) counts two different
+things: the expander subtitle counts every listed update
+(`pageview.FirmwareUpdatesSubtitle(len(updates), err)`), while the badge stores
+only the installable ones (`badgestate.Firmware` receives
+`installableCount(updates)`). A blocked device therefore appears in the list and
+in the subtitle, and never in the badge.
+
+A blocked device gets no Install button, and its subtitle is
+`pageview.FirmwareBlockedUpdate(...)` — the normal row text plus ` · ` plus the
+`Reason`, so the user reads why the device waits. One page-wide
+`UserHome.firmwareInstallGate` (`actionstate.Gate`) allows a single firmware
+install at a time: a click that finds the gate busy shows the toast `Another
+firmware update is installing` and does nothing else. Cancel, failure, and
+dry-run reset the gate. A live success removes the row and resets the gate too —
+not complete it — because the row is gone and the page must stay able to install
+the next device. `actionstate.PackageUpgrade` remains the single decision for
+row removal, badge decrement, and refresh.
+
+### Dry-run behavior
+
+`Install` validates the id first — an invalid id is an error even under
+dry-run, because the id is a programming contract, not a mutation — then logs
+`[DRY-RUN] Would execute: fwupdmgr update --no-reboot-check <id>` and returns
+nil without constructing a command. `ListUpdates` has no dry-run branch: it
+only queries the daemon.
+
+### Test seam
+
+`runCommandAt(ctx context.Context, exe string, args ...string) (string, int, error)`
+is the unexported runner. It returns stdout, the process exit status, and a
+classified error, and the executable is a package variable whose default is
+`"fwupdmgr"`, so `runner_test.go` and `fwupd_test.go` drive a `#!/bin/sh` fake
+script from `t.TempDir()` and assert the exact argv a real install would use.
+Like `runFlatpakCommandAt`, it starts the command in its own process group and
+sets `cmd.Cancel` to kill that group, so a helper process dies with fwupdmgr;
+`cmd.WaitDelay` bounds the wait. Deadlines and cancellations are classified
+first and never surface as `signal: killed`.
 
 ## Shared OS stage executor (`internal/stageexec`)
 

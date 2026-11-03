@@ -12,6 +12,7 @@ const (
 	Flatpak
 	Homebrew
 	Sysupdate
+	Firmware
 	sourceCount
 )
 
@@ -22,8 +23,8 @@ type Snapshot struct {
 }
 
 // Counts stores update counts by provider. Its methods are safe for the
-// independent bootc, Flatpak, Homebrew, and sysupdate worker goroutines to
-// call.
+// independent bootc, Flatpak, Homebrew, sysupdate, and firmware worker
+// goroutines to call.
 type Counts struct {
 	mu     sync.Mutex
 	values [sourceCount]int

@@ -23,10 +23,13 @@ func TestCountsReplaceRepeatedRefreshState(t *testing.T) {
 	if got := counts.Set(Sysupdate, 1); got != (Snapshot{Count: 1, Total: 9}) {
 		t.Fatalf("Set(Sysupdate, 1) = %#v", got)
 	}
+	if got := counts.Set(Firmware, 2); got != (Snapshot{Count: 2, Total: 11}) {
+		t.Fatalf("Set(Firmware, 2) = %#v", got)
+	}
 
 	// A second provider refresh replaces its previous count; it must not
 	// accumulate duplicate rows into the badge total.
-	if got := counts.Set(Flatpak, 2); got != (Snapshot{Count: 2, Total: 7}) {
+	if got := counts.Set(Flatpak, 2); got != (Snapshot{Count: 2, Total: 9}) {
 		t.Fatalf("second Set(Flatpak, 2) = %#v, want replacement total", got)
 	}
 	if got := counts.Get(Flatpak); got != 2 {
@@ -44,6 +47,12 @@ func TestCountsAddNeverProducesNegativeBadgeState(t *testing.T) {
 	if got := counts.Add(Homebrew, -10); got != (Snapshot{Count: 0, Total: 0}) {
 		t.Fatalf("Add(Homebrew, -10) = %#v, want clamped zero", got)
 	}
+
+	counts.Set(Firmware, 2)
+	if got := counts.Add(Firmware, -1); got != (Snapshot{Count: 1, Total: 1}) {
+		t.Fatalf("Add(Firmware, -1) = %#v", got)
+	}
+	counts.Set(Firmware, 0)
 	if got := counts.Set(Flatpak, -4); got != (Snapshot{Count: 0, Total: 0}) {
 		t.Fatalf("Set(Flatpak, -4) = %#v, want clamped zero", got)
 	}
@@ -65,10 +74,24 @@ func TestCountsRejectUnknownSourceWithoutChangingTotal(t *testing.T) {
 	}
 }
 
+// TestCountsCoverEveryProvider proves the source order and count of providers:
+// the five update providers, then the sourceCount sentinel.
+func TestCountsCoverEveryProvider(t *testing.T) {
+	providers := []Source{Bootc, Flatpak, Homebrew, Sysupdate, Firmware}
+	if int(sourceCount) != len(providers) {
+		t.Fatalf("sourceCount = %d, want %d providers", int(sourceCount), len(providers))
+	}
+	for index, source := range providers {
+		if int(source) != index {
+			t.Errorf("provider %d = %d, want %d", index, int(source), index)
+		}
+	}
+}
+
 func TestCountsConcurrentProviderUpdates(t *testing.T) {
 	var counts Counts
 	var wg sync.WaitGroup
-	for _, source := range []Source{Bootc, Flatpak, Homebrew, Sysupdate} {
+	for _, source := range []Source{Bootc, Flatpak, Homebrew, Sysupdate, Firmware} {
 		source := source
 		wg.Add(1)
 		go func() {
@@ -80,10 +103,10 @@ func TestCountsConcurrentProviderUpdates(t *testing.T) {
 	}
 	wg.Wait()
 
-	if got := counts.Total(); got != 400 {
-		t.Fatalf("Total() after concurrent updates = %d, want 400", got)
+	if got := counts.Total(); got != 500 {
+		t.Fatalf("Total() after concurrent updates = %d, want 500", got)
 	}
-	for _, source := range []Source{Bootc, Flatpak, Homebrew, Sysupdate} {
+	for _, source := range []Source{Bootc, Flatpak, Homebrew, Sysupdate, Firmware} {
 		if got := counts.Get(source); got != 100 {
 			t.Errorf("Get(%d) = %d, want 100", source, got)
 		}

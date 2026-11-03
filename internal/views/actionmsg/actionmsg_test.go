@@ -933,3 +933,60 @@ func TestFeatureUpdate(t *testing.T) {
 		})
 	}
 }
+
+// TestFirmwareInstall covers the dry-run preview and the three live
+// completion messages, which differ only in what the device needs afterwards.
+func TestFirmwareInstall(t *testing.T) {
+	tests := []struct {
+		name          string
+		dryRun        bool
+		deviceName    string
+		needsReboot   bool
+		needsShutdown bool
+		wantExact     string
+		wantContains  []string
+	}{
+		{
+			name:         "dry-run previews without claiming an install",
+			dryRun:       true,
+			deviceName:   "ThinkPad Embedded Controller",
+			needsReboot:  true,
+			wantExact:    "[DRY-RUN] Preview: firmware for ThinkPad Embedded Controller would be installed — no changes made",
+			wantContains: []string{"[DRY-RUN]", "no changes made"},
+		},
+		{
+			name:         "live install that needs a restart",
+			deviceName:   "ThinkPad Embedded Controller",
+			needsReboot:  true,
+			wantExact:    "Firmware for ThinkPad Embedded Controller installed. Restart to finish.",
+			wantContains: []string{"Restart to finish"},
+		},
+		{
+			name:          "live install that needs a shutdown",
+			deviceName:    "Thunderbolt Dock",
+			needsShutdown: true,
+			wantExact:     "Firmware for Thunderbolt Dock installed. Shut down to finish.",
+			wantContains:  []string{"Shut down to finish"},
+		},
+		{
+			name:         "live install that needs nothing afterwards",
+			deviceName:   "Keyboard",
+			wantExact:    "Firmware for Keyboard installed",
+			wantContains: []string{"Keyboard"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FirmwareInstall(tt.dryRun, tt.deviceName, tt.needsReboot, tt.needsShutdown)
+			if got != tt.wantExact {
+				t.Errorf("FirmwareInstall() = %q, want %q", got, tt.wantExact)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("FirmwareInstall() = %q, want it to contain %q", got, want)
+				}
+			}
+		})
+	}
+}

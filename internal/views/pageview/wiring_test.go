@@ -44,6 +44,10 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 				"pageview.SysupdateUpdateSubtitle(",
 				"pageview.SysupdateStageResultSubtitle(",
 				"pageview.SysupdateRollbackSubtitle(",
+				"pageview.FirmwareUpdate(",
+				"pageview.FirmwareBlockedUpdate(",
+				"pageview.FirmwareUpdatesSubtitle(",
+				"pageview.FirmwareInstallConfirmation(",
 			},
 			retired: []string{
 				"strings.LastIndex(",

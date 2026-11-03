@@ -18,7 +18,7 @@ ChairLift provides six configurable pages:
 |------|-------------|
 | **Applications** | Search/install Homebrew formulae and casks; uninstall installed formulae/casks; pin/unpin formulae; install curated Brewfile bundles. List/uninstall Flatpaks and launch the configured external manager for Flatpak discovery and installation. |
 | **Maintenance** | Run cleanup tasks for Homebrew and Flatpak, and execute custom maintenance scripts. |
-| **Updates** | Stage bootc or native A/B (systemd-sysupdate) system updates, apply Flatpak updates, upgrade Homebrew packages, and trust Homebrew taps. |
+| **Updates** | Stage bootc or native A/B (systemd-sysupdate) system updates, apply Flatpak updates, upgrade Homebrew packages, install firmware updates through fwupd, and trust Homebrew taps. |
 | **System** | View OS information, bootc deployment status, and launch a system health monitor. |
 | **Features** | Toggle system features managed by updex. |
 | **Help** | Links to the project website, issue tracker, and community chat. |
@@ -49,6 +49,8 @@ Runtime visibility depends on the group:
   Homebrew/Flatpak maintenance groups are hidden when their tool-specific
   runtime gates fail;
 - the Homebrew untrusted-taps group stays hidden unless actionable taps exist;
+- the firmware-updates group is off by default, and when enabled it stays
+  hidden until `fwupdmgr` is installed;
 - Features replaces its main group with an explicit unavailable message when
   Updex is not configured;
 - Applications and Updates groups for Homebrew and Flatpak remain visible and
@@ -61,6 +63,7 @@ groups configuration enables, not on runtime tool availability.
 |------|----------|
 | Homebrew | Package management (formulae, casks, bundles) |
 | Flatpak | Installed-application listing/uninstall and updates; new installs are delegated to the configured external manager |
+| fwupd (`fwupdmgr`) | Firmware updates (group off by default) |
 | bootc + `/usr/libexec/bootc-update-stage` | Staged bootc system updates |
 | `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` | Staged native A/B (systemd-sysupdate) system updates |
 | Updex | System feature toggles |

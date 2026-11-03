@@ -63,6 +63,11 @@ are listed in [org-adrs.md](org-adrs.md).
   root-only `bootc status` failure into the existing os-release fallback, so a
   row can show that it waits for a newer OS image; the root helper keeps the
   real bootc and fails closed
+- [adr/0012-firmware-updates-use-fwupds-own-polkit.md](adr/0012-firmware-updates-use-fwupds-own-polkit.md)
+  — firmware installs run the unprivileged `fwupdmgr update
+  --no-reboot-check <DeviceId>` and fwupd's own PolicyKit actions authorize
+  the daemon; ChairLift ships no policy file and no helper for firmware, and
+  the group is off by default until a hardware test
 
 ### Design
 
@@ -70,8 +75,8 @@ are listed in [org-adrs.md](org-adrs.md).
   purpose, dependency flow, key patterns, configuration, build and release
   (formerly `yeti/OVERVIEW.md`)
 - [design/package-managers.md](design/package-managers.md) — the Homebrew,
-  Flatpak, bootc, sysupdate, and updex wrappers and their view-layer leaf
-  packages (formerly `yeti/package-managers.md`)
+  Flatpak, fwupd, bootc, sysupdate, and updex wrappers and their view-layer
+  leaf packages (formerly `yeti/package-managers.md`)
 
 ### Specs
 

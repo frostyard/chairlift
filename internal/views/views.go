@@ -77,6 +77,11 @@ type UserHome struct {
 	sysupdateLogExpander   *adw.ExpanderRow
 	sysupdateRollbackRow   *adw.ActionRow
 
+	// firmware (fwupd) update references
+	firmwareGroup    *adw.PreferencesGroup
+	firmwareExpander *adw.ExpanderRow
+	firmwareRows     rowset.Tracker[*adw.ActionRow]
+
 	// Features page references
 	featuresGroup            *adw.PreferencesGroup
 	featuresUnavailableGroup *adw.PreferencesGroup
@@ -100,6 +105,11 @@ type UserHome struct {
 	brewRefresh         actionstate.RefreshGate
 	searchRefresh       actionstate.RefreshGate
 	brewPackagesRefresh actionstate.RefreshGate
+	firmwareRefresh     actionstate.RefreshGate
+	// firmwareInstallGate allows one firmware install at a time for the whole
+	// page: two flashes at once would overwrite each other's device state and
+	// make one confirmation dialog lie about what is happening.
+	firmwareInstallGate actionstate.Gate
 }
 
 // New creates a new UserHome views manager

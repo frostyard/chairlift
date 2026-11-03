@@ -4,7 +4,8 @@
 // Brewfile dumps and installs, Homebrew/Flatpak cleanup, Homebrew package
 // installs/uninstalls/pins/upgrades/self-updates, Flatpak application
 // uninstalls/updates, Homebrew tap trust, bootc system update staging,
-// configured custom maintenance scripts, and system feature toggles/updates.
+// firmware updates through fwupd, configured custom maintenance scripts, and
+// system feature toggles/updates.
 //
 // It is deliberately free of any puregotk/GTK import, following the
 // internal/views/trustmsg pattern, so its logic can be unit-tested on a
@@ -14,9 +15,10 @@
 // packages. See docs/agents/skills/gtk-headless-tests.md.
 //
 // Functions whose result only selects display text (BundleDump, Cleanup,
-// Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage) return a plain string: the
-// state-changing/no-op decision for those actions is already made and already
-// tested inside their wrapper package (internal/homebrew, internal/flatpak, internal/bootc,
+// Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage,
+// FirmwareInstall) return a plain string: the state-changing/no-op decision
+// for those actions is already made and already tested inside their wrapper
+// package (internal/homebrew, internal/flatpak, internal/bootc, internal/fwupd,
 // internal/updex).
 // Functions whose result gates a further decision return a decision struct,
 // precisely so the gated decision — not just the wording of the toast that
@@ -160,6 +162,26 @@ func SelfUpdate(dryRun bool, tool string) string {
 		return fmt.Sprintf("[DRY-RUN] Preview: %s would be updated — no changes made", tool)
 	}
 	return fmt.Sprintf("%s updated successfully", tool)
+}
+
+// FirmwareInstall returns the toast text for a firmware update installed
+// through fwupd. The wrapper package (internal/fwupd) already skips the
+// state-changing `fwupdmgr update` command under dry-run, so this function
+// only selects which string to show: a preview when dryRun is true, or the
+// completion message with the action the device needs afterwards when it
+// actually ran. ChairLift itself never restarts or shuts down the computer.
+func FirmwareInstall(dryRun bool, name string, needsReboot, needsShutdown bool) string {
+	if dryRun {
+		return fmt.Sprintf("[DRY-RUN] Preview: firmware for %s would be installed — no changes made", name)
+	}
+	switch {
+	case needsReboot:
+		return fmt.Sprintf("Firmware for %s installed. Restart to finish.", name)
+	case needsShutdown:
+		return fmt.Sprintf("Firmware for %s installed. Shut down to finish.", name)
+	default:
+		return fmt.Sprintf("Firmware for %s installed", name)
+	}
 }
 
 // BootcStage returns the toast text for a click of the Updates page's

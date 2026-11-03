@@ -244,3 +244,113 @@ func ShortDigest(digest string) string {
 	}
 	return digest
 }
+
+// Status is display text plus whether its container may expand.
+type Status struct {
+	Subtitle   string
+	Expandable bool
+}
+
+// FirmwareUpdate returns the row text for an available firmware update: the
+// device name (or "Unknown device"), and a subtitle built from the vendor and
+// the version transition. Empty parts are omitted rather than left as gaps.
+func FirmwareUpdate(name, vendor, currentVersion, newVersion string) Row {
+	title := name
+	if title == "" {
+		title = "Unknown device"
+	}
+
+	parts := make([]string, 0, 2)
+	if vendor != "" {
+		parts = append(parts, vendor)
+	}
+	if versions := versionTransition(currentVersion, newVersion); versions != "" {
+		parts = append(parts, versions)
+	}
+
+	return Row{Title: title, Subtitle: strings.Join(parts, " · ")}
+}
+
+// FirmwareBlockedUpdate returns the row text for a device whose update cannot
+// be installed now: the same text FirmwareUpdate gives, plus the reason fwupd
+// reports. The row has no install control, so the reason must be visible.
+func FirmwareBlockedUpdate(name, vendor, currentVersion, newVersion, reason string) Row {
+	row := FirmwareUpdate(name, vendor, currentVersion, newVersion)
+
+	parts := make([]string, 0, 2)
+	if row.Subtitle != "" {
+		parts = append(parts, row.Subtitle)
+	}
+	if reason != "" {
+		parts = append(parts, reason)
+	}
+
+	return Row{Title: row.Title, Subtitle: strings.Join(parts, " · ")}
+}
+
+// versionTransition renders the version change, keeping only the parts that
+// are known.
+func versionTransition(currentVersion, newVersion string) string {
+	switch {
+	case currentVersion != "" && newVersion != "":
+		return fmt.Sprintf("%s → %s", currentVersion, newVersion)
+	case newVersion != "":
+		return newVersion
+	default:
+		return currentVersion
+	}
+}
+
+// FirmwareUpdatesSubtitle returns the firmware expander's subtitle and whether
+// it can expand. A failed query never claims the firmware is up to date, and
+// it yields no rows to expand.
+func FirmwareUpdatesSubtitle(count int, err error) Status {
+	if err != nil {
+		return Status{Subtitle: fmt.Sprintf("Error checking firmware updates: %v", err)}
+	}
+	return Status{
+		Subtitle:   firmwareAvailableText(count),
+		Expandable: count > 0,
+	}
+}
+
+// firmwareAvailableText formats the firmware update count.
+func firmwareAvailableText(count int) string {
+	switch count {
+	case 0:
+		return "Firmware is up to date"
+	case 1:
+		return "1 firmware update available"
+	default:
+		return fmt.Sprintf("%d firmware updates available", count)
+	}
+}
+
+// FirmwareInstallConfirmation returns the heading and body of the dialog shown
+// before one device's firmware update is installed. The body always carries
+// the power warning: an interrupted firmware write can leave a device
+// unusable. The completion sentence says what the device needs afterwards, and
+// the last sentence states that ChairLift itself never restarts the computer.
+func FirmwareInstallConfirmation(name, newVersion string, needsReboot, needsShutdown bool) (string, string) {
+	device := name
+	if device == "" {
+		device = "Unknown device"
+	}
+
+	sentences := make([]string, 0, 4)
+	if newVersion != "" {
+		sentences = append(sentences, fmt.Sprintf("Version %s will be installed.", newVersion))
+	}
+	sentences = append(sentences, "Do not turn off or unplug the computer during the update. Keep the power connected.")
+	switch {
+	case needsReboot:
+		sentences = append(sentences, "The computer must restart to finish the update.")
+	case needsShutdown:
+		sentences = append(sentences, "The computer must shut down to finish the update.")
+	default:
+		sentences = append(sentences, "Some devices restart or disconnect while they update.")
+	}
+	sentences = append(sentences, "ChairLift will not restart the computer for you.")
+
+	return fmt.Sprintf("Install firmware for %s?", device), strings.Join(sentences, " ")
+}

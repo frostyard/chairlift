@@ -32,6 +32,7 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/navigation/ Canonical pages, shortcuts, and pure navigation transitions
         ├── internal/homebrew/  Homebrew CLI wrapper (JSON output parsing)
         ├── internal/flatpak/   Flatpak CLI wrapper (tabular output parsing)
+        ├── internal/fwupd/     fwupd CLI wrapper (JSON update list, unprivileged install)
         ├── internal/bootc/     bootc wrapper (status reads, fixed stage adapter)
         ├── internal/sysupdate/ native A/B detection, status, rollback, fixed stage adapter
         ├── internal/stageexec/ Pure-Go shared OS staging stream/event executor
@@ -42,7 +43,7 @@ internal/views/                 Page builders and event handlers (one file per p
 
 ### Dependency flow
 
-`cmd → app → window → views → {config, homebrew, flatpak, bootc, sysupdate, updex}`.
+`cmd → app → window → views → {config, homebrew, flatpak, fwupd, bootc, sysupdate, updex}`.
 `app` and `window` also depend on the pure `navigation` package.
 
 External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
@@ -124,9 +125,9 @@ The updates page's `sysupdate_updates_group` is gated on `sysupdate.IsNativeABCa
 Decision record: [ADR-0009](../adr/0009-dry-run-output-convention-and-single-decision-structs.md)
 (the `[DRY-RUN]` output convention and single decision structs).
 
-The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, bootc, sysupdate, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
+The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, fwupd, bootc, sysupdate, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
 
-**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would _also_ mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `FeatureUpdateDecision.Persistent`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation _and_ the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). `FeatureUpdateDecision.Persistent` is the same pattern for the Features page's Update toast: it decides whether the toast stays on screen as an error toast, and the same struct's `Recheck` decides whether the update check runs again, so the rows show the state after the update instead of the startup check's state. Sites with no second UI decision to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, and bootc stage toasts) get a plain string function instead.
+**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would _also_ mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `FeatureUpdateDecision.Persistent`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation _and_ the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). `FeatureUpdateDecision.Persistent` is the same pattern for the Features page's Update toast: it decides whether the toast stays on screen as an error toast, and the same struct's `Recheck` decides whether the update check runs again, so the rows show the state after the update instead of the startup check's state. Sites with no second UI decision to gate (package upgrade/update/self-update, Flatpak uninstall, firmware install, cleanup, Brewfile dump, and bootc stage toasts) get a plain string function instead.
 
 **Intentional exception:** bootc staging's completion **toast** is dry-run-aware (`actionmsg.BootcStage`), but its expander **subtitle** deliberately is not. The subtitle is a persistent status readout of live `bootc.GetStatus()` — what deployment is actually staged/booted right now — not a per-click completion claim, so it stays accurate and unchanged in both dry-run and live mode. Only the toast, which inherently answers "what did this click just do," needed dry-run-specific wording; there is no mutation left to gate once the subtitle is deliberately excluded, which is why `BootcStage` is string-only rather than a decision struct. Native A/B staging follows the identical split: `actionmsg.SysupdateStage` is the dry-run-aware toast, while the subtitle and rollback row re-read the real `/run/snosi` state files and partition labels in both modes.
 
@@ -992,9 +993,9 @@ Each wrapper in `internal/` follows a consistent shape:
 
 - Module-level `dryRun` flag with `SetDryRun()`/`IsDryRun()`
 - `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`) for use from views during async startup
-- Homebrew, Flatpak, and Updex implement both `IsInstalled()` and `IsInstalledCached()`
+- Homebrew, Flatpak, fwupd, and Updex implement both `IsInstalled()` and `IsInstalledCached()`
 - List/Search/Install/Uninstall/Update functions
-- Context-based timeouts. Homebrew and Flatpak both use a two-class model selected per invocation by an unexported `commandTimeout(args)` helper: 30s for read-only commands, 30m for state-changing ones (the keys of each package's `stateChangingCommands` map). updex uses 5min and bootc 30min.
+- Context-based timeouts. Homebrew and Flatpak both use a two-class model selected per invocation by an unexported `commandTimeout(args)` helper: 30s for read-only commands, 30m for state-changing ones (the keys of each package's `stateChangingCommands` map). fwupd selects its timeout per call instead, because it has exactly one read command and one state-changing command: 60s for the update query and 30m for an install. updex uses 5min and bootc 30min.
 - Custom error types where needed
 
 ### Shared OS staging progress (`internal/stageexec`)
@@ -1044,10 +1045,52 @@ path group-killable is a privilege-model change.
 
 `onBootcStageClicked()` (`internal/views/updates_page.go`) drives the "System Update" expander: it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes the `ProgressEvent` channel on a second goroutine — `EventMessage` lines are appended to a log expander with timestamps, and `EventComplete` marks the activity complete. A returned `stageErr` drives the error subtitle and toast after the stream closes; there is no duplicate error event. After `wg.Wait()` returns, the handler re-reads live `bootc.GetStatus()` and calls `uh.updateCounts.Set(badgestate.Bootc, 0|1)` plus `uh.updateBadgeCount()` unconditionally in both dry-run and live mode (this is a plain read, not a mutation, so it always reflects reality); it then sets `expander`'s subtitle from that same live read unconditionally as well, but shows `actionmsg.BootcStage(bootc.IsDryRun(), staged)` for the completion toast — an explicit preview string under dry-run rather than one of the "staged"/"up to date" strings that read as a verified completion claim about a click that, under dry-run, checked and changed nothing. The system page has a separate, simpler bootc path: `loadBootcStatus` (gated on `IsBootcBootedCached()`) calls `bootc.GetStatus` to show the booted/staged/rollback deployment images, versions, and digests, with no staging controls of its own — staging happens on the Updates page.
 
+### Firmware updates (updates page)
+
+`internal/fwupd` wraps the unprivileged `fwupdmgr` client of the Linux Vendor
+Firmware Service, and `buildUpdatesPage` builds `firmware_updates_group` hidden
+and checks availability asynchronously. The group stays hidden when
+`fwupd.IsInstalledCached()` is false, so a host without fwupd never sees it. On
+a host with fwupd, `loadFirmwareUpdates` runs
+`fwupdmgr get-updates --json` on a worker goroutine, shows the group, and adds
+one row per device. The load is generation-guarded by `firmwareRefresh`, so a
+stale query cannot replace newer rows. A query that exits 2 ("no updatable
+devices") is an empty list, not an error; any other failure shows
+`pageview.FirmwareUpdatesSubtitle`'s error text and keeps the last known count.
+
+The expander subtitle counts every listed update, while the badge stores only
+the installable ones (`installableCount`, in `badgestate.Firmware`). A device
+that fwupd will not flash now — no `updatable` flag (a closed lid, a host on
+battery), a non-empty `Problems` array, or a non-empty `UpdateError` — keeps its
+row and its reason but gets no `Install` button, and its subtitle comes from
+`pageview.FirmwareBlockedUpdate`, which appends the reason to the normal row
+text. Without that rule a zero exit from a skipped device would read as a
+successful flash.
+
+One `firmwareInstallGate` (`actionstate.Gate`) on `UserHome` covers the whole
+page, so only one firmware install runs at a time: a click that finds the gate
+busy shows the toast `Another firmware update is installing` and does nothing
+else.
+
+The Install button opens `adw.NewAlertDialog` with
+`pageview.FirmwareInstallConfirmation`: the body always warns not to turn off or
+unplug the computer and to keep the power connected, then states whether the
+device needs a restart, a shutdown, or nothing, and that ChairLift will not
+restart the computer itself. The install response is `adw.ResponseDestructiveValue`.
+On confirm the handler calls `fwupd.Install(deviceID)` and applies
+`actionstate.PackageUpgrade` as its single decision, exactly like a Homebrew
+upgrade row: failure restores the button and shows an error toast, dry-run
+restores it and shows the `actionmsg.FirmwareInstall` preview, and a live
+success removes the row, decrements the firmware badge, updates the subtitle,
+and refreshes the list. The gate resets in every case, on success included:
+the row is gone, and the page must stay able to install the next device. Every call is unprivileged —
+fwupd's own PolicyKit actions authorize the daemon — which is decision record
+[ADR-0012](../adr/0012-firmware-updates-use-fwupds-own-polkit.md).
+
 ### Update badge tracking
 
-The updates page stores bootc, sysupdate, Flatpak, and Homebrew counts in the
-mutex-backed `badgestate.Counts` value on `UserHome`. The bootc provider is 1
+The updates page stores bootc, sysupdate, firmware, Flatpak, and Homebrew
+counts in the mutex-backed `badgestate.Counts` value on `UserHome`. The bootc provider is 1
 when `bootc.GetStatus()` reports a staged deployment and 0 otherwise — a
 boolean folded into the total, not a count of available images. The sysupdate
 provider follows the same boolean rule: 1 when `sysupdate.GetStatus().IsStaged()`
@@ -1057,7 +1100,10 @@ no persistent "available but unstaged" state because the snosi stager checks
 and stages in one run. Provider refreshes use
 `Set`, so a repeated load replaces rather than accumulates; successful
 row-level Homebrew upgrades use `Add(Homebrew, -1)`, which cannot go below
-zero. `updateBadgeCount` reads the aggregate `Total` and pushes it through
+zero, and a successful firmware install uses `Add(Firmware, -1)` under the same
+rule. The firmware provider counts the devices fwupd lists as updatable; it is
+set by a completed firmware query and never lowered by a failed one.
+`updateBadgeCount` reads the aggregate `Total` and pushes it through
 `ToastAdder.SetUpdateBadge()`. Refresh requests receive an increasing
 generation from `actionstate.RefreshGate`; only the newest request may apply
 its result, so an older, slower query cannot overwrite newer metadata. Every
@@ -1075,7 +1121,7 @@ Decision records: [ADR-0001](../adr/0001-fixed-path-pkexec-privilege-boundary.md
 [ADR-0006](../adr/0006-split-system-integration-package-with-mutual-conflicts.md)
 (the system-integration package split).
 
-bootc staging, native A/B staging, and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), native A/B staging runs `pkexec /usr/libexec/snosi-sysupdate-stage` directly (`internal/sysupdate.StageScriptPath`, action id `org.frostyard.ChairLift.sysupdate.stage`), and updex delegates to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`) via `pkexec`. Polkit policy files are installed for all three: `data/org.frostyard.ChairLift.bootc.policy`, `data/org.frostyard.ChairLift.sysupdate.policy`, and `data/org.frostyard.ChairLift.updex.policy`. ChairLift deliberately ships no `.rules` files: the policies require normal administrator authentication (`auth_admin`, with `auth_admin_keep` for an active local session) rather than granting blanket passwordless access to a login group. Source installation removes the two legacy ChairLift `.rules` files so an older passwordless rule cannot survive an upgrade. Homebrew tap trust (`brew trust`) is explicitly per-user and does _not_ go through pkexec — see [package-managers.md](./package-managers.md).
+bootc staging, native A/B staging, and updex require root for state-changing operations. They invoke commands through `pkexec` (PolicyKit). bootc runs `pkexec /usr/libexec/bootc-update-stage` directly (polkit action id `org.frostyard.ChairLift.bootc.stage`), native A/B staging runs `pkexec /usr/libexec/snosi-sysupdate-stage` directly (`internal/sysupdate.StageScriptPath`, action id `org.frostyard.ChairLift.sysupdate.stage`), and updex delegates to the fixed absolute path `internal/updex.HelperPath` (`/usr/bin/chairlift-updex-helper`) via `pkexec`. Polkit policy files are installed for all three: `data/org.frostyard.ChairLift.bootc.policy`, `data/org.frostyard.ChairLift.sysupdate.policy`, and `data/org.frostyard.ChairLift.updex.policy`. ChairLift deliberately ships no `.rules` files: the policies require normal administrator authentication (`auth_admin`, with `auth_admin_keep` for an active local session) rather than granting blanket passwordless access to a login group. Source installation removes the two legacy ChairLift `.rules` files so an older passwordless rule cannot survive an upgrade. Homebrew tap trust (`brew trust`) is explicitly per-user and does _not_ go through pkexec — see [package-managers.md](./package-managers.md). Firmware installs are the other unprivileged mutation: `internal/fwupd` calls `fwupdmgr update --no-reboot-check <DeviceId>` directly and the fwupd daemon authorizes it with fwupd's own PolicyKit actions, so ChairLift contributes no policy file and no helper to that path ([ADR-0012](../adr/0012-firmware-updates-use-fwupds-own-polkit.md)).
 
 **Why the helper path must be absolute, and why `PREFIX=/usr`:** `pkexec`
 resolves the program it's asked to run to an absolute path and compares it
@@ -1263,6 +1309,7 @@ page_name:
 | `system_page`       | `health_group`                   | System monitor launcher (configurable `app_id`, default: Mission Center)                                                                                                                                |
 | `updates_page`      | `bootc_updates_group`            | bootc system updates — stage via `bootc-update-stage`, apply on restart (gated on `bootc.IsBootcBootedCached()` and stage script availability)                                                          |
 | `updates_page`      | `sysupdate_updates_group`        | native A/B system updates — stage via `snosi-sysupdate-stage`, apply on restart, with a read-only previous-version rollback row (gated on `sysupdate.IsNativeABCached()` and stage script availability) |
+| `updates_page`      | `firmware_updates_group`         | device firmware updates through fwupd, one device at a time with a confirmation dialog (gated on `fwupd.IsInstalledCached()`); **disabled by default** until a hardware test |
 | `updates_page`      | `flatpak_updates_group`          | Flatpak pending updates                                                                                                                                                                                 |
 | `updates_page`      | `brew_updates_group`             | Homebrew outdated packages                                                                                                                                                                              |
 | `updates_page`      | `brew_trust_group`               | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); hidden unless there is something to trust                                                                                       |
@@ -1296,6 +1343,7 @@ page_name:
 - GTK 4 and libadwaita 1 (shared libraries loaded at runtime by puregotk)
 - Homebrew (optional)
 - Flatpak (optional)
+- fwupd / `fwupdmgr` (optional; the firmware-updates group is disabled by default and, when enabled, hidden unless `fwupdmgr` is present)
 - `bootc` + `/usr/libexec/bootc-update-stage` (both optional; UI gated on `bootc.IsBootcBootedCached()`, i.e. `bootc status` reporting a non-null `booted` deployment — not on any sentinel file)
 - `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` (both optional, shipped by native A/B OS images; UI gated on `sysupdate.IsNativeABCached()` and `sysupdate.StageScriptAvailable()`)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)

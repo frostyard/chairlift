@@ -27,6 +27,8 @@ updates_page:
     enabled: false  # Hide Homebrew updates (not typically used on other distros)
   brew_trust_group:
     enabled: false  # Hide Homebrew tap trust (not typically used on other distros)
+  firmware_updates_group:
+    enabled: false  # Off until tested on real hardware; set true to enable
 
 applications_page:
   applications_installed_group:
