@@ -43,10 +43,23 @@ and the badge counts installable firmware with the other providers.
 Harder: every host with fwupd now runs `fwupdmgr get-updates --json` at
 startup. The call is a read with the 60 s read timeout and changes nothing.
 
-An administrator who does not want the group must set
-`firmware_updates_group: enabled: false` in `/etc/chairlift/config.yml`. A
-host whose existing configuration file sets `enabled: false` explicitly keeps
+An administrator who does not want the group must set it off in
+`/etc/chairlift/config.yml`:
+
+```yaml
+updates_page:
+  firmware_updates_group:
+    enabled: false
+```
+
+A host whose existing configuration file sets `enabled: false` explicitly keeps
 the group off: an explicit value always wins over the default.
+
+Page visibility comes from static configuration, not from tool availability
+(`internal/navigation`). A configuration that disables every other Updates
+group but omits this one now keeps the Updates page, and on a host without
+`fwupdmgr` that page is empty. Such a configuration must also set
+`firmware_updates_group` to `enabled: false`.
 
 All obligations of ADR-0012 stay.
 
