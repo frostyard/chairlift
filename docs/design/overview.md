@@ -1091,8 +1091,9 @@ different offered version proves a flash, so the install is followed by
 classifies it, first match wins: a failed state query is `InstallUnverified`
 with its error text; a device that is not listed is `InstallUnverified` because
 it can be restarting; `UpdateState` of `needs-reboot` or `pending` is
-`InstallStaged`; the new version is `InstallFlashed`; `UpdateState` of `failed`
-or `failed-transient` is `InstallNotApplied`; the old version is
+`InstallStaged`; `UpdateState` of `failed` or `failed-transient` is
+`InstallNotApplied`, even with a matching version (fail closed); the new
+version is `InstallFlashed`; the old version is
 `InstallNotApplied`; anything else is `InstallUnverified` and names the version
 the device reports. `InstallUnverified` is the zero value of `InstallResult`, so
 an unknown outcome cannot read as a success. The `get-updates` list is read

@@ -75,8 +75,9 @@ Five constraints make that safe and unambiguous:
    b. the device is not listed — unverified, because it can be restarting;
    c. `UpdateState` is `needs-reboot` or `pending` — staged, which is what a
       UEFI capsule reports while its version is still the old one;
-   d. the device version equals the new release — flashed;
-   e. `UpdateState` is `failed` or `failed-transient` — not applied;
+   d. `UpdateState` is `failed` or `failed-transient` — not applied, even
+      when the version matches, so the check fails closed;
+   e. the device version equals the new release — flashed;
    f. the device version equals the old version — not applied, with the
       device's update error, its own blocked reason, or a generic sentence;
    g. anything else — unverified, naming the version the device reports.

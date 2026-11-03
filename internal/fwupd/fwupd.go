@@ -302,9 +302,10 @@ type InstallReport struct {
 //	a. the state query failed            Unverified, the error text
 //	b. the device is not listed          Unverified, it can be restarting
 //	c. update state needs-reboot/pending Staged
-//	d. version equals the new version    Flashed
-//	e. update state failed (transient)   NotApplied, the update error or
-//	                                     "the update failed"
+//	d. update state failed (transient)   NotApplied, the update error or
+//	                                     "the update failed"; it wins over a
+//	                                     matching version (fail closed)
+//	e. version equals the new version    Flashed
 //	f. version equals the old version    NotApplied, the update error, else
 //	                                     the device's own blocked reason, else
 //	                                     "fwupd did not install the update"

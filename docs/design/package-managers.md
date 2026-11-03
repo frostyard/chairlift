@@ -510,7 +510,7 @@ path uses `pkexec` — decision record
 | `ListUpdates()` | `fwupdmgr get-updates --json` | 60s | Read-only; parses `{"Devices":[…]}` |
 | `Install(deviceID)` | `fwupdmgr update --no-reboot-check <deviceID>` | 30m | State-changing, dry-run aware; validates the id first |
 | `GetDeviceState(deviceID)` | `fwupdmgr get-devices --json` | 60s | Read-only; validates the id first; exit 2 means the device is not listed |
-| `InstallAndVerify(update)` | that install, then `get-devices --json` and `get-updates --json` | 30m + 60s | Install error returned as the error; dry-run returns a zero report and makes no query |
+| `InstallAndVerify(update)` | that install, then `get-devices --json` and `get-updates --json` | 30m + 2 × 60s | Install error returned as the error; dry-run returns a zero report and makes no query |
 | `VerifyInstall(before, state, found, stateErr)` | none | — | Pure: classifies the device's own state |
 | `ParseDeviceState(data, deviceID)` | none | — | Pure: JSON plus an id in, `DeviceState` and found out |
 | `IsInstalled()` / `IsInstalledCached()` | `exec.LookPath("fwupdmgr")` | — | Cached with `sync.Once` for the async startup gate |
@@ -518,8 +518,10 @@ path uses `pkexec` — decision record
 | `SetDryRun(bool)` / `IsDryRun()` | none | — | Module-level flag set once in `app.New()` |
 
 Unlike Homebrew and Flatpak, fwupd has no `stateChangingCommands` map and no
-`commandTimeout(args)`: there is exactly one read command and one state-changing
-command, so each caller passes its own timeout constant.
+`commandTimeout(args)`: there are two read commands (`get-updates --json` and
+`get-devices --json`, 60s each) and one state-changing command (`update`, 30m),
+so each caller passes its own timeout constant. `InstallAndVerify` runs the
+install and then both reads in sequence, each read with its own 60s budget.
 
 ### Parsing rules
 
@@ -567,13 +569,15 @@ afterwards for one purpose only: rebuilding the rows.
 | a | the state query failed | `InstallUnverified` | the state query's error text |
 | b | the device is not listed | `InstallUnverified` | `fwupd does not show the device now; it can be restarting` |
 | c | `UpdateState` is `needs-reboot` or `pending` | `InstallStaged` | — |
-| d | `Version` equals the offered new version (and is not empty) | `InstallFlashed` | — |
-| e | `UpdateState` is `failed` or `failed-transient` | `InstallNotApplied` | `UpdateError`, or `the update failed` |
+| d | `UpdateState` is `failed` or `failed-transient` | `InstallNotApplied` | `UpdateError`, or `the update failed` |
+| e | `Version` equals the offered new version (and is not empty) | `InstallFlashed` | — |
 | f | `Version` equals the device's old version | `InstallNotApplied` | `UpdateError`, else the device's own blocked reason, else `fwupd did not install the update` |
 | g | anything else | `InstallUnverified` | `the device now reports version <Version>` |
 
 `InstallUnverified` is the zero value of `InstallResult`, so an unknown outcome
-can never read as a success. A staged result is a real install that still needs
+can never read as a success. A failed state wins over a matching version
+(rule d before rule e), so the check fails closed: a device that reports the
+target version together with `failed` is not called installed. A staged result is a real install that still needs
 a restart: a UEFI capsule reports `needs-reboot` while its version stays the old
 one.
 

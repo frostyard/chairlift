@@ -486,14 +486,22 @@ func TestVerifyInstallRules(t *testing.T) {
 			wantResult: InstallStaged,
 		},
 		{
-			name:       "d: the device reports the new version",
+			name:       "e: the device reports the new version",
 			before:     before,
 			state:      DeviceState{Version: "2.0"},
 			found:      true,
 			wantResult: InstallFlashed,
 		},
 		{
-			name:       "e: the device reports a failed update",
+			name:       "d: a failed state wins over the new version",
+			before:     before,
+			state:      DeviceState{Version: "2.0", UpdateState: "failed", UpdateError: "failed to verify"},
+			found:      true,
+			wantResult: InstallNotApplied,
+			wantReason: "failed to verify",
+		},
+		{
+			name:       "d: the device reports a failed update",
 			before:     before,
 			state:      DeviceState{Version: "1.0", UpdateState: "failed", UpdateError: "failed to decompress"},
 			found:      true,
@@ -501,7 +509,7 @@ func TestVerifyInstallRules(t *testing.T) {
 			wantReason: "failed to decompress",
 		},
 		{
-			name:       "e: a failed update without a recorded error",
+			name:       "d: a failed update without a recorded error",
 			before:     before,
 			state:      DeviceState{Version: "1.0", UpdateState: "failed-transient"},
 			found:      true,
