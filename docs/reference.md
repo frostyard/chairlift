@@ -16,7 +16,7 @@ authoritative. If it cannot be read or fails YAML/schema validation, ChairLift
 hides every feature group, logs a `CONFIGURATION ERROR`, and displays a
 persistent toast with the path and cause. Fix the file and restart ChairLift.
 If no file is found, built-in defaults apply: all groups are enabled except
-`maintenance_cleanup_group` and `firmware_updates_group`.
+`maintenance_cleanup_group`.
 
 Source and nFPM installs provide the repository's maintainer defaults at
 `/usr/share/chairlift/config.yml`. Package upgrades may replace that file.
@@ -65,7 +65,7 @@ order below. Help is always retained.
 | Flatpak Updates | `flatpak_updates_group` | Pending Flatpak application updates |
 | Homebrew Updates | `brew_updates_group` | Outdated Homebrew packages with upgrade buttons |
 | Untrusted Taps | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); trust a tap to resume its updates. Shown only when there is something to trust |
-| Firmware Updates | `firmware_updates_group` | Device firmware updates from the Linux Vendor Firmware Service (fwupd), installed one device at a time after a confirmation that warns about power and the restart or shutdown the device needs; only one install runs at a time for the whole page. A device that fwupd will not update now (for example a closed lid, a host on battery, or a recorded update error) stays in the list with its reason and without an install button, and only installable updates count in the sidebar badge. After each install ChairLift reads the device's own state, not the update offer, so an update that fwupd did not apply is reported as an error and the device stays in the list; a staged update that needs a restart says so. Every call is unprivileged: the fwupd daemon authorizes the install with its own PolicyKit actions. Shown only when `fwupdmgr` is installed; **disabled by default** until a hardware test passes |
+| Firmware Updates | `firmware_updates_group` | Device firmware updates from the Linux Vendor Firmware Service (fwupd), installed one device at a time after a confirmation that warns about power and the restart or shutdown the device needs; only one install runs at a time for the whole page. A device that fwupd will not update now (for example a closed lid, a host on battery, or a recorded update error) stays in the list with its reason and without an install button, and only installable updates count in the sidebar badge. After each install ChairLift reads the device's own state, not the update offer, so an update that fwupd did not apply is reported as an error and the device stays in the list; a staged update that needs a restart says so. Every call is unprivileged: the fwupd daemon authorizes the install with its own PolicyKit actions. Shown only when `fwupdmgr` is installed; enabled by default |
 
 ### Applications Page (`applications_page`)
 
@@ -171,4 +171,4 @@ maintenance_page:
 ```
 
 All other groups keep their built-in state since they are not listed: enabled,
-except `maintenance_cleanup_group` and `firmware_updates_group`.
+except `maintenance_cleanup_group`.

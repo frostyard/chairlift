@@ -403,15 +403,17 @@ func repoRoot() string {
 
 // TestUpdatesPageDefaultGroupSetIsExact asserts that defaultConfig()'s
 // updates_page group set is exactly the six groups the Updates page view
-// still builds. This is an exact-set equality check (length plus every
-// expected key present), not a single named-key absence lookup, so it fails
-// loudly whether a formerly-shipped, now-removed group is silently
-// re-added under its old name or under any new one.
+// still builds, each with its documented default Enabled value. This is an
+// exact-set equality check (length plus every expected key present), not a
+// single named-key absence lookup, so it fails loudly whether a
+// formerly-shipped, now-removed group is silently re-added under its old name
+// or under any new one. Every group, firmware_updates_group included
+// (ADR-0013), is enabled by default.
 func TestUpdatesPageDefaultGroupSetIsExact(t *testing.T) {
 	want := map[string]bool{
 		"bootc_updates_group":     true,
 		"sysupdate_updates_group": true,
-		"firmware_updates_group":  false,
+		"firmware_updates_group":  true,
 		"flatpak_updates_group":   true,
 		"brew_updates_group":      true,
 		"brew_trust_group":        true,
@@ -421,9 +423,14 @@ func TestUpdatesPageDefaultGroupSetIsExact(t *testing.T) {
 	if len(got) != len(want) {
 		t.Fatalf("defaultConfig().UpdatesPage has %d groups, want %d: got keys %v", len(got), len(want), groupKeys(got))
 	}
-	for name := range want {
-		if _, ok := got[name]; !ok {
+	for name, wantEnabled := range want {
+		group, ok := got[name]
+		if !ok {
 			t.Errorf("defaultConfig().UpdatesPage: missing expected group %q; got keys %v", name, groupKeys(got))
+			continue
+		}
+		if group.Enabled != wantEnabled {
+			t.Errorf("defaultConfig().UpdatesPage[%q].Enabled = %v, want %v", name, group.Enabled, wantEnabled)
 		}
 	}
 }
@@ -470,5 +477,27 @@ func TestUpdatesPageDefaultGroupsHaveBuilders(t *testing.T) {
 		if !gated[name] {
 			t.Errorf("defaultConfig().UpdatesPage group %q has no matching config.IsGroupEnabled(\"updates_page\", ...) call in %s", name, path)
 		}
+	}
+}
+
+// TestShippedConfigsEnableFirmwareUpdates asserts that both shipped
+// configuration files agree with defaultConfig() on firmware_updates_group
+// (ADR-0013): a host with the packaged file and a host with no file must show
+// the same group.
+func TestShippedConfigsEnableFirmwareUpdates(t *testing.T) {
+	if !defaultConfig().UpdatesPage["firmware_updates_group"].Enabled {
+		t.Fatal("defaultConfig() firmware_updates_group is disabled, want enabled (ADR-0013)")
+	}
+	for _, name := range []string{"config.yml", "config.bootc-example.yml"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(repoRoot(), name)
+			cfg, err := loadFromPath(path)
+			if err != nil {
+				t.Fatalf("loadFromPath(%q): %v", path, err)
+			}
+			if !cfg.IsGroupEnabled("updates_page", "firmware_updates_group") {
+				t.Errorf("%s: firmware_updates_group is disabled, want enabled (ADR-0013)", name)
+			}
+		})
 	}
 }

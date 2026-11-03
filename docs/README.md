@@ -67,7 +67,11 @@ are listed in [org-adrs.md](org-adrs.md).
   — firmware installs run the unprivileged `fwupdmgr update
   --no-reboot-check <DeviceId>` and fwupd's own PolicyKit actions authorize
   the daemon; ChairLift ships no policy file and no helper for firmware, and
-  the group is off by default until a hardware test
+  the group is off by default until a hardware test (ADR-0013 changes that
+  default)
+- [adr/0013-firmware-updates-are-on-by-default.md](adr/0013-firmware-updates-are-on-by-default.md)
+  — proposed: `firmware_updates_group` is enabled by default after a test on
+  real hardware; the rest of ADR-0012 stays
 
 ### Design
 

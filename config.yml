@@ -24,7 +24,7 @@ updates_page:
   brew_trust_group:
     enabled: true
   firmware_updates_group:
-    enabled: false  # Off until tested on real hardware; set true to enable
+    enabled: true  # Shown only when fwupdmgr is installed
 
 applications_page:
   applications_installed_group:

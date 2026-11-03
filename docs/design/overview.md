@@ -144,7 +144,7 @@ Per-wrapper mechanics:
 
 ### Configuration-driven UI visibility
 
-Each preference group on every page checks `config.IsGroupEnabled(pageName, groupName)` before building its widgets. Groups default to enabled if not specified in config. `maintenance_cleanup_group` and `firmware_updates_group` default to disabled in the default config.
+Each preference group on every page checks `config.IsGroupEnabled(pageName, groupName)` before building its widgets. Groups default to enabled if not specified in config. `maintenance_cleanup_group` defaults to disabled in the default config.
 
 `internal/config/config.go` builds the effective `*Config` by overlaying a
 parsed file onto `defaultConfig()` field by field, not by replacing it
@@ -1337,7 +1337,7 @@ page_name:
 | `system_page`       | `health_group`                   | System monitor launcher (configurable `app_id`, default: Mission Center)                                                                                                                                |
 | `updates_page`      | `bootc_updates_group`            | bootc system updates — stage via `bootc-update-stage`, apply on restart (gated on `bootc.IsBootcBootedCached()` and stage script availability)                                                          |
 | `updates_page`      | `sysupdate_updates_group`        | native A/B system updates — stage via `snosi-sysupdate-stage`, apply on restart, with a read-only previous-version rollback row (gated on `sysupdate.IsNativeABCached()` and stage script availability) |
-| `updates_page`      | `firmware_updates_group`         | device firmware updates through fwupd, one device at a time with a confirmation dialog (gated on `fwupd.IsInstalledCached()`); **disabled by default** until a hardware test |
+| `updates_page`      | `firmware_updates_group`         | device firmware updates through fwupd, one device at a time with a confirmation dialog (gated on `fwupd.IsInstalledCached()`); enabled by default since [ADR-0013](../adr/0013-firmware-updates-are-on-by-default.md) |
 | `updates_page`      | `flatpak_updates_group`          | Flatpak pending updates                                                                                                                                                                                 |
 | `updates_page`      | `brew_updates_group`             | Homebrew outdated packages                                                                                                                                                                              |
 | `updates_page`      | `brew_trust_group`               | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); hidden unless there is something to trust                                                                                       |
@@ -1371,7 +1371,7 @@ page_name:
 - GTK 4 and libadwaita 1 (shared libraries loaded at runtime by puregotk)
 - Homebrew (optional)
 - Flatpak (optional)
-- fwupd / `fwupdmgr` (optional; the firmware-updates group is disabled by default and, when enabled, hidden unless `fwupdmgr` is present)
+- fwupd / `fwupdmgr` (optional; the firmware-updates group is enabled by default and hidden unless `fwupdmgr` is present)
 - `bootc` + `/usr/libexec/bootc-update-stage` (both optional; UI gated on `bootc.IsBootcBootedCached()`, i.e. `bootc status` reporting a non-null `booted` deployment — not on any sentinel file)
 - `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` (both optional, shipped by native A/B OS images; UI gated on `sysupdate.IsNativeABCached()` and `sysupdate.StageScriptAvailable()`)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
