@@ -13,8 +13,7 @@ ChairLift searches for the configuration file in the following locations (in ord
    directory when no executable-relative file exists (development fallback)
 
 If no configuration file is found, all features default to enabled, except
-`maintenance_cleanup_group` and `firmware_updates_group`, which default to
-disabled.
+`maintenance_cleanup_group`, which defaults to disabled.
 
 Packages own and may replace the `/usr/share` defaults during an upgrade.
 Administrators should put local changes in `/etc/chairlift/config.yml`;
@@ -68,8 +67,7 @@ valid page.
 - `brew_trust_group`: Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); only shown when there is something to trust
 - `firmware_updates_group`: Device firmware updates from the Linux Vendor
   Firmware Service (fwupd), installed one device at a time; only shown when
-  the `fwupdmgr` client is installed. Disabled by default until it is tested on
-  real hardware
+  the `fwupdmgr` client is installed
 
 ### Applications Page (`applications_page`)
 
@@ -192,8 +190,8 @@ install -D -m 644 config.yml debian/tmp/usr/share/chairlift/config.yml
 - A configuration file is applied as an overlay on top of the built-in
   defaults, field by field, not as a full replacement:
   - An omitted `enabled` key inherits that group's documented default
-    (`true` for every group except `maintenance_cleanup_group` and
-    `firmware_updates_group`, which default to `false`)
+    (`true` for every group except `maintenance_cleanup_group`, which
+    defaults to `false`)
   - An omitted optional field (`app_id`, `website`, `issues`, `chat`,
     `actions`, `bundles_paths`) inherits its documented default value
   - An explicit empty list (e.g. `actions: []`) clears the field

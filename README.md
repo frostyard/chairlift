@@ -41,7 +41,7 @@
   Service with fwupd, one device at a time, after a confirmation that warns
   about power and the restart or shutdown the device needs. No root path of
   ChairLift's own is involved: the fwupd daemon authorizes the install with its
-  own PolicyKit actions. Off by default until a hardware test passes
+  own PolicyKit actions. Shown when fwupd is installed
 - **System Maintenance**: Keep your system running smoothly
 
 ---
@@ -168,7 +168,7 @@ Other useful targets: `make dev` (CGO-enabled build with `-race` for development
 - Go (see `go.mod` for the toolchain version)
 - GTK 4 and libadwaita 1 (shared libraries, loaded at runtime by puregotk — no GTK dev headers or CGO needed to build)
 - Homebrew (optional, for package management features and tap trust)
-- fwupd (optional, for firmware updates; the group is off by default)
+- fwupd (optional, for firmware updates)
 - Flatpak (optional)
 - `bootc` and the snow `/usr/libexec/bootc-update-stage` script (optional; enables staged system updates on bootc installs)
 - The snow `/usr/libexec/snosi-sysupdate-stage` script and `/usr/lib/snosi/native-ab` marker (optional; enables staged system updates on native A/B installs)
