@@ -302,11 +302,16 @@ func versionTransition(currentVersion, newVersion string) string {
 }
 
 // FirmwareUpdatesSubtitle returns the firmware expander's subtitle and whether
-// it can expand. A failed query never claims the firmware is up to date, and
-// it yields no rows to expand.
-func FirmwareUpdatesSubtitle(count int, err error) Status {
+// it can expand. A failed query never claims the firmware is up to date; when
+// the view still holds rows from an earlier load (retainedRows), those rows
+// stay reachable, so a failed refresh does not hide devices the user can act
+// on.
+func FirmwareUpdatesSubtitle(count int, err error, retainedRows int) Status {
 	if err != nil {
-		return Status{Subtitle: fmt.Sprintf("Error checking firmware updates: %v", err)}
+		return Status{
+			Subtitle:   fmt.Sprintf("Error checking firmware updates: %v", err),
+			Expandable: retainedRows > 0,
+		}
 	}
 	return Status{
 		Subtitle:   firmwareAvailableText(count),

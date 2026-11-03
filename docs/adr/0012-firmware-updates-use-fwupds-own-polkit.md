@@ -45,7 +45,7 @@ command typed in a terminal. ChairLift ships no PolicyKit policy file and no
 helper binary for firmware, adds no pkexec invocation, and never learns a root
 path.
 
-Four constraints make that safe and unambiguous:
+Five constraints make that safe and unambiguous:
 
 1. **The device id is validated before it reaches argv.** `internal/fwupd`
    accepts only `^[0-9a-f]{40}$`, the id format fwupd itself enforces.
@@ -65,6 +65,15 @@ Four constraints make that safe and unambiguous:
    empty, and its `UpdateError` is empty. Any other device stays in the list
    with no install control and a visible reason, because fwupdmgr would skip it
    and exit 0. ChairLift must not turn that exit into a success message.
+5. **Every install is verified before ChairLift reports it.** The device state
+   can change while the confirmation dialog is open, so after `fwupdmgr update`
+   ChairLift runs the update query again and classifies the result
+   (`fwupd.VerifyInstall`): a device that no longer has the update, or that now
+   has a different version, is verified; the same release still offered is not
+   applied, with the device's own reason when fwupd reports one; a failed query
+   is unverified. Only a verified result is reported as an install. A published
+   list is always replaced whole, never patched by removing one row, so a device
+   that still has an update remains visible and the badge is the new count.
 
 The group `firmware_updates_group` is off by default. It is built hidden and
 shown only when fwupdmgr is present. It stays disabled in the shipped
@@ -84,12 +93,15 @@ after the flash, so it must stay in the confirmation body.
 
 Harder: a zero exit says only that fwupdmgr finished, not that a device was
 flashed. fwupdmgr can exit 0 without a flash, so ChairLift offers Install only
-for installable devices. The refresh after a success shows any device again
-that still has the update, so a blocked device never disappears from the list.
+for installable devices and verifies each install with a second query. The
+published list is the whole verified list, so a device that still has an update
+appears again, and a failed verification is reported as an error instead of a
+success.
 
 New obligations: the device id validator must not be relaxed,
-`--no-reboot-check` must stay in the argument list, and the installable test
-(flag, problems, update error) must stay in step with fwupd. A future change
+`--no-reboot-check` must stay in the argument list, the verification query must
+stay after every install, and the installable test (flag, problems, update
+error) must stay in step with fwupd. A future change
 that adds a privileged firmware path must first supersede this ADR.
 
 ## Alternatives considered

@@ -15,11 +15,10 @@
 // packages. See docs/agents/skills/gtk-headless-tests.md.
 //
 // Functions whose result only selects display text (BundleDump, Cleanup,
-// Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage,
-// FirmwareInstall) return a plain string: the state-changing/no-op decision
-// for those actions is already made and already tested inside their wrapper
-// package (internal/homebrew, internal/flatpak, internal/bootc, internal/fwupd,
-// internal/updex).
+// Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage) return a
+// plain string: the state-changing/no-op decision for those actions is already
+// made and already tested inside their wrapper package (internal/homebrew,
+// internal/flatpak, internal/bootc, internal/updex).
 // Functions whose result gates a further decision return a decision struct,
 // precisely so the gated decision — not just the wording of the toast that
 // follows it — is what a table-driven test in actionmsg_test.go asserts.
@@ -29,7 +28,9 @@
 // Homebrew Taps view removes a row, changes group visibility, and refreshes.
 // FeatureToggle decides whether a feature switch confirms its new visual
 // state. FeatureUpdate decides the toast text and whether it persists from
-// the update's per-feature results. Those latter UI-side decisions have no
+// the update's per-feature results. FirmwareInstall decides whether the page
+// publishes a verified device list, restores the install button, and shows an
+// error toast, from fwupd's own verification of the install. Those latter UI-side decisions have no
 // wrapper-package equivalent even though the wrappers already gate their
 // underlying command.
 package actionmsg
@@ -39,6 +40,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/updex"
 )
 
@@ -164,16 +166,88 @@ func SelfUpdate(dryRun bool, tool string) string {
 	return fmt.Sprintf("%s updated successfully", tool)
 }
 
-// FirmwareInstall returns the toast text for a firmware update installed
-// through fwupd. The wrapper package (internal/fwupd) already skips the
-// state-changing `fwupdmgr update` command under dry-run, so this function
-// only selects which string to show: a preview when dryRun is true, or the
-// completion message with the action the device needs afterwards when it
-// actually ran. ChairLift itself never restarts or shuts down the computer.
-func FirmwareInstall(dryRun bool, name string, needsReboot, needsShutdown bool) string {
-	if dryRun {
-		return fmt.Sprintf("[DRY-RUN] Preview: firmware for %s would be installed — no changes made", name)
+// FirmwareInstallDecision is the result of installing one device's firmware
+// and asking fwupd what happened afterwards.
+//
+// fwupdmgr can exit 0 without flashing a device: the lid closes, the host
+// leaves battery power, or an update error appears while the confirmation
+// dialog is open. A zero exit is therefore not a success claim, and this
+// decision is built from internal/fwupd's verification query, not from the
+// exit status alone.
+type FirmwareInstallDecision struct {
+	// Toast is the message to show.
+	Toast string
+	// IsError is true when the toast must stay on screen as an error toast
+	// because something needs the user's attention: a failed install, an
+	// install fwupd did not apply, or an outcome ChairLift could not check.
+	IsError bool
+	// RestoreControl is true when the row's Install button becomes clickable
+	// again, because the device is still updatable or the outcome is unknown.
+	RestoreControl bool
+	// PublishList is true when the verification query returned an
+	// authoritative device list — the install was verified, or fwupd reported
+	// that it did not apply the update and the devices must stay reachable.
+	// The caller publishes report.Updates; that list is the refresh.
+	PublishList bool
+}
+
+// FirmwareInstall decides the toast, its severity, whether the install button
+// comes back, and whether the verified device list is published.
+//
+// Decision table, first match wins:
+//
+//	installErr != nil   "Firmware install failed: <err>", error toast, button
+//	                    restored: nothing ran, so the row must stay usable
+//	dryRun              the preview text, button restored: fwupdmgr never ran
+//	verified            the installed text naming a restart, a shutdown, or
+//	                    nothing afterwards; the verified list is published
+//	not applied         "Firmware for <name> was not installed: <reason>",
+//	                    error toast, list published so the device stays listed
+//	unverified          "fwupdmgr finished for <name>, but ChairLift could not
+//	                    check the result: <reason>", error toast, button
+//	                    restored: the outcome is unknown, so no success claim
+func FirmwareInstall(dryRun bool, installErr error, report fwupd.InstallReport, name string, needsReboot, needsShutdown bool) FirmwareInstallDecision {
+	if installErr != nil {
+		return FirmwareInstallDecision{
+			Toast:          fmt.Sprintf("Firmware install failed: %v", installErr),
+			IsError:        true,
+			RestoreControl: true,
+		}
 	}
+	if dryRun {
+		return FirmwareInstallDecision{
+			Toast:          fmt.Sprintf("[DRY-RUN] Preview: firmware for %s would be installed — no changes made", name),
+			RestoreControl: true,
+		}
+	}
+
+	switch report.Result {
+	case fwupd.InstallNotApplied:
+		return FirmwareInstallDecision{
+			Toast:       fmt.Sprintf("Firmware for %s was not installed: %s", name, report.Reason),
+			IsError:     true,
+			PublishList: true,
+		}
+	case fwupd.InstallVerified:
+		return FirmwareInstallDecision{
+			Toast:       installedFirmwareToast(name, needsReboot, needsShutdown),
+			PublishList: true,
+		}
+	default:
+		// InstallUnverified, and any future result ChairLift does not know:
+		// the outcome is unknown, so it must not read as a success.
+		return FirmwareInstallDecision{
+			Toast:          fmt.Sprintf("fwupdmgr finished for %s, but ChairLift could not check the result: %s", name, report.Reason),
+			IsError:        true,
+			RestoreControl: true,
+		}
+	}
+}
+
+// installedFirmwareToast returns the completion text for a verified install,
+// naming what the device needs afterwards. ChairLift never restarts or shuts
+// down the computer itself.
+func installedFirmwareToast(name string, needsReboot, needsShutdown bool) string {
 	switch {
 	case needsReboot:
 		return fmt.Sprintf("Firmware for %s installed. Restart to finish.", name)

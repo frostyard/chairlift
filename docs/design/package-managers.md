@@ -185,10 +185,12 @@ Its exported outcomes are:
 - `FirmwareUpdate` titles the row with the device name (falling back to
   `Unknown device`) and builds the subtitle from the parts that exist —
   `Vendor · 1.2 → 1.3` — omitting an empty vendor and keeping only the version
-  that is known. `FirmwareUpdatesSubtitle` returns a `Status` for the firmware
-  expander: `Firmware is up to date` for zero updates, singular or plural
-  "update available" text otherwise, and `Error checking firmware updates: <err>`
-  with no expansion when the query failed. `FirmwareInstallConfirmation`
+  that is known. `FirmwareUpdatesSubtitle(count, err, retainedRows)` returns a
+  `Status` for the firmware expander: `Firmware is up to date` for zero
+  updates, singular or plural "update available" text otherwise, and
+  `Error checking firmware updates: <err>` when the query failed. On error the
+  expander may expand only when `retainedRows > 0`, so a failed refresh leaves
+  rows from an earlier load reachable. `FirmwareInstallConfirmation`
   returns the confirmation dialog's heading and body; the body always carries
   the power warning, then the restart sentence, the shutdown sentence, or the
   "some devices restart or disconnect" sentence, and always ends with
@@ -237,11 +239,11 @@ Two of the nine small, puregotk-free packages under `internal/views/` (the other
   - `SelfUpdate(dryRun bool, tool string) string` — Homebrew self-update ("Update Homebrew" button) toast (c3)
   - `TapTrustDecision{MutateUI bool; Toast string}` + `TapTrust(dryRun bool, tapName string) TapTrustDecision` — gates whether `trustTap` removes the tap's row, hides the group, and refreshes outdated packages (c3)
   - `BootcStage(dryRun bool, staged bool) string` — bootc stage-button completion toast; string-only since the subtitle stays live in both modes and there is no mutation left to gate (c4)
-  - `FirmwareInstall(dryRun bool, name string, needsReboot, needsShutdown bool) string` — fwupd firmware install toast: a `[DRY-RUN] Preview: firmware for <device> would be installed — no changes made` preview, or the completion message naming the restart, the shutdown, or nothing afterwards. String-only: `actionstate.PackageUpgrade` owns the row/control/badge decision, exactly as it does for a Homebrew upgrade row
+  - `FirmwareInstallDecision{Toast string; IsError bool; RestoreControl bool; PublishList bool}` + `FirmwareInstall(dryRun bool, installErr error, report fwupd.InstallReport, name string, needsReboot, needsShutdown bool) FirmwareInstallDecision` — fwupd firmware install decision, built from the wrapper's own verification rather than from an exit status. Decision table: an install error gives `Firmware install failed: <err>` with an error toast and the button restored; dry-run gives the `[DRY-RUN] Preview: firmware for <device> would be installed — no changes made` preview with the button restored; a verified install gives the completion text naming the restart, the shutdown, or nothing afterwards and publishes the list; a not-applied install gives `Firmware for <name> was not installed: <reason>` with an error toast and publishes the list; an unverified install gives `fwupdmgr finished for <name>, but ChairLift could not check the result: <reason>` with an error toast and the button restored
   - `FeatureToggleDecision{Confirm bool; Toast string}` + `FeatureToggle(dryRun, enable bool, name string) FeatureToggleDecision` — gates whether `onFeatureToggled`'s switch confirms the flip or reverts it (c5)
   - `FeatureUpdateDecision{Toast string; Persistent bool; Recheck bool}` + `FeatureUpdate(dryRun bool, results []updex.FeatureUpdate, err error) FeatureUpdateDecision` — Features page "Update" button toast, whether it persists as an error toast, and whether the caller must run the update check again. `Recheck` is true for every outcome that ran the update — errors and failures included, because a failed run can still change state in part — and false only for the dry-run preview, where nothing ran; the page then calls `recheckFeatureUpdates` after showing the toast, so the rows show the state after the update instead of the startup check's state (see the `featurestatus` section's re-check paragraph). It reads the per-feature results because updex returns a nil error when a feature is held (see the Updex section's "Update results"). Decision table: dry-run gives the preview; an error with no results gives "Features merged, but activation did not finish. Reboot to finish." for `*updex.ActivationIncompleteError` or "Update failed: <err>" for any other error (both persistent); nil results with a nil error, and `*updex.ResultsUnreadableError`, give "Feature update finished, but ChairLift could not read the results. See the log for details." (persistent; the outcome is unknown, so no success claim); empty results give "No enabled features to update."; only updated (and current) features keep the old text exactly; only current features give "Features are already up to date."; anything else joins, in order, "Updated: a, b.", "Waiting for a newer OS image: c (reason); ...", "Held by a rollback: e (reason).", "Failed: f (reason); ...", then "Changes apply after reboot." (when something updated and activation is complete), then the activation sentence or, when no feature failed, "Update failed: <err>"; persistent when any feature waits, is held or failed, or the error is set
 
-  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`, `FirmwareInstall`) select toast wording only. Where an application action also changes row controls or requests an inventory refresh, the separate tested `actionstate` decision owns that UI-side effect. The five decision-struct functions in `actionmsg` exist because their call sites have no wrapper- or `actionstate`-level gate for the *second* effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch; and the Features Update toast must read the per-feature results to tell a real update from a held one.
+  The plain-`string` functions (`BundleDump`, `Cleanup`, `Install`, `Uninstall`, `Pin`, `Upgrade`, `Update`, `SelfUpdate`, `BootcStage`) select toast wording only. Where an application action also changes row controls or requests an inventory refresh, the separate tested `actionstate` decision owns that UI-side effect. The six decision-struct functions in `actionmsg` exist because their call sites have no wrapper- or `actionstate`-level gate for the *second* effect: script execution has no wrapper package; a bundle row must distinguish a real completion from a dry-run wrapper success; tap-trust row removal and switch confirmation are view-local state that the wrapper's own dry-run skip does not touch; the Features Update toast must read the per-feature results to tell a real update from a held one; and a firmware install must publish a verified device list only when fwupd's own verification reported a real outcome.
 
 ### View-layer update action state (`internal/views/actionstate`)
 
@@ -487,6 +489,13 @@ path uses `pkexec` — decision record
   devices" below) and is empty for an installable device.
 - **`Error`** — message plus an underlying cause, so `errors.Is` classifies a
   deadline or a cancellation while the message stays readable.
+- **`InstallResult`** — the classification of a verification query:
+  `InstallVerified` (the device left the list, or now offers a different
+  version), `InstallNotApplied` (the same release is still offered, so nothing
+  was flashed) and `InstallUnverified` (the query failed, so the outcome is
+  unknown). `InstallUnverified` is the zero value, so a report that nothing
+  filled in fails closed. `InstallReport` carries the result, its reason, the verified
+  `[]Update` list, and the query's error.
 
 ### Operations
 
@@ -494,6 +503,8 @@ path uses `pkexec` — decision record
 |----------|------------|---------|-------|
 | `ListUpdates()` | `fwupdmgr get-updates --json` | 60s | Read-only; parses `{"Devices":[…]}` |
 | `Install(deviceID)` | `fwupdmgr update --no-reboot-check <deviceID>` | 30m | State-changing, dry-run aware; validates the id first |
+| `InstallAndVerify(update)` | that install, then `get-updates --json` | 30m + 60s | Install error returned as the error; dry-run returns a zero report and makes no query |
+| `VerifyInstall(deviceID, newVersion, after, listErr)` | none | — | Pure: classifies a verification list |
 | `IsInstalled()` / `IsInstalledCached()` | `exec.LookPath("fwupdmgr")` | — | Cached with `sync.Once` for the async startup gate |
 | `ParseUpdates(data)` | none | — | Pure: JSON in, `[]Update` out |
 | `SetDryRun(bool)` / `IsDryRun()` | none | — | Module-level flag set once in `app.New()` |
@@ -530,6 +541,26 @@ fails the id or release check and is dropped; a blocked device is never
 dropped, because removing it would hide an update without telling the user why
 it cannot be applied.
 
+### Verification after an install
+
+`fwupdmgr update` can exit 0 without flashing a device: the lid closes, the host
+leaves battery power, or an update error appears while the confirmation dialog
+is open. A zero exit therefore proves nothing, and `InstallAndVerify` always
+follows the install with a second `ListUpdates` query.
+
+`VerifyInstall` classifies the result in this order, first match wins:
+
+| Condition | Result | Reason |
+|-----------|--------|--------|
+| the verification query failed | `InstallUnverified` | the query's error text |
+| no update for the device id in the new list | `InstallVerified` | — |
+| an update for the device id with a different `NewVersion` | `InstallVerified` | — |
+| the same `NewVersion` still offered | `InstallNotApplied` | that update's `Reason` when it is not installable, otherwise `fwupd did not install the update` |
+
+`InstallAndVerify` returns the install error as its error, so a failed command
+and a command that changed nothing stay distinguishable. Under dry-run it
+returns a zero `InstallReport` and makes no query at all.
+
 ### Exit-code rule
 
 `ListUpdates` treats exit status **2** as an empty list with a nil error:
@@ -550,23 +581,34 @@ injection defense for this wrapper.
 
 ### View rules
 
-`loadFirmwareUpdates` (`internal/views/updates_page.go`) counts two different
-things: the expander subtitle counts every listed update
-(`pageview.FirmwareUpdatesSubtitle(len(updates), err)`), while the badge stores
-only the installable ones (`badgestate.Firmware` receives
-`installableCount(updates)`). A blocked device therefore appears in the list and
-in the subtitle, and never in the badge.
+`publishFirmwareList` (`internal/views/updates_page.go`) is the single publisher
+of firmware rows, used by both `loadFirmwareUpdates` and the install flow. It
+clears and rebuilds every row, sets the badge to the installable count
+(`installableCount`), and sets the subtitle from the full list
+(`pageview.FirmwareUpdatesSubtitle(len(updates), nil, uh.firmwareRows.Len())`).
+The badge therefore counts what the user can install while the subtitle counts
+everything fwupd lists. A failed load publishes no rows: it shows the error
+subtitle, keeps the last known count, and passes the retained row count so rows
+from an earlier load stay expandable.
 
 A blocked device gets no Install button, and its subtitle is
 `pageview.FirmwareBlockedUpdate(...)` — the normal row text plus ` · ` plus the
-`Reason`, so the user reads why the device waits. One page-wide
-`UserHome.firmwareInstallGate` (`actionstate.Gate`) allows a single firmware
-install at a time: a click that finds the gate busy shows the toast `Another
-firmware update is installing` and does nothing else. Cancel, failure, and
-dry-run reset the gate. A live success removes the row and resets the gate too —
-not complete it — because the row is gone and the page must stay able to install
-the next device. `actionstate.PackageUpgrade` remains the single decision for
-row removal, badge decrement, and refresh.
+`Reason`, so the user reads why the device waits.
+
+One page-wide `UserHome.firmwareInstallGate` (`actionstate.Gate`) allows a single
+firmware install at a time: a click that finds the gate busy shows the toast
+`Another firmware update is installing` and does nothing else. Cancel, failure,
+an unverified result and dry-run reset the gate; a verified or not-applied
+result publishes the list and resets it too. The gate resets last, in every
+case.
+
+The install flow keeps no row identity and never patches the list: there is no
+row removal and no `Add(Firmware, -1)`. `actionmsg.FirmwareInstall` decides
+`PublishList`, `RestoreControl` and `IsError`; when `PublishList` is set the
+handler takes a fresh `firmwareRefresh` generation (which makes any load still
+in flight stale) and publishes `report.Updates`. That verified list *is* the
+refresh, and it is why a device that still has an update appears again.
+`actionstate.PackageUpgrade` is not used on this path.
 
 ### Dry-run behavior
 

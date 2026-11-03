@@ -528,6 +528,7 @@ func TestFirmwareUpdateSubtitleStates(t *testing.T) {
 		name           string
 		count          int
 		err            error
+		retainedRows   int
 		wantSubtitle   string
 		wantExpandable bool
 	}{
@@ -535,16 +536,24 @@ func TestFirmwareUpdateSubtitleStates(t *testing.T) {
 		{name: "one", count: 1, wantSubtitle: "1 firmware update available", wantExpandable: true},
 		{name: "several", count: 3, wantSubtitle: "3 firmware updates available", wantExpandable: true},
 		{
-			name:         "error",
+			name:         "error with no retained rows cannot expand",
 			count:        0,
 			err:          errors.New("could not reach the daemon"),
 			wantSubtitle: "Error checking firmware updates: could not reach the daemon",
+		},
+		{
+			name:           "error with retained rows keeps them reachable",
+			count:          0,
+			err:            errors.New("could not reach the daemon"),
+			retainedRows:   2,
+			wantSubtitle:   "Error checking firmware updates: could not reach the daemon",
+			wantExpandable: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FirmwareUpdatesSubtitle(tt.count, tt.err)
+			got := FirmwareUpdatesSubtitle(tt.count, tt.err, tt.retainedRows)
 			want := Status{Subtitle: tt.wantSubtitle, Expandable: tt.wantExpandable}
 			if got != want {
 				t.Fatalf("FirmwareUpdatesSubtitle() = %#v, want %#v", got, want)

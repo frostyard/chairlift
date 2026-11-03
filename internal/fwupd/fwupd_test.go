@@ -370,3 +370,190 @@ func TestFwupdIsInstalledMissingBinary(t *testing.T) {
 		t.Error("IsInstalled() = true for a missing fwupdmgr, want false")
 	}
 }
+
+// verificationScript builds a fake fwupdmgr that answers the install with exit
+// 0 and the update query with listBody, following the real client's two
+// subcommands.
+func verificationScript(t *testing.T, listBody string) string {
+	t.Helper()
+	return fakeFwupdmgr(t, `case "$1" in
+update)
+	exit 0
+	;;
+get-updates)
+`+listBody+`
+	;;
+esac`)
+}
+
+// listedUpdate is one device with an update, as fwupdmgr would report it.
+func listedUpdate(flags string, version string) string {
+	return `{"Devices":[{"DeviceId":"` + deviceID + `","Name":"Dock","Vendor":"Frostyard","Version":"1.0","Flags":` + flags + `,"Releases":[{"Version":"` + version + `","Summary":"Firmware"}]}]}`
+}
+
+func TestVerifyInstallTable(t *testing.T) {
+	installable := Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true}
+	blocked := Update{
+		DeviceID:    deviceID,
+		NewVersion:  "2.0",
+		Installable: false,
+		Reason:      "Needs attention: System is on battery",
+	}
+	other := Update{DeviceID: "9999999999999999999999999999999999999999", NewVersion: "9.0", Installable: true}
+
+	tests := []struct {
+		name       string
+		after      []Update
+		listErr    error
+		wantResult InstallResult
+		wantReason string
+	}{
+		{
+			name:       "device left the list",
+			after:      nil,
+			wantResult: InstallVerified,
+		},
+		{
+			name:       "device now offers a different version",
+			after:      []Update{{DeviceID: deviceID, NewVersion: "3.0", Installable: true}},
+			wantResult: InstallVerified,
+		},
+		{
+			name:       "only another device is listed",
+			after:      []Update{other},
+			wantResult: InstallVerified,
+		},
+		{
+			name:       "the same release is still offered",
+			after:      []Update{installable},
+			wantResult: InstallNotApplied,
+			wantReason: "fwupd did not install the update",
+		},
+		{
+			name:       "the same release is offered and blocked",
+			after:      []Update{blocked},
+			wantResult: InstallNotApplied,
+			wantReason: "Needs attention: System is on battery",
+		},
+		{
+			name:       "the query failed",
+			listErr:    errors.New("failed to connect to daemon"),
+			wantResult: InstallUnverified,
+			wantReason: "failed to connect to daemon",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, reason := VerifyInstall(deviceID, "2.0", tt.after, tt.listErr)
+			if result != tt.wantResult {
+				t.Errorf("VerifyInstall() result = %v, want %v", result, tt.wantResult)
+			}
+			if reason != tt.wantReason {
+				t.Errorf("VerifyInstall() reason = %q, want %q", reason, tt.wantReason)
+			}
+		})
+	}
+}
+
+func TestFwupdInstallAndVerifyVerified(t *testing.T) {
+	useFakeExecutable(t, verificationScript(t, `echo '{"Devices":[]}'`))
+
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	if err != nil {
+		t.Fatalf("InstallAndVerify: %v", err)
+	}
+	if report.Result != InstallVerified {
+		t.Errorf("Result = %v, want InstallVerified", report.Result)
+	}
+	if len(report.Updates) != 0 {
+		t.Errorf("Updates = %#v, want none", report.Updates)
+	}
+}
+
+func TestFwupdInstallAndVerifyNotApplied(t *testing.T) {
+	useFakeExecutable(t, verificationScript(t, `echo '`+listedUpdate(`["updatable"]`, "2.0")+`'`))
+
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	if err != nil {
+		t.Fatalf("InstallAndVerify: %v", err)
+	}
+	if report.Result != InstallNotApplied {
+		t.Fatalf("Result = %v, want InstallNotApplied", report.Result)
+	}
+	if report.Reason != "fwupd did not install the update" {
+		t.Errorf("Reason = %q", report.Reason)
+	}
+	if len(report.Updates) != 1 {
+		t.Errorf("Updates = %#v, want the device to stay listed", report.Updates)
+	}
+}
+
+func TestFwupdInstallAndVerifyNotAppliedBlocked(t *testing.T) {
+	useFakeExecutable(t, verificationScript(t, `echo '`+listedUpdate(`["updatable-hidden"]`, "2.0")+`'`))
+
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	if err != nil {
+		t.Fatalf("InstallAndVerify: %v", err)
+	}
+	if report.Result != InstallNotApplied {
+		t.Fatalf("Result = %v, want InstallNotApplied", report.Result)
+	}
+	if report.Reason != "This device cannot be updated now" {
+		t.Errorf("Reason = %q, want the device's own blocked reason", report.Reason)
+	}
+}
+
+func TestFwupdInstallAndVerifyUnverified(t *testing.T) {
+	useFakeExecutable(t, verificationScript(t, `echo "failed to connect to daemon" >&2
+	exit 1`))
+
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	if err != nil {
+		t.Fatalf("InstallAndVerify: %v", err)
+	}
+	if report.Result != InstallUnverified {
+		t.Fatalf("Result = %v, want InstallUnverified", report.Result)
+	}
+	if !strings.Contains(report.Reason, "failed to connect to daemon") {
+		t.Errorf("Reason = %q, want the query's stderr", report.Reason)
+	}
+	if report.ListErr == nil {
+		t.Error("ListErr = nil, want the query's error")
+	}
+}
+
+func TestFwupdInstallAndVerifyReportsInstallFailure(t *testing.T) {
+	useFakeExecutable(t, fakeFwupdmgr(t, `echo "device not found" >&2
+exit 1`))
+
+	if _, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0"}); err == nil {
+		t.Fatal("InstallAndVerify = nil error, want the install failure")
+	}
+}
+
+func TestFwupdInstallAndVerifyDryRunSkipsQuery(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "queried")
+	useFakeExecutable(t, fakeFwupdmgr(t, `case "$1" in
+update)
+	exit 0
+	;;
+get-updates)
+	touch "`+marker+`"
+	echo '{"Devices":[]}'
+	;;
+esac`))
+	SetDryRun(true)
+	t.Cleanup(func() { SetDryRun(false) })
+
+	report, err := InstallAndVerify(Update{DeviceID: deviceID, NewVersion: "2.0", Installable: true})
+	if err != nil {
+		t.Fatalf("InstallAndVerify under dry-run = %v, want nil", err)
+	}
+	if report.Result != InstallUnverified || report.Reason != "" || report.Updates != nil || report.ListErr != nil {
+		t.Errorf("report = %#v, want a zero report (InstallUnverified, fail closed)", report)
+	}
+	if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("the fake fwupdmgr was queried under dry-run (stat %s = %v)", marker, statErr)
+	}
+}

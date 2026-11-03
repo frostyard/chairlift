@@ -127,7 +127,7 @@ Decision record: [ADR-0009](../adr/0009-dry-run-output-convention-and-single-dec
 
 The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, fwupd, bootc, sysupdate, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
 
-**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would _also_ mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `FeatureUpdateDecision.Persistent`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation _and_ the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). `FeatureUpdateDecision.Persistent` is the same pattern for the Features page's Update toast: it decides whether the toast stays on screen as an error toast, and the same struct's `Recheck` decides whether the update check runs again, so the rows show the state after the update instead of the startup check's state. Sites with no second UI decision to gate (package upgrade/update/self-update, Flatpak uninstall, firmware install, cleanup, Brewfile dump, and bootc stage toasts) get a plain string function instead.
+**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would _also_ mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `FeatureUpdateDecision.Persistent`, `FirmwareInstallDecision.PublishList`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation _and_ the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). `FeatureUpdateDecision.Persistent` is the same pattern for the Features page's Update toast: it decides whether the toast stays on screen as an error toast, and the same struct's `Recheck` decides whether the update check runs again, so the rows show the state after the update instead of the startup check's state. Sites with no second UI decision to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, and bootc stage toasts) get a plain string function instead.
 
 **Intentional exception:** bootc staging's completion **toast** is dry-run-aware (`actionmsg.BootcStage`), but its expander **subtitle** deliberately is not. The subtitle is a persistent status readout of live `bootc.GetStatus()` — what deployment is actually staged/booted right now — not a per-click completion claim, so it stays accurate and unchanged in both dry-run and live mode. Only the toast, which inherently answers "what did this click just do," needed dry-run-specific wording; there is no mutation left to gate once the subtitle is deliberately excluded, which is why `BootcStage` is string-only rather than a decision struct. Native A/B staging follows the identical split: `actionmsg.SysupdateStage` is the dry-run-aware toast, while the subtitle and rollback row re-read the real `/run/snosi` state files and partition labels in both modes.
 
@@ -140,10 +140,11 @@ Per-wrapper mechanics:
 - **Homebrew tap trust**: `trustTap` (`internal/views/updates_page.go`) computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once, after a successful `homebrew.TrustPackages` call, and gates removing the tap's row, hiding the group, and refreshing outdated packages on `decision.MutateUI`.
 - **views (custom maintenance scripts)**: `runMaintenanceAction` (`internal/views/maintenance_page.go`) calls `actionmsg.MaintenanceScript(IsDryRun(), title)` once, before spawning its goroutine, to get a `ScriptDecision{Execute, Toast}`: when `Execute` is false no `exec.Cmd` is ever constructed (no `pkexec`, no direct script exec) — only a `[DRY-RUN] Would execute: ...` log line.
 - **Features page switch confirmation**: `onFeatureToggled` (`internal/views/features_page.go`) computes `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` once, after a successful `updex.EnableFeature`/`DisableFeature` call, and branches solely on `decision.Confirm` to decide whether the switch confirms the flip (`toggle.SetActive(enabled)`) or reverts to its pre-click state (`toggle.SetActive(!enabled)`).
+- **Firmware install**: `installFirmwareUpdate` (`internal/views/updates_page.go`) calls `fwupd.InstallAndVerify`, then builds `decision := actionmsg.FirmwareInstall(fwupd.IsDryRun(), installErr, report, …)` once. `decision.PublishList` decides whether the verified device list is published, `decision.RestoreControl` whether the Install button comes back, and `decision.IsError` whether the toast stays on screen. `fwupdmgr` can exit 0 without flashing a device, so the view never reads the exit status as success on its own.
 
 ### Configuration-driven UI visibility
 
-Each preference group on every page checks `config.IsGroupEnabled(pageName, groupName)` before building its widgets. Groups default to enabled if not specified in config. The `maintenance_cleanup_group` defaults to disabled in the default config.
+Each preference group on every page checks `config.IsGroupEnabled(pageName, groupName)` before building its widgets. Groups default to enabled if not specified in config. `maintenance_cleanup_group` and `firmware_updates_group` default to disabled in the default config.
 
 `internal/config/config.go` builds the effective `*Config` by overlaying a
 parsed file onto `defaultConfig()` field by field, not by replacing it
@@ -1052,11 +1053,15 @@ Firmware Service, and `buildUpdatesPage` builds `firmware_updates_group` hidden
 and checks availability asynchronously. The group stays hidden when
 `fwupd.IsInstalledCached()` is false, so a host without fwupd never sees it. On
 a host with fwupd, `loadFirmwareUpdates` runs
-`fwupdmgr get-updates --json` on a worker goroutine, shows the group, and adds
-one row per device. The load is generation-guarded by `firmwareRefresh`, so a
-stale query cannot replace newer rows. A query that exits 2 ("no updatable
-devices") is an empty list, not an error; any other failure shows
-`pageview.FirmwareUpdatesSubtitle`'s error text and keeps the last known count.
+`fwupdmgr get-updates --json` on a worker goroutine, shows the group, and hands
+the list to `publishFirmwareList`. That function is the single publisher of
+firmware rows: it replaces every row, sets the badge to the installable count,
+and sets the subtitle from the full list. The load is generation-guarded by
+`firmwareRefresh`, so a stale query cannot replace a newer list. A query that
+exits 2 ("no updatable devices") is an empty list, not an error; any other
+failure shows `pageview.FirmwareUpdatesSubtitle`'s error text, keeps the last
+known count, and passes `uh.firmwareRows.Len()` so rows from an earlier load
+stay expandable.
 
 The expander subtitle counts every listed update, while the badge stores only
 the installable ones (`installableCount`, in `badgestate.Firmware`). A device
@@ -1076,15 +1081,25 @@ The Install button opens `adw.NewAlertDialog` with
 `pageview.FirmwareInstallConfirmation`: the body always warns not to turn off or
 unplug the computer and to keep the power connected, then states whether the
 device needs a restart, a shutdown, or nothing, and that ChairLift will not
-restart the computer itself. The install response is `adw.ResponseDestructiveValue`.
-On confirm the handler calls `fwupd.Install(deviceID)` and applies
-`actionstate.PackageUpgrade` as its single decision, exactly like a Homebrew
-upgrade row: failure restores the button and shows an error toast, dry-run
-restores it and shows the `actionmsg.FirmwareInstall` preview, and a live
-success removes the row, decrements the firmware badge, updates the subtitle,
-and refreshes the list. The gate resets in every case, on success included:
-the row is gone, and the page must stay able to install the next device. Every call is unprivileged —
-fwupd's own PolicyKit actions authorize the daemon — which is decision record
+restart the computer itself. The install response is `adw.ResponseDestructiveValue`,
+and closing the dialog is the `cancel` response, so the page gate is released.
+
+On confirm the handler calls `fwupd.InstallAndVerify`, which installs and then
+asks fwupd for the device state again: `fwupdmgr update` can exit 0 without
+flashing a device, so the exit status alone cannot be trusted.
+`fwupd.VerifyInstall` classifies that list as `InstallVerified` (the device
+left the list, or now offers a different version), `InstallNotApplied` (the same
+release is still offered) or `InstallUnverified` (the query failed).
+`actionmsg.FirmwareInstall` turns the report into one decision:
+`decision.PublishList` publishes `report.Updates` as the new list,
+`decision.RestoreControl` restores the Install button, and `decision.IsError`
+selects the error toast. The view removes no row by identity and never
+decrements the badge: a verified list is published whole, so a device that still
+has an update stays visible and the badge is the new installable count. Taking a
+fresh `firmwareRefresh` generation before publishing makes any load still in
+flight stale. The page gate resets last, in every case. Every call is
+unprivileged — fwupd's own PolicyKit actions authorize the daemon — which is
+decision record
 [ADR-0012](../adr/0012-firmware-updates-use-fwupds-own-polkit.md).
 
 ### Update badge tracking
@@ -1100,9 +1115,11 @@ no persistent "available but unstaged" state because the snosi stager checks
 and stages in one run. Provider refreshes use
 `Set`, so a repeated load replaces rather than accumulates; successful
 row-level Homebrew upgrades use `Add(Homebrew, -1)`, which cannot go below
-zero, and a successful firmware install uses `Add(Firmware, -1)` under the same
-rule. The firmware provider counts the devices fwupd lists as updatable; it is
-set by a completed firmware query and never lowered by a failed one.
+zero. Firmware uses `Set` only and never `Add`: a verified install publishes the
+whole checked list, with the badge set to that list's installable count, so
+decrementing would double-count the change. The firmware provider counts the
+devices fwupd lists as updatable; it is set by a completed firmware query and
+never lowered by a failed one.
 `updateBadgeCount` reads the aggregate `Total` and pushes it through
 `ToastAdder.SetUpdateBadge()`. Refresh requests receive an increasing
 generation from `actionstate.RefreshGate`; only the newest request may apply

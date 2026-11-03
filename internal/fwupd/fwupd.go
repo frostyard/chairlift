@@ -198,6 +198,86 @@ func blockedReason(device wireDevice) string {
 	return "This device cannot be updated now"
 }
 
+// InstallResult classifies what a verification query found after an install.
+// fwupdmgr can exit 0 without flashing a device, for example when the lid
+// closes or the host leaves battery power while the confirmation dialog is
+// open, so a zero exit is not proof of an install.
+type InstallResult int
+
+const (
+	// InstallUnverified means ChairLift could not read the device state after
+	// the install, so the outcome is unknown and must not be reported as a
+	// success. It is the zero value on purpose: a report that nothing filled
+	// in fails closed.
+	InstallUnverified InstallResult = iota
+	// InstallVerified means fwupd no longer offers the same release for the
+	// device: it was flashed, or the device left the update list.
+	InstallVerified
+	// InstallNotApplied means fwupd still offers the same release for the
+	// device, so the install did not happen.
+	InstallNotApplied
+)
+
+// InstallReport is everything ChairLift knows after an install attempt: the
+// classification, its reason, the list the verification query returned, and
+// the query's error.
+type InstallReport struct {
+	Result  InstallResult
+	Reason  string
+	Updates []Update
+	ListErr error
+}
+
+// VerifyInstall classifies an install from a later update query. It is pure,
+// so every outcome is tested without a fwupdmgr binary.
+//
+// A query failure proves nothing, so it is InstallUnverified with the error
+// text as the reason. A device that no longer has an update, or that now has a
+// different one, was flashed. The same release still offered means nothing was
+// installed: the reason then names the device's own blocked reason when fwupd
+// reports one, and otherwise says the update did not happen.
+func VerifyInstall(deviceID, newVersion string, after []Update, listErr error) (InstallResult, string) {
+	if listErr != nil {
+		return InstallUnverified, listErr.Error()
+	}
+
+	for _, update := range after {
+		if update.DeviceID != deviceID {
+			continue
+		}
+		if update.NewVersion != newVersion {
+			return InstallVerified, ""
+		}
+		if !update.Installable && update.Reason != "" {
+			return InstallNotApplied, update.Reason
+		}
+		return InstallNotApplied, "fwupd did not install the update"
+	}
+
+	return InstallVerified, ""
+}
+
+// InstallAndVerify installs one device's firmware and then asks fwupd for the
+// device state, so a zero exit that flashed nothing is not reported as a
+// success. The install error is returned as the error; the report carries
+// everything the verification found.
+//
+// Under dry-run nothing runs, so the report is zero and no query is made.
+func InstallAndVerify(update Update) (InstallReport, error) {
+	if err := Install(update.DeviceID); err != nil {
+		return InstallReport{}, err
+	}
+
+	if dryRun {
+		return InstallReport{}, nil
+	}
+
+	after, listErr := ListUpdates()
+	report := InstallReport{Updates: after, ListErr: listErr}
+	report.Result, report.Reason = VerifyInstall(update.DeviceID, update.NewVersion, after, listErr)
+	return report, nil
+}
+
 // hasFlag reports whether flags contains want.
 func hasFlag(flags []string, want string) bool {
 	for _, flag := range flags {
