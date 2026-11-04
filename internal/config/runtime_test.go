@@ -223,6 +223,90 @@ func TestLoadAuthoritativeFailureLogsHighSignalDiagnostic(t *testing.T) {
 	}
 }
 
+func TestLoadDanglingAuthoritativeSymlinkFailsClosed(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "missing-target.yml")
+	link := filepath.Join(dir, "config.yml")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("creating dangling symlink: %v", err)
+	}
+	// ReadFile follows the link and reports ENOENT, indistinguishable from an
+	// absent path without an Lstat on the candidate.
+	if _, err := os.ReadFile(link); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("setup: ReadFile(dangling symlink) err = %v, want ENOENT", err)
+	}
+	withConfigPaths(t, []string{link})
+
+	cfg, loadErr := Load()
+	if loadErr == nil {
+		t.Fatal("Load() error = nil, want authoritative failure for dangling symlink")
+	}
+	if loadErr.Kind != KindRead {
+		t.Fatalf("Load() error kind = %q, want %q", loadErr.Kind, KindRead)
+	}
+	if loadErr.Path != link {
+		t.Fatalf("Load() error path = %q, want %q", loadErr.Path, link)
+	}
+	if cfg == nil {
+		t.Fatal("Load() config = nil on authoritative failure")
+	}
+	assertAllKnownGroupsDisabled(t, cfg)
+}
+
+func TestLoadDanglingHigherPriorityDoesNotFallThroughToValidCandidate(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "missing-target.yml")
+	high := filepath.Join(dir, "high.yml")
+	low := writeConfigFile(t, "system_page:\n  health_group:\n    enabled: true\n")
+	if err := os.Symlink(target, high); err != nil {
+		t.Fatalf("creating dangling symlink: %v", err)
+	}
+	withConfigPaths(t, []string{high, low})
+
+	cfg, loadErr := Load()
+	if loadErr == nil {
+		t.Fatal("Load() error = nil, want authoritative failure for dangling symlink")
+	}
+	if loadErr.Path != high {
+		t.Fatalf("Load() error path = %q, want the dangling %q", loadErr.Path, high)
+	}
+	if cfg.SystemPage["health_group"].Enabled {
+		t.Fatal("dangling authoritative symlink fell through to a valid lower-priority candidate")
+	}
+	assertAllKnownGroupsDisabled(t, cfg)
+}
+
+func TestLoadLiveSymlinkCandidateLoadsTarget(t *testing.T) {
+	target := writeConfigFile(t, "system_page:\n  health_group:\n    enabled: false\n")
+	link := filepath.Join(t.TempDir(), "config.yml")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+	withConfigPaths(t, []string{link})
+
+	cfg, loadErr := Load()
+	if loadErr != nil {
+		t.Fatalf("Load() error = %v, want nil for a symlink to a valid file", loadErr)
+	}
+	if cfg.SystemPage["health_group"].Enabled {
+		t.Fatal("Load() did not apply the symlink target's configuration")
+	}
+}
+
+func TestLoadMissingHigherPriorityStillAdvancesPastAbsentEntry(t *testing.T) {
+	absent := filepath.Join(t.TempDir(), "absent.yml")
+	low := writeConfigFile(t, "system_page:\n  health_group:\n    enabled: false\n")
+	withConfigPaths(t, []string{absent, low})
+
+	cfg, loadErr := Load()
+	if loadErr != nil {
+		t.Fatalf("Load() error = %v, want nil when only an absent entry precedes a valid candidate", loadErr)
+	}
+	if cfg.SystemPage["health_group"].Enabled {
+		t.Fatal("Load() did not advance past the absent candidate to the valid one")
+	}
+}
+
 func TestLoadAllCandidatesAbsentReturnsDefaultsWithoutError(t *testing.T) {
 	dir := t.TempDir()
 	withConfigPaths(t, []string{
