@@ -18,11 +18,12 @@ import (
 // fails to parse and the toast renders blank.
 //
 // The rule is strict so that it can be proven without control-flow analysis:
-// the constructor result must be assigned to a variable, the very next
-// statement in the same block must be name.SetUseMarkup(false), and the
-// enclosing function (nested function literals included) must contain no
-// other name.SetUseMarkup call. Anything else is a violation, including an
-// inline constructor such as AddToast(adw.NewToast(msg)).
+// the constructor result must be assigned to a variable, and the very next
+// statement in the same block must be name.SetUseMarkup(false). No other
+// SetUseMarkup reference may appear in the file, on any receiver and in any
+// form (defer, go, method value, alias, helper). Anything else is a
+// violation, including an inline constructor such as
+// AddToast(adw.NewToast(msg)).
 func toastMarkupViolations(filename string, src []byte) ([]string, int, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, src, 0)
@@ -37,6 +38,7 @@ func toastMarkupViolations(filename string, src []byte) ([]string, int, error) {
 
 	constructors := 0
 	accepted := make(map[*ast.CallExpr]bool)
+	acceptedSetters := make(map[*ast.SelectorExpr]bool)
 	checkBody := func(body *ast.BlockStmt) {
 		ast.Inspect(body, func(n ast.Node) bool {
 			// A nested function literal is checked as its own body.
@@ -61,20 +63,12 @@ func toastMarkupViolations(filename string, src []byte) ([]string, int, error) {
 					continue
 				}
 				accepted[call] = true
-				if i+1 >= len(block.List) || !isMarkupSetter(block.List[i+1], ident.Name, true) {
+				if i+1 >= len(block.List) || !isMarkupSetter(block.List[i+1], ident.Name) {
 					report(call.Pos(), ident.Name+" is not followed at once by "+ident.Name+".SetUseMarkup(false)")
 					continue
 				}
-				setters := 0
-				ast.Inspect(body, func(n ast.Node) bool {
-					if expr, ok := n.(*ast.ExprStmt); ok && isMarkupSetter(expr, ident.Name, false) {
-						setters++
-					}
-					return true
-				})
-				if setters != 1 {
-					report(call.Pos(), ident.Name+" calls SetUseMarkup more than once, so markup can be turned on again")
-				}
+				setter := block.List[i+1].(*ast.ExprStmt).X.(*ast.CallExpr)
+				acceptedSetters[setter.Fun.(*ast.SelectorExpr)] = true
 			}
 			return true
 		})
@@ -92,10 +86,20 @@ func toastMarkupViolations(filename string, src []byte) ([]string, int, error) {
 		return true
 	})
 	ast.Inspect(file, func(n ast.Node) bool {
-		if call, ok := n.(*ast.CallExpr); ok && isToastConstructor(call) {
-			constructors++
-			if !accepted[call] {
-				report(call.Pos(), "toast is not assigned to a variable, so markup cannot be disabled")
+		switch node := n.(type) {
+		case *ast.CallExpr:
+			if isToastConstructor(node) {
+				constructors++
+				if !accepted[node] {
+					report(node.Pos(), "toast is not assigned to a variable, so markup cannot be disabled")
+				}
+			}
+		case *ast.SelectorExpr:
+			// Any other SetUseMarkup reference, in any form (a plain,
+			// deferred or goroutine call, a method value, or a call on an
+			// alias or another receiver), could turn markup on again.
+			if node.Sel.Name == "SetUseMarkup" && !acceptedSetters[node] {
+				report(node.Pos(), "SetUseMarkup is used outside the setter that directly follows a toast constructor")
 			}
 		}
 		return true
@@ -118,10 +122,9 @@ func isToastConstructor(call *ast.CallExpr) bool {
 	return strings.HasPrefix(sel.Sel.Name, "NewToast") && !strings.HasPrefix(sel.Sel.Name, "NewToastOverlay")
 }
 
-// isMarkupSetter reports whether stmt is the statement name.SetUseMarkup(arg).
-// With onlyFalse, arg must be the identifier false; otherwise any argument
-// matches.
-func isMarkupSetter(stmt ast.Stmt, name string, onlyFalse bool) bool {
+// isMarkupSetter reports whether stmt is the statement
+// name.SetUseMarkup(false).
+func isMarkupSetter(stmt ast.Stmt, name string) bool {
 	expr, ok := stmt.(*ast.ExprStmt)
 	if !ok {
 		return false
@@ -135,21 +138,15 @@ func isMarkupSetter(stmt ast.Stmt, name string, onlyFalse bool) bool {
 		return false
 	}
 	recv, ok := sel.X.(*ast.Ident)
-	if !ok || recv.Name != name {
-		return false
-	}
-	if !onlyFalse {
-		return true
-	}
-	arg, ok := call.Args[0].(*ast.Ident)
-	return ok && arg.Name == "false"
+	arg, isIdent := call.Args[0].(*ast.Ident)
+	return ok && recv.Name == name && isIdent && arg.Name == "false"
 }
 
 func TestToastMarkupViolationsFixtures(t *testing.T) {
 	tests := []struct {
-		name string
-		src  string
-		want int
+		name   string
+		src    string
+		unsafe bool
 	}{
 		{
 			name: "markup disabled before AddToast",
@@ -160,7 +157,7 @@ func f(w W, msg string) {
 	toast.SetTimeout(3)
 	w.AddToast(toast)
 }`,
-			want: 0,
+			unsafe: false,
 		},
 		{
 			name: "markup left on",
@@ -170,7 +167,7 @@ func f(w W, msg string) {
 	toast.SetTimeout(3)
 	w.AddToast(toast)
 }`,
-			want: 1,
+			unsafe: true,
 		},
 		{
 			name: "markup disabled after the toast is shown",
@@ -180,7 +177,7 @@ func f(w W, msg string) {
 	w.AddToast(toast)
 	toast.SetUseMarkup(false)
 }`,
-			want: 1,
+			unsafe: true,
 		},
 		{
 			name: "markup set to true",
@@ -190,7 +187,7 @@ func f(w W, msg string) {
 	toast.SetUseMarkup(true)
 	w.AddToast(toast)
 }`,
-			want: 1,
+			unsafe: true,
 		},
 		{
 			name: "inline constructor",
@@ -198,7 +195,7 @@ func f(w W, msg string) {
 func f(w W, msg string) {
 	w.AddToast(adw.NewToast(msg))
 }`,
-			want: 1,
+			unsafe: true,
 		},
 		{
 			name: "toast in a callback",
@@ -210,7 +207,7 @@ func f(w W, msg string) {
 	}
 	cb()
 }`,
-			want: 1,
+			unsafe: true,
 		},
 		{
 			name: "markup disabled only inside an uncalled callback",
@@ -220,7 +217,7 @@ func f(w W, msg string) {
 	_ = func() { toast.SetUseMarkup(false) }
 	w.AddToast(toast)
 }`,
-			want: 1,
+			unsafe: true,
 		},
 		{
 			name: "markup turned on again before AddToast",
@@ -231,7 +228,65 @@ func f(w W, msg string) {
 	toast.SetUseMarkup(true)
 	w.AddToast(toast)
 }`,
-			want: 1,
+			unsafe: true,
+		},
+		{
+			name: "markup turned on again by a deferred call",
+			src: `package p
+func f(w W, msg string) {
+	toast := adw.NewToast(msg)
+	toast.SetUseMarkup(false)
+	defer w.AddToast(toast)
+	defer toast.SetUseMarkup(true)
+}`,
+			unsafe: true,
+		},
+		{
+			name: "markup turned on again in a goroutine",
+			src: `package p
+func f(w W, msg string) {
+	toast := adw.NewToast(msg)
+	toast.SetUseMarkup(false)
+	go toast.SetUseMarkup(true)
+	w.AddToast(toast)
+}`,
+			unsafe: true,
+		},
+		{
+			name: "markup turned on again through an alias",
+			src: `package p
+func f(w W, msg string) {
+	toast := adw.NewToast(msg)
+	toast.SetUseMarkup(false)
+	same := toast
+	same.SetUseMarkup(true)
+	w.AddToast(toast)
+}`,
+			unsafe: true,
+		},
+		{
+			name: "markup turned on again through a method value",
+			src: `package p
+func f(w W, msg string) {
+	toast := adw.NewToast(msg)
+	toast.SetUseMarkup(false)
+	set := toast.SetUseMarkup
+	set(true)
+	w.AddToast(toast)
+}`,
+			unsafe: true,
+		},
+		{
+			name: "markup turned on again in a helper",
+			src: `package p
+func f(w W, msg string) {
+	toast := adw.NewToast(msg)
+	toast.SetUseMarkup(false)
+	enable(toast)
+	w.AddToast(toast)
+}
+func enable(t *Toast) { t.SetUseMarkup(true) }`,
+			unsafe: true,
 		},
 		{
 			name: "markup disabled only on one branch",
@@ -243,7 +298,7 @@ func f(w W, msg string, plain bool) {
 	}
 	w.AddToast(toast)
 }`,
-			want: 1,
+			unsafe: true,
 		},
 		{
 			name: "toast in a callback with markup disabled",
@@ -256,7 +311,7 @@ func f(w W, msg string) {
 	}
 	cb()
 }`,
-			want: 0,
+			unsafe: false,
 		},
 		{
 			name: "toast overlay is not a toast",
@@ -265,7 +320,7 @@ func f() {
 	overlay := adw.NewToastOverlay()
 	_ = overlay
 }`,
-			want: 0,
+			unsafe: false,
 		},
 	}
 	for _, tt := range tests {
@@ -274,8 +329,8 @@ func f() {
 			if err != nil {
 				t.Fatalf("parse fixture: %v", err)
 			}
-			if len(got) != tt.want {
-				t.Fatalf("toastMarkupViolations() = %v, want %d violation(s)", got, tt.want)
+			if (len(got) > 0) != tt.unsafe {
+				t.Fatalf("toastMarkupViolations() = %v, want unsafe = %v", got, tt.unsafe)
 			}
 		})
 	}

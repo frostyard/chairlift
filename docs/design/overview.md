@@ -990,10 +990,12 @@ zero, so the startup error remains visible instead of expiring. Both
 markup by default and a path or tool error containing `<`, `>` or `&` would
 otherwise render as a blank toast. `internal/installcheck`'s
 `TestToastsRenderPlainText` parses every production Go file and fails unless
-each `adw.NewToast` result is assigned to a variable, the next statement in
-the same block is `<name>.SetUseMarkup(false)`, and the function calls
-`<name>.SetUseMarkup` nowhere else; it also fails when it finds no toast
-constructor at all; construction
+each `adw.NewToast` result is assigned to a variable and the next statement
+in the same block is `<name>.SetUseMarkup(false)`. Any other `SetUseMarkup`
+reference in production code (on any receiver, deferred, in a goroutine, as a
+method value or through a helper) also fails it, so a widget that needs markup
+must first change that test. It also fails when it finds no toast constructor
+at all; construction
 and the toast call both occur on the GTK main thread.
 
 ### Package manager wrapper pattern
