@@ -10,13 +10,19 @@ import (
 var (
 	executablePath = os.Executable
 	workingDir     = os.Getwd
-	statPath       = os.Stat
+	// statPath probes the executable-relative candidate. It is os.Lstat,
+	// not os.Stat: a dangling symlink beside the executable is a present
+	// directory entry, so it must stay the selected candidate and fail
+	// closed in Load, not fall through to the working directory.
+	statPath = os.Lstat
 )
 
 // resolveCandidatePath returns the exact path loadFromPath will read and a
 // diagnostic will report. Relative candidates prefer a file alongside the
 // executable, preserving ChairLift's existing development behavior, then
-// fall back to an absolute path under the current working directory.
+// fall back to an absolute path under the current working directory. The
+// executable-relative entry counts as present when it exists as a directory
+// entry, including a symlink whose target is missing.
 func resolveCandidatePath(path string) string {
 	if filepath.IsAbs(path) {
 		return filepath.Clean(path)

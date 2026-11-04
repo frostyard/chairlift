@@ -981,7 +981,10 @@ a nil error are returned.
 `resolveCandidatePath` makes diagnostic paths deterministic and absolute when
 the operating system supplies a working directory: absolute candidates are
 cleaned; a relative candidate prefers a file beside the executable and
-otherwise resolves against the current working directory. Filesystem reads,
+otherwise resolves against the current working directory. The
+executable-relative probe uses `os.Lstat`, so a dangling symlink beside the
+executable stays the selected candidate and fails closed in `Load` instead of
+falling through to the working directory. Filesystem reads,
 the executable path, and the working directory have narrow package-level
 seams so precedence and permission failures are testable without relying on
 host permissions.

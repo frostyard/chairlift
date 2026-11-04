@@ -276,6 +276,46 @@ func TestLoadDanglingHigherPriorityDoesNotFallThroughToValidCandidate(t *testing
 	assertAllKnownGroupsDisabled(t, cfg)
 }
 
+// TestLoadDanglingExecutableRelativeSymlinkFailsClosed covers the third,
+// relative candidate: a dangling config.yml symlink beside the executable is
+// present and authoritative. It must not resolve to the working-directory
+// fallback, whose valid file would otherwise load instead.
+func TestLoadDanglingExecutableRelativeSymlinkFailsClosed(t *testing.T) {
+	root := t.TempDir()
+	exeDir := filepath.Join(root, "bin")
+	cwd := filepath.Join(root, "work")
+	for _, dir := range []string{exeDir, cwd} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("creating %s: %v", dir, err)
+		}
+	}
+	link := filepath.Join(exeDir, "config.yml")
+	if err := os.Symlink(filepath.Join(root, "missing-target.yml"), link); err != nil {
+		t.Fatalf("creating dangling symlink: %v", err)
+	}
+	cwdConfig := filepath.Join(cwd, "config.yml")
+	if err := os.WriteFile(cwdConfig, []byte("system_page:\n  health_group:\n    enabled: true\n"), 0o600); err != nil {
+		t.Fatalf("writing working-directory config: %v", err)
+	}
+	withPathResolutionSeams(t,
+		func() (string, error) { return filepath.Join(exeDir, "chairlift"), nil },
+		func() (string, error) { return cwd, nil },
+	)
+	withConfigPaths(t, []string{"config.yml"})
+
+	cfg, loadErr := Load()
+	if loadErr == nil {
+		t.Fatal("Load() error = nil, want authoritative failure for the dangling executable-relative symlink")
+	}
+	if loadErr.Kind != KindRead {
+		t.Fatalf("Load() error kind = %q, want %q", loadErr.Kind, KindRead)
+	}
+	if loadErr.Path != link {
+		t.Fatalf("Load() error path = %q, want the dangling %q", loadErr.Path, link)
+	}
+	assertAllKnownGroupsDisabled(t, cfg)
+}
+
 func TestLoadLiveSymlinkCandidateLoadsTarget(t *testing.T) {
 	target := writeConfigFile(t, "system_page:\n  health_group:\n    enabled: false\n")
 	link := filepath.Join(t.TempDir(), "config.yml")
