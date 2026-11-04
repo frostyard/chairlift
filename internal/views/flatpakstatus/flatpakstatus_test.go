@@ -168,3 +168,47 @@ func TestPartialResultNamesTheInstallationThatCouldNotBeChecked(t *testing.T) {
 		})
 	}
 }
+
+// TestSubtitleAuthoritative pins the contract the Updates page relies on to
+// decide whether a completed load may replace the rows and badge count: a load
+// is authoritative unless both installation queries failed.
+func TestSubtitleAuthoritative(t *testing.T) {
+	tests := []struct {
+		name         string
+		count        int
+		userFailed   bool
+		systemFailed bool
+		want         bool
+	}{
+		{name: "both queries succeeded with no updates", want: true},
+		{name: "both queries succeeded with updates", count: 3, want: true},
+		{name: "only the user query failed, no updates", userFailed: true, want: true},
+		{name: "only the user query failed, updates", count: 2, userFailed: true, want: true},
+		{name: "only the system query failed, no updates", systemFailed: true, want: true},
+		{name: "only the system query failed, updates", count: 2, systemFailed: true, want: true},
+		{name: "both queries failed", userFailed: true, systemFailed: true, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Subtitle(tc.count, tc.userFailed, tc.systemFailed).Authoritative; got != tc.want {
+				t.Errorf("Subtitle(%d, %t, %t).Authoritative = %t, want %t",
+					tc.count, tc.userFailed, tc.systemFailed, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestBothQueriesFailedIsNotAuthoritativeAtAnyCount guards the regression: a
+// refresh in which both installations failed must never be treated as an
+// authoritative inventory, whatever partial count its remote failures carry.
+func TestBothQueriesFailedIsNotAuthoritativeAtAnyCount(t *testing.T) {
+	for _, count := range []int{0, 1, 7} {
+		result := Subtitle(count, true, true)
+		if result.Authoritative {
+			t.Errorf("Subtitle(%d, true, true).Authoritative = true, want false", count)
+		}
+		if result.Subtitle != "Could not check for updates" {
+			t.Errorf("Subtitle(%d, true, true).Subtitle = %q, want %q", count, result.Subtitle, "Could not check for updates")
+		}
+	}
+}

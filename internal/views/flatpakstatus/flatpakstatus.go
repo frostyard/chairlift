@@ -28,6 +28,11 @@ type Result struct {
 	Subtitle string
 	// Expandable reports whether the expander should allow expansion.
 	Expandable bool
+	// Authoritative reports whether this load learned anything about the
+	// update inventory. It is false only when both queries failed: the caller
+	// then knows nothing and must keep the previous rows and badge count
+	// rather than publishing an empty inventory over a known one.
+	Authoritative bool
 }
 
 // Subtitle derives the expander state from the number of updates that were
@@ -38,10 +43,14 @@ type Result struct {
 // the rows that were found in a partially failed load are real and stay
 // reachable. The claim that everything is up to date is made only when both
 // queries succeeded and found nothing.
+//
+// Authoritative is false exactly when both queries failed, whatever count a
+// partial result carries.
 func Subtitle(count int, userFailed, systemFailed bool) Result {
 	return Result{
-		Subtitle:   subtitleText(count, userFailed, systemFailed),
-		Expandable: count > 0,
+		Subtitle:      subtitleText(count, userFailed, systemFailed),
+		Expandable:    count > 0,
+		Authoritative: !userFailed || !systemFailed,
 	}
 }
 

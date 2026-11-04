@@ -130,8 +130,9 @@ func (uh *UserHome) buildUpdatesPage() {
 
 		page.Add(group)
 
-		// Load flatpak updates asynchronously
-		go uh.loadFlatpakUpdates()
+		// Load flatpak updates asynchronously. loadFlatpakUpdates takes its
+		// refresh generation here, then queries on a goroutine.
+		uh.loadFlatpakUpdates()
 	}
 
 	// Homebrew Updates group
@@ -448,13 +449,27 @@ func (uh *UserHome) loadOutdatedPackagesGeneration(generation uint64, done func(
 	})
 }
 
-// loadFlatpakUpdates loads available Flatpak updates asynchronously
+// loadFlatpakUpdates starts a generation-guarded refresh of the Flatpak
+// update inventory. Only the newest request may publish, so a slow reload
+// that a later one overtook cannot re-add a row the later one retired or
+// overwrite a newer badge count. Call it on the main thread so concurrent
+// completions take generations in the order they finished.
 func (uh *UserHome) loadFlatpakUpdates() {
-	if !flatpak.IsInstalledCached() {
-		uh.updateCounts.Set(badgestate.Flatpak, 0)
-		uh.updateBadgeCount()
+	generation := uh.flatpakUpdatesRefresh.Begin()
+	go uh.loadFlatpakUpdatesGeneration(generation)
+}
 
+// loadFlatpakUpdatesGeneration runs one Flatpak update refresh on a worker
+// goroutine and publishes it on the main thread only while generation is
+// still current.
+func (uh *UserHome) loadFlatpakUpdatesGeneration(generation uint64) {
+	if !flatpak.IsInstalledCached() {
 		sgtk.RunOnMainThread(func() {
+			if !uh.flatpakUpdatesRefresh.IsCurrent(generation) {
+				return
+			}
+			uh.updateCounts.Set(badgestate.Flatpak, 0)
+			uh.updateBadgeCount()
 			if uh.flatpakUpdatesExpander != nil {
 				uh.flatpakUpdatesExpander.SetSubtitle("Flatpak not installed")
 			}
@@ -466,38 +481,56 @@ func (uh *UserHome) loadFlatpakUpdates() {
 	var allUpdates []flatpak.UpdateInfo
 
 	// Load user updates. The error is kept as a value, not just logged: the
-	// expander subtitle has to say that half the picture is missing.
+	// expander subtitle has to say that half the picture is missing. The
+	// updates are kept even with an error: a remote failure
+	// (*flatpak.RemoteError) still returns the healthy remotes' updates,
+	// while an aborted query returns none.
 	userUpdates, userErr := flatpak.ListUpdates(true)
 	if userErr != nil {
 		log.Printf("Error loading user flatpak updates: %v", userErr)
-	} else {
-		allUpdates = append(allUpdates, userUpdates...)
 	}
+	allUpdates = append(allUpdates, userUpdates...)
 
 	// Load system updates
 	systemUpdates, systemErr := flatpak.ListUpdates(false)
 	if systemErr != nil {
 		log.Printf("Error loading system flatpak updates: %v", systemErr)
-	} else {
-		allUpdates = append(allUpdates, systemUpdates...)
 	}
+	allUpdates = append(allUpdates, systemUpdates...)
 
 	status := flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)
 
-	// Update the badge count
-	uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))
-	uh.updateBadgeCount()
-
 	sgtk.RunOnMainThread(func() {
+		if !uh.flatpakUpdatesRefresh.IsCurrent(generation) {
+			return
+		}
+
+		// A load in which both installation queries failed learned nothing,
+		// so it keeps the last known count and rows instead of publishing an
+		// empty inventory.
+		refresh := actionstate.OutdatedRefresh(
+			status.Authoritative,
+			uh.updateCounts.Get(badgestate.Flatpak),
+			len(allUpdates),
+		)
+		uh.updateCounts.Set(badgestate.Flatpak, refresh.Count)
+		uh.updateBadgeCount()
+
 		if uh.flatpakUpdatesExpander == nil {
 			return
 		}
 
-		// Clear existing rows
-		for _, row := range uh.flatpakUpdateRows {
-			uh.flatpakUpdatesExpander.Remove(&row.Widget)
+		if !refresh.ReplaceRows {
+			// Say the check failed, but leave the previously discovered
+			// rows and their expansion reachable.
+			uh.flatpakUpdatesExpander.SetSubtitle(status.Subtitle)
+			return
 		}
-		uh.flatpakUpdateRows = nil
+
+		// Clear existing rows
+		uh.flatpakUpdateRows.Clear(func(row *adw.ActionRow) {
+			uh.flatpakUpdatesExpander.Remove(&row.Widget)
+		})
 
 		uh.flatpakUpdatesExpander.SetSubtitle(status.Subtitle)
 		uh.flatpakUpdatesExpander.SetEnableExpansion(status.Expandable)
@@ -524,22 +557,56 @@ func (uh *UserHome) loadFlatpakUpdates() {
 
 			appID := update.ApplicationID
 			isUser := update.Installation == "user"
+			flatpakUpdateGate := &actionstate.Gate{}
 			clickedCb := func(btn gtk.Button) {
+				if !flatpakUpdateGate.TryStart() {
+					return
+				}
 				btn.SetSensitive(false)
 				btn.SetLabel("Updating...")
 				go func() {
-					if err := flatpak.Update(appID, isUser); err != nil {
+					err := flatpak.Update(appID, isUser)
+					dryRun := flatpak.IsDryRun()
+					decision := actionstate.PackageUpgrade(err == nil, dryRun)
+					if err != nil {
 						sgtk.RunOnMainThread(func() {
-							btn.SetSensitive(true)
-							btn.SetLabel("Update")
+							if decision.RestoreControl {
+								flatpakUpdateGate.Reset()
+								btn.SetSensitive(true)
+								btn.SetLabel("Update")
+							}
 							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
 						})
 						return
 					}
 					sgtk.RunOnMainThread(func() {
-						uh.toastAdder.ShowToast(actionmsg.Update(flatpak.IsDryRun(), appID))
-						// Refresh the updates list
-						go uh.loadFlatpakUpdates()
+						uh.toastAdder.ShowToast(actionmsg.Update(dryRun, appID))
+						// The control must not depend on the reload: a
+						// reload in which both installation queries fail
+						// keeps the old rows, and with them this button.
+						// A live success retires the row now; a dry-run
+						// restores the button.
+						if decision.RemoveRow {
+							flatpakUpdateGate.Complete()
+						}
+						if decision.RemoveRow && uh.flatpakUpdateRows.Remove(row, func(row *adw.ActionRow) {
+							uh.flatpakUpdatesExpander.Remove(&row.Widget)
+						}) {
+							remaining := uh.updateCounts.Add(badgestate.Flatpak, -1).Count
+							uh.flatpakUpdatesExpander.SetEnableExpansion(remaining > 0)
+							uh.updateBadgeCount()
+						}
+						if decision.RestoreControl {
+							flatpakUpdateGate.Reset()
+							btn.SetSensitive(true)
+							btn.SetLabel("Update")
+						}
+						// Refresh the updates list. Called on the main
+						// thread so concurrent completions take generations
+						// in the order they finished.
+						if decision.Refresh {
+							uh.loadFlatpakUpdates()
+						}
 					})
 				}()
 			}
@@ -547,7 +614,7 @@ func (uh *UserHome) loadFlatpakUpdates() {
 
 			row.AddSuffix(&updateBtn.Widget)
 			uh.flatpakUpdatesExpander.AddRow(&row.Widget)
-			uh.flatpakUpdateRows = append(uh.flatpakUpdateRows, row)
+			uh.flatpakUpdateRows.Add(row)
 		}
 	})
 }

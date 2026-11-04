@@ -126,13 +126,23 @@ func getClient() *updexapi.Client {
 	return apiClient
 }
 
-// IsInstalled checks if updex features are configured on this system
+// featuresLister lists the feature definitions IsInstalled judges. It is a
+// variable only so tests can supply an empty, populated or failing list
+// without depending on the host's definitions.
+var featuresLister = func(ctx context.Context) ([]Feature, error) {
+	return getClient().Features(ctx)
+}
+
+// IsInstalled reports whether updex features are configured on this system:
+// the feature list must load without error and hold at least one feature.
+// updex's Client.Features returns an empty list with a nil error when no
+// feature definitions exist, which is not an available feature manager.
 func IsInstalled() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	_, err := getClient().Features(ctx)
-	return err == nil
+	features, err := featuresLister(ctx)
+	return err == nil && len(features) > 0
 }
 
 var (

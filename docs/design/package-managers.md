@@ -279,7 +279,9 @@ for the Applications and Updates pages' Homebrew mutation controls:
 - `OutdatedRefresh(succeeded, currentCount, discoveredCount)` returns exactly
   two outcomes: failure keeps `currentCount` and does not authorize row
   replacement; success authorizes replacement and adopts `discoveredCount`,
-  including zero.
+  including zero. The Flatpak update reload reuses it with
+  `flatpakstatus.Result.Authoritative` as `succeeded`, so a load in which both
+  installation queries failed keeps the last known Flatpak rows and count.
 - `OutdatedPresentation(count)` returns `0 packages available` with expansion
   disabled for zero, `1 package available` with expansion enabled for one,
   and `%d packages available` with expansion enabled for larger counts.
@@ -288,7 +290,10 @@ for the Applications and Updates pages' Homebrew mutation controls:
 action gate (requiring exactly one acquisition), and proves 64 concurrent
 refresh requests receive unique generations with exactly one current.
 `wiring_test.go` and `applications_wiring_test.go` statically check the
-puregotk-importing views use those decisions, confirmation/progress states,
+puregotk-importing views use those decisions (`wiring_test.go`'s
+`TestUpdatesPageGuardsFlatpakUpdateRefreshes` covers the Flatpak update
+reload's `flatpakUpdatesRefresh` generation guard and `OutdatedRefresh`
+routing), confirmation/progress states,
 shared gates, row removal, count decrement, versioned refresh callbacks, and
 clear/add bookkeeping; no `_test.go` is added to `internal/views`.
 
@@ -360,16 +365,16 @@ Exported surface:
 
 Exported surface:
 
-- `Result{Subtitle string; Expandable bool}` — the expander state for one update load.
-- `Subtitle(count int, userFailed, systemFailed bool) Result` — derives that state. Both halves come from a single call so the wording and the expansion decision cannot drift apart, the same reason `actionmsg` returns `ScriptDecision`/`TapTrustDecision`/`FeatureToggleDecision` structs. Failure is taken as two `bool`s rather than `error` values, which is what keeps the package free of any dependency on `internal/flatpak`.
+- `Result{Subtitle string; Expandable bool; Authoritative bool}` — the expander state for one update load. `Authoritative` is `!userFailed || !systemFailed`: false exactly when both installation queries failed, whatever count a partial result carries, which tells the caller the load learned nothing and must not replace the known rows or count.
+- `Subtitle(count int, userFailed, systemFailed bool) Result` — derives that state. All three fields come from a single call so the wording and the expansion decision cannot drift apart, the same reason `actionmsg` returns `ScriptDecision`/`TapTrustDecision`/`FeatureToggleDecision` structs. Failure is taken as two `bool`s rather than `error` values, which is what keeps the package free of any dependency on `internal/flatpak`.
 
-`Expandable` is `count > 0` in every case: a failed query never invents updates, so there is nothing to expand that the count does not already reflect, while the rows that *were* found in a partially failed load are real and stay reachable. The five distinguishable outcomes are: both queries ok with no updates → `All applications are up to date` (the only case that makes the up-to-date claim); both ok with updates → `1 update available` / `%d updates available`; exactly one query failed with no updates → `No updates found in the <ok> installation; the <failed> installation could not be checked`; exactly one failed with updates → the count followed by `; the <failed> installation could not be checked`; both failed → `Could not check for updates`, which makes no claim about update state at all. `<ok>`/`<failed>` are the literal words `user` and `system`. `flatpakstatus_test.go` has one subtest per row (with both the user-failed and system-failed variants of the one-failed rows), and additionally asserts that all the subtitles are pairwise distinct, that "up to date" appears in the first case and no other, and that singular and plural both read correctly.
+`Expandable` is `count > 0` in every case: a failed query never invents updates, so there is nothing to expand that the count does not already reflect, while the rows that *were* found in a partially failed load are real and stay reachable. The five distinguishable outcomes are: both queries ok with no updates → `All applications are up to date` (the only case that makes the up-to-date claim); both ok with updates → `1 update available` / `%d updates available`; exactly one query failed with no updates → `No updates found in the <ok> installation; the <failed> installation could not be checked`; exactly one failed with updates → the count followed by `; the <failed> installation could not be checked`; both failed → `Could not check for updates`, which makes no claim about update state at all. `<ok>`/`<failed>` are the literal words `user` and `system`. `flatpakstatus_test.go` has one subtest per row (with both the user-failed and system-failed variants of the one-failed rows), and additionally asserts that all the subtitles are pairwise distinct, that "up to date" appears in the first case and no other, that singular and plural both read correctly, that `Authoritative` is true for every outcome except both-failed, and that both-failed is non-authoritative at counts 0, 1 and 7.
 
 The package is pure and holds no state, so it is safe to call from a worker goroutine or from inside an `sgtk.RunOnMainThread` closure.
 
-`loadFlatpakUpdates` (`internal/views/updates_page.go`) is its only call site. It keeps both `flatpak.ListUpdates` errors as values — `userErr` and `systemErr`, still logged exactly as before via the two `log.Printf("Error loading {user,system} flatpak updates: %v", …)` lines — instead of dropping them once logged, and then calls `flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)` once on the worker goroutine, before entering `sgtk.RunOnMainThread`. Inside that closure (past the `if uh.flatpakUpdatesExpander == nil { return }` guard, which stays because `flatpak_updates_group` can be disabled and the expander then never gets built) the result is applied unconditionally: `SetSubtitle(result.Subtitle)` and `SetEnableExpansion(result.Expandable)` run on *every* path, including the zero-update path, and only the building of the per-update rows is skipped when there are none. The view holds no subtitle text and makes no decision of its own; the old hard-coded `"All applications are up to date"` and `fmt.Sprintf("%d updates available", …)` strings are gone from it.
+`loadFlatpakUpdates` (`internal/views/updates_page.go`) is its only call site. It runs on the main thread, takes a generation from `uh.flatpakUpdatesRefresh.Begin()` (an `actionstate.RefreshGate`, the same guard `loadOutdatedPackages` uses), and starts `loadFlatpakUpdatesGeneration(generation)` on a goroutine; both the page build and a completed per-row update call it this way, so overlapping reloads take generations in the order they were requested. Every `sgtk.RunOnMainThread` closure the worker publishes from — the `Flatpak not installed` path included — first returns when `!uh.flatpakUpdatesRefresh.IsCurrent(generation)`, so a slower, older reload can neither re-add a row a newer one retired nor overwrite a newer count. The worker keeps both `flatpak.ListUpdates` errors as values — `userErr` and `systemErr`, still logged exactly as before via the two `log.Printf("Error loading {user,system} flatpak updates: %v", …)` lines — instead of dropping them once logged, appends each installation's returned updates whether or not its error is nil (a `*flatpak.RemoteError` still carries the healthy remotes' updates; an aborted query returns none), and then calls `flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)` once on the worker goroutine, before entering `sgtk.RunOnMainThread`. Inside that closure the count goes through `actionstate.OutdatedRefresh(status.Authoritative, uh.updateCounts.Get(badgestate.Flatpak), len(allUpdates))` and `uh.updateCounts.Set(badgestate.Flatpak, refresh.Count)`, so a non-authoritative load keeps the last known badge contribution. Past the `if uh.flatpakUpdatesExpander == nil { return }` guard (which stays because `flatpak_updates_group` can be disabled and the expander then never gets built), a load with `refresh.ReplaceRows == false` only sets the subtitle (`Could not check for updates`) and leaves the previous rows and their expansion state in place. Every authoritative load replaces the rows and applies `SetSubtitle(result.Subtitle)` and `SetEnableExpansion(result.Expandable)`, including the zero-update path; only the building of the per-update rows is skipped when there are none. The view holds no subtitle text and makes no decision of its own; the old hard-coded `"All applications are up to date"` and `fmt.Sprintf("%d updates available", …)` strings are gone from it.
 
-The practical consequence is that a total failure — both installations unqueryable — no longer renders as an all-up-to-date message: `allUpdates` is empty for the same reason it is empty when everything really is current, and only the retained errors distinguish the two, so the expander reads `Could not check for updates`. A partial failure is identified as partial rather than silently under-reported: the rows that were found are shown and expandable, with the subtitle naming the installation that could not be checked. The badge deliberately remains a plain count — `uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))` carries no error state — so a total failure shows a badge contribution of `0` next to an honest subtitle rather than an invented number.
+The practical consequence is that a total failure — both installations unqueryable — no longer renders as an all-up-to-date message and no longer wipes what was known: the expander reads `Could not check for updates`, while the rows and badge contribution of the last authoritative load stay (on the very first load that is the initial empty state with a count of `0`). A partial failure is identified as partial rather than silently under-reported: the rows that were found are shown and expandable, with the subtitle naming the installation that could not be checked, and the count is the number found. `internal/views/actionstate/wiring_test.go`'s `TestUpdatesPageGuardsFlatpakUpdateRefreshes` pins the generation guard, the `OutdatedRefresh` routing and the preserved-rows branch, and fails if an unguarded `go uh.loadFlatpakUpdates()` or `Set(badgestate.Flatpak, len(allUpdates))` returns.
 
 ### View-layer feature update status (`internal/views/featurestatus`)
 
@@ -427,11 +432,11 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 |----------|------------|---------|-------|
 | `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
 | `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
-| `ListUpdates(user)` | `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system]` | 30s | Separate calls for user/system; `--app` excludes runtimes |
+| `ListUpdates(user)` | `flatpak remotes [--user\|--system] --columns=name,options`, then `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system] <remote>` per enabled remote, and `flatpak list [--user\|--system] --app --columns=origin` only when a remote failed | 30s per query | Separate calls for user/system; `--app` excludes runtimes; see [Update queries run per remote](#update-queries-run-per-remote) |
 | `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
-| `UninstallUnused()` | `flatpak uninstall --unused -y` | 30m | Maintenance cleanup |
+| `UninstallUnused()` | `flatpak uninstall --unused -y` (no scope flag) | 30m | Maintenance cleanup of every installation; see below |
 | `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 30s | Key-value parsed |
 | `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 30s | Lists configured remotes |
 
@@ -441,7 +446,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 ### Error handling
 
-`runFlatpakCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `stageexec.Run` gives OS staging and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
+`runFlatpakCommand` is a thin wrapper that calls `runFlatpakCommandCtx(context.Background(), args...)`. `runFlatpakCommandCtx(ctx, args...)` is the single dry-run gate (it skips state-changing commands before any `exec.Cmd` exists), layers `commandTimeout(args)` onto the caller's `ctx` with `context.WithTimeout` (so the nearer deadline wins and cancelling `ctx` stops the command), and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `stageexec.Run` gives OS staging and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
 
 `runFlatpakCommandAt` starts the command in its own process group (`cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}`) and sets `cmd.Cancel` to `syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)`, so flatpak's download helpers (download workers, ostree pulls) are killed with the command instead of being orphaned when only the direct child is signalled. `cmd.WaitDelay` (5s) bounds the wait, because those helpers inherit the stdout/stderr pipes and a straggler would otherwise hold `Wait` open indefinitely. `cmd.Run` still reaps the child.
 
@@ -463,14 +468,71 @@ iterates all four real state-changing command keys to prove dry-run returns
 before execution. This complements runner classification rather than chasing
 a percentage in isolation.
 
+### Unused-runtime cleanup covers every installation
+
+`UninstallUnused` runs `flatpak uninstall --unused -y` with no scope flag, on
+purpose. flatpak parses `uninstall` with `FLATPAK_BUILTIN_FLAG_ALL_DIRS`
+(`app/flatpak-builtins-uninstall.c`): with no `--user`, `--system` or
+`--installation` flag, `flatpak-main.c` selects the user installation, the
+default system installation and every extra system installation from
+`/etc/flatpak/installations.d`, and the `--unused` branch visits each of them.
+This holds in flatpak 1.10, 1.14 and 1.16. Do not add a scope flag: running
+`--user` then `--system` would skip the extra installations
+(`.memory/corrections.jsonl`, 2026-11-05). `flatpak_test.go`
+(`TestUninstallUnusedCoversEveryInstallation` and the "remove unused" row of
+`TestCommandWrappersUseExpectedArguments`) asserts exactly one invocation with
+no scope flag.
+
 ### Update queries exclude runtimes
 
-`ListUpdates` builds its argument list with the unexported pure helper
-`updateListArgs(user bool) []string`, the only place the `remote-ls` command is
-spelled. It passes `--app` — matching the precedent set by `listApplications` —
+`ListUpdates` builds each remote's argument list with the unexported pure
+helper `updateListArgs(user bool, remote string) []string`, the only place the
+`remote-ls` command is spelled. It passes `--app` — matching the precedent set by `listApplications` —
 so runtimes and extensions are deliberately excluded from the results. Update
 rows and the sidebar update badge therefore only ever describe applications,
 which is what the user can act on from the applications page.
+
+### Update queries run per remote
+
+A remote-less `flatpak remote-ls --updates` fails the whole installation when
+any one remote is unreachable, so a remote left behind by an uninstalled
+application failed the Updates check and hid every other remote's updates,
+although `flatpak update` itself still succeeded. `ListUpdates(user)` therefore
+delegates to the unexported `listUpdates(ctx, user)`, which:
+
+1. lists the installation's remotes with `updateRemoteListArgs`
+   (`remotes <scope> --columns=name,options`) and keeps, in listed order, every
+   remote whose options do not include `disabled` (`parseUpdateRemotes`) — the
+   set flatpak's own remote-less query visits;
+2. queries each of those remotes with `updateListArgs(user, remote)`, each
+   under its own 30-second read budget, so one slow remote cannot starve the
+   others;
+3. only when at least one remote query failed, lists the origin of every
+   installed **application** in the installation with `originListArgs`
+   (`list <scope> --app --columns=origin`, parsed by `parseOrigins`). `--app`
+   matches the inventory's own filter: a remote that still serves only
+   runtimes — the usual leftover of an uninstall without `--unused` — can hide
+   no update this inventory would list.
+
+Outcomes, per installation:
+
+| Situation | Updates returned | Error returned |
+|-----------|------------------|----------------|
+| Remote listing fails | `nil` | the listing's `*Error` / `*NotFoundError` |
+| No enabled remotes | none | `nil` (only the listing runs) |
+| Every remote query succeeds | all remotes' updates | `nil` (no origin listing) |
+| A remote fails and no installed application comes from it | the healthy remotes' updates | `nil`; the failure is logged as `flatpak: ignoring <installation> remote "<name>", which no installed application uses: ...` |
+| A remote fails and an installed application comes from it | the healthy remotes' updates | a `*flatpak.RemoteError{Remote, Installation, Err}` per such remote, joined with `errors.Join`; its message names the remote and installation and it unwraps to the query's `*Error` |
+| A remote fails and the origin listing fails too | the healthy remotes' updates | the origin listing's error joined with a `*RemoteError` for every failed remote (none can be shown unused) |
+| The caller's context is cancelled, or the executable is missing (`abortsUpdateQuery`) | `nil` | the cancellation / `*NotFoundError`; never judged as one remote's failure |
+
+A per-query timeout (`context.DeadlineExceeded`) is a remote's own failure,
+not an abort. The exported `ListUpdates` passes `context.Background()`; the
+context parameter exists so cancellation is part of the contract and is
+tested. `loadFlatpakUpdates` keeps the returned updates even when the error is
+non-nil, so the healthy remotes' rows are shown while the subtitle names the
+installation that could not be checked (`flatpakstatus`). `flatpak_test.go`
+covers each row of the table plus the argument builders and parsers directly.
 
 ## fwupd (`internal/fwupd/fwupd.go`)
 
@@ -949,7 +1011,7 @@ Type aliases to `github.com/frostyard/updex/v2/updex`:
 
 | Function | Implementation | Mode | Timeout | Notes |
 |----------|---------------|------|---------|-------|
-| `IsInstalled()` | Go library: `client.Features()` | Direct | 3s | Checks if updex features are configured |
+| `IsInstalled()` | Go library: `client.Features()` (through the unexported `featuresLister` test seam) | Direct | 3s | Checks if updex features are configured: requires `err == nil` **and** `len(features) > 0`, because updex v2.1.3's `Features` returns an empty list with a nil error when no feature definitions exist; an empty list shows the Features page's unavailable group |
 | `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
 | `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
 | `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Preserves successful components when v2 reports structured partial failures, logs failed-component metadata, and returns `[]FeatureCheck`; true request failures still return an error |
@@ -1142,7 +1204,7 @@ additional refresh generation because multiple Homebrew actions can request
 overlapping reloads. Not-installed and error branches change the subtitle and
 preserve the last known rows.
 
-The Updates page's per-package Homebrew upgrade button, per-app Flatpak update button, and the "Update Homebrew" self-update button (`internal/views/updates_page.go`) follow the same toast pattern: `actionmsg.Upgrade(dryRun, pkgName)`, `actionmsg.Update(flatpak.IsDryRun(), appID)`, and `actionmsg.SelfUpdate(dryRun, "Homebrew")` replace what were unconditional "upgraded"/"updated"/"updated successfully" toasts, since `upgrade` and `update` are both in their wrappers' `stateChangingCommands` and no-op under dry-run. The Flatpak update button's list refresh (`go uh.loadFlatpakUpdates()`) stays unconditional, same reasoning as the uninstall refresh above.
+The Updates page's per-package Homebrew upgrade button, per-app Flatpak update button, and the "Update Homebrew" self-update button (`internal/views/updates_page.go`) follow the same toast pattern: `actionmsg.Upgrade(dryRun, pkgName)`, `actionmsg.Update(flatpak.IsDryRun(), appID)`, and `actionmsg.SelfUpdate(dryRun, "Homebrew")` replace what were unconditional "upgraded"/"updated"/"updated successfully" toasts, since `upgrade` and `update` are both in their wrappers' `stateChangingCommands` and no-op under dry-run. The Flatpak update button follows the Homebrew upgrade decision too (`actionstate.PackageUpgrade(err == nil, dryRun)` behind a per-row `actionstate.Gate`): a failure or a dry-run preview restores the button; a live success removes the row from the `rowset.Tracker` `uh.flatpakUpdateRows`, decrements `badgestate.Flatpak` by one, and only then calls `uh.loadFlatpakUpdates()` on the main thread, which takes the next refresh generation before it starts its worker. The button must not rely on the reload to replace it: a reload in which both installation queries fail keeps the old rows, so a button left at "Updating..." would stay there. `actionstate.TestUpdatesPageRetiresCompletedFlatpakUpdateRows` pins this.
 
 The two Homebrew paths additionally use `actionstate.Gate` before spawning a
 goroutine and immediately make the clicked button insensitive with an

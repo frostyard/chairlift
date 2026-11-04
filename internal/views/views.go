@@ -53,7 +53,7 @@ type UserHome struct {
 	flatpakUserExpander    *adw.ExpanderRow
 	flatpakSystemExpander  *adw.ExpanderRow
 	flatpakUpdatesExpander *adw.ExpanderRow
-	flatpakUpdateRows      []*adw.ActionRow               // Store references for cleanup
+	flatpakUpdateRows      rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	flatpakUserRows        rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	flatpakSystemRows      rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	formulaeRows           rowset.Tracker[*adw.ActionRow]
@@ -106,6 +106,10 @@ type UserHome struct {
 	searchRefresh       actionstate.RefreshGate
 	brewPackagesRefresh actionstate.RefreshGate
 	firmwareRefresh     actionstate.RefreshGate
+	// flatpakUpdatesRefresh bounds overlapping Flatpak update inventory
+	// reloads. Every completed update kicks a reload, so two finishing close
+	// together race; only the newest generation may publish rows and count.
+	flatpakUpdatesRefresh actionstate.RefreshGate
 	// firmwareInstallGate allows one firmware install at a time for the whole
 	// page: two flashes at once would overwrite each other's device state and
 	// make one confirmation dialog lie about what is happening.
