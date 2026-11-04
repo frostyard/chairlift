@@ -190,10 +190,31 @@ func runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, 
 		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			if isUntrustedTapMessage(stderr.String()) {
-				return "", &UntrustedTapError{Message: fmt.Sprintf("Brew command failed: %s", stderr.String())}
+			// A read-only command keeps its whole stderr in the error:
+			// nothing else preserves it, and callers such as searchKind
+			// match on the full text.
+			diagnostic := stderr.String()
+			message := diagnostic
+			if len(args) > 0 && stateChangingCommands[args[0]] {
+				// A state-changing command splits its diagnosis across both
+				// streams: `brew bundle install` replays a failing entry's
+				// own installer output on stdout and prints only its
+				// restatement on stderr. Join them (stdout first), log the
+				// full text as the evidence a bug report needs, and distill
+				// one line for the user-facing message.
+				diagnostic = joinCommandStreams(stdout.String(), stderr.String())
+				if trimmed := strings.TrimSpace(diagnostic); trimmed != "" {
+					log.Printf("Command '%s' failed:\n%s", display, trimmed)
+				}
+				message = summarizeDiagnostic(diagnostic)
+				if message == "" {
+					message = exitErr.Error()
+				}
 			}
-			return "", &Error{Message: fmt.Sprintf("Brew command failed: %s", stderr.String()), Err: err}
+			if isUntrustedTapMessage(diagnostic) {
+				return "", &UntrustedTapError{Message: fmt.Sprintf("Brew command failed: %s", message)}
+			}
+			return "", &Error{Message: fmt.Sprintf("Brew command failed: %s", message), Err: err}
 		}
 		// exec.ErrNotFound covers a bare name missing from $PATH;
 		// fs.ErrNotExist covers an explicit path that does not exist.

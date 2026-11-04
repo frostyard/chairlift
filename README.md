@@ -233,7 +233,9 @@ and an Install action; a leading comment in the Brewfile becomes its
 description. Missing directories are harmless, while unreadable configured
 paths are reported without hiding bundles found elsewhere. Repeated clicks
 cannot start overlapping installs, and `--dry-run` shows a preview without
-leaving the row marked as installed.
+leaving the row marked as installed. A failed install reports the installer's
+own error line (for example flatpak's `error: ...`), not the progress that
+preceded it; ChairLift's log keeps the complete brew output for bug reports.
 
 ---
 

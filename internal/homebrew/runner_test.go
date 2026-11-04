@@ -3,6 +3,7 @@ package homebrew
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -165,6 +166,105 @@ exit 1`)
 		var trustErr *UntrustedTapError
 		if !errors.As(err, &trustErr) {
 			t.Fatalf("err = %T (%v), want *UntrustedTapError", err, err)
+		}
+	})
+
+	// `brew bundle install` replays a failing entry's own installer output on
+	// stdout and prints only its restatement on stderr. Keeping stderr alone
+	// threw away the only line that said why the entry failed.
+	t.Run("failed mutation reports the cause from either stream", func(t *testing.T) {
+		script := fakeBrew(t, `echo "Installing io.podman_desktop.PodmanDesktop"
+echo 'error: Remote "flathub" not found'
+echo "Error: Installing io.podman_desktop.PodmanDesktop has failed!" >&2
+echo "Error: Homebrew Bundle failed! 1 Brewfile dependency failed to install." >&2
+exit 1`)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		_, err := runBrewCommandAt(ctx, script, "bundle", "install", "--file=/usr/share/snow/bundles/dev.Brewfile")
+		if err == nil {
+			t.Fatal("runBrewCommandAt = nil error, want failure")
+		}
+		want := `Brew command failed: error: Remote "flathub" not found`
+		if err.Error() != want {
+			t.Errorf("error = %q, want %q", err.Error(), want)
+		}
+	})
+
+	t.Run("failed mutation is summarized to one line", func(t *testing.T) {
+		script := fakeBrew(t, `echo "==> Installing demo"
+echo "==> Pouring demo.bottle.tar.gz"
+echo "Error: bottle is corrupt" >&2
+exit 1`)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		_, err := runBrewCommandAt(ctx, script, "install", "demo")
+		if got, want := fmt.Sprint(err), "Brew command failed: Error: bottle is corrupt"; got != want {
+			t.Errorf("error = %q, want %q", got, want)
+		}
+		var brewErr *Error
+		if !errors.As(err, &brewErr) {
+			t.Fatalf("err = %T, want *Error", err)
+		}
+	})
+
+	t.Run("silent failed mutation reports the exit status", func(t *testing.T) {
+		script := fakeBrew(t, `exit 4`)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		_, err := runBrewCommandAt(ctx, script, "upgrade", "demo")
+		if got, want := fmt.Sprint(err), "Brew command failed: exit status 4"; got != want {
+			t.Errorf("error = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("untrusted tap on mutation stdout yields UntrustedTapError", func(t *testing.T) {
+		script := fakeBrew(t, `echo "Installing vendor/tap/tool"
+echo "Error: Refusing to load formula tool from untrusted tap vendor/tap."
+echo "Installing vendor/tap/tool has failed!" >&2
+exit 1`)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		_, err := runBrewCommandAt(ctx, script, "bundle", "install", "--file=x.Brewfile")
+		var trustErr *UntrustedTapError
+		if !errors.As(err, &trustErr) {
+			t.Fatalf("err = %T (%v), want *UntrustedTapError", err, err)
+		}
+		want := "Brew command failed: Error: Refusing to load formula tool from untrusted tap vendor/tap."
+		if trustErr.Error() != want {
+			t.Errorf("message = %q, want %q", trustErr.Error(), want)
+		}
+	})
+
+	// A read-only command keeps its whole stderr in the error: nothing else
+	// preserves it, and searchKind matches on the full text.
+	t.Run("failed read keeps full stderr and ignores stdout", func(t *testing.T) {
+		script := fakeBrew(t, `echo "stdout-marker"
+echo "Warning: tap is shallow" >&2
+echo "Error: No formulae or casks found for \"demo\"." >&2
+exit 1`)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		_, err := runBrewCommandAt(ctx, script, "search", "--formula", "demo")
+		if err == nil {
+			t.Fatal("runBrewCommandAt = nil error, want failure")
+		}
+		for _, want := range []string{"Warning: tap is shallow", `Error: No formulae or casks found for "demo".`} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("read-only failure lost %q: %q", want, err.Error())
+			}
+		}
+		if strings.Contains(err.Error(), "stdout-marker") {
+			t.Errorf("read-only failure = %q, want stdout left out", err.Error())
 		}
 	})
 
