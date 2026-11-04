@@ -62,6 +62,8 @@ by CI and therefore protects nothing. The accident is easy to make, because
 plain unit-test names such as `TestIsValid`, `TestInitConfig`, or `TestIndexOf`
 all start with `TestI` and would be silently skipped; name them so the first
 letter after `Test` is not `I` (see the GTK-headless skill below).
+`internal/installcheck.TestGateFilterHidesNoHermeticTest` now fails when the
+filter hides a hermetic test or when a test function sits outside `./internal/...`.
 
 The separately invoked tests under `test/e2e/` are outside the
 `./internal/...` unit-test scope by design. They are enforced by the E2E

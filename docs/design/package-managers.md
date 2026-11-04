@@ -1249,7 +1249,7 @@ installed layout itself:
   map the repository `config.yml` to
   `/usr/share/chairlift/config.yml` and rejects any content entry targeting
   `/etc/chairlift/config.yml`.
-- **`TestGoreleaserPublishesSystemIntegrationPackage`** requires exactly one
+- **`TestGoreleaserPublishesSystemPackage`** requires exactly one
   full package and one integration package, verifies their build filters,
   mutual conflicts, unique IDs, and the integration package's exact four
   content mappings. This prevents the companion from accidentally acquiring

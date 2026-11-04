@@ -33,7 +33,7 @@ same privileged files. Both ship as `deb`, `rpm`, and `apk`. Neither ships
 distro policy, provided by the image at the fixed `/usr/libexec` paths, and
 the UI hides the corresponding groups when the script is absent.
 
-`TestGoreleaserPublishesSystemIntegrationPackage`
+`TestGoreleaserPublishesSystemPackage`
 (`internal/installcheck/goreleaser_test.go:156-196`) pins the shape: unique
 ids, exact build-id lists per package, the mutual `conflicts:` pair, the
 format list, and content-set equality for the integration package (exactly
@@ -80,5 +80,5 @@ current and future — to the `/usr` layout.
   [ADR-0002](0002-usr-prefix-is-the-only-supported-install-prefix.md),
   [core ADR-0011 — Distro packages are named frostyard-&lt;tool&gt;](https://github.com/frostyard/core/blob/main/docs/adr/0011-frostyard-prefixed-package-names.md)
 - Enforced by: `internal/installcheck/goreleaser_test.go`
-  (`TestGoreleaserPublishesSystemIntegrationPackage`,
+  (`TestGoreleaserPublishesSystemPackage`,
   `TestGoreleaserNfpmLayoutMatchesUsrPrefix`)
