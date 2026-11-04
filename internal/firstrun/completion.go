@@ -33,12 +33,15 @@ type Completion struct {
 	// markers: ..." preview in dry run, the markers written, or the failure.
 	Log string
 	// DoneDescription is the msgid the Done step shows: the dry-run preview
-	// in dry run, so the window never claims a change that did not happen,
-	// and the "starts again at the next login" text when recording failed.
+	// in dry run, so the window never claims a change that did not happen.
+	// After a failure it is the "starts again at your next login" text, but
+	// DoneState replaces it when a marker exists after all (a partial
+	// failure), because the gate then does not start the first run again.
 	DoneDescription string
-	// Err is set when the completion could not be recorded: the config home
-	// is unknown, or MarkDone failed. The next login runs the first run
-	// again.
+	// Err is set when the completion could not be recorded in full: the
+	// config home is unknown, or a MarkDone step failed. MarkDone may have
+	// written a marker before a later step failed, so Err alone does not
+	// tell whether the next login runs the first run again; IsDone does.
 	Err error
 	// ShowWarning tells the Done step to show the warning icon instead of
 	// the success icon. It is true exactly when Err is set.
@@ -125,14 +128,59 @@ type Done struct {
 	Entries []ErrorEntry
 }
 
-// DoneState composes the Done step from the failed actions' entries and the
-// completion outcome: the action entries, then the completion entry; the
-// warning shows when any entry exists.
-func DoneState(actionEntries []ErrorEntry, c Completion) Done {
+// DoneState composes the Done step from the failed actions' entries, the
+// completion outcome, and done: the gate state after the completion
+// (DoneAt), that is, whether the next login skips the first run. The action
+// entries come first, then the completion entry; the warning shows when any
+// entry exists. When the completion failed, the description is "The first
+// run starts again at your next login" only when done is false; when a
+// marker exists after all (a partial MarkDone failure), the gate skips the
+// next run and the description is "Setup finished with errors".
+func DoneState(actionEntries []ErrorEntry, c Completion, done bool) Done {
 	entries := append(append([]ErrorEntry(nil), actionEntries...), c.ErrorLog()...)
+	description := c.DoneDescription
+	if c.Err != nil {
+		description = i18n.MsgCompletionFailedDesc
+		if done {
+			description = i18n.MsgFinishedWithErrors
+		}
+	}
 	return Done{
 		Warning:     c.ShowWarning || len(entries) > 0,
-		Description: c.DoneDescription,
+		Description: description,
 		Entries:     entries,
 	}
+}
+
+// ProgressSteps are the parts of the Progress sequence. The window passes
+// the production parts; tests inject their own.
+type ProgressSteps struct {
+	// Run runs one action (FlatpakRunner in production).
+	Run Runner
+	// Emit receives each action event (the window marshals it to the GTK
+	// main thread).
+	Emit func(Event)
+	// Drain waits until no color-scheme write is pending
+	// (SchemeWriter.Wait). It may be nil.
+	Drain func()
+	// Complete records the completion (CompleteAt in production).
+	Complete func() Completion
+	// IsDone reports the gate state after Complete (DoneAt in production).
+	IsDone func() bool
+}
+
+// RunProgress is the Progress worker's whole sequence, in this order: run
+// every action, wait for the color-scheme writer to drain, record the
+// completion, then read the gate state and compose the Done step. Draining
+// before Complete means the user's last style choice is written before the
+// completion is recorded, the application hold is released, and Exit can
+// end the process. Back is not possible from Progress, so no newer style
+// choice can come after the drain. It runs off the GTK main thread.
+func RunProgress(actions []Action, steps ProgressSteps) (Completion, Done) {
+	report := Execute(actions, steps.Run, steps.Emit)
+	if steps.Drain != nil {
+		steps.Drain()
+	}
+	completion := steps.Complete()
+	return completion, DoneState(ErrorLog(actions, report), completion, steps.IsDone())
 }

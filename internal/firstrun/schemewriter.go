@@ -15,16 +15,18 @@ type SchemeWriter struct {
 	apply func(ColorScheme) error
 
 	mu         sync.Mutex
+	idle       *sync.Cond // signalled when the worker stops
 	pending    ColorScheme
 	hasPending bool
 	running    bool
-	idle       sync.WaitGroup
 }
 
 // NewSchemeWriter returns a writer that applies schemes with apply
 // (ApplyColorScheme in production; tests inject a runner).
 func NewSchemeWriter(apply func(ColorScheme) error) *SchemeWriter {
-	return &SchemeWriter{apply: apply}
+	w := &SchemeWriter{apply: apply}
+	w.idle = sync.NewCond(&w.mu)
+	return w
 }
 
 // Request records scheme as the latest choice and starts the worker when it
@@ -37,17 +39,16 @@ func (w *SchemeWriter) Request(scheme ColorScheme) {
 		return
 	}
 	w.running = true
-	w.idle.Add(1)
 	go w.work()
 }
 
 // work writes pending values until none is left.
 func (w *SchemeWriter) work() {
-	defer w.idle.Done()
 	for {
 		w.mu.Lock()
 		if !w.hasPending {
 			w.running = false
+			w.idle.Broadcast()
 			w.mu.Unlock()
 			return
 		}
@@ -61,7 +62,15 @@ func (w *SchemeWriter) work() {
 	}
 }
 
-// Wait blocks until the worker has no write left. Tests use it.
+// Wait blocks until the worker has no write left: the running write and the
+// pending latest choice are both done. It returns at once when nothing is
+// running. The Progress sequence (RunProgress) calls it from the worker
+// goroutine before it records completion, so the last choice is written
+// before Exit can end the process. Safe for concurrent use with Request.
 func (w *SchemeWriter) Wait() {
-	w.idle.Wait()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for w.running {
+		w.idle.Wait()
+	}
 }

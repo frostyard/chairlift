@@ -419,17 +419,24 @@ func (w *FirstRunWindow) startProgress() {
 	w.app.Hold()
 	w.holding = true
 	go func() {
-		report := firstrun.Execute(actions, firstrun.FlatpakRunner, func(event firstrun.Event) {
-			sgtk.RunOnMainThread(func() { w.showActionState(event) })
+		// RunProgress runs the actions, waits for the color-scheme writer
+		// to drain, then records the completion (also when some actions
+		// failed) before the Done step shows and the hold is released.
+		decision, done := firstrun.RunProgress(actions, firstrun.ProgressSteps{
+			Run: firstrun.FlatpakRunner,
+			Emit: func(event firstrun.Event) {
+				sgtk.RunOnMainThread(func() { w.showActionState(event) })
+			},
+			Drain: w.scheme.Wait,
+			Complete: func() firstrun.Completion {
+				return firstrun.CompleteAt(dryRun, paths, pathsErr)
+			},
+			IsDone: func() bool { return firstrun.DoneAt(paths, pathsErr) },
 		})
-		// The marker is written after the actions end, also when some
-		// failed, and before the Done step shows (as first-setup did).
 		// CompleteAt logs nothing itself; its Log line carries the dry-run
 		// preview, the markers written, or the failure, which the Done
 		// step also shows.
-		decision := firstrun.CompleteAt(dryRun, paths, pathsErr)
 		log.Println(decision.Log)
-		done := firstrun.DoneState(firstrun.ErrorLog(actions, report), decision)
 		sgtk.RunOnMainThread(func() { w.finishProgress(done) })
 	}()
 }

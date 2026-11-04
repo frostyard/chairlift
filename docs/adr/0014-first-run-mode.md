@@ -63,14 +63,20 @@ Facts that constrain the move:
    and before the Done step shows, as first-setup did. A completion that
    cannot be recorded (no config home, or a `MarkDone` error) is not hidden:
    `firstrun.Completion` carries `Err` and `ShowWarning`, and the Done step
-   shows the warning icon, an error-log entry ("Setup failed: Could not
-   record that the first run is finished" and the error text), and the text
-   "The first run starts again at your next login". There is no retry
-   button; the next login runs the first run again.
+   shows the warning icon and an error-log entry ("Setup failed: Could not
+   record that the first run is finished" and the error text). The text
+   follows the real gate state after the failure (`firstrun.DoneAt`): "The
+   first run starts again at your next login" only when no marker exists;
+   when `MarkDone` wrote a marker before a later step failed, the gate skips
+   the next login and the text is "Setup finished with errors". There is no
+   retry button.
 4. **The Progress step cannot be cut short.** While the Progress actions run
    (`Flow.CanClose` is false), the window blocks `close-request` and holds
    the GApplication, so the Flatpak actions and the marker write finish. The
    hold is released and close works again when Progress ends.
+   `firstrun.RunProgress` fixes the order on the worker goroutine: the
+   actions, then a drain of the color-scheme writer, then the completion, so
+   the last style choice is written before Exit can end the process.
 5. **The legacy marker end rule.** ChairLift always **reads**
    `snow-first-setup.done`; that never ends. During the transition it also
    **writes** it (the `writeLegacyMarker` constant in

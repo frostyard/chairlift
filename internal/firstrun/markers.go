@@ -93,6 +93,13 @@ func IsDone(p Paths) bool {
 	return false
 }
 
+// DoneAt is the gate state for the window's paths: false when the paths are
+// unknown (pathsErr is set), else IsDone. The Done step uses it to tell
+// whether the next login starts the first run again.
+func DoneAt(p Paths, pathsErr error) bool {
+	return pathsErr == nil && IsDone(p)
+}
+
 // MarkDone is the one function that records a finished first run. The Done
 // step (through Complete) and `chairlift-first-run --mark-done` both reach
 // it. It creates <ConfigHome>/chairlift (mode 0700 for each directory it must

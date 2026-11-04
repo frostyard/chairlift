@@ -115,6 +115,9 @@ func TestCompletionPathsShareOneMarkerWriter(t *testing.T) {
 	if !calls["CompleteAt"]["Complete"] {
 		t.Error("CompleteAt does not call Complete")
 	}
+	if !calls["RunProgress"]["Execute"] || !calls["RunProgress"]["DoneState"] {
+		t.Error("RunProgress does not call Execute and DoneState")
+	}
 	for fn, set := range calls {
 		if set["MarkDone"] && fn != "Complete" {
 			t.Errorf("%s calls MarkDone directly; only Complete may", fn)
@@ -125,7 +128,7 @@ func TestCompletionPathsShareOneMarkerWriter(t *testing.T) {
 	for _, path := range windowFirstRunFiles(t) {
 		window.WriteString(readSource(t, path))
 	}
-	for _, fragment := range []string{"firstrun.CompleteAt(", "firstrun.IsDryRun()", "firstrun.DoneState(", "done.Warning", "done.Entries"} {
+	for _, fragment := range []string{"firstrun.CompleteAt(", "firstrun.IsDryRun()", "firstrun.RunProgress(", "firstrun.DoneAt(paths, pathsErr)", "done.Warning", "done.Entries"} {
 		if !strings.Contains(window.String(), fragment) {
 			t.Errorf("internal/window/firstrun*.go does not contain %q", fragment)
 		}
@@ -296,7 +299,7 @@ func TestWindowGuardsCloseDuringProgress(t *testing.T) {
 		}
 	}
 	hold := strings.Index(window, "w.app.Hold()")
-	worker := strings.Index(window, "report := firstrun.Execute(")
+	worker := strings.Index(window, "firstrun.RunProgress(")
 	if hold < 0 || worker < 0 || hold > worker {
 		t.Error("the application is not held before the Progress worker starts")
 	}
@@ -341,5 +344,28 @@ func TestWindowWritesColorSchemeSerially(t *testing.T) {
 	}
 	if strings.Contains(window, "firstrun.ApplyColorScheme(scheme)") {
 		t.Error("internal/window/firstrun*.go calls ApplyColorScheme directly; it must use the SchemeWriter")
+	}
+}
+
+// TestWindowDrainsSchemeWriterBeforeCompletion proves the Progress worker
+// goes through RunProgress with the window's SchemeWriter as its drain, so
+// the last style choice is written before the completion is recorded and
+// the hold is released. It also fails when the window runs the actions or
+// records the completion outside RunProgress.
+func TestWindowDrainsSchemeWriterBeforeCompletion(t *testing.T) {
+	window := windowFirstRunSource(t)
+	run := strings.Index(window, "firstrun.RunProgress(")
+	drain := strings.Index(window, "Drain: w.scheme.Wait,")
+	complete := strings.Index(window, "return firstrun.CompleteAt(dryRun, paths, pathsErr)")
+	if run < 0 || drain < run || complete < run {
+		t.Fatalf("the Progress worker does not pass Drain: w.scheme.Wait and CompleteAt to firstrun.RunProgress (run %d, drain %d, complete %d)", run, drain, complete)
+	}
+	if strings.Count(window, "firstrun.CompleteAt(") != 1 || strings.Contains(window, "firstrun.Execute(") {
+		t.Error("internal/window/firstrun*.go records completion or runs actions outside RunProgress")
+	}
+	release := strings.Index(window, "w.app.Release()")
+	finish := strings.Index(window, "func (w *FirstRunWindow) finishProgress(")
+	if release < finish {
+		t.Error("the hold is released outside finishProgress, which runs after RunProgress")
 	}
 }

@@ -65,6 +65,9 @@ const (
 	// Done step (new): the completion could not be recorded.
 	MsgCompletionFailed     = "Could not record that the first run is finished"
 	MsgCompletionFailedDesc = "The first run starts again at your next login"
+	// Done step (new): the completion failed in part, but a marker exists,
+	// so the next login does not start the first run again.
+	MsgFinishedWithErrors = "Setup finished with errors"
 )
 
 // Messages lists every first-run msgid, ported and new.
@@ -78,5 +81,5 @@ var Messages = []string{
 	MsgBrowsers, MsgBrowsersDesc, MsgUtilities, MsgUtilitiesDesc, MsgOffice, MsgOfficeDesc,
 	MsgProgress, MsgProgressDesc, MsgInstalling, MsgSettingUpFlathub,
 	MsgFinished, MsgFinishedDesc, MsgExit, MsgSetupFailed, MsgErrorLog, MsgDryRunFinished,
-	MsgCompletionFailed, MsgCompletionFailedDesc,
+	MsgCompletionFailed, MsgCompletionFailedDesc, MsgFinishedWithErrors,
 }

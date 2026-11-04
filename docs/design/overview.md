@@ -1392,7 +1392,9 @@ Done and every transition:
   one `firstrun.SchemeWriter` from the main thread. The writer has one worker
   goroutine and a mutex-protected pending value: a request during a write
   replaces the pending value, so the latest choice wins and at most the
-  running write and the latest one run. Each write is
+  running write and the latest one run. `SchemeWriter.Wait` blocks until no
+  write is running or pending; the Progress sequence calls it before the
+  completion. Each write is
   `firstrun.ApplyColorScheme`: `gsettings set org.gnome.desktop.interface
   color-scheme prefer-light|prefer-dark`, never `gtk-theme`. The window
   follows the choice through its style manager.
@@ -1457,10 +1459,29 @@ and calls `MarkDone` only when `WriteMarkers` is true;
   dry-run preview text (a missing config home is no failure here);
 - a live run with no config home, or a `MarkDone` error — `Err` is set,
   `ShowWarning` is true, the `Log` line is `first-run: could not record
-  completion: ...`, `DoneDescription` is "The first run starts again at your
-  next login", and `Completion.ErrorLog` gives one entry, "Setup failed:
+  completion: ...`, and `Completion.ErrorLog` gives one entry, "Setup failed:
   Could not record that the first run is finished" with the error text. There
-  is no retry button. Wiring tests
+  is no retry button.
+
+`firstrun.DoneState(actionEntries, completion, done)` composes the Done step.
+`done` is the gate state after the completion, `firstrun.DoneAt(paths,
+pathsErr)` (false when the paths are unknown, else `IsDone`). After a failure
+the description is "The first run starts again at your next login" only when
+`done` is false (nothing was written: the gate starts the first run again).
+`MarkDone` can fail after it wrote the markers, for example when the legacy
+autostart path is a non-empty directory; then `done` is true, the gate skips
+the next login, and the description is "Setup finished with errors". The
+warning icon and the error log show in both cases.
+
+`firstrun.RunProgress(actions, steps)` is the Progress worker's whole
+sequence, in this order: run every action (`Execute`), drain the
+color-scheme writer (`Drain`, the window's `SchemeWriter.Wait`), record the
+completion (`Complete`, `CompleteAt`), then read the gate state (`IsDone`,
+`DoneAt`) and compose `DoneState`. The window runs it off the GTK thread and
+calls `finishProgress` (which releases the application hold) only after it
+returns, so the last style choice is written before Exit can end the
+process; Back is not possible from Progress, so no newer choice can follow
+the drain. Wiring tests
 in `internal/firstrun` prove both paths reach the one writer, that only
 `MarkDone` writes files, and that only `internal/firstrun/markers.go` spells
 the marker names.

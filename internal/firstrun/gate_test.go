@@ -5,7 +5,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/frostyard/chairlift/internal/i18n"
 )
@@ -63,6 +65,23 @@ func TestCompleteWritesMarkers(t *testing.T) {
 	}
 }
 
+// gateEnvFor is a regular user's gate environment for the config home.
+func gateEnvFor(configHome string) GateEnv {
+	return GateEnv{UID: 1000, Getenv: envOf(map[string]string{"XDG_CONFIG_HOME": configHome}), Home: "/nonexistent-home"}
+}
+
+// assertGateExecs checks that the gate starts the first run again.
+func assertGateExecs(t *testing.T, env GateEnv) {
+	t.Helper()
+	got := Gate(env)
+	if got.ExecPath != ChairLiftPath || len(got.ExecArgv) < 2 || got.ExecArgv[1] != "--first-run" {
+		t.Errorf("Gate() = %+v, want an exec of %s --first-run (the next login runs the first run again)", got, ChairLiftPath)
+	}
+}
+
+// TestCompleteReportsMarkDoneFailure is a total failure: the config home is
+// a file, so no marker can be written, the Done step says the first run
+// starts again, and the gate does start it again.
 func TestCompleteReportsMarkDoneFailure(t *testing.T) {
 	p := testPaths(t)
 	touch(t, p.ConfigHome) // a file where a directory must be
@@ -79,6 +98,41 @@ func TestCompleteReportsMarkDoneFailure(t *testing.T) {
 	if CompleteAt(false, p, nil).Err == nil {
 		t.Error("CompleteAt() lost MarkDone's error")
 	}
+	if DoneAt(p, nil) {
+		t.Fatal("DoneAt() = true after a total failure")
+	}
+	if done := DoneState(nil, decision, DoneAt(p, nil)); done.Description != i18n.MsgCompletionFailedDesc {
+		t.Errorf("DoneState().Description = %q, want %q", done.Description, i18n.MsgCompletionFailedDesc)
+	}
+	assertGateExecs(t, gateEnvFor(p.ConfigHome))
+}
+
+// TestCompletePartialFailureDoesNotPromiseAnotherRun: the legacy autostart
+// path is a non-empty directory, so its remove fails after both markers were
+// written. The gate then skips the next login, so the Done step must not say
+// that the first run starts again.
+func TestCompletePartialFailureDoesNotPromiseAnotherRun(t *testing.T) {
+	p := testPaths(t)
+	touch(t, filepath.Join(p.LegacyAutostart, "keep"))
+
+	decision := CompleteAt(false, p, nil)
+	if decision.Err == nil || !decision.ShowWarning {
+		t.Fatalf("CompleteAt() = %+v, want the remove error", decision)
+	}
+	if !IsDone(p) || !DoneAt(p, nil) {
+		t.Fatal("IsDone() = false; the markers were written before the remove failed")
+	}
+	got := Gate(gateEnvFor(p.ConfigHome))
+	if got.Code != 0 || got.ExecPath != "" || !strings.Contains(got.Stderr, "first-run: already done") {
+		t.Fatalf("Gate() = %+v, want exit 0 \"already done\"", got)
+	}
+	done := DoneState(nil, decision, DoneAt(p, nil))
+	if done.Description == i18n.MsgCompletionFailedDesc || done.Description != i18n.MsgFinishedWithErrors {
+		t.Errorf("DoneState().Description = %q, want %q, not the \"starts again\" text", done.Description, i18n.MsgFinishedWithErrors)
+	}
+	if !done.Warning || len(done.Entries) != 1 || !strings.Contains(done.Entries[0].Message, p.LegacyAutostart) {
+		t.Errorf("DoneState() = %+v, want the warning and the remove error in the log", done)
+	}
 }
 
 // TestCompleteAtReportsMissingConfigHome covers the window's path error: a
@@ -90,6 +144,19 @@ func TestCompleteAtReportsMissingConfigHome(t *testing.T) {
 		t.Fatalf("CompleteAt() Err = %v, want it to wrap %v", decision.Err, pathsErr)
 	}
 	assertCompletionFailure(t, decision, pathsErr)
+	if DoneAt(Paths{}, pathsErr) {
+		t.Fatal("DoneAt() = true with unknown paths")
+	}
+	if done := DoneState(nil, decision, DoneAt(Paths{}, pathsErr)); done.Description != i18n.MsgCompletionFailedDesc {
+		t.Errorf("DoneState().Description = %q, want %q", done.Description, i18n.MsgCompletionFailedDesc)
+	}
+	// Nothing was written anywhere: at a login with a normal environment
+	// the gate starts the first run again. (In the same broken environment
+	// it exits 1, because it cannot find a config home either.)
+	assertGateExecs(t, gateEnvFor(filepath.Join(t.TempDir(), "cfg")))
+	if broken := Gate(GateEnv{UID: 1000, Getenv: envOf(nil)}); broken.Code != 1 || broken.ExecPath != "" {
+		t.Errorf("Gate(no config home) = %+v, want exit 1", broken)
+	}
 
 	// In dry run nothing would be written, so a missing config home is no
 	// failure.
@@ -116,7 +183,7 @@ func assertCompletionFailure(t *testing.T, decision Completion, cause error) {
 		!strings.Contains(entries[0].Message, cause.Error()) {
 		t.Errorf("ErrorLog() = %+v, want one translated entry with %q", entries, cause)
 	}
-	done := DoneState(nil, decision)
+	done := DoneState(nil, decision, false)
 	if !done.Warning || len(done.Entries) != 1 || done.Description != i18n.MsgCompletionFailedDesc {
 		t.Errorf("DoneState() = %+v, want the warning, the entry and the failure text", done)
 	}
@@ -126,26 +193,104 @@ func TestDoneState(t *testing.T) {
 	action := ErrorEntry{Title: "Setup failed: Installing Firefox", Message: "no network"}
 	failed := Completion{DoneDescription: i18n.MsgCompletionFailedDesc, Err: errors.New("disk full"), ShowWarning: true}
 	finished := Completion{DoneDescription: i18n.MsgFinishedDesc}
+	dry := Completion{DoneDescription: i18n.MsgDryRunFinished}
 	tests := []struct {
-		name        string
-		actions     []ErrorEntry
-		completion  Completion
-		wantWarning bool
-		wantEntries int
+		name            string
+		actions         []ErrorEntry
+		completion      Completion
+		done            bool
+		wantWarning     bool
+		wantEntries     int
+		wantDescription string
 	}{
-		{"all good", nil, finished, false, 0},
-		{"an action failed", []ErrorEntry{action}, finished, true, 1},
-		{"completion failed", nil, failed, true, 1},
-		{"both failed: action entry first", []ErrorEntry{action}, failed, true, 2},
+		{"all good", nil, finished, true, false, 0, i18n.MsgFinishedDesc},
+		{"dry run", nil, dry, false, false, 0, i18n.MsgDryRunFinished},
+		{"an action failed", []ErrorEntry{action}, finished, true, true, 1, i18n.MsgFinishedDesc},
+		{"completion failed, no marker", nil, failed, false, true, 1, i18n.MsgCompletionFailedDesc},
+		{"completion failed, a marker exists", nil, failed, true, true, 1, i18n.MsgFinishedWithErrors},
+		{"both failed: action entry first", []ErrorEntry{action}, failed, false, true, 2, i18n.MsgCompletionFailedDesc},
 	}
 	for _, tt := range tests {
-		got := DoneState(tt.actions, tt.completion)
-		if got.Warning != tt.wantWarning || len(got.Entries) != tt.wantEntries || got.Description != tt.completion.DoneDescription {
-			t.Errorf("%s: DoneState() = %+v", tt.name, got)
+		got := DoneState(tt.actions, tt.completion, tt.done)
+		if got.Warning != tt.wantWarning || len(got.Entries) != tt.wantEntries || got.Description != tt.wantDescription {
+			t.Errorf("%s: DoneState() = %+v, want warning %v, %d entries, %q", tt.name, got, tt.wantWarning, tt.wantEntries, tt.wantDescription)
 		}
 		if tt.wantEntries > 0 && len(tt.actions) > 0 && got.Entries[0] != action {
 			t.Errorf("%s: first entry = %+v, want the action entry", tt.name, got.Entries[0])
 		}
+	}
+}
+
+// TestRunProgressDrainsSchemeWriterBeforeCompletion: the first color-scheme
+// write is still running and a newer choice is pending when the actions
+// end. The completion step must run only after both writes, and the last
+// write must be the newer choice.
+func TestRunProgressDrainsSchemeWriterBeforeCompletion(t *testing.T) {
+	release := make(chan struct{})
+	started := make(chan struct{}, 4)
+	var mu sync.Mutex
+	var writes []ColorScheme
+	writer := NewSchemeWriter(func(scheme ColorScheme) error {
+		started <- struct{}{}
+		mu.Lock()
+		first := len(writes) == 0
+		mu.Unlock()
+		if first {
+			<-release
+		}
+		mu.Lock()
+		writes = append(writes, scheme)
+		mu.Unlock()
+		return nil
+	})
+	writer.Request(SchemeDark)
+	<-started
+	writer.Request(SchemeLight) // pending while the Dark write blocks
+
+	var order []string
+	var seenAtComplete []ColorScheme
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		close(release)
+	}()
+	_, done := RunProgress(PlanActions([]App{firefox}), ProgressSteps{
+		Run:   func(Action) error { order = append(order, "action"); return nil },
+		Emit:  func(Event) {},
+		Drain: writer.Wait,
+		Complete: func() Completion {
+			order = append(order, "complete")
+			mu.Lock()
+			seenAtComplete = append([]ColorScheme(nil), writes...)
+			mu.Unlock()
+			return Completion{DoneDescription: i18n.MsgFinishedDesc}
+		},
+		IsDone: func() bool { order = append(order, "isdone"); return true },
+	})
+	if want := []string{"action", "action", "complete", "isdone"}; !reflect.DeepEqual(order, want) {
+		t.Fatalf("order = %v, want %v", order, want)
+	}
+	if want := []ColorScheme{SchemeDark, SchemeLight}; !reflect.DeepEqual(seenAtComplete, want) {
+		t.Fatalf("writes when completion ran = %v, want %v (the writer was not drained first)", seenAtComplete, want)
+	}
+	if done.Description != i18n.MsgFinishedDesc || done.Warning {
+		t.Fatalf("RunProgress() Done = %+v", done)
+	}
+}
+
+func TestRunProgressReportsFailedActions(t *testing.T) {
+	_, done := RunProgress(PlanActions([]App{firefox}), ProgressSteps{
+		Run: func(a Action) error {
+			if a.Kind == ActionInstall {
+				return errors.New("no space")
+			}
+			return nil
+		},
+		Emit:     func(Event) {},
+		Complete: func() Completion { return Completion{DoneDescription: i18n.MsgFinishedDesc} },
+		IsDone:   func() bool { return true },
+	})
+	if !done.Warning || len(done.Entries) != 1 || done.Entries[0].Message != "no space" {
+		t.Fatalf("RunProgress() Done = %+v, want the install failure in the log", done)
 	}
 }
 
