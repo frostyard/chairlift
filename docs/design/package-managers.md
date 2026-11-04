@@ -360,7 +360,7 @@ Exported surface:
 
 The package is pure and holds no state, so it is safe to call from a worker goroutine or from inside an `sgtk.RunOnMainThread` closure.
 
-`loadFlatpakUpdates` (`internal/views/updates_page.go`) is its only call site. It keeps both `flatpak.ListUpdates` errors as values — `userErr` and `systemErr`, still logged exactly as before via the two `log.Printf("Error loading {user,system} flatpak updates: %v", …)` lines — instead of dropping them once logged, and then calls `flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)` once on the worker goroutine, before entering `sgtk.RunOnMainThread`. Inside that closure (past the `if uh.flatpakUpdatesExpander == nil { return }` guard, which stays because `flatpak_updates_group` can be disabled and the expander then never gets built) the result is applied unconditionally: `SetSubtitle(result.Subtitle)` and `SetEnableExpansion(result.Expandable)` run on *every* path, including the zero-update path, and only the building of the per-update rows is skipped when there are none. The view holds no subtitle text and makes no decision of its own; the old hard-coded `"All applications are up to date"` and `fmt.Sprintf("%d updates available", …)` strings are gone from it.
+`loadFlatpakUpdates` (`internal/views/updates_page.go`) is its only call site. It keeps both `flatpak.ListUpdates` errors as values — `userErr` and `systemErr`, still logged exactly as before via the two `log.Printf("Error loading {user,system} flatpak updates: %v", …)` lines — instead of dropping them once logged, appends each installation's returned updates whether or not its error is nil (a `*flatpak.RemoteError` still carries the healthy remotes' updates; an aborted query returns none), and then calls `flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)` once on the worker goroutine, before entering `sgtk.RunOnMainThread`. Inside that closure (past the `if uh.flatpakUpdatesExpander == nil { return }` guard, which stays because `flatpak_updates_group` can be disabled and the expander then never gets built) the result is applied unconditionally: `SetSubtitle(result.Subtitle)` and `SetEnableExpansion(result.Expandable)` run on *every* path, including the zero-update path, and only the building of the per-update rows is skipped when there are none. The view holds no subtitle text and makes no decision of its own; the old hard-coded `"All applications are up to date"` and `fmt.Sprintf("%d updates available", …)` strings are gone from it.
 
 The practical consequence is that a total failure — both installations unqueryable — no longer renders as an all-up-to-date message: `allUpdates` is empty for the same reason it is empty when everything really is current, and only the retained errors distinguish the two, so the expander reads `Could not check for updates`. A partial failure is identified as partial rather than silently under-reported: the rows that were found are shown and expandable, with the subtitle naming the installation that could not be checked. The badge deliberately remains a plain count — `uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))` carries no error state — so a total failure shows a badge contribution of `0` next to an honest subtitle rather than an invented number.
 
@@ -420,7 +420,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 |----------|------------|---------|-------|
 | `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
 | `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
-| `ListUpdates(user)` | `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system]` | 30s | Separate calls for user/system; `--app` excludes runtimes |
+| `ListUpdates(user)` | `flatpak remotes [--user\|--system] --columns=name,options`, then `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system] <remote>` per enabled remote, and `flatpak list [--user\|--system] --app --columns=origin` only when a remote failed | 30s per query | Separate calls for user/system; `--app` excludes runtimes; see [Update queries run per remote](#update-queries-run-per-remote) |
 | `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
@@ -434,7 +434,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 ### Error handling
 
-`runFlatpakCommand` is a thin wrapper: it applies the dry-run skip (before any `exec.Cmd` exists), builds a context from `commandTimeout(args)`, and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `stageexec.Run` gives OS staging and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
+`runFlatpakCommand` is a thin wrapper that calls `runFlatpakCommandCtx(context.Background(), args...)`. `runFlatpakCommandCtx(ctx, args...)` is the single dry-run gate (it skips state-changing commands before any `exec.Cmd` exists), layers `commandTimeout(args)` onto the caller's `ctx` with `context.WithTimeout` (so the nearer deadline wins and cancelling `ctx` stops the command), and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `stageexec.Run` gives OS staging and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
 
 `runFlatpakCommandAt` starts the command in its own process group (`cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}`) and sets `cmd.Cancel` to `syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)`, so flatpak's download helpers (download workers, ostree pulls) are killed with the command instead of being orphaned when only the direct child is signalled. `cmd.WaitDelay` (5s) bounds the wait, because those helpers inherit the stdout/stderr pipes and a straggler would otherwise hold `Wait` open indefinitely. `cmd.Run` still reaps the child.
 
@@ -474,12 +474,54 @@ failure, and the dry-run preview.
 
 ### Update queries exclude runtimes
 
-`ListUpdates` builds its argument list with the unexported pure helper
-`updateListArgs(user bool) []string`, the only place the `remote-ls` command is
-spelled. It passes `--app` — matching the precedent set by `listApplications` —
+`ListUpdates` builds each remote's argument list with the unexported pure
+helper `updateListArgs(user bool, remote string) []string`, the only place the
+`remote-ls` command is spelled. It passes `--app` — matching the precedent set by `listApplications` —
 so runtimes and extensions are deliberately excluded from the results. Update
 rows and the sidebar update badge therefore only ever describe applications,
 which is what the user can act on from the applications page.
+
+### Update queries run per remote
+
+A remote-less `flatpak remote-ls --updates` fails the whole installation when
+any one remote is unreachable, so a remote left behind by an uninstalled
+application failed the Updates check and hid every other remote's updates,
+although `flatpak update` itself still succeeded. `ListUpdates(user)` therefore
+delegates to the unexported `listUpdates(ctx, user)`, which:
+
+1. lists the installation's remotes with `updateRemoteListArgs`
+   (`remotes <scope> --columns=name,options`) and keeps, in listed order, every
+   remote whose options do not include `disabled` (`parseUpdateRemotes`) — the
+   set flatpak's own remote-less query visits;
+2. queries each of those remotes with `updateListArgs(user, remote)`, each
+   under its own 30-second read budget, so one slow remote cannot starve the
+   others;
+3. only when at least one remote query failed, lists the origin of every
+   installed **application** in the installation with `originListArgs`
+   (`list <scope> --app --columns=origin`, parsed by `parseOrigins`). `--app`
+   matches the inventory's own filter: a remote that still serves only
+   runtimes — the usual leftover of an uninstall without `--unused` — can hide
+   no update this inventory would list.
+
+Outcomes, per installation:
+
+| Situation | Updates returned | Error returned |
+|-----------|------------------|----------------|
+| Remote listing fails | `nil` | the listing's `*Error` / `*NotFoundError` |
+| No enabled remotes | none | `nil` (only the listing runs) |
+| Every remote query succeeds | all remotes' updates | `nil` (no origin listing) |
+| A remote fails and no installed application comes from it | the healthy remotes' updates | `nil`; the failure is logged as `flatpak: ignoring <installation> remote "<name>", which no installed application uses: ...` |
+| A remote fails and an installed application comes from it | the healthy remotes' updates | a `*flatpak.RemoteError{Remote, Installation, Err}` per such remote, joined with `errors.Join`; its message names the remote and installation and it unwraps to the query's `*Error` |
+| A remote fails and the origin listing fails too | the healthy remotes' updates | the origin listing's error joined with a `*RemoteError` for every failed remote (none can be shown unused) |
+| The caller's context is cancelled, or the executable is missing (`abortsUpdateQuery`) | `nil` | the cancellation / `*NotFoundError`; never judged as one remote's failure |
+
+A per-query timeout (`context.DeadlineExceeded`) is a remote's own failure,
+not an abort. The exported `ListUpdates` passes `context.Background()`; the
+context parameter exists so cancellation is part of the contract and is
+tested. `loadFlatpakUpdates` keeps the returned updates even when the error is
+non-nil, so the healthy remotes' rows are shown while the subtitle names the
+installation that could not be checked (`flatpakstatus`). `flatpak_test.go`
+covers each row of the table plus the argument builders and parsers directly.
 
 ## fwupd (`internal/fwupd/fwupd.go`)
 

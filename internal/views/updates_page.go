@@ -466,21 +466,22 @@ func (uh *UserHome) loadFlatpakUpdates() {
 	var allUpdates []flatpak.UpdateInfo
 
 	// Load user updates. The error is kept as a value, not just logged: the
-	// expander subtitle has to say that half the picture is missing.
+	// expander subtitle has to say that half the picture is missing. The
+	// updates are kept even with an error: a remote failure
+	// (*flatpak.RemoteError) still returns the healthy remotes' updates,
+	// while an aborted query returns none.
 	userUpdates, userErr := flatpak.ListUpdates(true)
 	if userErr != nil {
 		log.Printf("Error loading user flatpak updates: %v", userErr)
-	} else {
-		allUpdates = append(allUpdates, userUpdates...)
 	}
+	allUpdates = append(allUpdates, userUpdates...)
 
 	// Load system updates
 	systemUpdates, systemErr := flatpak.ListUpdates(false)
 	if systemErr != nil {
 		log.Printf("Error loading system flatpak updates: %v", systemErr)
-	} else {
-		allUpdates = append(allUpdates, systemUpdates...)
 	}
+	allUpdates = append(allUpdates, systemUpdates...)
 
 	status := flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)
 
