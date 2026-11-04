@@ -153,7 +153,7 @@ func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 	}
 }
 
-func TestGoreleaserPublishesSystemIntegrationPackage(t *testing.T) {
+func TestGoreleaserPublishesSystemPackage(t *testing.T) {
 	cfg := loadGoreleaserConfig(t)
 	full := nfpmByPackageName(t, cfg, fullPackageName)
 	integration := nfpmByPackageName(t, cfg, integrationPackageName)

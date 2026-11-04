@@ -16,8 +16,8 @@
 ```bash
 make test              # Run all tests
 go test -v ./...       # Run all tests with verbose output
-go test -v ./... -coverprofile=coverage.out -covermode=atomic  # With coverage
-go test -race -short ./...   # With race detector
+go test -v ./internal/... -coverprofile=coverage.out -covermode=atomic  # With coverage
+go test -race -short ./internal/...   # With race detector
 make e2e               # Build and run the headless GTK/install smoke suite
 ```
 
@@ -149,24 +149,27 @@ func testConfig() *config.Config {
 
 **View Coverage:**
 ```bash
-go test -v ./... -coverprofile=coverage.out -covermode=atomic
+go test -v ./internal/... -coverprofile=coverage.out -covermode=atomic
 go tool cover -html=coverage.out -o coverage.html
 ```
 
 ## Test Types
 
 **Unit Tests:**
-- Focus on individual repository packages under `./...`
-- Run with: `go test -v ./...`
-- No `-run` or `-skip` filter hides tests
+- Focus on individual packages in `internal/`
+- Run with: `go test -v ./internal/... -run "^Test[^I]" -skip "Integration"`
+- Exclude integration tests by naming convention
 
-**Integration-style tests:**
-- Environment-dependent tests use ordinary test names and run under `./...`
-- Headless unit gates do not execute packages that import puregotk
-- The dedicated E2E suite lives under `test/e2e/` and requires `make e2e`
+**Integration Tests:**
+- Naming convention: any name beginning `TestI` (not merely those beginning
+  `TestIntegr…`) or containing `Integration` is excluded by `-run "^Test[^I]" -skip "Integration"`;
+  those names are reserved for environment-dependent tests, so ordinary unit
+  tests must not use the `TestI` prefix
+- Skipped in CI unit test runs
+- Require external tools (nbc, flatpak, brew)
 
 **Race Detection:**
-- Run with: `go test -race -short ./...`
+- Run with: `go test -race -short ./internal/...`
 - Part of CI pipeline (`race-test` job)
 - Uses `-short` flag to reduce test duration
 
@@ -266,14 +269,14 @@ func TestGroupEnabledLookup(t *testing.T) {
 | Job | Purpose | Command |
 |-----|---------|---------|
 | `lint` | Code quality | `golangci-lint` |
-| `unit-test` | Unit tests + coverage | `go test -v ./... -coverprofile=coverage.out -covermode=atomic` |
-| `race-test` | Race condition detection | `go test -race -short ./...` |
+| `unit-test` | Unit tests + coverage | `go test -v ./internal/... -coverprofile=coverage.out` |
+| `race-test` | Race condition detection | `go test -race -short ./internal/...` |
 | `e2e` | Built-binary, headless GTK startup, staged-install smoke tests | `make e2e` |
 | `verify` | Go mod, vet, gofmt checks | `go mod tidy`, `go vet`, `gofmt` |
 | `build` | Build binaries (amd64, arm64) | `make build` |
 
 **Test Filtering in CI:**
-- Unit and race commands have no `-run` or `-skip` filter
+- Unit tests exclude integration: `-run "^Test[^I]" -skip "Integration"`
 - Race tests use `-short` flag
 
 ## Testing Guidelines

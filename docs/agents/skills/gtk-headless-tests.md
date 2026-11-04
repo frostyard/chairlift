@@ -43,9 +43,10 @@ The only safe signal is: the package does not import puregotk at all.
 - Test in the puregotk-free package, following the model of the existing
   `internal/bootc` and `internal/homebrew` tests (pure functions, table-driven).
 - Name tests `Test…` (not `TestI…`, no "Integration") so they run under CI's
-  repository-wide `go test ./...` gate. Filters are **not** an escape hatch
-  for GTK-needing tests — a skipped test still lives in its package's binary,
-  which can panic at init. Skipping does not help; moving the logic out does.
+  `-run "^Test[^I]" -skip "Integration"` filter. That filter is **not** an
+  escape hatch for GTK-needing tests — a skipped test still lives in its
+  package's binary, which still panics at init. Skipping does not help; moving
+  the logic out does.
 
 **Widget-bound methods are not headlessly unit-testable.** A guard like
 `if uh.someExpander == nil { return }` on a method of a puregotk-holding struct

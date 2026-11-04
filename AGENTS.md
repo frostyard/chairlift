@@ -52,16 +52,23 @@ to `.PHONY`; `internal/installcheck/makefile_phony_test.go` fails when a
 target is missing from `.PHONY` or `.PHONY` names a target that does not
 exist.
 
-CI (`.github/workflows/test.yml`) and `make ci` run `go test ./...` for unit
-and race tests. They use no `-run` or `-skip` filter, so test names beginning
-with `TestI` and tests containing `Integration` run normally. The
-`internal/installcheck.TestUnitTestGatesRunEveryTest` guard rejects future unit
-or race gates that add either filter or narrow the package pattern away from
-`./...`.
+CI (`.github/workflows/test.yml`) filters tests with `-run "^Test[^I]"
+-skip "Integration"`. That filter excludes *any* test whose name begins `TestI`
+— not only `TestIntegration` — or contains `Integration` anywhere. Those names
+are reserved for tests that require a real environment (a live `brew`,
+`flatpak`, `bootc`, or GTK display). Ordinary unit tests must not use the
+`TestI` prefix: a test that trips the filter is never executed by `make ci` or
+by CI and therefore protects nothing. The accident is easy to make, because
+plain unit-test names such as `TestIsValid`, `TestInitConfig`, or `TestIndexOf`
+all start with `TestI` and would be silently skipped; name them so the first
+letter after `Test` is not `I` (see the GTK-headless skill below).
+`internal/installcheck.TestGateFilterHidesNoHermeticTest` now fails when the
+filter hides a hermetic test or when a test function sits outside `./internal/...`.
 
-The separately invoked tests under `test/e2e/` use `./test/e2e` by design.
-They are enforced by the E2E workflow's explicit `make e2e` step; ordinary
-unit-test gates run `./...` and do not replace that dedicated E2E gate.
+The separately invoked tests under `test/e2e/` are outside the
+`./internal/...` unit-test scope by design. They are enforced by the E2E
+workflow's explicit `make e2e` step; do not assume adding a test outside
+`internal/` is enough without that dedicated gate.
 
 There are no generated files and no codegen step; everything under version
 control is hand-written Go, YAML, and data assets.

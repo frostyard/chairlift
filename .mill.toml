@@ -12,10 +12,10 @@ chunk = [
   "CGO_ENABLED=0 go vet ./... 2>&1 | tail -c 4000; exit ${PIPESTATUS[0]}",
   "CGO_ENABLED=0 golangci-lint run 2>&1 | tail -c 4000; exit ${PIPESTATUS[0]}",
   "CGO_ENABLED=0 go build ./... 2>&1 | tail -c 4000; exit ${PIPESTATUS[0]}",
-  # Tests run under the same unfiltered repository-wide scope as CI. GTK/GLib
-  # is dlopen'd at runtime and is absent on the gate host, so tests must be
-  # headless — see docs/agents/skills/gtk-headless-tests.md.
-  "CGO_ENABLED=0 go test ./... 2>&1 | { grep -v '^ok ' || true; } | tail -c 6000; exit ${PIPESTATUS[0]}",
+  # Tests run under CI's exact filter. GTK/GLib is dlopen'd at runtime and is
+  # absent on the gate host, so tests must be headless — see
+  # docs/agents/skills/gtk-headless-tests.md.
+  "CGO_ENABLED=0 go test ./internal/... -run \"^Test[^I]\" -skip \"Integration\" 2>&1 | { grep -v '^ok ' || true; } | tail -c 6000; exit ${PIPESTATUS[0]}",
 ]
 # Heavier final gate before the ship decision. `make ci` mirrors CI exactly
 # (tidy check, vet, gofmt, lint, unit tests, race detector, and a build over

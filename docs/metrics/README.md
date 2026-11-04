@@ -9,7 +9,7 @@ definitions instead of committing snapshots that become stale.
 | Pull request acceptance | [Definition and reproducible 90-day query](../metrics.md) | Accepted and closed counts plus their ratio. It is descriptive, not a target. |
 | CI results | [Tests workflow](https://github.com/frostyard/chairlift/actions/workflows/test.yml) | Lint, unit tests, race detection, verification, and cross-architecture builds for each run. |
 | Nightly compliance | [Nightly workflow](https://github.com/frostyard/chairlift/actions/workflows/nightly-compliance.yml) | Default-branch CI, E2E, and vulnerability checks run on a schedule. |
-| Test coverage | [Codecov](https://app.codecov.io/gh/frostyard/chairlift) | Coverage for the tested `./...` scope; consult the upload status before interpreting missing data. |
+| Test coverage | [Codecov](https://app.codecov.io/gh/frostyard/chairlift) | Coverage for the tested `internal/...` scope; consult the upload status before interpreting missing data. |
 | Releases | [GitHub Releases](https://github.com/frostyard/chairlift/releases) | Published versions, timestamps, and release assets. |
 | Review activity | [Pull requests](https://github.com/frostyard/chairlift/pulls) | Public review discussions, outcomes, checks, and merge history. |
 
