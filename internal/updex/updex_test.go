@@ -450,3 +450,35 @@ func TestParseUpdateResults(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdexAvailabilityRequiresNonEmptyFeatures(t *testing.T) {
+	origLister := featuresLister
+	t.Cleanup(func() { featuresLister = origLister })
+
+	tests := []struct {
+		name     string
+		features []Feature
+		err      error
+		want     bool
+	}{
+		{name: "empty feature list", features: []Feature{}, want: false},
+		{name: "nil feature list", features: nil, want: false},
+		{name: "listing error", err: errors.New("failed to read features"), want: false},
+		{name: "listing error with features", features: []Feature{{Name: "docker"}}, err: errors.New("partial"), want: false},
+		{name: "one disabled feature", features: []Feature{{Name: "docker"}}, want: true},
+		{name: "several features", features: []Feature{{Name: "docker", Enabled: true}, {Name: "devtools"}}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			featuresLister = func(ctx context.Context) ([]Feature, error) {
+				if _, ok := ctx.Deadline(); !ok {
+					t.Error("featuresLister called without a deadline")
+				}
+				return tt.features, tt.err
+			}
+			if got := IsInstalled(); got != tt.want {
+				t.Fatalf("IsInstalled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
