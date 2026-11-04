@@ -29,9 +29,11 @@ type Result struct {
 	// Expandable reports whether the expander should allow expansion.
 	Expandable bool
 	// Authoritative reports whether this load learned anything about the
-	// update inventory. It is false only when both queries failed: the caller
-	// then knows nothing and must keep the previous rows and badge count
-	// rather than publishing an empty inventory over a known one.
+	// update inventory. It is true when at least one installation returned a
+	// usable result: either its query succeeded, or it returned updates with
+	// a RemoteError. It is false only when both queries failed and found no
+	// updates; the caller then knows nothing and must keep the previous rows
+	// and badge count rather than publishing an empty inventory over a known one.
 	Authoritative bool
 }
 
@@ -44,18 +46,23 @@ type Result struct {
 // reachable. The claim that everything is up to date is made only when both
 // queries succeeded and found nothing.
 //
-// Authoritative is false exactly when both queries failed, whatever count a
-// partial result carries.
+// Authoritative is true when at least one installation returned a usable
+// result. That means its query succeeded or it returned one or more updates
+// with an error. In the boolean API, it is false only when both queries failed
+// and count is zero.
 func Subtitle(count int, userFailed, systemFailed bool) Result {
 	return Result{
 		Subtitle:      subtitleText(count, userFailed, systemFailed),
 		Expandable:    count > 0,
-		Authoritative: !userFailed || !systemFailed,
+		Authoritative: !userFailed || !systemFailed || count > 0,
 	}
 }
 
 func subtitleText(count int, userFailed, systemFailed bool) string {
 	if userFailed && systemFailed {
+		if count > 0 {
+			return fmt.Sprintf("%s; the user and system installations could not be fully checked", availableText(count))
+		}
 		return "Could not check for updates"
 	}
 

@@ -505,9 +505,9 @@ func (uh *UserHome) loadFlatpakUpdatesGeneration(generation uint64) {
 			return
 		}
 
-		// A load in which both installation queries failed learned nothing,
-		// so it keeps the last known count and rows instead of publishing an
-		// empty inventory.
+		// A load in which no installation returned a usable result learned
+		// nothing, so it keeps the last known count and rows instead of publishing
+		// an empty inventory.
 		refresh := actionstate.OutdatedRefresh(
 			status.Authoritative,
 			uh.updateCounts.Get(badgestate.Flatpak),
@@ -582,8 +582,8 @@ func (uh *UserHome) loadFlatpakUpdatesGeneration(generation uint64) {
 					sgtk.RunOnMainThread(func() {
 						uh.toastAdder.ShowToast(actionmsg.Update(dryRun, appID))
 						// The control must not depend on the reload: a
-						// reload in which both installation queries fail
-						// keeps the old rows, and with them this button.
+						// reload in which no installation returned a usable
+						// result keeps the old rows, and with them this button.
 						// A live success retires the row now; a dry-run
 						// restores the button.
 						if decision.RemoveRow {

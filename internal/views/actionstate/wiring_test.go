@@ -55,7 +55,7 @@ func TestUpdatesPageUsesGuardedRefreshDecisions(t *testing.T) {
 // TestUpdatesPageGuardsFlatpakUpdateRefreshes pins the Flatpak update
 // inventory reload to the same discipline as the Homebrew one: every reload
 // takes a RefreshGate generation, only the current generation publishes, and a
-// load in which both installation queries failed keeps the last known rows and
+// load in which no installation returned a usable result keeps the last known rows and
 // count through OutdatedRefresh instead of publishing an empty inventory.
 func TestUpdatesPageGuardsFlatpakUpdateRefreshes(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
