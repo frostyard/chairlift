@@ -70,67 +70,110 @@ func gateMakefileCITestCommands(text string) []string {
 	return commands
 }
 
+func gateNormalizeFlag(field string) (name, value string, hasValue bool) {
+	name = strings.TrimLeft(field, "-")
+	name = strings.TrimPrefix(name, "test.")
+	if equals := strings.Index(name, "="); equals >= 0 {
+		value = name[equals+1:]
+		name = name[:equals]
+		hasValue = true
+	}
+	return name, value, hasValue
+}
+
 func gateValidateExactFilter(command string) error {
 	fields := strings.Fields(strings.ReplaceAll(command, "$(GOTEST)", "go test"))
 	for i := range fields {
 		fields[i] = strings.Trim(fields[i], "\"'")
 	}
 
-	validGoTest := false
+	goTestIndex := -1
+	for i := 0; i+1 < len(fields); i++ {
+		if fields[i] == "go" && fields[i+1] == "test" {
+			goTestIndex = i
+			break
+		}
+	}
+	if goTestIndex < 0 {
+		return fmt.Errorf("the gate filter changed: update this guard: no go test command")
+	}
+
+	for i := 0; i < goTestIndex; i++ {
+		if !strings.Contains(fields[i], "=") {
+			return fmt.Errorf("the gate filter changed: update this guard: field %q before go test must be an environment assignment", fields[i])
+		}
+	}
+
 	packageCount := 0
 	runCount := 0
 	skipCount := 0
-	for i := 0; i < len(fields); i++ {
+	for i := goTestIndex + 2; i < len(fields); i++ {
 		field := fields[i]
-		if i+1 < len(fields) && field == "go" && fields[i+1] == "test" {
-			validGoTest = true
-		}
-
-		if field == "./internal/..." {
+		if !strings.HasPrefix(field, "-") {
 			packageCount++
-		}
-		if field == "./..." || field == "../..." || strings.HasPrefix(field, "./") || strings.HasPrefix(field, "../") {
 			if field != "./internal/..." {
-				return fmt.Errorf("the gate filter changed: update this guard: extra or wrong package pattern %q", field)
+				return fmt.Errorf("the gate filter changed: update this guard: package pattern must be ./internal/..., got %q", field)
 			}
+			continue
 		}
 
-		if field == "-run" {
+		name, value, hasValue := gateNormalizeFlag(field)
+		switch name {
+		case "v", "race", "short":
+			if hasValue {
+				return fmt.Errorf("the gate filter changed: update this guard: flag %q is not allowed", field)
+			}
+		case "coverprofile", "covermode":
+			if hasValue {
+				continue
+			}
+			if i+1 >= len(fields) {
+				return fmt.Errorf("the gate filter changed: update this guard: flag %q has no value", field)
+			}
+			i++
+		case "run":
+			if field != "-run" && !strings.HasPrefix(field, "-run=") {
+				return fmt.Errorf("the gate filter changed: update this guard: flag %q is not allowed", field)
+			}
 			runCount++
 			if runCount != 1 {
 				return fmt.Errorf("the gate filter changed: update this guard: duplicate -run or -test.run")
+			}
+			if hasValue {
+				if value != "^Test[^I]" {
+					return fmt.Errorf("the gate filter changed: update this guard: -run must be ^Test[^I]")
+				}
+				continue
 			}
 			if i+1 >= len(fields) || fields[i+1] != "^Test[^I]" {
 				return fmt.Errorf("the gate filter changed: update this guard: -run must be ^Test[^I]")
 			}
 			i++
-			continue
-		}
-		if strings.HasPrefix(field, "-run=") || field == "--run" || strings.HasPrefix(field, "--run=") || field == "-test.run" || strings.HasPrefix(field, "-test.run=") {
-			return fmt.Errorf("the gate filter changed: update this guard: rejected run filter form %q", field)
-		}
-
-		if field == "-skip" {
+		case "skip":
+			if field != "-skip" && !strings.HasPrefix(field, "-skip=") {
+				return fmt.Errorf("the gate filter changed: update this guard: flag %q is not allowed", field)
+			}
 			skipCount++
 			if skipCount != 1 {
 				return fmt.Errorf("the gate filter changed: update this guard: duplicate -skip or -test.skip")
+			}
+			if hasValue {
+				if value != "Integration" {
+					return fmt.Errorf("the gate filter changed: update this guard: -skip must be Integration")
+				}
+				continue
 			}
 			if i+1 >= len(fields) || fields[i+1] != "Integration" {
 				return fmt.Errorf("the gate filter changed: update this guard: -skip must be Integration")
 			}
 			i++
-			continue
-		}
-		if strings.HasPrefix(field, "-skip=") || field == "--skip" || strings.HasPrefix(field, "--skip=") || field == "-test.skip" || strings.HasPrefix(field, "-test.skip=") {
-			return fmt.Errorf("the gate filter changed: update this guard: rejected skip filter form %q", field)
+		default:
+			return fmt.Errorf("the gate filter changed: update this guard: flag %q is not allowed", field)
 		}
 	}
 
-	if !validGoTest {
-		return fmt.Errorf("the gate filter changed: update this guard: no go test command")
-	}
 	if packageCount != 1 {
-		return fmt.Errorf("the gate filter changed: update this guard: package pattern must occur exactly once as ./internal/...")
+		return fmt.Errorf("the gate filter changed: update this guard: exactly 1 package pattern is required as ./internal/...")
 	}
 	if runCount != 1 {
 		return fmt.Errorf("the gate filter changed: update this guard: -run must occur exactly once")
@@ -192,6 +235,14 @@ func TestGateValidateExactFilter(t *testing.T) {
 		{name: "test run pair", command: `go test ./internal/... -test.run "^TestFoo" -skip "Integration"`, wantErr: true},
 		{name: "test run equals", command: `go test ./internal/... -test.run=^TestFoo -skip "Integration"`, wantErr: true},
 		{name: "long skip", command: `go test ./internal/... -run "^Test[^I]" --skip "Integration"`, wantErr: true},
+		{name: "double hyphen test skip equals", command: `go test ./internal/... -run "^Test[^I]" -skip "Integration" --test.skip=Goreleaser`, wantErr: true},
+		{name: "double hyphen test skip pair", command: `go test ./internal/... -run "^Test[^I]" -skip "Integration" --test.skip Goreleaser`, wantErr: true},
+		{name: "double hyphen test run equals", command: `go test ./internal/... -run "^Test[^I]" -skip "Integration" --test.run=^TestFoo`, wantErr: true},
+		{name: "test run pair", command: `go test ./internal/... -run "^Test[^I]" -skip "Integration" -test.run ^TestFoo`, wantErr: true},
+		{name: "list flag", command: `go test ./internal/... -run "^Test[^I]" -skip "Integration" -list .`, wantErr: true},
+		{name: "compile flag", command: `go test ./internal/... -run "^Test[^I]" -skip "Integration" -c`, wantErr: true},
+		{name: "count equals", command: `go test ./internal/... -run "^Test[^I]" -skip "Integration" -count=0`, wantErr: true},
+		{name: "second run equals", command: `go test ./internal/... -run "^Test[^I]" -run=^Test[^I] -skip "Integration"`, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := gateValidateExactFilter(tc.command)
