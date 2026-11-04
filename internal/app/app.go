@@ -115,9 +115,24 @@ func (a *Application) onActivate() {
 	win := window.New(a.Application)
 	a.window = win
 	a.AddWindow(&win.Window)
+	a.registerQuitAction()
 	a.setupKeyboardShortcuts(win.NavigationItems())
 	win.Present()
 	log.Printf("app: window presented in %s (since activate)", time.Since(activateStart))
+}
+
+// registerQuitAction registers the app.quit action that navigation's
+// <Primary>q shortcut targets. GTK registers no quit action for an
+// application by default, so without this the accelerator
+// setupKeyboardShortcuts installs resolves to nothing and Ctrl+Q is
+// advertised in the shortcuts dialog while doing nothing.
+func (a *Application) registerQuitAction() {
+	quitAction := gio.NewSimpleAction("quit", nil)
+	quitActivateCb := func(action gio.SimpleAction, param uintptr) {
+		a.Quit()
+	}
+	quitAction.ConnectActivate(&quitActivateCb)
+	a.AddAction(quitAction)
 }
 
 // setupKeyboardShortcuts sets up application-wide keyboard shortcuts

@@ -994,7 +994,17 @@ path-and-cause diagnostic with `CONFIGURATION ERROR`, states that all groups
 were disabled, and instructs the user to restart after fixing the file.
 `window.New` retains the same `LoadError`, builds the toast overlay, then calls
 `ShowErrorToast` with `LoadError.ToastMessage`. `ShowErrorToast` sets timeout
-zero, so the startup error remains visible instead of expiring; construction
+zero, so the startup error remains visible instead of expiring. Both
+`ShowToast` and `ShowErrorToast` disable Pango markup, because AdwToast parses
+markup by default and a path or tool error containing `<`, `>` or `&` would
+otherwise render as a blank toast. `internal/installcheck`'s
+`TestToastsRenderPlainText` parses every production Go file and fails unless
+each `adw.NewToast` result is assigned to a variable and the next statement
+in the same block is `<name>.SetUseMarkup(false)`. Any other `SetUseMarkup`
+reference in production code (on any receiver, deferred, in a goroutine, as a
+method value or through a helper) also fails it, so a widget that needs markup
+must first change that test. It also fails when it finds no toast constructor
+at all; construction
 and the toast call both occur on the GTK main thread.
 
 ### Package manager wrapper pattern
@@ -1261,6 +1271,16 @@ compacted Alt+number keys. `internal/window` uses the result for its sidebar,
 stack, actions, initial selection, and shortcuts dialog. After construction,
 `internal/app` registers `navigation.Bindings(window.NavigationItems())`, so
 the registered and advertised keys use the exact same visible inventory.
+
+Binding an accelerator does not create the action it targets. `internal/window`
+registers the `win.*` actions (`show-shortcuts`, `show-about`, and one
+`navigate-<page>` per visible page) and `internal/app` registers `app.quit`
+(`registerQuitAction`) — GTK supplies no default quit action. Because neither
+package can host a test binary, `navigation`'s
+`TestEveryAdvertisedActionIsRegistered` reads both source files and fails when
+any advertised action has no `gio.NewSimpleAction` registration. For
+`app.quit` it also requires the `registerQuitAction` call in `onActivate`, the
+`ConnectActivate` and `AddAction` calls, and the `a.Quit()` handler.
 
 The accelerators are:
 
