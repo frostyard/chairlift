@@ -988,7 +988,9 @@ were disabled, and instructs the user to restart after fixing the file.
 zero, so the startup error remains visible instead of expiring. Both
 `ShowToast` and `ShowErrorToast` disable Pango markup, because AdwToast parses
 markup by default and a path or tool error containing `<`, `>` or `&` would
-otherwise render as a blank toast; construction
+otherwise render as a blank toast. `internal/installcheck`'s
+`TestToastsRenderPlainText` parses every production Go file and fails when an
+`adw.NewToast` result is shown without `SetUseMarkup(false)` first; construction
 and the toast call both occur on the GTK main thread.
 
 ### Package manager wrapper pattern
@@ -1262,7 +1264,9 @@ registers the `win.*` actions (`show-shortcuts`, `show-about`, and one
 (`registerQuitAction`) — GTK supplies no default quit action. Because neither
 package can host a test binary, `navigation`'s
 `TestEveryAdvertisedActionIsRegistered` reads both source files and fails when
-any advertised action has no `gio.NewSimpleAction` registration.
+any advertised action has no `gio.NewSimpleAction` registration. For
+`app.quit` it also requires the `registerQuitAction` call in `onActivate`, the
+`ConnectActivate` and `AddAction` calls, and the `a.Quit()` handler.
 
 The accelerators are:
 

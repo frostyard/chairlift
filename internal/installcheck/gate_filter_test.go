@@ -195,8 +195,10 @@ func gateSkipsDir(path, name string) bool {
 	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata" {
 		return true
 	}
-	_, err := os.Stat(filepath.Join(path, "go.mod"))
-	return err == nil
+	// Only a regular go.mod file marks a module root; a directory named
+	// go.mod does not.
+	info, err := os.Stat(filepath.Join(path, "go.mod"))
+	return err == nil && !info.IsDir()
 }
 
 func gateHiddenFunctionReasons(relPath, name string) []string {
@@ -415,6 +417,10 @@ func TestGateSkipsDirMatchesGoPackagePatterns(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(nested, "go.mod"), []byte("module example.com/nested\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	modDir := filepath.Join(root, "moddir")
+	if err := os.MkdirAll(filepath.Join(modDir, "go.mod"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	plain := filepath.Join(root, "internal")
 	if err := os.Mkdir(plain, 0o755); err != nil {
 		t.Fatal(err)
@@ -430,6 +436,7 @@ func TestGateSkipsDirMatchesGoPackagePatterns(t *testing.T) {
 		{filepath.Join(root, "testdata"), "testdata", true},
 		{nested, "nested", true},
 		{plain, "internal", false},
+		{modDir, "moddir", false},
 	}
 	for _, tt := range tests {
 		if got := gateSkipsDir(tt.path, tt.name); got != tt.want {

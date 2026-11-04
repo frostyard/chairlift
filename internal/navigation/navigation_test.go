@@ -402,6 +402,20 @@ func TestEveryAdvertisedActionIsRegistered(t *testing.T) {
 				binding.Action, binding.Accelerators, sources[prefix], fragment)
 		}
 	}
+
+	// Constructing the quit action is not enough: onActivate must call
+	// registerQuitAction, and it must connect the handler and add the action.
+	app := read["app."]
+	for _, fragment := range []string{
+		"\ta.registerQuitAction()\n",
+		"quitAction.ConnectActivate(&quitActivateCb)",
+		"a.AddAction(quitAction)",
+		"a.Quit()",
+	} {
+		if !strings.Contains(app, fragment) {
+			t.Errorf("%s does not wire app.quit: missing %q", sources["app."], fragment)
+		}
+	}
 }
 
 func containsPage(items []Item, name string) bool {
