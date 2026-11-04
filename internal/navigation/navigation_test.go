@@ -356,6 +356,68 @@ func TestWindowAndAppUseCanonicalNavigation(t *testing.T) {
 	}
 }
 
+// TestEveryAdvertisedActionIsRegistered guards against an accelerator bound to
+// an action nothing registers: Ctrl+Q was advertised and bound to app.quit for
+// releases while no "quit" action existed, so the shortcut silently did
+// nothing. internal/app and internal/window import puregotk and cannot host a
+// test binary, so this reads their source for the registration call.
+func TestEveryAdvertisedActionIsRegistered(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller could not locate navigation_test.go")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
+	sources := map[string]string{
+		"app.": filepath.Join(repoRoot, "internal", "app", "app.go"),
+		"win.": filepath.Join(repoRoot, "internal", "window", "window.go"),
+	}
+	read := make(map[string]string, len(sources))
+	for prefix, path := range sources {
+		source, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		read[prefix] = string(source)
+	}
+
+	for _, binding := range Bindings(Items()) {
+		var prefix string
+		for candidate := range sources {
+			if strings.HasPrefix(binding.Action, candidate) {
+				prefix = candidate
+			}
+		}
+		if prefix == "" {
+			t.Errorf("%s uses an action scope with no registration source", binding.Action)
+			continue
+		}
+		name := strings.TrimPrefix(binding.Action, prefix)
+		fragment := `gio.NewSimpleAction("` + name + `", nil)`
+		if strings.HasPrefix(name, "navigate-") {
+			// Window registers every navigate-<page> action in one loop.
+			fragment = `gio.NewSimpleAction("navigate-"+itemName, nil)`
+		}
+		if !strings.Contains(read[prefix], fragment) {
+			t.Errorf("%s is bound to %v but %s never registers it (want %q)",
+				binding.Action, binding.Accelerators, sources[prefix], fragment)
+		}
+	}
+
+	// Constructing the quit action is not enough: onActivate must call
+	// registerQuitAction, and it must connect the handler and add the action.
+	app := read["app."]
+	for _, fragment := range []string{
+		"\ta.registerQuitAction()\n",
+		"quitAction.ConnectActivate(&quitActivateCb)",
+		"a.AddAction(quitAction)",
+		"a.Quit()",
+	} {
+		if !strings.Contains(app, fragment) {
+			t.Errorf("%s does not wire app.quit: missing %q", sources["app."], fragment)
+		}
+	}
+}
+
 func containsPage(items []Item, name string) bool {
 	for _, item := range items {
 		if item.Name == name {
