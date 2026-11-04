@@ -174,8 +174,10 @@ An agent must not break these:
 - **Flatpak update reloads are generation-guarded and preserve known
   state.** `loadFlatpakUpdates` takes an `actionstate.RefreshGate` generation
   on the main thread and every publication checks it, so a stale reload
-  never replaces newer rows or counts. A load in which both installation
-  queries failed (`flatpakstatus.Result.Authoritative == false`) keeps the
+  never replaces newer rows or counts. A load is usable when at least one
+  installation succeeds or returns one or more updates with an error. A load
+  in which no installation returned a usable result
+  (`flatpakstatus.Result.Authoritative == false`) keeps the
   last known rows and count through `actionstate.OutdatedRefresh` and only
   reports that the check failed. Because such a load keeps the old rows, the
   per-app update button never waits for a reload to replace it: a failure or
