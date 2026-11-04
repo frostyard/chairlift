@@ -1,0 +1,36 @@
+# Galician translations for snow-first-setup package.
+# Copyright (C) 2022 THE snow-first-setup'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Automatically generated, 2022.
+#
+# Rafa <rafita.fernandez@gmail.com>, 2023.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2023-03-09 22:41+0000\n"
+"Last-Translator: Rafa <rafita.fernandez@gmail.com>\n"
+"Language-Team: Galician <https://hosted.weblate.org/projects/snow-os/"
+"first-setup/gl/>\n"
+"Language: gl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Weblate 4.16.2-dev\n"
+
+msgid "Back"
+msgstr "Atrás"
+
+msgid "Next"
+msgstr "Seguinte"
+
+msgid "Color Scheme"
+msgstr "Esquema de cores"
+
+msgid "Dark"
+msgstr "Escuro"
+
+msgid "No Internet Connection!"
+msgstr "Non hai conexión con Internet!"

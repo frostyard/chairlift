@@ -1,0 +1,125 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Serhii Chebanenko <4e6anenk0@gmail.com>, 2023.
+# Dan <denqwerta@gmail.com>, 2023.
+# Dan <jonweblin2205@protonmail.com>, 2023, 2025.
+# andrij <Kalenskuja@gmail.com>, 2024.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2025-03-16 19:19+0000\n"
+"Last-Translator: Dan <jonweblin2205@protonmail.com>\n"
+"Language-Team: Ukrainian <https://hosted.weblate.org/projects/snow-os/"
+"first-setup/uk/>\n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"X-Generator: Weblate 5.11-dev\n"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Next"
+msgstr "Далі"
+
+msgid "Finished!"
+msgstr "Завершено!"
+
+msgid "Your user account is ready to use"
+msgstr "Ваш обліковий запис користувача готовий до використання"
+
+msgid "Exit"
+msgstr "Вийти"
+
+msgid "Progress"
+msgstr "Прогрес"
+
+msgid "Some steps still take some time"
+msgstr "Це може зайняти деякий час"
+
+msgid "Checking Connection"
+msgstr "Перевірка з'єднання"
+
+msgid "Please wait until the connection check is done"
+msgstr "Зачекайте, поки завершиться перевірка з'єднання"
+
+msgid "Open Settings"
+msgstr "Відкрити налаштування"
+
+msgid "Color Scheme"
+msgstr "Колірна схема"
+
+msgid "Choose a color scheme for your system"
+msgstr "Виберіть колірну схему для вашої системи"
+
+msgid "Light Mode"
+msgstr "Світлий режим"
+
+msgid "Light"
+msgstr "Світлий"
+
+msgid "Dark Mode"
+msgstr "Темний режим"
+
+msgid "Dark"
+msgstr "Темний"
+
+msgid "Start"
+msgstr "Розпочати"
+
+msgid "Accessibility"
+msgstr "Доступність"
+
+msgid "Let's set up your user account"
+msgstr "Налаштуймо ваш обліковий запис"
+
+msgid "Applications"
+msgstr "Застосунки"
+
+msgid "Choose which applications to install."
+msgstr "Виберіть, які застосунки встановити."
+
+msgid "Browsers"
+msgstr "Браузери"
+
+msgid "Common Utilities"
+msgstr "Базові утиліти"
+
+msgid "Useful utilities to enhance your desktop experience"
+msgstr "Корисні утиліти для покращення роботи на робочому столі"
+
+msgid "Office"
+msgstr "Офіс"
+
+msgid "The LibreOffice suite"
+msgstr "Пакет LibreOffice"
+
+msgid "Select the applications you want to install"
+msgstr "Виберіть Застосунком, які хочете встановити"
+
+msgid "Setup failed: "
+msgstr "Не вдалося встановити: "
+
+msgid "Error log"
+msgstr "Журнал помилок"
+
+msgid "No Internet Connection!"
+msgstr "Немає мережевого з'єднання!"
+
+msgid "Connection available"
+msgstr "Доступне з'єднання"
+
+msgid "You have a working internet connection"
+msgstr "Немає мережевого з'єднання"
+
+msgid "Hello {}!"
+msgstr "Вітаємо, {}!"
+
+msgid "Installing"
+msgstr "Встановлення"

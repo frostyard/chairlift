@@ -10,8 +10,8 @@ is YAML-configuration-driven; feature groups toggle on and off per host.
 
 The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
 
-- `make build` — builds `build/chairlift` and `build/chairlift-updex-helper`
-  (both `CGO_ENABLED=0`).
+- `make build` — builds `build/chairlift`, `build/chairlift-updex-helper`
+  and `build/chairlift-first-run` (all `CGO_ENABLED=0`).
 - `make test` — `go test ./...`.
 - `make fmt` — `gofmt -s -w .`.
 - `make lint` — `golangci-lint run`.
@@ -23,11 +23,16 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   the mill's deep gate calls this exact target. Codecov's remote project status
   additionally rejects coverage regressions greater than one percentage point;
   it has no fixed coverage target and cannot be mirrored locally.
-- `make e2e` — builds both executables, checks the application's real
-  `--help` surface, starts the dry-run GTK window under a private D-Bus/Xvfb
-  session, stages `make install`, and executes the installed privileged
-  helper's rejection paths. Startup polls the three readiness log markers for
-  up to 30 seconds, requires one additional second of process stability, and
+- `make e2e` — builds the three executables, checks the application's real
+  `--help` surface (including `--first-run`), starts the dry-run GTK window
+  under a private D-Bus/Xvfb session, stages `make install` (which must hold
+  `usr/bin/chairlift-first-run` and no autostart path), and executes the
+  installed privileged helper's rejection paths. It also checks
+  `chairlift-first-run --help`, runs `--mark-done` and the gate against
+  temporary homes (as `nobody` when the test runs as root), and starts
+  `chairlift --first-run --dry-run` until it logs `first-run: window
+  presented`, with no marker written. Main-window startup polls the three
+  readiness log markers for up to 30 seconds, requires one additional second of process stability, and
   terminates the private process group as soon as the smoke check passes. It
   requires GTK4, Libadwaita, `dbus-run-session`, and `xvfb-run`; the hosted E2E job
   installs those runtime dependencies explicitly because ordinary unit-test
@@ -129,6 +134,21 @@ An agent must not break these:
   never route them through pkexec or add a helper or policy for them. Do not
   add arbitrary privileged command execution, broaden what pkexec runs, or
   route new mutations around the fixed helper/policy pair.
+- **First-run mode stays user-level, pure at its gate, and opt-in per image**
+  ([ADR-0014](docs/adr/0014-first-run-mode.md)). `cmd/chairlift-first-run`
+  imports no GTK binding (no puregotk, no snowkit; guarded by
+  `internal/installcheck.TestFirstRunGateImportsNoGTK`) and only calls
+  `internal/firstrun.Gate`; it ships in `frostyard-chairlift` only.
+  `chairlift --first-run` uses the application ID
+  `org.frostyard.ChairLift.FirstRun` and the window in
+  `internal/window/firstrun.go`; the six pages and `internal/navigation` do
+  not know it. `firstrun.MarkDone` is the only writer of the markers
+  (`chairlift/first-run.done` and, until ADR-0014's dated end rule, the legacy
+  `snow-first-setup.done`), reached only through `firstrun.Complete`; reading
+  the legacy marker never ends. The first run uses no pkexec and no sudo, and
+  ChairLift ships no autostart entry: the image owns the trigger. The
+  `first-run: window presented` log line is a contract. First-run text goes
+  through `internal/i18n`; a new msgid goes into `internal/i18n/msgids.go`.
 - **OS staging execution has one owner.** `internal/stageexec` is the pure-Go
   leaf package that owns the progress event contract, merged stdout/stderr
   streaming, direct-child cancellation, error classification, completion event,

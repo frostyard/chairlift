@@ -161,7 +161,7 @@ func TestGoreleaserPublishesSystemPackage(t *testing.T) {
 	if full.ID == "" || integration.ID == "" || full.ID == integration.ID {
 		t.Errorf("nFPM ids must be non-empty and unique: full=%q integration=%q", full.ID, integration.ID)
 	}
-	if want := []string{"chairlift", "chairlift-updex-helper"}; !reflect.DeepEqual(full.IDs, want) {
+	if want := []string{"chairlift", "chairlift-updex-helper", "chairlift-first-run"}; !reflect.DeepEqual(full.IDs, want) {
 		t.Errorf("%s ids = %v, want %v", fullPackageName, full.IDs, want)
 	}
 	if want := []string{"chairlift-updex-helper"}; !reflect.DeepEqual(integration.IDs, want) {

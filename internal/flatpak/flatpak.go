@@ -81,10 +81,11 @@ type Application struct {
 
 // stateChangingCommands are commands that modify system state
 var stateChangingCommands = map[string]bool{
-	"install":   true,
-	"uninstall": true,
-	"remove":    true,
-	"update":    true,
+	"install":    true,
+	"uninstall":  true,
+	"remove":     true,
+	"update":     true,
+	"remote-add": true,
 }
 
 // commandTimeout returns the timeout class for a flatpak invocation: the
@@ -286,6 +287,22 @@ func Install(appID string, user bool) error {
 	args = append(args, appID)
 
 	_, err := runFlatpakCommand(args...)
+	return err
+}
+
+// FlathubRemoteName and FlathubRepoURL name the remote the first run adds
+// before it installs applications (first-setup's setup-flatpak-remote).
+const (
+	FlathubRemoteName = "flathub"
+	FlathubRepoURL    = "https://dl.flathub.org/repo/flathub.flatpakrepo"
+)
+
+// AddRemote adds a remote to the user or system installation with
+// --if-not-exists, so an existing remote of that name is kept and is not an
+// error. remote-add is a state-changing command: under dry-run it is logged
+// and skipped.
+func AddRemote(name, url string, user bool) error {
+	_, err := runFlatpakCommand("remote-add", installationFlag(user), "--if-not-exists", name, url)
 	return err
 }
 

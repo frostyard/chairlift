@@ -1,0 +1,130 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# M00nD3v <matteo.duchs@outlook.com>, 2023.
+# Matt C <matei.gurzu@gmail.com>, 2023.
+# nautilusx <translate@disroot.org>, 2023.
+# "Martin P." <edisso999@gmail.com>, 2023.
+# Jörn Weigend <das.jott@gmail.com>, 2023.
+# juzac001 <julian.zachmann001@stud.fh-dortmund.de>, 2023.
+# Experiencing A Significant Gravitas Shortfall <bedeb1@pm.me>, 2023, 2024.
+# Ettore Atalan <atalanttore@googlemail.com>, 2023, 2024.
+# Rene Regensbogen <smartpower0105@gmail.com>, 2023.
+# Neo <neobihli@gmail.com>, 2024.
+# Matthias Langwieser <langi4888@gmail.com>, 2024.
+# Jonas Haberkorn <j.bohne.13@gmail.com>, 2025.
+# Max Enrico Müller <kontakt.maxmueller@outlook.com>, 2025.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2025-03-16 09:00+0000\n"
+"Last-Translator: Max Enrico Müller <kontakt.maxmueller@outlook.com>\n"
+"Language-Team: German <https://hosted.weblate.org/projects/snow-os/first-"
+"setup/de/>\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Weblate 5.11-dev\n"
+
+msgid "Back"
+msgstr "Zurück"
+
+msgid "Next"
+msgstr "Weiter"
+
+msgid "Finished!"
+msgstr "Fertig!"
+
+msgid "Your user account is ready to use"
+msgstr "Ihr Benutzeraccount ist bereit zur Nutzung"
+
+msgid "Exit"
+msgstr "Beenden"
+
+msgid "Progress"
+msgstr "Fortschritt"
+
+msgid "Some steps still take some time"
+msgstr "Einige Schritte dauern noch"
+
+msgid "Checking Connection"
+msgstr "Verbindung wird geprüft"
+
+msgid "Please wait until the connection check is done"
+msgstr "Bitte warten, Verbindung wird geprüft"
+
+msgid "Open Settings"
+msgstr "Einstellungen öffnen"
+
+msgid "Color Scheme"
+msgstr "Farbschema"
+
+msgid "Choose a color scheme for your system"
+msgstr "Wählen Sie ein Farbschema für Ihr System aus"
+
+msgid "Light Mode"
+msgstr "Heller Modus"
+
+msgid "Light"
+msgstr "Hell"
+
+msgid "Dark Mode"
+msgstr "Dunkler Modus"
+
+msgid "Dark"
+msgstr "Dunkel"
+
+msgid "Start"
+msgstr "Start"
+
+msgid "Accessibility"
+msgstr "Barrierefreiheit"
+
+msgid "Let's set up your user account"
+msgstr "Geben Sie Details zu Ihrem Benutzerkonto an"
+
+msgid "Applications"
+msgstr "Anwendungen"
+
+msgid "Choose which applications to install."
+msgstr "Wählen Sie, welche Anwendungen installiert werden sollen"
+
+msgid "Browsers"
+msgstr "Browser"
+
+msgid "Common Utilities"
+msgstr "Beliebte Werkzeuge"
+
+msgid "Useful utilities to enhance your desktop experience"
+msgstr "Nützliche Werkzeuge, welche das Nutzererlebnis verbessern können"
+
+msgid "Office"
+msgstr "Office"
+
+msgid "The LibreOffice suite"
+msgstr "Die LibreOffice Suite"
+
+msgid "Select the applications you want to install"
+msgstr "Wählen Sie Ihre Anwendungen aus"
+
+msgid "Setup failed: "
+msgstr "Eichrichtung fehlgeschlagen: "
+
+msgid "Error log"
+msgstr "Fehler log"
+
+msgid "No Internet Connection!"
+msgstr "Keine Internetverbindung!"
+
+msgid "You have a working internet connection"
+msgstr "Sie haben eine funktionierende Internetverbindung!"
+
+msgid "Hello {}!"
+msgstr "Hallo {}!"
+
+msgid "Installing"
+msgstr "Installiere"

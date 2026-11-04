@@ -126,6 +126,16 @@ esac`
 		},
 		{name: "install user", run: func() error { return Install("org.example.App", true) }, want: []string{"install", "-y", "--user", "org.example.App"}},
 		{name: "install system", run: func() error { return Install("org.example.App", false) }, want: []string{"install", "-y", "--system", "org.example.App"}},
+		{
+			name: "add user remote",
+			run:  func() error { return AddRemote(FlathubRemoteName, FlathubRepoURL, true) },
+			want: []string{"remote-add", "--user", "--if-not-exists", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"},
+		},
+		{
+			name: "add system remote",
+			run:  func() error { return AddRemote("vendor", "https://example.org/vendor.flatpakrepo", false) },
+			want: []string{"remote-add", "--system", "--if-not-exists", "vendor", "https://example.org/vendor.flatpakrepo"},
+		},
 		{name: "uninstall user", run: func() error { return Uninstall("org.example.App", true) }, want: []string{"uninstall", "-y", "--user", "org.example.App"}},
 		{name: "uninstall system", run: func() error { return Uninstall("org.example.App", false) }, want: []string{"uninstall", "-y", "--system", "org.example.App"}},
 		{name: "update one user app", run: func() error { return Update("org.example.App", true) }, want: []string{"update", "-y", "--user", "org.example.App"}},
@@ -656,8 +666,8 @@ func TestParseUpdateList(t *testing.T) {
 }
 
 func TestCommandTimeout(t *testing.T) {
-	if len(stateChangingCommands) != 4 {
-		t.Fatalf("stateChangingCommands has %d entries, want 4: update this test when the map changes", len(stateChangingCommands))
+	if len(stateChangingCommands) != 5 {
+		t.Fatalf("stateChangingCommands has %d entries, want 5: update this test when the map changes", len(stateChangingCommands))
 	}
 
 	for cmd := range stateChangingCommands {

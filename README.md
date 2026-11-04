@@ -98,8 +98,9 @@ make build
 # Binaries are written to build/:
 #   build/chairlift                 the main application
 #   build/chairlift-updex-helper    privileged helper for updex feature writes
+#   build/chairlift-first-run       pure-Go first-run gate (no GTK)
 
-# Install (binaries, polkit policies, icons, desktop file)
+# Install (binaries, polkit policies, icons, desktop file; no autostart entry)
 sudo make install
 ```
 
@@ -196,6 +197,20 @@ chairlift
 5. **Features**: Enable, disable, and update configured system features
 6. **Help**: Documentation and support resources
 
+### First Run
+
+`chairlift --first-run` opens a first-login setup window: a welcome, a
+connection check, the light or dark color scheme, an optional application
+picker (user Flatpaks from Flathub), and a progress and done step. It replaces
+SNOW First Setup. `chairlift-first-run` starts it once for each user: it exits
+without loading GTK when `${XDG_CONFIG_HOME:-~/.config}/chairlift/first-run.done`
+or SNOW First Setup's `snow-first-setup.done` exists, or for root, and
+`chairlift-first-run --mark-done` records the first run as finished.
+ChairLift installs no autostart entry, so nothing starts on its own; Snow
+images ship the autostart entry and the application list. The first-run
+strings are translated (ported from SNOW First Setup). See
+[ADR-0014](docs/adr/0014-first-run-mode.md).
+
 ### Keyboard Shortcuts
 
 - `Alt+1` through `Alt+N`: open the first through Nth visible page in sidebar
@@ -286,10 +301,11 @@ the built-in defaults apply.
 chairlift/
 ├── cmd/
 │   ├── chairlift/               # Main application entry point
+│   ├── chairlift-first-run/     # Pure-Go first-run gate (execs `chairlift --first-run`)
 │   └── chairlift-updex-helper/  # Privileged helper for updex writes (invoked via pkexec)
 ├── internal/
 │   ├── app/       # GObject-registered Application (adw.Application subtype)
-│   ├── window/    # Main window: NavigationSplitView, sidebar, content stack
+│   ├── window/    # Main window (NavigationSplitView) and the first-run window
 │   ├── navigation/ # Canonical pages, shortcuts, and headless transition logic
 │   ├── views/     # GTK page builders plus headlessly tested view-state packages
 │   ├── config/    # YAML config loading, feature group enablement
@@ -299,6 +315,8 @@ chairlift/
 │   ├── bootc/     # bootc wrapper (status reads, pkexec stage script)
 │   ├── sysupdate/ # Native A/B wrapper (state-file reads, pkexec stage script)
 │   ├── updex/     # Updex feature manager
+│   ├── firstrun/  # First-run gate, markers, steps, apps list, actions (no GTK)
+│   ├── i18n/      # .po reader and embedded first-run translations
 │   └── version/   # Build metadata (ldflags injection)
 ├── data/          # Desktop file, icons, and PolicyKit policies
 └── Makefile       # Build configuration
@@ -313,6 +331,8 @@ See [docs/design/overview.md](docs/design/overview.md) and [docs/design/package-
 - **`internal/bootc`**: bootc status reads and pkexec-driven update staging via the snow `bootc-update-stage` script
 - **`internal/sysupdate`**: native A/B (systemd-sysupdate) status reads from the `/run/snosi` state files, rollback-candidate discovery from partition labels, and pkexec-driven update staging via the snow `snosi-sysupdate-stage` script
 - **`internal/views`**: GTK4/Adwaita UI — async operations dispatched via `sgtk.RunOnMainThread`, toast notifications for user feedback
+- **`internal/firstrun`**: the first-run mode's decisions — the `chairlift-first-run` gate, the done markers and their one writer, the step flow, the application list, the Flatpak actions, the color-scheme write, and the dry-run completion decision
+- **`internal/i18n`**: a pure-Go `.po` reader and the first-run translations embedded from SNOW First Setup
 - **`internal/views/pageview`**: pure-Go row text, page status, os-release parsing, help-link ordering, and maintenance-command selection shared by all six page builders
 
 ### Development Environment

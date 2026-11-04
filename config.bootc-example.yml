@@ -63,3 +63,8 @@ help_page:
     website: https://github.com/frostyard/chairlift
     issues: https://github.com/frostyard/chairlift/issues
     chat: https://github.com/frostyard/chairlift/discussions
+
+first_run_page:
+  first_run_apps_group:
+    enabled: true  # Used only by `chairlift --first-run`; ChairLift ships no autostart entry, so nothing starts it unless your image does
+    apps_path: /usr/share/snow/first-run/apps.json  # Application list for the first run's Apps step; a missing or invalid list hides the step

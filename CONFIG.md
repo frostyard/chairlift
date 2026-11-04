@@ -112,6 +112,22 @@ valid page.
   - `issues`: URL to the issue tracker for bug reports and feature requests
   - `chat`: URL to community chat or discussions
 
+### First-Run Page (`first_run_page`)
+
+This page is not in the sidebar. It configures `chairlift --first-run`
+([ADR-0014](docs/adr/0014-first-run-mode.md)).
+
+- `first_run_apps_group`: The first run's Apps step (application picker)
+  - `apps_path`: Path of the application list (default:
+    `/usr/share/snow/first-run/apps.json`). The list is JSON in SNOW First
+    Setup's shape: `{"<category>": [{"name": "...", "id": "<Flatpak app ID>",
+    "active": false}]}`; an absent `active` means the app starts selected.
+
+The Apps step shows only when this group is enabled, the list is valid, and
+the connection check found the internet. A disabled group, a configuration
+error, or a missing or invalid list hides the step; the user can still finish
+the first run.
+
 ## Example: Disabling Homebrew Features
 
 To create a distribution-specific configuration that disables all Homebrew features:
@@ -194,7 +210,7 @@ install -D -m 644 config.yml debian/tmp/usr/share/chairlift/config.yml
     (`true` for every group except `maintenance_cleanup_group`, which
     defaults to `false`)
   - An omitted optional field (`app_id`, `website`, `issues`, `chat`,
-    `actions`, `bundles_paths`) inherits its documented default value
+    `actions`, `bundles_paths`, `apps_path`) inherits its documented default value
   - An explicit empty list (e.g. `actions: []`) clears the field
   - A non-empty list, or an explicitly set scalar value, replaces the
     default outright

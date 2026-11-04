@@ -40,6 +40,7 @@ always retained so the window always has a valid destination.
 | Flag | Description |
 |------|-------------|
 | `--dry-run`, `-d` | Run without making any changes to the system. Propagated to all package manager wrappers. |
+| `--first-run` | Open the first-run setup window (application ID `org.frostyard.ChairLift.FirstRun`) instead of the main window. `chairlift-first-run` starts it once per user; ChairLift ships no autostart entry ([ADR-0014](adr/0014-first-run-mode.md)). |
 
 ## Optional Dependencies
 
@@ -73,12 +74,13 @@ groups configuration enables, not on runtime tool availability.
 make build
 ```
 
-This produces two binaries in `build/`:
+This produces three binaries in `build/`:
 
 - `chairlift` — the main application
 - `chairlift-updex-helper` — privileged helper for updex write operations
+- `chairlift-first-run` — pure-Go first-run gate; it loads no GTK
 
-Both are built with `CGO_ENABLED=0`.
+All are built with `CGO_ENABLED=0`.
 
 ### Installation
 

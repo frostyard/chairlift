@@ -67,6 +67,24 @@ builds:
       - -s -w
     main: ./cmd/chairlift-updex-helper/main.go
 
+  # Pure-Go first-run gate (ADR-0014). It ships only in the GUI package; the
+  # image that wants a first run ships its own autostart entry.
+  - id: chairlift-first-run
+    binary: chairlift-first-run
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    main: ./cmd/chairlift-first-run/main.go
+
 archives:
   - files:
       - README.md
@@ -117,11 +135,13 @@ nfpms:
     ids:
       - chairlift
       - chairlift-updex-helper
+      - chairlift-first-run
     file_name_template: "{{ .ConventionalFileName }}"
     package_name: frostyard-chairlift
-    # Both build ids' binaries (chairlift, chairlift-updex-helper) are
-    # packaged automatically into bindir; do not add them as contents
-    # entries (build outputs live in dist/, not the repo root).
+    # The build ids' binaries (chairlift, chairlift-updex-helper,
+    # chairlift-first-run) are packaged automatically into bindir; do not add
+    # them as contents entries (build outputs live in dist/, not the repo
+    # root). No autostart entry is packaged: the image owns the trigger.
     bindir: /usr/bin
     description: |-
       System management tool for bootc-based installations.
