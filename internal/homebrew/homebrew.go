@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -148,6 +149,14 @@ func runBrewCommand(args ...string) (string, error) {
 // with it rather than being orphaned. cmd.Run still reaps the child.
 func runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, exe, args...)
+	if len(args) > 0 && args[0] == "tap-info" {
+		// tap-info's JSON also reports each tap's "private" flag, which brew
+		// asks the GitHub API for. On Linux its credential probe pipes into
+		// a nonexistent `git credential-osxkeychain`, and brew intermittently
+		// dies with "Error: Broken pipe". ChairLift reads only the local
+		// "trusted" key, so every tap-info runs with the API lookup off.
+		cmd.Env = append(os.Environ(), "HOMEBREW_NO_GITHUB_API=1")
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)

@@ -79,6 +79,36 @@ func awaitErr(t *testing.T, done <-chan error) error {
 	}
 }
 
+// TestRunBrewCommandAtKeepsTapInfoOffTheGitHubAPI pins the workaround for
+// Homebrew's intermittent "Error: Broken pipe" from tap-info on Linux: every
+// tap-info runs with HOMEBREW_NO_GITHUB_API=1 and still inherits the caller's
+// environment, while no other command loses GitHub API access.
+func TestRunBrewCommandAtKeepsTapInfoOffTheGitHubAPI(t *testing.T) {
+	t.Setenv("HOMEBREW_NO_GITHUB_API", "")
+	t.Setenv("CHAIRLIFT_TEST_MARKER", "inherited")
+	script := fakeBrew(t, `printf '%s|%s' "$HOMEBREW_NO_GITHUB_API" "$CHAIRLIFT_TEST_MARKER"`)
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"tap-info", "--installed", "--json"}, "1|inherited"},
+		{[]string{"tap-info", "--json", "vendor/tap"}, "1|inherited"},
+		{[]string{"info", "--installed", "--json=v2"}, "|inherited"},
+		{[]string{"outdated", "--json=v2"}, "|inherited"},
+		{[]string{"trust", "--formula", "vendor/tap/pkg"}, "|inherited"},
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		out, err := runBrewCommandAt(ctx, script, tc.args...)
+		cancel()
+		if err != nil {
+			t.Fatalf("runBrewCommandAt(%v): %v", tc.args, err)
+		}
+		if out != tc.want {
+			t.Errorf("runBrewCommandAt(%v) saw env %q, want %q", tc.args, out, tc.want)
+		}
+	}
+}
+
 func TestRunBrewCommandAt(t *testing.T) {
 	t.Run("success captures stdout", func(t *testing.T) {
 		script := fakeBrew(t, `echo "hello from brew"`)
