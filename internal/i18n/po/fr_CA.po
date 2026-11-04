@@ -1,0 +1,125 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Gabriel Girouard <ggirouard@bungeetaco.com>, 2023.
+# Jumpy Game <jumpy634@gmail.com>, 2023.
+# Michaël Tremblay <Tichael@users.noreply.hosted.weblate.org>, 2024.
+# Maxim Therrien <maxim@veryloud.ca>, 2025.
+# Fabrice Collin <collinfabrice.private@gmail.com>, 2025.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2025-03-29 18:02+0000\n"
+"Last-Translator: Fabrice Collin <collinfabrice.private@gmail.com>\n"
+"Language-Team: French (Canada) <https://hosted.weblate.org/projects/snow-"
+"os/first-setup/fr_CA/>\n"
+"Language: fr_CA\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n > 1;\n"
+"X-Generator: Weblate 5.11-dev\n"
+
+msgid "Back"
+msgstr "Retour"
+
+msgid "Next"
+msgstr "Suivant"
+
+msgid "Finished!"
+msgstr "Terminé!"
+
+msgid "Your user account is ready to use"
+msgstr "Votre compte d'utilisateur est prêt à être utilisé"
+
+msgid "Exit"
+msgstr "Sortir"
+
+msgid "Progress"
+msgstr "Progrès"
+
+msgid "Some steps still take some time"
+msgstr "Certaines étapes perdurent"
+
+msgid "Checking Connection"
+msgstr "Vérification de la connexion"
+
+msgid "Please wait until the connection check is done"
+msgstr "Vérification de la connexion en cours, veuillez patienter"
+
+msgid "Open Settings"
+msgstr "Ouvrir les paramètres"
+
+msgid "Color Scheme"
+msgstr "Thème de couleurs"
+
+msgid "Choose a color scheme for your system"
+msgstr "Choisissez un thème de couleur pour votre système"
+
+msgid "Light Mode"
+msgstr "Mode clair"
+
+msgid "Light"
+msgstr "Clair"
+
+msgid "Dark Mode"
+msgstr "Mode sombre"
+
+msgid "Dark"
+msgstr "Sombre"
+
+msgid "Start"
+msgstr "Démarrer"
+
+msgid "Accessibility"
+msgstr "Accessibilité"
+
+msgid "Let's set up your user account"
+msgstr "Configurons votre compte utilisateur"
+
+msgid "Applications"
+msgstr "Applications"
+
+msgid "Choose which applications to install."
+msgstr "Choisir les applications à installer."
+
+msgid "Browsers"
+msgstr "Navigateurs"
+
+msgid "Common Utilities"
+msgstr "Utilitaires"
+
+msgid "Useful utilities to enhance your desktop experience"
+msgstr "Utilitaires pratiques pour améliorer votre expérience de bureau"
+
+msgid "Office"
+msgstr "Bureautique"
+
+msgid "The LibreOffice suite"
+msgstr "La suite LibreOffice"
+
+msgid "Select the applications you want to install"
+msgstr "Sélectionnez les applications que vous désirez installer"
+
+msgid "Setup failed: "
+msgstr "La configuration a échouée : "
+
+msgid "Error log"
+msgstr "Journal d'erreurs"
+
+msgid "No Internet Connection!"
+msgstr "Votre ordinateur n'est pas connecté à l'internet"
+
+msgid "Connection available"
+msgstr "Réseaux disponibles"
+
+msgid "You have a working internet connection"
+msgstr "Votre ordinateur est connecté à l'internet"
+
+msgid "Hello {}!"
+msgstr "Bonjour {}!"
+
+msgid "Installing"
+msgstr "Installation en cours"

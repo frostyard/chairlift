@@ -1,0 +1,47 @@
+# Catalan translations for snow-first-setup package.
+# Copyright (C) 2022 THE snow-first-setup'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Automatically generated, 2022.
+#
+# jolupa <jolupameister@gmail.com>, 2023.
+# fobinasa i <starx700@gmail.com>, 2024.
+# Albert Farreras <albertfarrerasaleu30@gmail.com>, 2024.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2024-09-04 12:59+0000\n"
+"Last-Translator: Albert Farreras <albertfarrerasaleu30@gmail.com>\n"
+"Language-Team: Catalan <https://hosted.weblate.org/projects/snow-os/first-"
+"setup/ca/>\n"
+"Language: ca\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Weblate 5.7.2-rc\n"
+
+msgid "Back"
+msgstr "Enrere"
+
+msgid "Next"
+msgstr "Següent"
+
+msgid "Finished!"
+msgstr "Finalitzat!"
+
+msgid "Please wait until the connection check is done"
+msgstr "Espera fins que es comprovi la connexió"
+
+msgid "Color Scheme"
+msgstr "Esquema de colors"
+
+msgid "Choose a color scheme for your system"
+msgstr "Escull un esquema de colors per al teu sistema"
+
+msgid "Dark"
+msgstr "Fosc"
+
+msgid "No Internet Connection!"
+msgstr "Sense connexió a Internet!"

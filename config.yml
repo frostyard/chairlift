@@ -67,3 +67,11 @@ help_page:
     website: https://github.com/frostyard/snosi
     issues: https://github.com/frostyard/snosi/issues
     chat: https://github.com/frostyard/snosi/discussions
+
+# Not a navigation page: it configures `chairlift --first-run` (ADR-0014).
+# The Apps step shows only when this group is enabled, the list at apps_path
+# is valid, and the connection check found the internet.
+first_run_page:
+  first_run_apps_group:
+    enabled: true
+    apps_path: /usr/share/snow/first-run/apps.json

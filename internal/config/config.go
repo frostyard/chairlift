@@ -16,6 +16,9 @@ type Config struct {
 	MaintenancePage  PageConfig `yaml:"maintenance_page"`
 	FeaturesPage     PageConfig `yaml:"features_page"`
 	HelpPage         PageConfig `yaml:"help_page"`
+	// FirstRunPage configures `chairlift --first-run`. It is not a
+	// navigation page: internal/navigation never lists it.
+	FirstRunPage PageConfig `yaml:"first_run_page"`
 }
 
 // PageConfig represents configuration for a single page
@@ -30,6 +33,7 @@ type GroupConfig struct {
 	Issues       string         `yaml:"issues,omitempty"`
 	Chat         string         `yaml:"chat,omitempty"`
 	BundlesPaths []string       `yaml:"bundles_paths,omitempty"`
+	AppsPath     string         `yaml:"apps_path,omitempty"`
 }
 
 // ActionConfig represents a configurable action
@@ -51,6 +55,7 @@ type rawConfig struct {
 	MaintenancePage  rawPageConfig `yaml:"maintenance_page"`
 	FeaturesPage     rawPageConfig `yaml:"features_page"`
 	HelpPage         rawPageConfig `yaml:"help_page"`
+	FirstRunPage     rawPageConfig `yaml:"first_run_page"`
 }
 
 // rawPageConfig mirrors PageConfig for YAML parsing.
@@ -69,6 +74,7 @@ type rawGroupConfig struct {
 	Issues       *string         `yaml:"issues"`
 	Chat         *string         `yaml:"chat"`
 	BundlesPaths *[]string       `yaml:"bundles_paths"`
+	AppsPath     *string         `yaml:"apps_path"`
 }
 
 // configPaths are the locations to search for the config file
@@ -161,6 +167,7 @@ func disabledConfig() *Config {
 		cfg.MaintenancePage,
 		cfg.FeaturesPage,
 		cfg.HelpPage,
+		cfg.FirstRunPage,
 	}
 	for _, page := range pages {
 		for name, group := range page {
@@ -184,6 +191,7 @@ func mergeConfig(def *Config, raw *rawConfig) *Config {
 		MaintenancePage:  mergePage(def.MaintenancePage, raw.MaintenancePage),
 		FeaturesPage:     mergePage(def.FeaturesPage, raw.FeaturesPage),
 		HelpPage:         mergePage(def.HelpPage, raw.HelpPage),
+		FirstRunPage:     mergePage(def.FirstRunPage, raw.FirstRunPage),
 	}
 }
 
@@ -237,6 +245,9 @@ func mergeGroup(def GroupConfig, raw rawGroupConfig) GroupConfig {
 	}
 	if raw.BundlesPaths != nil {
 		result.BundlesPaths = *raw.BundlesPaths
+	}
+	if raw.AppsPath != nil {
+		result.AppsPath = *raw.AppsPath
 	}
 
 	return result
@@ -301,8 +312,19 @@ func defaultConfig() *Config {
 				Chat:    "https://github.com/frostyard/snosi/discussions",
 			},
 		},
+		FirstRunPage: PageConfig{
+			"first_run_apps_group": GroupConfig{
+				Enabled:  true,
+				AppsPath: defaultFirstRunAppsPath,
+			},
+		},
 	}
 }
+
+// defaultFirstRunAppsPath is the default apps_path of first_run_apps_group:
+// the application list that the Snow images ship for the first run's Apps
+// step (ADR-0014).
+const defaultFirstRunAppsPath = "/usr/share/snow/first-run/apps.json"
 
 // IsGroupEnabled checks if a preference group is enabled
 func (c *Config) IsGroupEnabled(pageName, groupName string) bool {
@@ -320,6 +342,8 @@ func (c *Config) IsGroupEnabled(pageName, groupName string) bool {
 		page = c.FeaturesPage
 	case "help_page":
 		page = c.HelpPage
+	case "first_run_page":
+		page = c.FirstRunPage
 	default:
 		return true
 	}
@@ -347,6 +371,8 @@ func (c *Config) GetGroupConfig(pageName, groupName string) *GroupConfig {
 		page = c.FeaturesPage
 	case "help_page":
 		page = c.HelpPage
+	case "first_run_page":
+		page = c.FirstRunPage
 	default:
 		return nil
 	}

@@ -72,12 +72,17 @@ are listed in [org-adrs.md](org-adrs.md).
 - [adr/0013-firmware-updates-are-on-by-default.md](adr/0013-firmware-updates-are-on-by-default.md)
   — `firmware_updates_group` is enabled by default after the test on real
   hardware passed (2026-11-03); the rest of ADR-0012 stays
+- [adr/0014-first-run-mode.md](adr/0014-first-run-mode.md)
+  — `chairlift --first-run` replaces SNOW First Setup: a pure-Go
+  `chairlift-first-run` gate, its own application ID, one marker writer that
+  also writes first-setup's marker until the dated end rule, no autostart in
+  the deb, the `first_run_page` config, and embedded `.po` translations
 
 ### Design
 
 - [design/overview.md](design/overview.md) — architecture entry point:
-  purpose, dependency flow, key patterns, configuration, build and release
-  (formerly `yeti/OVERVIEW.md`)
+  purpose, dependency flow, key patterns, the first-run mode, configuration,
+  build and release (formerly `yeti/OVERVIEW.md`)
 - [design/package-managers.md](design/package-managers.md) — the Homebrew,
   Flatpak, fwupd, bootc, sysupdate, and updex wrappers and their view-layer
   leaf packages (formerly `yeti/package-managers.md`)

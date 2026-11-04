@@ -1,0 +1,40 @@
+# Persian translations for snow-first-setup package.
+# Copyright (C) 2022 THE snow-first-setup'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Automatically generated, 2022.
+#
+# MohammadSaleh Kamyab <mskf1383@envs.net>, 2023.
+# Alone Crow <Analonecrow@users.noreply.hosted.weblate.org>, 2024.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2024-02-18 10:01+0000\n"
+"Last-Translator: Alone Crow <Analonecrow@users.noreply.hosted.weblate.org>\n"
+"Language-Team: Persian <https://hosted.weblate.org/projects/snow-os/first-"
+"setup/fa/>\n"
+"Language: fa\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n > 1;\n"
+"X-Generator: Weblate 5.4\n"
+
+msgid "Back"
+msgstr "بازگشت"
+
+msgid "Next"
+msgstr "بعدی"
+
+msgid "Please wait until the connection check is done"
+msgstr "لطفا تا اتمام بررسی اتصال منتظر بمانید"
+
+msgid "Color Scheme"
+msgstr "رنگبندی"
+
+msgid "Choose a color scheme for your system"
+msgstr "برای سیستم خود یک رنگبندی انتخاب کنید"
+
+msgid "Dark"
+msgstr "تاریک"

@@ -1,0 +1,120 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Hugo Carvalho <hugokarvalho@hotmail.com>, 2023.
+# ssantos <ssantos@web.de>, 2023, 2024.
+# Felipe Nogueira <contato.fnog@gmail.com>, 2023.
+# Afonso Coutinho <afonsopcastro@gmail.com>, 2023.
+# Ricardo <ricardo.btupy@gmail.com>, 2023.
+# Wagner Costa Gottschald <wagnercostag@gmail.com>, 2023.
+# Vinícius <vinicius.cgobbi2004@gmail.com>, 2024.
+# Matheus Silverio Silva <drchaos820@gmail.com>, 2024.
+# Fabio Dev <fabiodev1123@gmail.com>, 2025.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2025-03-21 08:17+0000\n"
+"Last-Translator: Fabio Dev <fabiodev1123@gmail.com>\n"
+"Language-Team: Portuguese <https://hosted.weblate.org/projects/snow-os/"
+"first-setup/pt/>\n"
+"Language: pt\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n > 1;\n"
+"X-Generator: Weblate 5.11-dev\n"
+
+msgid "Back"
+msgstr "Voltar"
+
+msgid "Next"
+msgstr "Seguinte"
+
+msgid "Finished!"
+msgstr "Terminado!"
+
+msgid "Your user account is ready to use"
+msgstr "O teu dispositivo está pronto a ser utilizado"
+
+msgid "Exit"
+msgstr "sair"
+
+msgid "Progress"
+msgstr "Progresso"
+
+msgid "Some steps still take some time"
+msgstr "Alguns passos podem levar algum tempo"
+
+msgid "Checking Connection"
+msgstr "A verificar ligação"
+
+msgid "Please wait until the connection check is done"
+msgstr "Aguarda que a verificação da ligacao seja concluída"
+
+msgid "Open Settings"
+msgstr "Abrir Definições"
+
+msgid "Color Scheme"
+msgstr "Esquema de cores"
+
+msgid "Choose a color scheme for your system"
+msgstr "Escolhe um esquema de cores para o teu sistema"
+
+msgid "Light Mode"
+msgstr "Modo Claro"
+
+msgid "Light"
+msgstr "Claro"
+
+msgid "Dark Mode"
+msgstr "Modo Escuro"
+
+msgid "Dark"
+msgstr "Escuro"
+
+msgid "Start"
+msgstr "Iniciar"
+
+msgid "Accessibility"
+msgstr "Acessibilidade"
+
+msgid "Let's set up your user account"
+msgstr "Fornece detalhes para a tua conta de utilizador"
+
+msgid "Applications"
+msgstr "Aplicações"
+
+msgid "Choose which applications to install."
+msgstr "Escolha quais aplicações instalar."
+
+msgid "Browsers"
+msgstr "Navegadores"
+
+msgid "Common Utilities"
+msgstr "Utilitários Comuns"
+
+msgid "Useful utilities to enhance your desktop experience"
+msgstr "Utilitários úteis para melhorar sua experiência na área de trabalho"
+
+msgid "Office"
+msgstr "Escritório"
+
+msgid "The LibreOffice suite"
+msgstr "O pacote LibreOffice"
+
+msgid "Select the applications you want to install"
+msgstr "Selecione as aplicações que deseja instalar"
+
+msgid "Setup failed: "
+msgstr "Falha na configuração: "
+
+msgid "No Internet Connection!"
+msgstr "Sem ligação à Internet!"
+
+msgid "Hello {}!"
+msgstr "Olá {}!"
+
+msgid "Installing"
+msgstr "A Instalar"

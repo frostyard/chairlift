@@ -1,0 +1,38 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Frederik Pjetri <rikpjetri@gmail.com>, 2023.
+# Fabrice Collin <collinfabrice.private@gmail.com>, 2025.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2025-03-29 18:02+0000\n"
+"Last-Translator: Fabrice Collin <collinfabrice.private@gmail.com>\n"
+"Language-Team: Albanian <https://hosted.weblate.org/projects/snow-os/"
+"first-setup/sq/>\n"
+"Language: sq\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"X-Generator: Weblate 5.11-dev\n"
+
+msgid "Back"
+msgstr "Mbrapa"
+
+msgid "Next"
+msgstr "Tjetra"
+
+msgid "Your user account is ready to use"
+msgstr "Llogaria juaj e përdoruesit është gati për t'u përdorur."
+
+msgid "Color Scheme"
+msgstr "Skema e ngjyrave"
+
+msgid "Dark"
+msgstr "E errët"
+
+msgid "No Internet Connection!"
+msgstr "Nuk ka lidhje interneti!"

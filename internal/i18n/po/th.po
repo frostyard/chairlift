@@ -1,0 +1,37 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# "ส. สิทธิชัยวัฒน์" <phongthon.thuiprasid@gmail.com>, 2023.
+# Donlawat Samerwongtip <donlabob1051@gmail.com>, 2023.
+# "Toshisawa D. Daitsuku" <65522118+Daitsuku@users.noreply.github.com>, 2023.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2023-10-31 15:43+0000\n"
+"Last-Translator: \"Toshisawa D. Daitsuku\" <65522118+Daitsuku@users.noreply."
+"github.com>\n"
+"Language-Team: Thai <https://hosted.weblate.org/projects/snow-os/first-"
+"setup/th/>\n"
+"Language: th\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Generator: Weblate 5.2-dev\n"
+
+msgid "Back"
+msgstr "ย้อนกลับ"
+
+msgid "Next"
+msgstr "ถัดไป"
+
+msgid "Color Scheme"
+msgstr "แบบแผนชุดสี"
+
+msgid "Dark"
+msgstr "มืด"
+
+msgid "No Internet Connection!"
+msgstr "ไม่พบการเชื่อมต่ออินเทอร์เน็ต!"

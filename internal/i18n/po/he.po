@@ -1,0 +1,91 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Daniel Toubul <molder@toubul.eu>, 2023.
+# guylamar2006 <guychronister@outlook.com>, 2024.
+# aharon don <aronrefael@gmail.com>, 2025.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2025-03-05 21:37+0000\n"
+"Last-Translator: aharon don <aronrefael@gmail.com>\n"
+"Language-Team: Hebrew <https://hosted.weblate.org/projects/snow-os/first-"
+"setup/he/>\n"
+"Language: he\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=4; plural=(n == 1) ? 0 : ((n == 2) ? 1 : ((n > 10 && "
+"n % 10 == 0) ? 2 : 3));\n"
+"X-Generator: Weblate 5.10.3-dev\n"
+
+msgid "Back"
+msgstr "חזור"
+
+msgid "Next"
+msgstr "הבא"
+
+msgid "Finished!"
+msgstr "נגמר!"
+
+msgid "Your user account is ready to use"
+msgstr "חשבון המשתמש שלך מוכן לשימוש."
+
+msgid "Exit"
+msgstr "יציאה"
+
+msgid "Progress"
+msgstr "התקדמות"
+
+msgid "Some steps still take some time"
+msgstr "כמה שלבים עדיין מתבצעים ייקח עוד זמן להשלמתם"
+
+msgid "Checking Connection"
+msgstr "בודק חיבור"
+
+msgid "Please wait until the connection check is done"
+msgstr "אנא המתן עד שבדיקת החיבור תסתיים"
+
+msgid "Open Settings"
+msgstr "פתח הגדרות"
+
+msgid "Color Scheme"
+msgstr "ערכת צבעים"
+
+msgid "Choose a color scheme for your system"
+msgstr "בחר ערכת צבעים עבור המערכת שלך"
+
+msgid "Light Mode"
+msgstr "מצב בהיר"
+
+msgid "Light"
+msgstr "בהיר"
+
+msgid "Dark Mode"
+msgstr "מצב כהה"
+
+msgid "Dark"
+msgstr "כהה"
+
+msgid "Start"
+msgstr "התחל"
+
+msgid "Accessibility"
+msgstr "נגישות"
+
+msgid "Let's set up your user account"
+msgstr "אנא מלא את הפרטים עבור חשבון המשתמש שלך"
+
+msgid "Applications"
+msgstr "Applications"
+
+msgid "Choose which applications to install."
+msgstr "בחר את הapplications להתקנה."
+
+msgid "Browsers"
+msgstr "דפדפנים"
+
+msgid "No Internet Connection!"
+msgstr "אין חיבור אינטרנט!"

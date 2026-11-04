@@ -438,13 +438,14 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 | `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
+| `AddRemote(name, url, user)` | `flatpak remote-add [--user\|--system] --if-not-exists <name> <url>` | 30m | State-changing; the first run's Progress step adds `FlathubRemoteName`/`FlathubRepoURL` to the user installation before it installs applications |
 | `UninstallUnused()` | `flatpak uninstall --unused -y` (no scope flag) | 30m | Maintenance cleanup of every installation; see below |
 | `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 30s | Key-value parsed |
 | `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 30s | Lists configured remotes |
 
 ### State-changing commands
 
-`install`, `uninstall`, `remove`, `update` — exactly four keys. As in homebrew, the map selects both the dry-run skip (these are skipped entirely and return a mock message) and the timeout class: `commandTimeout(args []string)` returns `mutationTimeout` (30 minutes) when `args[0]` is one of the four keys and `readTimeout` (30 seconds) otherwise, including for empty args, and `runFlatpakCommand` passes it to `context.WithTimeout`. Flatpak's read budget matches homebrew's 30 seconds, so both wrappers agree. `flatpak_test.go`'s `TestCommandTimeout` iterates the real map and asserts `len(stateChangingCommands) == 4`.
+`install`, `uninstall`, `remove`, `update`, `remote-add` — exactly five keys. As in homebrew, the map selects both the dry-run skip (these are skipped entirely and return a mock message) and the timeout class: `commandTimeout(args []string)` returns `mutationTimeout` (30 minutes) when `args[0]` is one of the five keys and `readTimeout` (30 seconds) otherwise, including for empty args, and `runFlatpakCommand` passes it to `context.WithTimeout`. Flatpak's read budget matches homebrew's 30 seconds, so both wrappers agree. `flatpak_test.go`'s `TestCommandTimeout` iterates the real map and asserts `len(stateChangingCommands) == 5`.
 
 ### Error handling
 
@@ -1167,6 +1168,7 @@ Every wrapper has `SetDryRun(bool)` and `IsDryRun() bool`. Behavior varies by wr
 | sysupdate | `StageUpdate` never invokes pkexec; emits synthetic `EventMessage`+`EventComplete` and returns. The stage button's toast is `actionmsg.SysupdateStage(sysupdate.IsDryRun(), staged)`; the expander subtitle and rollback row stay live (from the `/run/snosi` state files and partition labels) in both modes | Yes |
 | Updex | Skips helper execution, returns nil results and a nil error (the Update toast is the `actionmsg.FeatureUpdate` preview); the helper binary itself (`cmd/chairlift-updex-helper`, via `internal/updexhelper`) also honors `--dry-run` for all three subcommands, defense-in-depth even though `updex.runHelper` never invokes pkexec under dry-run | Yes |
 | views (custom maintenance scripts) | `runMaintenanceAction` never constructs an `exec.Cmd` (no `pkexec`, no direct script exec); logs `[DRY-RUN] Would execute: ...` instead | Yes |
+| firstrun (first-run mode) | `ApplyColorScheme` runs no `gsettings` and logs `[DRY-RUN] would execute: gsettings ...`; `Complete` writes no marker and logs `[DRY-RUN] would write first-run markers: ...`, and its `Completion` decision gives the Done step the preview text. The first run's `remote-add` and `install` go through the Flatpak wrapper's own flag (see [overview.md — First-run mode](./overview.md#first-run-mode)) | Yes |
 
 Custom maintenance scripts (config.yml `actions` entries) have no wrapper package of their own, so `internal/views` carries its own `SetDryRun`/`IsDryRun` (`internal/views/dryrun.go`) rather than reusing one of the above. Unlike the other wrappers, the execution gate for this one is not just an `if IsDryRun()` branch inline in the view: `internal/views/actionmsg.MaintenanceScript(dryRun, title)` returns a `ScriptDecision{Execute, Toast}` computed once, before the goroutine spawns, and both the "does it execute" question and the toast text come from that single tested function call — not two independently-maintained conditionals. See "View-layer toast and decision helpers" above for the full `actionmsg`/`trustmsg` function and type list.
 

@@ -22,6 +22,7 @@ var pageNames = []string{
 	"maintenance_page",
 	"features_page",
 	"help_page",
+	"first_run_page",
 }
 
 // pagesOf returns cfg's pages keyed by the same page-name strings
@@ -34,6 +35,7 @@ func pagesOf(cfg *Config) map[string]PageConfig {
 		"maintenance_page":  cfg.MaintenancePage,
 		"features_page":     cfg.FeaturesPage,
 		"help_page":         cfg.HelpPage,
+		"first_run_page":    cfg.FirstRunPage,
 	}
 }
 
@@ -151,8 +153,8 @@ func TestMaintenanceCleanupGroupDefaultConsistentAcrossAbsentAndOmitted(t *testi
 }
 
 // defaultBearingGroups lists every group in defaultConfig() that defines a
-// non-Enabled default field (AppID, Website/Issues/Chat, Actions, or
-// BundlesPaths). Enabled-only-overlay coverage loops over all of them, not
+// non-Enabled default field (AppID, Website/Issues/Chat, Actions,
+// BundlesPaths, or AppsPath). Enabled-only-overlay coverage loops over all of them, not
 // just one, per the repo's regression-tests-must-cover-every-collection-entry
 // skill.
 var defaultBearingGroups = []struct {
@@ -164,6 +166,7 @@ var defaultBearingGroups = []struct {
 	{"help_page", "help_resources_group"},
 	{"maintenance_page", "maintenance_cleanup_group"},
 	{"applications_page", "brew_bundles_group"},
+	{"first_run_page", "first_run_apps_group"},
 }
 
 // TestEnabledOnlyOverlayPreservesOtherDefaultFields feeds a partial file

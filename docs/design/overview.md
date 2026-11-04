@@ -5,17 +5,19 @@ Living design document (formerly `yeti/OVERVIEW.md`; folded into `docs/` per
 
 ## Purpose
 
-ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, OS system updates (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off.
+ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, OS system updates (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off. A separate first-run mode (`chairlift --first-run`, started by the pure-Go `chairlift-first-run` gate) replaces SNOW First Setup on images that ship its trigger; see [First-run mode](#first-run-mode).
 
 ## Architecture
 
 ```
 cmd/chairlift/main.go                 Entry point: version injection, app creation
 cmd/chairlift-updex-helper/main.go    Privileged helper for updex write operations
+cmd/chairlift-first-run/main.go       Pure-Go first-run gate: exits or execs `chairlift --first-run`
         │
 internal/app/app.go             GObject-registered Application (adw.Application subtype)
         │
 internal/window/window.go       Main window: NavigationSplitView, sidebar, content stack
+internal/window/firstrun.go     First-run window: header Back/Next, a stack of the first-run steps
         │
 internal/views/                 Page builders and event handlers (one file per page)
         │                       ├── internal/views/actionmsg/     ┐ puregotk-free leaf packages:
@@ -38,6 +40,8 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/stageexec/ Pure-Go shared OS staging stream/event executor
         ├── internal/updex/     Updex feature manager (Go library reads, helper binary writes)
         ├── internal/updexhelper/ Puregotk-free argv-parsing/Options-building for cmd/chairlift-updex-helper
+        ├── internal/firstrun/  Puregotk-free first-run logic: gate, markers, steps, apps list, actions
+        ├── internal/i18n/      Puregotk-free .po reader and the embedded first-run translations
         └── internal/version/   Build metadata (ldflags injection)
 ```
 
@@ -45,6 +49,8 @@ internal/views/                 Page builders and event handlers (one file per p
 
 `cmd → app → window → views → {config, homebrew, flatpak, fwupd, bootc, sysupdate, updex}`.
 `app` and `window` also depend on the pure `navigation` package.
+The first-run mode adds `cmd/chairlift-first-run → firstrun → {config, flatpak, i18n}`
+(no GTK package, guarded by `internal/installcheck`) and `app → window (firstrun.go) → {firstrun, i18n}`.
 
 External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
 
@@ -63,7 +69,9 @@ The `views.go` file defines the central `UserHome` struct that holds references 
 
 ### Pages
 
-The UI defines six pages, each in its own file under `internal/views/`. Static
+The UI defines six pages, each in its own file under `internal/views/`. The
+first-run window is not a page: it lives in `internal/window/firstrun.go`, and
+`internal/navigation` does not list it. Static
 configuration may omit any functional page whose builder-backed groups are all
 disabled; Help is always retained:
 
@@ -125,7 +133,7 @@ The updates page's `sysupdate_updates_group` is gated on `sysupdate.IsNativeABCa
 Decision record: [ADR-0009](../adr/0009-dry-run-output-convention-and-single-decision-structs.md)
 (the `[DRY-RUN]` output convention and single decision structs).
 
-The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, fwupd, bootc, sysupdate, updex, and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
+The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, fwupd, bootc, sysupdate, updex, `internal/firstrun` (the first run's color-scheme write and completion markers), and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
 
 **The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would _also_ mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `FeatureUpdateDecision.Persistent`, `FirmwareInstallDecision.PublishList`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation _and_ the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). `FeatureUpdateDecision.Persistent` is the same pattern for the Features page's Update toast: it decides whether the toast stays on screen as an error toast, and the same struct's `Recheck` decides whether the update check runs again, so the rows show the state after the update instead of the startup check's state. Sites with no second UI decision to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, and bootc stage toasts) get a plain string function instead.
 
@@ -140,6 +148,7 @@ Per-wrapper mechanics:
 - **Homebrew tap trust**: `trustTap` (`internal/views/updates_page.go`) computes `decision := actionmsg.TapTrust(homebrew.IsDryRun(), tap.Name)` once, after a successful `homebrew.TrustPackages` call, and gates removing the tap's row, hiding the group, and refreshing outdated packages on `decision.MutateUI`.
 - **views (custom maintenance scripts)**: `runMaintenanceAction` (`internal/views/maintenance_page.go`) calls `actionmsg.MaintenanceScript(IsDryRun(), title)` once, before spawning its goroutine, to get a `ScriptDecision{Execute, Toast}`: when `Execute` is false no `exec.Cmd` is ever constructed (no `pkexec`, no direct script exec) — only a `[DRY-RUN] Would execute: ...` log line.
 - **Features page switch confirmation**: `onFeatureToggled` (`internal/views/features_page.go`) computes `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` once, after a successful `updex.EnableFeature`/`DisableFeature` call, and branches solely on `decision.Confirm` to decide whether the switch confirms the flip (`toggle.SetActive(enabled)`) or reverts to its pre-click state (`toggle.SetActive(!enabled)`).
+- **First run**: the first-run window reads `firstrun.IsDryRun()` once when the Progress step starts and passes it to `firstrun.Complete`, whose `firstrun.Completion` decision (`WriteMarkers`, `Log`, `DoneDescription`) decides both whether the markers are written and the Done step's text (`[DRY-RUN] Preview: first run finished — no changes made`). `firstrun.ApplyColorScheme` logs `[DRY-RUN] would execute: gsettings ...`, and the Flatpak wrapper skips `remote-add` and `install`.
 - **Firmware install**: `installFirmwareUpdate` (`internal/views/updates_page.go`) calls `fwupd.InstallAndVerify`, then builds `decision := actionmsg.FirmwareInstall(fwupd.IsDryRun(), installErr, report, …)` once. `decision.PublishList` decides whether the verified device list is published, `decision.RestoreControl` whether the Install button comes back, and `decision.IsError` whether the toast stays on screen. `fwupdmgr` can exit 0 without flashing a device, so the view never reads the exit status as success on its own.
 
 ### Configuration-driven UI visibility
@@ -1310,6 +1319,203 @@ Note: `GtkShortcutsWindow` is not available in puregotk, so a custom `adw.Window
 
 Help page links are opened via `xdg-open` using `exec.Command`. The process is started asynchronously and its exit is waited on in a goroutine to avoid zombie processes.
 
+## First-run mode
+
+Decision record: [ADR-0014](../adr/0014-first-run-mode.md). The first-run
+mode replaces SNOW First Setup (frostyard/first-setup) on images that ship its
+trigger. ChairLift itself ships no autostart entry, so on any other
+distribution nothing starts on its own.
+
+### Binaries and trigger
+
+- `cmd/chairlift-first-run` (`/usr/bin/chairlift-first-run`, GUI package
+  `frostyard-chairlift` only) is pure Go: `internal/installcheck`'s
+  `TestFirstRunGateImportsNoGTK` fails when `go list -deps` of it,
+  `internal/firstrun` or `internal/i18n` contains a puregotk or snowkit
+  package. puregotk dlopens GTK in package `init`, so a gate inside
+  `cmd/chairlift` could not exit before GTK loads. `main.go` only calls
+  `firstrun.Gate`, prints its output and `syscall.Exec`s.
+- `firstrun.Gate` outcomes, in order: an unknown argument prints the usage to
+  stderr and exits 2; `--help`/`-h` prints the usage to stdout and exits 0;
+  UID 0 exits 0 with `first-run: skipped for root` (also for `--mark-done`);
+  no config home (neither `XDG_CONFIG_HOME` nor `HOME`) exits 1;
+  `--mark-done` calls `firstrun.Complete` and exits 0, or 1 when the write
+  fails; an existing marker exits 0 with `first-run: already done`; otherwise
+  it execs the fixed path `/usr/bin/chairlift` with argv `chairlift
+  --first-run` (plus `--dry-run`).
+- snosi ships the trigger on Snow and Snowfield:
+  `/etc/xdg/autostart/org.frostyard.ChairLift.FirstRun.desktop` with
+  `Exec=/usr/bin/chairlift-first-run`, and the list
+  `/usr/share/snow/first-run/apps.json`.
+
+### Application and window
+
+`internal/app` checks `os.Args` for `--first-run` before it creates the
+GObject (as it does for `--dry-run`), and then uses the application ID
+`org.frostyard.ChairLift.FirstRun`; with the main ID a running ChairLift would
+receive the activation and the window would never show. `first-run` is a
+registered main option, so `chairlift --help` lists it. On activate the app
+builds `window.NewFirstRun` instead of the main window and presents it;
+`FirstRunWindow.Present` logs `first-run: window presented`, the readiness
+marker that `make e2e` and the lab read (ADR-0008 style). The window is an
+`adw.ApplicationWindow` with a header bar (Back, Next) and a `gtk.Stack` of
+`adw.StatusPage` steps, inside an `adw.ToastOverlay`. All its text goes
+through `i18n.T`; worker results return through `sgtk.RunOnMainThread`.
+
+When `config.Load` returns an error, the window shows
+`LoadError.ToastMessage()` as a persistent toast (`SetUseMarkup(false)`,
+`SetTimeout(0)`), as the main window does; the Apps step is hidden and the
+user can still finish. `internal/installcheck.TestToastsRenderPlainText`
+scans this toast too.
+
+**Close guard.** `Flow.CanClose` is false only on the Progress step before
+`FinishProgress`. The window connects `close-request` and returns
+`!Flow.CanClose()`, so a close is refused while the Flatpak actions and the
+marker write run. `startProgress` also calls `Hold` on the GApplication before
+the worker starts, and `finishProgress` calls `Release`; after Progress ends,
+close works normally.
+
+### Steps and flow
+
+`firstrun.Flow` owns the order Welcome, Connectivity, Style, Apps, Progress,
+Done and every transition:
+
+- **Welcome** — `Hello {}!` with `firstrun.WelcomeName` (the GECOS full name's
+  first comma field, else the login name, else `$USER`/`$LOGNAME`), Start, and
+  Accessibility (`gnome-control-center universal-access`).
+- **Connectivity** — status only: `firstrun.CheckConnectivity` dials
+  `dl.flathub.org:443` over TCP with a 5 s timeout (`ConnChecking`,
+  `ConnOnline`, `ConnOffline`). Next waits while the check runs, because the
+  result decides whether Apps shows. Offline shows Check Again and Open
+  Settings (`gnome-control-center wifi`); the user can go on.
+- **Style** — Light/Dark toggles. Each toggle calls `Request` on the window's
+  one `firstrun.SchemeWriter` from the main thread. The writer has one worker
+  goroutine and a mutex-protected pending value: a request during a write
+  replaces the pending value, so the latest choice wins and at most the
+  running write and the latest one run. `SchemeWriter.Wait` blocks until no
+  write is running or pending; the Progress sequence calls it before the
+  completion. Each write is
+  `firstrun.ApplyColorScheme`: `gsettings set org.gnome.desktop.interface
+  color-scheme prefer-light|prefer-dark`, never `gtk-theme`. The window
+  follows the choice through its style manager.
+- **Apps** — visible only when the list loaded, `first_run_apps_group` is
+  enabled, and the check said online (`Flow.Visible`). One `adw.ExpanderRow`
+  with an enable switch per category, one `adw.SwitchRow` per app, no icons
+  and no network fetch.
+- **Progress** — Back is not possible; Next waits until every action ended.
+  `firstrun.PlanActions` gives no action when no app is selected, else
+  `flatpak remote-add --user --if-not-exists flathub
+  https://dl.flathub.org/repo/flathub.flatpakrepo` (`flatpak.AddRemote`) and
+  then `flatpak install -y --user <id>` per selected app
+  (`flatpak.Install(id, true)`). `firstrun.Execute` runs every action, also
+  after a failure, and emits Running, then Succeeded or Failed per row.
+- **Done** — `Finished!`, the completion text, Exit, and an `Error log`
+  expander. `firstrun.DoneState` composes it from the failed actions'
+  entries (`firstrun.ErrorLog`) and the completion outcome: the warning icon
+  and the expander show when an action failed or the completion could not be
+  recorded. No Back, no Next.
+
+The settings buttons show only when `gnome-control-center` is on `PATH`
+(`firstrun.SettingsAvailable`); they are launches, not state changes, so they
+also run in dry run, and they have no config keys (GNOME-only).
+
+### Application list
+
+`firstrun.LoadConfiguredApps` returns `ErrAppsDisabled` when
+`first_run_page`/`first_run_apps_group` is disabled — also after a
+configuration error, because `disabledConfig()` turns every group off — and
+otherwise `firstrun.LoadApps(apps_path)`. `LoadApps`/`ParseApps` accept
+first-setup's shape, `{"<category>": [{"name", "id", "active"}]}` with an
+absent `active` meaning true, and reject a read error, a file over 1 MiB,
+invalid JSON or trailing data, unknown fields, an empty object or category,
+an empty name, an ID that is not a valid Flatpak application ID
+(`firstrun.ValidFlatpakID`: at least 3 elements, `-` only in the last, at
+most 255 bytes) and a duplicate ID. Categories show in the order browsers,
+utilities, office, then the other keys sorted; known keys get first-setup's
+translated title and subtitle, an unknown key shows the key. Any error hides
+Apps and is logged (`first-run: Apps step hidden: ...`). `firstrun.Selection`
+holds the switches: a category starts on when at least one of its apps is
+active; `Selected` returns the apps whose category and own switch are on, in
+list order.
+
+### Markers and completion
+
+The config home is `$XDG_CONFIG_HOME` when it is not empty, else
+`$HOME/.config`. `firstrun.IsDone` is true when
+`<config home>/chairlift/first-run.done` or first-setup's
+`<config home>/snow-first-setup.done` exists. `firstrun.MarkDone` is the only
+writer: it creates `<config home>/chairlift` (0700), writes both markers as
+empty 0644 files (an existing file is kept), and removes the legacy per-user
+`<config home>/autostart/org.frostyard.FirstSetup.autostart.desktop`.
+`firstrun.Complete(dryRun, paths)` builds the `firstrun.Completion` decision
+and calls `MarkDone` only when `WriteMarkers` is true;
+`chairlift-first-run --mark-done` reaches it through `Gate`. The window calls
+`firstrun.CompleteAt(dryRun, paths, pathsErr)` after the Progress actions end
+(also when some failed) and before Done shows. The outcomes:
+
+- success — `DoneDescription` "Your user account is ready to use", no
+  warning;
+- dry run — no write, `[DRY-RUN] would write first-run markers: ...`, the
+  dry-run preview text (a missing config home is no failure here);
+- a live run with no config home, or a `MarkDone` error — `Err` is set,
+  `ShowWarning` is true, the `Log` line is `first-run: could not record
+  completion: ...`, and `Completion.ErrorLog` gives one entry, "Setup failed:
+  Could not record that the first run is finished" with the error text. There
+  is no retry button.
+
+`firstrun.DoneState(actionEntries, completion, gate)` composes the Done step.
+`gate` is the gate state after the completion, from
+`firstrun.GateStateAt(paths, pathsErr)`, one of 3 values:
+
+- `GateRunsAgain` — the paths are known and no marker exists: the gate
+  execs ChairLift at the next login. Only this state gets the description
+  "The first run starts again at your next login" after a failure.
+- `GateDone` — a marker exists. `MarkDone` can fail after it wrote the
+  markers, for example when the legacy autostart path is a non-empty
+  directory; the gate then skips the next login, and the description is
+  "Setup finished with errors".
+- `GateUnknown` — the window has no config home (`pathsErr`). The gate in
+  that environment exits 1 and starts nothing, so the description is also
+  "Setup finished with errors", with no promise of another run.
+  `GateUnknown` is the zero value, so an unset state never promises a run.
+
+The warning icon and the error log show after every completion failure.
+
+`firstrun.RunProgress(actions, steps)` is the Progress worker's whole
+sequence, in this order: run every action (`Execute`), drain the
+color-scheme writer (`Drain`, the window's `SchemeWriter.Wait`), record the
+completion (`Complete`, `CompleteAt`), then read the gate state (`Gate`,
+`GateStateAt`) and compose `DoneState`. The window runs it off the GTK thread and
+calls `finishProgress` (which releases the application hold) only after it
+returns, so the last style choice is written before Exit can end the
+process; Back is not possible from Progress, so no newer choice can follow
+the drain. Wiring tests
+in `internal/firstrun` prove both paths reach the one writer, that only
+`MarkDone` writes files, and that only `internal/firstrun/markers.go` spells
+the marker names.
+
+**Legacy marker end rule.** Reading `snow-first-setup.done` never ends.
+Writing it (`writeLegacyMarker` in `internal/firstrun/markers.go`) ends no
+earlier than 90 days after the first snosi main image without first-setup
+publishes. The change that removes the write records that date and the
+ChairLift release that drops it here. Status: the write is active; the end
+date is not set yet.
+
+### Translations
+
+`internal/i18n` embeds `internal/i18n/po/*.po` (ported from first-setup commit
+`b5f7de3`; see `internal/i18n/po/README.md`) and reads them with its own
+parser (`ParsePO`: msgid/msgstr, multi-line strings, C escapes; fuzzy and
+empty entries skipped; msgctxt and plurals are errors). `Candidates` applies
+gettext's locale choice: the first non-empty of `LC_ALL`, `LC_MESSAGES`,
+`LANG`; English for an empty, `C` or `POSIX` locale (then `LANGUAGE` is
+ignored); else each `LANGUAGE` entry, then the locale, each as `ll_CC` then
+`ll` after the codeset and modifier are removed, with `zh_CN`/`zh_SG` mapped to
+`zh_Hans` and `zh_TW`/`zh_HK`/`zh_MO` to `zh_Hant`. `T` returns the first
+catalog's translation, else the msgid; `Format` fills `{}` placeholders. Every
+first-run msgid is a constant in `internal/i18n/msgids.go`, and a test fails
+when an embedded file holds a msgid outside that list.
+
 ## Configuration
 
 Decision records: [ADR-0003](../adr/0003-two-tier-config-with-fail-closed-semantics.md)
@@ -1353,6 +1559,7 @@ page_name:
         script: "/path/to/script"
         sudo: true/false
     bundles_paths: [...] # Homebrew bundle directories
+    apps_path: "..." # First-run application list (first_run_page only)
     website: "..." # Help page URLs
     issues: "..."
     chat: "..."
@@ -1383,18 +1590,19 @@ page_name:
 | `maintenance_page`  | `maintenance_optimization_group` | System optimization (placeholder)                                                                                                                                                                       |
 | `features_page`     | `features_group`                 | Updex feature toggles                                                                                                                                                                                   |
 | `help_page`         | `help_resources_group`           | Configurable links (website, issues, chat)                                                                                                                                                              |
+| `first_run_page`    | `first_run_apps_group`           | Not a navigation page: the first run's Apps step and its `apps_path` list (default `/usr/share/snow/first-run/apps.json`); disabled, a configuration error, or a missing/invalid list hides the step ([ADR-0014](../adr/0014-first-run-mode.md)) |
 
 ## Build and Release
 
-- **Build**: `make build` builds two binaries: `build/chairlift` (main app) and `build/chairlift-updex-helper` (privileged helper), both with `CGO_ENABLED=0`
-- **CI mirror**: `make ci` runs every host-independent gate from `.github/workflows/test.yml` in fail-fast order — go.mod tidy check, `go vet`, gofmt check, `golangci-lint`, unit tests (`./internal/...` under `-run "^Test[^I]" -skip "Integration"`), the race detector, and the build. Its build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into `build/ci-linux-<arch>/` before rebuilding natively, so a compile failure on the non-host architecture cannot pass locally. The mill's deep gate (`.mill.toml`) calls this target. Codecov's remote project status additionally rejects coverage regressions greater than one percentage point, with no fixed project or patch target; it cannot be mirrored locally. The runtime-dependent E2E job is deliberately separate: `make e2e` builds both binaries, executes the application's `--help` path, boots the dry-run GTK window under a private D-Bus/Xvfb session, polls all three readiness markers for at most 30 seconds, requires one second of post-readiness stability, then terminates its private process group, stages the real `make install` layout under a temporary `DESTDIR`, and executes the staged `chairlift-updex-helper` rejection paths. Its Go test package lives at `test/e2e`, imports no puregotk package, and is enforced by that explicit target rather than the `./internal/...` unit-test filter. The readiness markers are a log-line contract — decision record [ADR-0008](../adr/0008-e2e-readiness-is-a-log-marker-contract.md).
+- **Build**: `make build` builds three binaries: `build/chairlift` (main app), `build/chairlift-updex-helper` (privileged helper), and `build/chairlift-first-run` (pure-Go first-run gate), all with `CGO_ENABLED=0`
+- **CI mirror**: `make ci` runs every host-independent gate from `.github/workflows/test.yml` in fail-fast order — go.mod tidy check, `go vet`, gofmt check, `golangci-lint`, unit tests (`./internal/...` under `-run "^Test[^I]" -skip "Integration"`), the race detector, and the build. Its build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into `build/ci-linux-<arch>/` before rebuilding natively, so a compile failure on the non-host architecture cannot pass locally. The mill's deep gate (`.mill.toml`) calls this target. Codecov's remote project status additionally rejects coverage regressions greater than one percentage point, with no fixed project or patch target; it cannot be mirrored locally. The runtime-dependent E2E job is deliberately separate: `make e2e` builds the three binaries, executes the application's `--help` path (which must list `--first-run`), boots the dry-run GTK window under a private D-Bus/Xvfb session, polls all three readiness markers for at most 30 seconds, requires one second of post-readiness stability, then terminates its private process group, stages the real `make install` layout under a temporary `DESTDIR` (which must hold an executable `usr/bin/chairlift-first-run` and no autostart path), and executes the staged `chairlift-updex-helper` rejection paths. For the first run it also checks `chairlift-first-run --help`, runs `--mark-done` and the gate against temporary homes (as `nobody` when the test runs as root), and boots `chairlift --first-run --dry-run` until it logs `first-run: window presented`, then checks that no marker exists. Its Go test package lives at `test/e2e`, imports no puregotk package, and is enforced by that explicit target rather than the `./internal/...` unit-test filter. The readiness markers are a log-line contract — decision record [ADR-0008](../adr/0008-e2e-readiness-is-a-log-marker-contract.md).
 - **Dev build**: `make dev` builds with `CGO_ENABLED=1` and `-race` flag for race detection
 - **Version**: Set via ldflags by goreleaser (`buildVersion`, `buildCommit`, `buildDate`, `buildBy`)
 - **Semantic versioning**: Uses [svu](https://github.com/caarlos0/svu) via `make bump`
 - **CI**: GitHub Actions workflows for test, snapshot, and release (`.github/workflows/`); per [ADR-0034](../org-adrs.md), snapshot publishers use the repository-scoped `goreleaser-nightly` concurrency group with in-progress cancellation so only the newest tested `main` commit publishes to the rolling `dev` release and concurrent GoReleaser uploads cannot collide. Every external `uses:` reference in every workflow is pinned to a full 40-character commit SHA (with its version or source ref retained as a comment); `internal/installcheck.TestWorkflowActionsUseImmutableCommitSHAs` inventories both `.yml` and `.yaml` workflow files and rejects mutable tags, branches, short SHAs, and expressions while allowing repository-local `./` actions.
 - **Release**: GoReleaser config at `.goreleaser.yaml`. Its `metadata.homepage` is the single source of truth for the repository URL and is consumed by `release.footer`, whose "Full Changelog" link is templated from `{{ .Metadata.Homepage }}` rather than a hardcoded owner; two static tests guard that pairing — see the "Install-path consistency (`internal/installcheck`)" section of [package-managers.md](./package-managers.md#install-path-consistency-internalinstallcheck)
 - **Debian publication**: a tag push runs `.github/workflows/release.yml`. GoReleaser creates the GitHub release with the archives, `checksums.txt` and the deb/rpm/apk packages. `actions/attest-build-provenance` then attests all of them, and the final step sends a `publish-deb` `repository_dispatch` with the repository and tag to `frostyard/apt-publisher`, authenticated by `APT_PUBLISH_TOKEN`. apt-publisher is the only writer of `https://repository.frostyard.org/debian/` ([frostyard/core ADR-0055](../org-adrs.md)). It downloads every `.deb` asset of the tag, verifies its provenance against `refs/tags/<tag>`, and publishes it to the codenames registered for chairlift in its `config/producers.tsv`. After apt can download the new packages through the public URL, it dispatches `build` to the image repositories registered there (ADR-0056). The request is not `continue-on-error`, so a failed request fails the release. The rolling `dev` prerelease from `snapshot.yml` is never published to the APT repository and dispatches nothing. `internal/installcheck/release_workflow_test.go` pins the exact release and snapshot step sequences, the request's inputs, the workflow permissions and attestation subjects, and that the only `.deb` packages GoReleaser builds are the two names that must be registered with apt-publisher.
-- **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint), `make install`/`make uninstall` (system install including polkit policies, icons, and wrapper script; default `PREFIX=/usr`, the only prefix that matches where polkit reads policy files and the updex helper's fixed pkexec exec-path annotation — see "Privileged operations" above), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
+- **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint), `make install`/`make uninstall` (system install including the three binaries, polkit policies, icons, and wrapper script, and no autostart entry; default `PREFIX=/usr`, the only prefix that matches where polkit reads policy files and the updex helper's fixed pkexec exec-path annotation — see "Privileged operations" above), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
 
 ### Runtime dependencies
 
@@ -1405,6 +1613,7 @@ page_name:
 - `bootc` + `/usr/libexec/bootc-update-stage` (both optional; UI gated on `bootc.IsBootcBootedCached()`, i.e. `bootc status` reporting a non-null `booted` deployment — not on any sentinel file)
 - `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` (both optional, shipped by native A/B OS images; UI gated on `sysupdate.IsNativeABCached()` and `sysupdate.StageScriptAvailable()`)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
+- First run only: `gsettings` (the Style step), `flatpak` (the Apps step), and `gnome-control-center` (optional; the settings buttons show only when it is on `PATH`)
 
 ### Key external Go dependencies
 

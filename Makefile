@@ -1,8 +1,10 @@
-.PHONY: all build build-app build-helper run clean deps tidy test e2e dev install-deps fmt lint build-linux-amd64 build-linux-arm64 install uninstall bump
+.PHONY: all build build-app build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint build-linux-amd64 build-linux-arm64 install uninstall bump
 
 # Binary names
 BINARY_NAME=chairlift
 HELPER_NAME=chairlift-updex-helper
+# Pure-Go first-run gate (ADR-0014); it must never import a GTK binding
+FIRSTRUN_NAME=chairlift-first-run
 
 # Build directory
 BUILD_DIR=build
@@ -50,7 +52,7 @@ deps:
 tidy:
 	$(GOMOD) tidy
 
-build: build-app build-helper
+build: build-app build-helper build-first-run
 
 build-app:
 	@mkdir -p $(BUILD_DIR)
@@ -59,6 +61,10 @@ build-app:
 build-helper:
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(HELPER_NAME) ./cmd/chairlift-updex-helper
+
+build-first-run:
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(FIRSTRUN_NAME) ./cmd/chairlift-first-run
 
 run: build
 	./$(BUILD_DIR)/$(BINARY_NAME) --dry-run
@@ -71,6 +77,7 @@ test:
 	$(GOTEST) -v ./...
 
 # End-to-end smoke tests require GTK4, Libadwaita, dbus-run-session, and Xvfb.
+# They also run the pure-Go chairlift-first-run gate against temporary homes.
 # They run separately from ci because the ordinary unit-test gate is
 # intentionally usable on hosts without those runtime libraries.
 e2e: build
@@ -116,6 +123,8 @@ install: build
 	install -Dm644 data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
 	# Install updex helper binary
 	install -Dm755 $(BUILD_DIR)/$(HELPER_NAME) $(DESTDIR)$(BINDIR)/$(HELPER_NAME)
+	# Install the first-run gate; the image, not ChairLift, ships its trigger
+	install -Dm755 $(BUILD_DIR)/$(FIRSTRUN_NAME) $(DESTDIR)$(BINDIR)/$(FIRSTRUN_NAME)
 	# Remove legacy passwordless rules from prior source installs
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.bootc.rules
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
@@ -136,6 +145,7 @@ uninstall:
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
 	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
 	rm -f $(DESTDIR)$(BINDIR)/$(HELPER_NAME)
+	rm -f $(DESTDIR)$(BINDIR)/$(FIRSTRUN_NAME)
 	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.bootc.policy
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.bootc.rules
 	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.updex.policy

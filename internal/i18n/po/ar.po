@@ -1,0 +1,49 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Manjur Muammar Rashidi <mhasanmuammar2@gmail.com>, 2023.
+# Ibrahim Kaikaa <ibrahimkaikaa@protonmail.com>, 2023.
+# Muhammad Bahaa <muhammad.bahaa1@gmail.com>, 2023, 2024.
+# Moumn Almunawy <moumnalmunawy2006@gmail.com>, 2023.
+# bob lock <sidkia447@gmail.com>, 2023.
+# Yassin Mohamed <bursledon_backwaters@aleeas.com>, 2023.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2024-07-27 17:09+0000\n"
+"Last-Translator: Muhammad Bahaa <muhammad.bahaa1@gmail.com>\n"
+"Language-Team: Arabic <https://hosted.weblate.org/projects/snow-os/first-"
+"setup/ar/>\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
+"&& n%100<=10 ? 3 : n%100>=11 ? 4 : 5;\n"
+"X-Generator: Weblate 5.7-dev\n"
+
+msgid "Back"
+msgstr "إلى الخلف"
+
+msgid "Next"
+msgstr "التالي"
+
+msgid "Finished!"
+msgstr "انتهى!"
+
+msgid "Please wait until the connection check is done"
+msgstr "الرجاء الانتظار لحين الانتهاء من التحقق بالاتصال."
+
+msgid "Color Scheme"
+msgstr "سمة النظام"
+
+msgid "Choose a color scheme for your system"
+msgstr "اختر سمة اللون لنظامك."
+
+msgid "Dark"
+msgstr "مظلم"
+
+msgid "No Internet Connection!"
+msgstr "لا يوجد إتصال بالإنترنت!"

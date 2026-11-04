@@ -1,0 +1,45 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the snow-first-setup package.
+# Filip Čudek <cudek.filip9494@gmail.com>, 2023.
+# Martin <stefanic.martin@gmail.com>, 2023.
+# Julia Forgac <marek.forgi@protonmail.com>, 2024.
+msgid ""
+msgstr ""
+"Project-Id-Version: snow-first-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-03-07 10:11+0100\n"
+"PO-Revision-Date: 2024-11-15 02:59+0000\n"
+"Last-Translator: Julia Forgac <marek.forgi@protonmail.com>\n"
+"Language-Team: Slovak <https://hosted.weblate.org/projects/snow-os/first-"
+"setup/sk/>\n"
+"Language: sk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2);\n"
+"X-Generator: Weblate 5.9-dev\n"
+
+msgid "Back"
+msgstr "Späť"
+
+msgid "Next"
+msgstr "Ďalej"
+
+msgid "Finished!"
+msgstr "Hotovo!"
+
+msgid "Please wait until the connection check is done"
+msgstr "Prosím počkajte, než sa dokončí kontrola pripojenia"
+
+msgid "Color Scheme"
+msgstr "Vzhľad"
+
+msgid "Choose a color scheme for your system"
+msgstr "Zvoľte si vzhľad systému"
+
+msgid "Dark"
+msgstr "Tmavý"
+
+msgid "No Internet Connection!"
+msgstr "Žiadne internetové pripojenie!"

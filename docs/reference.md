@@ -148,6 +148,24 @@ authorization rule.
 | `issues` | Issue tracker URL |
 | `chat` | Community chat or discussions URL |
 
+### First-Run Page (`first_run_page`)
+
+Not a sidebar page: it configures `chairlift --first-run`
+([ADR-0014](adr/0014-first-run-mode.md)).
+
+| Group | Key | Description |
+|-------|-----|-------------|
+| Apps step | `first_run_apps_group` | The first run's application picker |
+
+`first_run_apps_group` supports:
+
+| Field | Description |
+|-------|-------------|
+| `apps_path` | Application list (JSON); default `/usr/share/snow/first-run/apps.json` |
+
+A disabled group, a configuration error, or a missing or invalid list hides
+the Apps step; the user can still finish the first run.
+
 ## Example
 
 A configuration that disables all Homebrew features:

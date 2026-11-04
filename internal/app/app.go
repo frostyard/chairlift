@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/frostyard/chairlift/internal/bootc"
+	"github.com/frostyard/chairlift/internal/firstrun"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/homebrew"
@@ -28,6 +29,11 @@ import (
 
 const appID = "org.frostyard.ChairLift"
 
+// firstRunAppID is the application ID of `chairlift --first-run`
+// (ADR-0014). With the main ID, a running ChairLift would receive the
+// activation and the first-run window would never show.
+const firstRunAppID = "org.frostyard.ChairLift.FirstRun"
+
 var (
 	gTypeApplication gobject.Type
 	appRegistry      *gobj.InstanceRegistry
@@ -38,6 +44,10 @@ type Application struct {
 	adw.Application
 	window *window.Window
 	dryRun bool
+	// firstRun is true for `chairlift --first-run`: activation builds the
+	// first-run window instead of the main window.
+	firstRun       bool
+	firstRunWindow *window.FirstRunWindow
 }
 
 func init() {
@@ -71,12 +81,28 @@ func init() {
 
 // New creates a new ChairLift application
 func New() *Application {
-	obj := gobject.NewObject(gTypeApplication, "application_id", appID, "flags", gio.GApplicationFlagsNoneValue)
+	// Check for --first-run before the GObject exists: it selects the
+	// application ID.
+	firstRun := false
+	id := appID
+	for _, arg := range os.Args[1:] {
+		if arg == "--first-run" {
+			firstRun = true
+			id = firstRunAppID
+			break
+		}
+	}
+
+	obj := gobject.NewObject(gTypeApplication, "application_id", id, "flags", gio.GApplicationFlagsNoneValue)
 	if obj == nil {
 		log.Fatal("Failed to create application")
 	}
 
 	app := (*Application)(appRegistry.Get(obj.GoPointer()))
+	app.firstRun = firstRun
+	if firstRun {
+		log.Println("Running in first-run mode")
+	}
 
 	// Check for --dry-run flag before GTK processes args
 	for _, arg := range os.Args[1:] {
@@ -90,6 +116,7 @@ func New() *Application {
 			sysupdate.SetDryRun(true)
 			updex.SetDryRun(true)
 			views.SetDryRun(true)
+			firstrun.SetDryRun(true)
 			break
 		}
 	}
@@ -102,6 +129,11 @@ func New() *Application {
 
 // onActivate is called when the application is activated
 func (a *Application) onActivate() {
+	if a.firstRun {
+		a.activateFirstRun()
+		return
+	}
+
 	activateStart := time.Now()
 	log.Println("ChairLift activated")
 
@@ -119,6 +151,16 @@ func (a *Application) onActivate() {
 	a.setupKeyboardShortcuts(win.NavigationItems())
 	win.Present()
 	log.Printf("app: window presented in %s (since activate)", time.Since(activateStart))
+}
+
+// activateFirstRun builds and presents the first-run window, or presents
+// the existing one when the first run is activated again.
+func (a *Application) activateFirstRun() {
+	log.Println("ChairLift first run activated")
+	if a.firstRunWindow == nil {
+		a.firstRunWindow = window.NewFirstRun(a.Application)
+	}
+	a.firstRunWindow.Present()
 }
 
 // registerQuitAction registers the app.quit action that navigation's
@@ -150,6 +192,14 @@ func (a *Application) registerOptions() {
 		glib.GOptionFlagNoneValue,
 		glib.GOptionArgNoneValue,
 		"Don't make any changes to the system.",
+		"",
+	)
+	a.AddMainOption(
+		"first-run",
+		0,
+		glib.GOptionFlagNoneValue,
+		glib.GOptionArgNoneValue,
+		"Show the first-run setup window (started by chairlift-first-run).",
 		"",
 	)
 }
