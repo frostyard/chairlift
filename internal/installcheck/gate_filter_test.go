@@ -184,6 +184,21 @@ func gateValidateExactFilter(command string) error {
 	return nil
 }
 
+// gateSkipsDir reports whether the go tool's "./..." pattern skips the
+// directory, so test files beneath it belong to no package the gate runs and
+// are neither hidden nor selected by its filter. The go tool ignores
+// directories whose names begin with "." or "_", directories named testdata,
+// and nested modules. Without this the walk counted agent worktrees under
+// .claude/worktrees/ — complete checkouts of this repository — as hidden
+// tests.
+func gateSkipsDir(path, name string) bool {
+	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata" {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(path, "go.mod"))
+	return err == nil
+}
+
 func gateHiddenFunctionReasons(relPath, name string) []string {
 	var reasons []string
 	slashPath := filepath.ToSlash(relPath)
@@ -335,7 +350,7 @@ func TestGateFilterHidesNoHermeticTest(t *testing.T) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if entry.Name() == ".git" {
+			if path != RepoRoot() && gateSkipsDir(path, entry.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -389,4 +404,36 @@ func TestGateFilterHidesNoHermeticTest(t *testing.T) {
 		t.Errorf("hidden by the chairlift gate filter:\n- %s", strings.Join(hiddenFunctions, "\n- "))
 	}
 	t.Logf("gate filter counts: functions checked=%d, exempt e2e=%d, hidden=%d", checked, exemptE2E, hidden)
+}
+
+func TestGateSkipsDirMatchesGoPackagePatterns(t *testing.T) {
+	root := t.TempDir()
+	nested := filepath.Join(root, "nested")
+	if err := os.Mkdir(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nested, "go.mod"), []byte("module example.com/nested\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plain := filepath.Join(root, "internal")
+	if err := os.Mkdir(plain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		path, name string
+		want       bool
+	}{
+		{filepath.Join(root, ".claude"), ".claude", true},
+		{filepath.Join(root, ".git"), ".git", true},
+		{filepath.Join(root, "_scratch"), "_scratch", true},
+		{filepath.Join(root, "testdata"), "testdata", true},
+		{nested, "nested", true},
+		{plain, "internal", false},
+	}
+	for _, tt := range tests {
+		if got := gateSkipsDir(tt.path, tt.name); got != tt.want {
+			t.Errorf("gateSkipsDir(%q) = %v, want %v", tt.name, got, tt.want)
+		}
+	}
 }

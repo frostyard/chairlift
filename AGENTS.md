@@ -64,6 +64,9 @@ all start with `TestI` and would be silently skipped; name them so the first
 letter after `Test` is not `I` (see the GTK-headless skill below).
 `internal/installcheck.TestGateFilterHidesNoHermeticTest` now fails when the
 filter hides a hermetic test or when a test function sits outside `./internal/...`.
+Its walk skips what the go tool's `./...` pattern skips — directories starting
+with `.` or `_`, `testdata`, and nested modules — so agent worktrees under
+`.claude/worktrees/` do not count as hidden tests.
 
 The separately invoked tests under `test/e2e/` are outside the
 `./internal/...` unit-test scope by design. They are enforced by the E2E
