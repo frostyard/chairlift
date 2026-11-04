@@ -50,3 +50,53 @@ func TestUpdatesPageUsesGuardedRefreshDecisions(t *testing.T) {
 		}
 	}
 }
+
+// TestUpdatesPageGuardsFlatpakUpdateRefreshes pins the Flatpak update
+// inventory reload to the same discipline as the Homebrew one: every reload
+// takes a RefreshGate generation, only the current generation publishes, and a
+// load in which both installation queries failed keeps the last known rows and
+// count through OutdatedRefresh instead of publishing an empty inventory.
+func TestUpdatesPageGuardsFlatpakUpdateRefreshes(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller could not locate wiring_test.go")
+	}
+	viewsDir := filepath.Clean(filepath.Join(filepath.Dir(filename), ".."))
+	read := func(name string) string {
+		t.Helper()
+		source, err := os.ReadFile(filepath.Join(viewsDir, name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		return string(source)
+	}
+	updates := read("updates_page.go")
+
+	for _, required := range []string{
+		`generation := uh.flatpakUpdatesRefresh.Begin()`,
+		`go uh.loadFlatpakUpdatesGeneration(generation)`,
+		`!uh.flatpakUpdatesRefresh.IsCurrent(generation)`,
+		`status.Authoritative,`,
+		`uh.updateCounts.Get(badgestate.Flatpak),`,
+		`uh.updateCounts.Set(badgestate.Flatpak, refresh.Count)`,
+		`if !refresh.ReplaceRows {`,
+	} {
+		if !strings.Contains(updates, required) {
+			t.Errorf("updates-page Flatpak refresh wiring does not contain %q", required)
+		}
+	}
+	for _, forbidden := range []string{
+		`go uh.loadFlatpakUpdates()`,
+		`uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))`,
+	} {
+		if strings.Contains(updates, forbidden) {
+			t.Errorf("updates_page.go still contains unguarded Flatpak refresh %q", forbidden)
+		}
+	}
+	if got := strings.Count(updates, `!uh.flatpakUpdatesRefresh.IsCurrent(generation)`); got < 2 {
+		t.Errorf("flatpakUpdatesRefresh.IsCurrent guards = %d, want the not-installed and the query publication paths both guarded", got)
+	}
+	if !strings.Contains(read("views.go"), `flatpakUpdatesRefresh actionstate.RefreshGate`) {
+		t.Error("views.go does not declare flatpakUpdatesRefresh actionstate.RefreshGate")
+	}
+}

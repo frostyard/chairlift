@@ -168,6 +168,13 @@ An agent must not break these:
   changing rows or counts. A live package success removes its row, decrements
   the count/badge, and refreshes; a failed refresh preserves that last known
   row/count state instead of replacing it with an invented zero.
+- **Flatpak update reloads are generation-guarded and preserve known
+  state.** `loadFlatpakUpdates` takes an `actionstate.RefreshGate` generation
+  on the main thread and every publication checks it, so a stale reload
+  never replaces newer rows or counts. A load in which both installation
+  queries failed (`flatpakstatus.Result.Authoritative == false`) keeps the
+  last known rows and count through `actionstate.OutdatedRefresh` and only
+  reports that the check failed.
 - **Homebrew application actions are typed and refresh-safe.** Search queries
   both formula and cask namespaces and carries the result kind into
   `brew install [--cask]`. Search and installed-package refreshes use separate

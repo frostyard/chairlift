@@ -130,8 +130,9 @@ func (uh *UserHome) buildUpdatesPage() {
 
 		page.Add(group)
 
-		// Load flatpak updates asynchronously
-		go uh.loadFlatpakUpdates()
+		// Load flatpak updates asynchronously. loadFlatpakUpdates takes its
+		// refresh generation here, then queries on a goroutine.
+		uh.loadFlatpakUpdates()
 	}
 
 	// Homebrew Updates group
@@ -448,13 +449,27 @@ func (uh *UserHome) loadOutdatedPackagesGeneration(generation uint64, done func(
 	})
 }
 
-// loadFlatpakUpdates loads available Flatpak updates asynchronously
+// loadFlatpakUpdates starts a generation-guarded refresh of the Flatpak
+// update inventory. Only the newest request may publish, so a slow reload
+// that a later one overtook cannot re-add a row the later one retired or
+// overwrite a newer badge count. Call it on the main thread so concurrent
+// completions take generations in the order they finished.
 func (uh *UserHome) loadFlatpakUpdates() {
-	if !flatpak.IsInstalledCached() {
-		uh.updateCounts.Set(badgestate.Flatpak, 0)
-		uh.updateBadgeCount()
+	generation := uh.flatpakUpdatesRefresh.Begin()
+	go uh.loadFlatpakUpdatesGeneration(generation)
+}
 
+// loadFlatpakUpdatesGeneration runs one Flatpak update refresh on a worker
+// goroutine and publishes it on the main thread only while generation is
+// still current.
+func (uh *UserHome) loadFlatpakUpdatesGeneration(generation uint64) {
+	if !flatpak.IsInstalledCached() {
 		sgtk.RunOnMainThread(func() {
+			if !uh.flatpakUpdatesRefresh.IsCurrent(generation) {
+				return
+			}
+			uh.updateCounts.Set(badgestate.Flatpak, 0)
+			uh.updateBadgeCount()
 			if uh.flatpakUpdatesExpander != nil {
 				uh.flatpakUpdatesExpander.SetSubtitle("Flatpak not installed")
 			}
@@ -485,12 +500,30 @@ func (uh *UserHome) loadFlatpakUpdates() {
 
 	status := flatpakstatus.Subtitle(len(allUpdates), userErr != nil, systemErr != nil)
 
-	// Update the badge count
-	uh.updateCounts.Set(badgestate.Flatpak, len(allUpdates))
-	uh.updateBadgeCount()
-
 	sgtk.RunOnMainThread(func() {
+		if !uh.flatpakUpdatesRefresh.IsCurrent(generation) {
+			return
+		}
+
+		// A load in which both installation queries failed learned nothing,
+		// so it keeps the last known count and rows instead of publishing an
+		// empty inventory.
+		refresh := actionstate.OutdatedRefresh(
+			status.Authoritative,
+			uh.updateCounts.Get(badgestate.Flatpak),
+			len(allUpdates),
+		)
+		uh.updateCounts.Set(badgestate.Flatpak, refresh.Count)
+		uh.updateBadgeCount()
+
 		if uh.flatpakUpdatesExpander == nil {
+			return
+		}
+
+		if !refresh.ReplaceRows {
+			// Say the check failed, but leave the previously discovered
+			// rows and their expansion reachable.
+			uh.flatpakUpdatesExpander.SetSubtitle(status.Subtitle)
 			return
 		}
 
@@ -539,8 +572,10 @@ func (uh *UserHome) loadFlatpakUpdates() {
 					}
 					sgtk.RunOnMainThread(func() {
 						uh.toastAdder.ShowToast(actionmsg.Update(flatpak.IsDryRun(), appID))
-						// Refresh the updates list
-						go uh.loadFlatpakUpdates()
+						// Refresh the updates list. Called on the main
+						// thread so concurrent completions take generations
+						// in the order they finished.
+						uh.loadFlatpakUpdates()
 					})
 				}()
 			}
