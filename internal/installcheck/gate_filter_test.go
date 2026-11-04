@@ -70,39 +70,75 @@ func gateMakefileCITestCommands(text string) []string {
 	return commands
 }
 
-func gateRequireExactFilter(t *testing.T, source, command string) {
-	t.Helper()
+func gateValidateExactFilter(command string) error {
 	fields := strings.Fields(strings.ReplaceAll(command, "$(GOTEST)", "go test"))
 	for i := range fields {
 		fields[i] = strings.Trim(fields[i], "\"'")
 	}
 
+	validGoTest := false
 	packageCount := 0
 	runCount := 0
 	skipCount := 0
-	valid := false
-	for i := 0; i+1 < len(fields); i++ {
-		if fields[i] == "go" && fields[i+1] == "test" {
-			valid = true
+	for i := 0; i < len(fields); i++ {
+		field := fields[i]
+		if i+1 < len(fields) && field == "go" && fields[i+1] == "test" {
+			validGoTest = true
 		}
-		if fields[i] == "./internal/..." {
+
+		if field == "./internal/..." {
 			packageCount++
 		}
-		if fields[i] == "-run" && fields[i+1] == "^Test[^I]" {
+		if field == "./..." || field == "../..." || strings.HasPrefix(field, "./") || strings.HasPrefix(field, "../") {
+			if field != "./internal/..." {
+				return fmt.Errorf("the gate filter changed: update this guard: extra or wrong package pattern %q", field)
+			}
+		}
+
+		if field == "-run" {
 			runCount++
+			if runCount != 1 {
+				return fmt.Errorf("the gate filter changed: update this guard: duplicate -run or -test.run")
+			}
+			if i+1 >= len(fields) || fields[i+1] != "^Test[^I]" {
+				return fmt.Errorf("the gate filter changed: update this guard: -run must be ^Test[^I]")
+			}
+			i++
+			continue
 		}
-		if fields[i] == "-skip" && fields[i+1] == "Integration" {
+		if strings.HasPrefix(field, "-run=") || field == "--run" || strings.HasPrefix(field, "--run=") || field == "-test.run" || strings.HasPrefix(field, "-test.run=") {
+			return fmt.Errorf("the gate filter changed: update this guard: rejected run filter form %q", field)
+		}
+
+		if field == "-skip" {
 			skipCount++
+			if skipCount != 1 {
+				return fmt.Errorf("the gate filter changed: update this guard: duplicate -skip or -test.skip")
+			}
+			if i+1 >= len(fields) || fields[i+1] != "Integration" {
+				return fmt.Errorf("the gate filter changed: update this guard: -skip must be Integration")
+			}
+			i++
+			continue
+		}
+		if strings.HasPrefix(field, "-skip=") || field == "--skip" || strings.HasPrefix(field, "--skip=") || field == "-test.skip" || strings.HasPrefix(field, "-test.skip=") {
+			return fmt.Errorf("the gate filter changed: update this guard: rejected skip filter form %q", field)
 		}
 	}
-	for _, field := range fields {
-		if field != "./internal/..." && (strings.HasPrefix(field, "./") || strings.Contains(field, "/...")) {
-			valid = false
-		}
+
+	if !validGoTest {
+		return fmt.Errorf("the gate filter changed: update this guard: no go test command")
 	}
-	if !valid || packageCount != 1 || runCount != 1 || skipCount != 1 {
-		t.Errorf("the gate filter changed: update this guard: %s: %q", source, command)
+	if packageCount != 1 {
+		return fmt.Errorf("the gate filter changed: update this guard: package pattern must occur exactly once as ./internal/...")
 	}
+	if runCount != 1 {
+		return fmt.Errorf("the gate filter changed: update this guard: -run must occur exactly once")
+	}
+	if skipCount != 1 {
+		return fmt.Errorf("the gate filter changed: update this guard: -skip must occur exactly once")
+	}
+	return nil
 }
 
 func gateHiddenFunctionReasons(relPath, name string) []string {
@@ -112,11 +148,18 @@ func gateHiddenFunctionReasons(relPath, name string) []string {
 	if !underInternal {
 		reasons = append(reasons, "package is outside ./internal/...")
 	}
-	if strings.HasPrefix(name, "TestI") {
-		reasons = append(reasons, `name begins with "TestI" and is not selected by ^Test[^I]`)
-	}
-	if strings.HasPrefix(name, "Test") && strings.Contains(name, "Integration") {
-		reasons = append(reasons, `name contains "Integration" and is excluded by -skip "Integration"`)
+
+	if strings.HasPrefix(name, "Test") {
+		if !gateSelectableTestName.MatchString(name) {
+			if name == "Test" {
+				reasons = append(reasons, "name does not match ^Test[^I]")
+			} else {
+				reasons = append(reasons, `name does not match ^Test[^I]`)
+			}
+		}
+		if strings.Contains(name, "Integration") {
+			reasons = append(reasons, `name contains "Integration" and is excluded by -skip "Integration"`)
+		}
 	}
 	if strings.HasPrefix(name, "Example") {
 		reasons = append(reasons, "Example functions are not selected by -run ^Test[^I]")
@@ -125,6 +168,79 @@ func gateHiddenFunctionReasons(relPath, name string) []string {
 		reasons = append(reasons, "Fuzz functions are not selected by -run ^Test[^I]")
 	}
 	return reasons
+}
+
+func TestGateValidateExactFilter(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		command string
+		wantErr bool
+	}{
+		{name: "workflow unit command", command: `go test -v ./internal/... -coverprofile=coverage.out -covermode=atomic -run "^Test[^I]" -skip "Integration"`},
+		{name: "makefile ci race command", command: `CGO_ENABLED=1 $(GOTEST) -race -short ./internal/... -run "^Test[^I]" -skip "Integration"`},
+		{name: "duplicate skip", command: `go test ./internal/... -run "^Test[^I]" -skip "Integration" -skip "Goreleaser"`, wantErr: true},
+		{name: "duplicate run", command: `go test ./internal/... -run "^Test[^I]" -run "^TestFoo" -skip "Integration"`, wantErr: true},
+		{name: "skip equals", command: `go test ./internal/... -run "^Test[^I]" -skip=Goreleaser`, wantErr: true},
+		{name: "test skip pair", command: `go test ./internal/... -run "^Test[^I]" -test.skip Goreleaser`, wantErr: true},
+		{name: "test skip equals", command: `go test ./internal/... -run "^Test[^I]" -test.skip=Goreleaser`, wantErr: true},
+		{name: "run wrong value", command: `go test ./internal/... -run "^TestFoo" -skip "Integration"`, wantErr: true},
+		{name: "missing skip", command: `go test ./internal/... -run "^Test[^I]"`, wantErr: true},
+		{name: "wrong package", command: `go test ./... -run "^Test[^I]" -skip "Integration"`, wantErr: true},
+		{name: "extra package", command: `go test ./internal/... ./cmd/... -run "^Test[^I]" -skip "Integration"`, wantErr: true},
+		{name: "run equals", command: `go test ./internal/... -run=^TestFoo -skip "Integration"`, wantErr: true},
+		{name: "long run", command: `go test ./internal/... --run "^Test[^I]" -skip "Integration"`, wantErr: true},
+		{name: "test run pair", command: `go test ./internal/... -test.run "^TestFoo" -skip "Integration"`, wantErr: true},
+		{name: "test run equals", command: `go test ./internal/... -test.run=^TestFoo -skip "Integration"`, wantErr: true},
+		{name: "long skip", command: `go test ./internal/... -run "^Test[^I]" --skip "Integration"`, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := gateValidateExactFilter(tc.command)
+			if tc.wantErr && err == nil {
+				t.Errorf("gateValidateExactFilter(%q) = nil, want error", tc.command)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("gateValidateExactFilter(%q) = %v, want nil", tc.command, err)
+			}
+			if tc.wantErr && err != nil && !strings.Contains(err.Error(), "the gate filter changed: update this guard") {
+				t.Errorf("gateValidateExactFilter(%q) error = %q, want guard-change wording", tc.command, err)
+			}
+		})
+	}
+}
+
+func TestGateHiddenFunctionReasons(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		relPath    string
+		function   string
+		wantHidden bool
+		wantReason string
+	}{
+		{name: "exact Test hidden", relPath: "internal/x/test_test.go", function: "Test", wantHidden: true, wantReason: "name does not match ^Test[^I]"},
+		{name: "TestI hidden", relPath: "internal/x/test_test.go", function: "TestIsValid", wantHidden: true, wantReason: "name does not match ^Test[^I]"},
+		{name: "Integration hidden", relPath: "internal/x/test_test.go", function: "TestFooIntegration", wantHidden: true, wantReason: `name contains "Integration"`},
+		{name: "outside internal hidden", relPath: "cmd/x/test_test.go", function: "TestFoo", wantHidden: true, wantReason: "package is outside ./internal/..."},
+		{name: "Example hidden", relPath: "internal/x/test_test.go", function: "ExampleFoo", wantHidden: true, wantReason: "Example functions are not selected"},
+		{name: "Fuzz hidden", relPath: "internal/x/test_test.go", function: "FuzzFoo", wantHidden: true, wantReason: "Fuzz functions are not selected"},
+		{name: "normal internal Test selected", relPath: "internal/x/test_test.go", function: "TestFoo", wantHidden: false},
+		{name: "TestMain internal selected", relPath: "internal/x/test_test.go", function: "TestMain", wantHidden: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reasons := gateHiddenFunctionReasons(tc.relPath, tc.function)
+			if tc.wantHidden && len(reasons) == 0 {
+				t.Fatalf("gateHiddenFunctionReasons(%q, %q) = nil, want hidden", tc.relPath, tc.function)
+			}
+			if !tc.wantHidden && len(reasons) != 0 {
+				t.Fatalf("gateHiddenFunctionReasons(%q, %q) = %v, want selected", tc.relPath, tc.function, reasons)
+			}
+			if tc.wantReason != "" {
+				joined := strings.Join(reasons, "; ")
+				if !strings.Contains(joined, tc.wantReason) {
+					t.Errorf("gateHiddenFunctionReasons(%q, %q) = %v, want reason containing %q", tc.relPath, tc.function, reasons, tc.wantReason)
+				}
+			}
+		})
+	}
 }
 
 func TestGateFilterHidesNoHermeticTest(t *testing.T) {
@@ -138,7 +254,9 @@ func TestGateFilterHidesNoHermeticTest(t *testing.T) {
 		t.Errorf("the gate filter changed: update this guard: %s has %d go test commands, want at least 2", workflowPath, len(workflowCommands))
 	}
 	for _, command := range workflowCommands {
-		gateRequireExactFilter(t, workflowPath, command)
+		if err := gateValidateExactFilter(command); err != nil {
+			t.Errorf("%s: %v: %q", workflowPath, err, command)
+		}
 	}
 
 	makefilePath := "Makefile"
@@ -151,7 +269,9 @@ func TestGateFilterHidesNoHermeticTest(t *testing.T) {
 		t.Errorf("the gate filter changed: update this guard: %s ci target has %d go test commands, want at least 2", makefilePath, len(makefileCommands))
 	}
 	for _, command := range makefileCommands {
-		gateRequireExactFilter(t, makefilePath+" ci target", command)
+		if err := gateValidateExactFilter(command); err != nil {
+			t.Errorf("%s ci target: %v: %q", makefilePath, err, command)
+		}
 	}
 
 	checked := 0
@@ -198,14 +318,8 @@ func TestGateFilterHidesNoHermeticTest(t *testing.T) {
 				continue
 			}
 
-			var reasons []string
-			reasons = gateHiddenFunctionReasons(slashPath, name)
-			if strings.HasPrefix(name, "Test") {
-				underInternal := slashPath == "internal" || strings.HasPrefix(slashPath, "internal/")
-				if underInternal && gateSelectableTestName.MatchString(name) && !strings.Contains(name, "Integration") {
-					reasons = nil
-				}
-			}
+			reasons := gateHiddenFunctionReasons(slashPath, name)
+			// -skip "Integration" is matched against top-level test names, not t.Run subtest names.
 			if len(reasons) > 0 {
 				hidden++
 				hiddenFunctions = append(hiddenFunctions, fmt.Sprintf("%s: %s (%s)", slashPath, name, strings.Join(reasons, "; ")))
