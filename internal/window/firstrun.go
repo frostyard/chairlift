@@ -431,7 +431,7 @@ func (w *FirstRunWindow) startProgress() {
 			Complete: func() firstrun.Completion {
 				return firstrun.CompleteAt(dryRun, paths, pathsErr)
 			},
-			IsDone: func() bool { return firstrun.DoneAt(paths, pathsErr) },
+			Gate: func() firstrun.GateState { return firstrun.GateStateAt(paths, pathsErr) },
 		})
 		// CompleteAt logs nothing itself; its Log line carries the dry-run
 		// preview, the markers written, or the failure, which the Done

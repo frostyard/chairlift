@@ -128,7 +128,7 @@ func TestCompletionPathsShareOneMarkerWriter(t *testing.T) {
 	for _, path := range windowFirstRunFiles(t) {
 		window.WriteString(readSource(t, path))
 	}
-	for _, fragment := range []string{"firstrun.CompleteAt(", "firstrun.IsDryRun()", "firstrun.RunProgress(", "firstrun.DoneAt(paths, pathsErr)", "done.Warning", "done.Entries"} {
+	for _, fragment := range []string{"firstrun.CompleteAt(", "firstrun.IsDryRun()", "firstrun.RunProgress(", "firstrun.GateStateAt(paths, pathsErr)", "done.Warning", "done.Entries"} {
 		if !strings.Contains(window.String(), fragment) {
 			t.Errorf("internal/window/firstrun*.go does not contain %q", fragment)
 		}

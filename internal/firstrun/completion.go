@@ -35,13 +35,13 @@ type Completion struct {
 	// DoneDescription is the msgid the Done step shows: the dry-run preview
 	// in dry run, so the window never claims a change that did not happen.
 	// After a failure it is the "starts again at your next login" text, but
-	// DoneState replaces it when a marker exists after all (a partial
-	// failure), because the gate then does not start the first run again.
+	// DoneState keeps it only when the gate state is GateRunsAgain.
 	DoneDescription string
 	// Err is set when the completion could not be recorded in full: the
 	// config home is unknown, or a MarkDone step failed. MarkDone may have
-	// written a marker before a later step failed, so Err alone does not
-	// tell whether the next login runs the first run again; IsDone does.
+	// written a marker before a later step failed, and an unknown config
+	// home stops the gate too, so Err alone does not tell whether the next
+	// login runs the first run again; GateStateAt does.
 	Err error
 	// ShowWarning tells the Done step to show the warning icon instead of
 	// the success icon. It is true exactly when Err is set.
@@ -129,20 +129,21 @@ type Done struct {
 }
 
 // DoneState composes the Done step from the failed actions' entries, the
-// completion outcome, and done: the gate state after the completion
-// (DoneAt), that is, whether the next login skips the first run. The action
-// entries come first, then the completion entry; the warning shows when any
-// entry exists. When the completion failed, the description is "The first
-// run starts again at your next login" only when done is false; when a
-// marker exists after all (a partial MarkDone failure), the gate skips the
-// next run and the description is "Setup finished with errors".
-func DoneState(actionEntries []ErrorEntry, c Completion, done bool) Done {
+// completion outcome, and gate: the gate state after the completion
+// (GateStateAt). The action entries come first, then the completion entry;
+// the warning shows when any entry exists. When the completion failed, the
+// description is "The first run starts again at your next login" only for
+// GateRunsAgain (no marker exists, so the gate execs ChairLift). For
+// GateDone (a partial MarkDone failure left a marker) and GateUnknown (no
+// config home: the gate exits 1) it is "Setup finished with errors", which
+// promises no further run.
+func DoneState(actionEntries []ErrorEntry, c Completion, gate GateState) Done {
 	entries := append(append([]ErrorEntry(nil), actionEntries...), c.ErrorLog()...)
 	description := c.DoneDescription
 	if c.Err != nil {
-		description = i18n.MsgCompletionFailedDesc
-		if done {
-			description = i18n.MsgFinishedWithErrors
+		description = i18n.MsgFinishedWithErrors
+		if gate == GateRunsAgain {
+			description = i18n.MsgCompletionFailedDesc
 		}
 	}
 	return Done{
@@ -165,8 +166,9 @@ type ProgressSteps struct {
 	Drain func()
 	// Complete records the completion (CompleteAt in production).
 	Complete func() Completion
-	// IsDone reports the gate state after Complete (DoneAt in production).
-	IsDone func() bool
+	// Gate reports the gate state after Complete (GateStateAt in
+	// production).
+	Gate func() GateState
 }
 
 // RunProgress is the Progress worker's whole sequence, in this order: run
@@ -182,5 +184,5 @@ func RunProgress(actions []Action, steps ProgressSteps) (Completion, Done) {
 		steps.Drain()
 	}
 	completion := steps.Complete()
-	return completion, DoneState(ErrorLog(actions, report), completion, steps.IsDone())
+	return completion, DoneState(ErrorLog(actions, report), completion, steps.Gate())
 }

@@ -65,11 +65,13 @@ Facts that constrain the move:
    `firstrun.Completion` carries `Err` and `ShowWarning`, and the Done step
    shows the warning icon and an error-log entry ("Setup failed: Could not
    record that the first run is finished" and the error text). The text
-   follows the real gate state after the failure (`firstrun.DoneAt`): "The
-   first run starts again at your next login" only when no marker exists;
-   when `MarkDone` wrote a marker before a later step failed, the gate skips
-   the next login and the text is "Setup finished with errors". There is no
-   retry button.
+   follows the real gate state after the failure (`firstrun.GateStateAt`):
+   "The first run starts again at your next login" only for
+   `GateRunsAgain` (the paths are known and no marker exists). For
+   `GateDone` (`MarkDone` wrote a marker before a later step failed, so the
+   gate skips the next login) and `GateUnknown` (no config home, so the gate
+   exits 1 and starts nothing) the text is "Setup finished with errors".
+   There is no retry button.
 4. **The Progress step cannot be cut short.** While the Progress actions run
    (`Flow.CanClose` is false), the window blocks `close-request` and holds
    the GApplication, so the Flatpak actions and the marker write finish. The

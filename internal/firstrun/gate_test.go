@@ -98,10 +98,10 @@ func TestCompleteReportsMarkDoneFailure(t *testing.T) {
 	if CompleteAt(false, p, nil).Err == nil {
 		t.Error("CompleteAt() lost MarkDone's error")
 	}
-	if DoneAt(p, nil) {
-		t.Fatal("DoneAt() = true after a total failure")
+	if got := GateStateAt(p, nil); got != GateRunsAgain {
+		t.Fatalf("GateStateAt() = %v after a total failure, want GateRunsAgain", got)
 	}
-	if done := DoneState(nil, decision, DoneAt(p, nil)); done.Description != i18n.MsgCompletionFailedDesc {
+	if done := DoneState(nil, decision, GateStateAt(p, nil)); done.Description != i18n.MsgCompletionFailedDesc {
 		t.Errorf("DoneState().Description = %q, want %q", done.Description, i18n.MsgCompletionFailedDesc)
 	}
 	assertGateExecs(t, gateEnvFor(p.ConfigHome))
@@ -119,14 +119,14 @@ func TestCompletePartialFailureDoesNotPromiseAnotherRun(t *testing.T) {
 	if decision.Err == nil || !decision.ShowWarning {
 		t.Fatalf("CompleteAt() = %+v, want the remove error", decision)
 	}
-	if !IsDone(p) || !DoneAt(p, nil) {
+	if !IsDone(p) || GateStateAt(p, nil) != GateDone {
 		t.Fatal("IsDone() = false; the markers were written before the remove failed")
 	}
 	got := Gate(gateEnvFor(p.ConfigHome))
 	if got.Code != 0 || got.ExecPath != "" || !strings.Contains(got.Stderr, "first-run: already done") {
 		t.Fatalf("Gate() = %+v, want exit 0 \"already done\"", got)
 	}
-	done := DoneState(nil, decision, DoneAt(p, nil))
+	done := DoneState(nil, decision, GateStateAt(p, nil))
 	if done.Description == i18n.MsgCompletionFailedDesc || done.Description != i18n.MsgFinishedWithErrors {
 		t.Errorf("DoneState().Description = %q, want %q, not the \"starts again\" text", done.Description, i18n.MsgFinishedWithErrors)
 	}
@@ -144,18 +144,21 @@ func TestCompleteAtReportsMissingConfigHome(t *testing.T) {
 		t.Fatalf("CompleteAt() Err = %v, want it to wrap %v", decision.Err, pathsErr)
 	}
 	assertCompletionFailure(t, decision, pathsErr)
-	if DoneAt(Paths{}, pathsErr) {
-		t.Fatal("DoneAt() = true with unknown paths")
+	if got := GateStateAt(Paths{}, pathsErr); got != GateUnknown {
+		t.Fatalf("GateStateAt() = %v with unknown paths, want GateUnknown", got)
 	}
-	if done := DoneState(nil, decision, DoneAt(Paths{}, pathsErr)); done.Description != i18n.MsgCompletionFailedDesc {
-		t.Errorf("DoneState().Description = %q, want %q", done.Description, i18n.MsgCompletionFailedDesc)
-	}
-	// Nothing was written anywhere: at a login with a normal environment
-	// the gate starts the first run again. (In the same broken environment
-	// it exits 1, because it cannot find a config home either.)
-	assertGateExecs(t, gateEnvFor(filepath.Join(t.TempDir(), "cfg")))
+	// The gate in this environment cannot find a config home either: it
+	// exits 1 and starts nothing, so the Done step must not promise another
+	// run.
 	if broken := Gate(GateEnv{UID: 1000, Getenv: envOf(nil)}); broken.Code != 1 || broken.ExecPath != "" {
-		t.Errorf("Gate(no config home) = %+v, want exit 1", broken)
+		t.Errorf("Gate(no config home) = %+v, want exit 1 and no exec", broken)
+	}
+	done := DoneState(nil, decision, GateStateAt(Paths{}, pathsErr))
+	if done.Description == i18n.MsgCompletionFailedDesc || done.Description != i18n.MsgFinishedWithErrors {
+		t.Errorf("DoneState().Description = %q, want %q, not the \"starts again\" text", done.Description, i18n.MsgFinishedWithErrors)
+	}
+	if !done.Warning || len(done.Entries) != 1 {
+		t.Errorf("DoneState() = %+v, want the warning and the error entry", done)
 	}
 
 	// In dry run nothing would be written, so a missing config home is no
@@ -183,9 +186,28 @@ func assertCompletionFailure(t *testing.T, decision Completion, cause error) {
 		!strings.Contains(entries[0].Message, cause.Error()) {
 		t.Errorf("ErrorLog() = %+v, want one translated entry with %q", entries, cause)
 	}
-	done := DoneState(nil, decision, false)
+	done := DoneState(nil, decision, GateRunsAgain)
 	if !done.Warning || len(done.Entries) != 1 || done.Description != i18n.MsgCompletionFailedDesc {
-		t.Errorf("DoneState() = %+v, want the warning, the entry and the failure text", done)
+		t.Errorf("DoneState(GateRunsAgain) = %+v, want the warning, the entry and the retry text", done)
+	}
+}
+
+// TestGateStateAt covers the 3 gate states and that the zero value never
+// promises another run.
+func TestGateStateAt(t *testing.T) {
+	if GateState(0) != GateUnknown {
+		t.Fatal("the zero GateState is not GateUnknown")
+	}
+	p := testPaths(t)
+	if got := GateStateAt(p, nil); got != GateRunsAgain {
+		t.Errorf("GateStateAt(no marker) = %v, want GateRunsAgain", got)
+	}
+	if got := GateStateAt(p, errors.New("no home")); got != GateUnknown {
+		t.Errorf("GateStateAt(paths error) = %v, want GateUnknown", got)
+	}
+	touch(t, p.LegacyMarker)
+	if got := GateStateAt(p, nil); got != GateDone {
+		t.Errorf("GateStateAt(legacy marker) = %v, want GateDone", got)
 	}
 }
 
@@ -198,20 +220,22 @@ func TestDoneState(t *testing.T) {
 		name            string
 		actions         []ErrorEntry
 		completion      Completion
-		done            bool
+		gate            GateState
 		wantWarning     bool
 		wantEntries     int
 		wantDescription string
 	}{
-		{"all good", nil, finished, true, false, 0, i18n.MsgFinishedDesc},
-		{"dry run", nil, dry, false, false, 0, i18n.MsgDryRunFinished},
-		{"an action failed", []ErrorEntry{action}, finished, true, true, 1, i18n.MsgFinishedDesc},
-		{"completion failed, no marker", nil, failed, false, true, 1, i18n.MsgCompletionFailedDesc},
-		{"completion failed, a marker exists", nil, failed, true, true, 1, i18n.MsgFinishedWithErrors},
-		{"both failed: action entry first", []ErrorEntry{action}, failed, false, true, 2, i18n.MsgCompletionFailedDesc},
+		{"all good", nil, finished, GateDone, false, 0, i18n.MsgFinishedDesc},
+		{"dry run", nil, dry, GateRunsAgain, false, 0, i18n.MsgDryRunFinished},
+		{"dry run, unknown paths", nil, dry, GateUnknown, false, 0, i18n.MsgDryRunFinished},
+		{"an action failed", []ErrorEntry{action}, finished, GateDone, true, 1, i18n.MsgFinishedDesc},
+		{"completion failed, no marker", nil, failed, GateRunsAgain, true, 1, i18n.MsgCompletionFailedDesc},
+		{"completion failed, a marker exists", nil, failed, GateDone, true, 1, i18n.MsgFinishedWithErrors},
+		{"completion failed, gate state unknown", nil, failed, GateUnknown, true, 1, i18n.MsgFinishedWithErrors},
+		{"both failed: action entry first", []ErrorEntry{action}, failed, GateRunsAgain, true, 2, i18n.MsgCompletionFailedDesc},
 	}
 	for _, tt := range tests {
-		got := DoneState(tt.actions, tt.completion, tt.done)
+		got := DoneState(tt.actions, tt.completion, tt.gate)
 		if got.Warning != tt.wantWarning || len(got.Entries) != tt.wantEntries || got.Description != tt.wantDescription {
 			t.Errorf("%s: DoneState() = %+v, want warning %v, %d entries, %q", tt.name, got, tt.wantWarning, tt.wantEntries, tt.wantDescription)
 		}
@@ -264,9 +288,9 @@ func TestRunProgressDrainsSchemeWriterBeforeCompletion(t *testing.T) {
 			mu.Unlock()
 			return Completion{DoneDescription: i18n.MsgFinishedDesc}
 		},
-		IsDone: func() bool { order = append(order, "isdone"); return true },
+		Gate: func() GateState { order = append(order, "gate"); return GateDone },
 	})
-	if want := []string{"action", "action", "complete", "isdone"}; !reflect.DeepEqual(order, want) {
+	if want := []string{"action", "action", "complete", "gate"}; !reflect.DeepEqual(order, want) {
 		t.Fatalf("order = %v, want %v", order, want)
 	}
 	if want := []ColorScheme{SchemeDark, SchemeLight}; !reflect.DeepEqual(seenAtComplete, want) {
@@ -287,7 +311,7 @@ func TestRunProgressReportsFailedActions(t *testing.T) {
 		},
 		Emit:     func(Event) {},
 		Complete: func() Completion { return Completion{DoneDescription: i18n.MsgFinishedDesc} },
-		IsDone:   func() bool { return true },
+		Gate:     func() GateState { return GateDone },
 	})
 	if !done.Warning || len(done.Entries) != 1 || done.Entries[0].Message != "no space" {
 		t.Fatalf("RunProgress() Done = %+v, want the install failure in the log", done)

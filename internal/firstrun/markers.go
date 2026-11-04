@@ -93,11 +93,35 @@ func IsDone(p Paths) bool {
 	return false
 }
 
-// DoneAt is the gate state for the window's paths: false when the paths are
-// unknown (pathsErr is set), else IsDone. The Done step uses it to tell
-// whether the next login starts the first run again.
-func DoneAt(p Paths, pathsErr error) bool {
-	return pathsErr == nil && IsDone(p)
+// GateState is what chairlift-first-run does at the next login, as far as
+// the window can tell after the completion. The zero value is GateUnknown,
+// so a state that nobody set never promises another run.
+type GateState int
+
+// The gate states.
+const (
+	// GateUnknown: the window does not know the config home, so it cannot
+	// tell. The gate in that environment exits 1 and starts nothing.
+	GateUnknown GateState = iota
+	// GateDone: a marker exists; the gate skips the next login.
+	GateDone
+	// GateRunsAgain: no marker exists; the gate starts the first run again.
+	GateRunsAgain
+)
+
+// GateStateAt returns the gate state for the window's paths: GateUnknown
+// when the paths are unknown (pathsErr is set), GateDone when IsDone, else
+// GateRunsAgain. The Done step uses it to decide whether it may promise
+// another run.
+func GateStateAt(p Paths, pathsErr error) GateState {
+	switch {
+	case pathsErr != nil:
+		return GateUnknown
+	case IsDone(p):
+		return GateDone
+	default:
+		return GateRunsAgain
+	}
 }
 
 // MarkDone is the one function that records a finished first run. The Done

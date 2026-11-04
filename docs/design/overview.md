@@ -1463,21 +1463,29 @@ and calls `MarkDone` only when `WriteMarkers` is true;
   Could not record that the first run is finished" with the error text. There
   is no retry button.
 
-`firstrun.DoneState(actionEntries, completion, done)` composes the Done step.
-`done` is the gate state after the completion, `firstrun.DoneAt(paths,
-pathsErr)` (false when the paths are unknown, else `IsDone`). After a failure
-the description is "The first run starts again at your next login" only when
-`done` is false (nothing was written: the gate starts the first run again).
-`MarkDone` can fail after it wrote the markers, for example when the legacy
-autostart path is a non-empty directory; then `done` is true, the gate skips
-the next login, and the description is "Setup finished with errors". The
-warning icon and the error log show in both cases.
+`firstrun.DoneState(actionEntries, completion, gate)` composes the Done step.
+`gate` is the gate state after the completion, from
+`firstrun.GateStateAt(paths, pathsErr)`, one of 3 values:
+
+- `GateRunsAgain` — the paths are known and no marker exists: the gate
+  execs ChairLift at the next login. Only this state gets the description
+  "The first run starts again at your next login" after a failure.
+- `GateDone` — a marker exists. `MarkDone` can fail after it wrote the
+  markers, for example when the legacy autostart path is a non-empty
+  directory; the gate then skips the next login, and the description is
+  "Setup finished with errors".
+- `GateUnknown` — the window has no config home (`pathsErr`). The gate in
+  that environment exits 1 and starts nothing, so the description is also
+  "Setup finished with errors", with no promise of another run.
+  `GateUnknown` is the zero value, so an unset state never promises a run.
+
+The warning icon and the error log show after every completion failure.
 
 `firstrun.RunProgress(actions, steps)` is the Progress worker's whole
 sequence, in this order: run every action (`Execute`), drain the
 color-scheme writer (`Drain`, the window's `SchemeWriter.Wait`), record the
-completion (`Complete`, `CompleteAt`), then read the gate state (`IsDone`,
-`DoneAt`) and compose `DoneState`. The window runs it off the GTK thread and
+completion (`Complete`, `CompleteAt`), then read the gate state (`Gate`,
+`GateStateAt`) and compose `DoneState`. The window runs it off the GTK thread and
 calls `finishProgress` (which releases the application hold) only after it
 returns, so the last style choice is written before Exit can end the
 process; Back is not possible from Progress, so no newer choice can follow

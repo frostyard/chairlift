@@ -65,8 +65,9 @@ const (
 	// Done step (new): the completion could not be recorded.
 	MsgCompletionFailed     = "Could not record that the first run is finished"
 	MsgCompletionFailedDesc = "The first run starts again at your next login"
-	// Done step (new): the completion failed in part, but a marker exists,
-	// so the next login does not start the first run again.
+	// Done step (new): the completion failed, and the next login does not
+	// start the first run again (a marker exists) or that is unknown (no
+	// config home).
 	MsgFinishedWithErrors = "Setup finished with errors"
 )
 
