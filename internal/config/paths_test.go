@@ -83,6 +83,24 @@ func TestResolveCandidatePathBranches(t *testing.T) {
 		}
 	})
 
+	t.Run("dangling executable-relative symlink remains authoritative", func(t *testing.T) {
+		danglingExeDir := filepath.Join(root, "dangling-bin")
+		if err := os.MkdirAll(danglingExeDir, 0o755); err != nil {
+			t.Fatalf("creating executable directory: %v", err)
+		}
+		want := filepath.Join(danglingExeDir, "config.yml")
+		if err := os.Symlink(filepath.Join(root, "missing-target.yml"), want); err != nil {
+			t.Fatalf("creating dangling symlink: %v", err)
+		}
+		withPathResolutionSeams(t,
+			func() (string, error) { return filepath.Join(danglingExeDir, "chairlift"), nil },
+			func() (string, error) { return cwd, nil },
+		)
+		if got := resolveCandidatePath("config.yml"); got != want {
+			t.Fatalf("resolveCandidatePath(config.yml) = %q, want dangling authoritative path %q", got, want)
+		}
+	})
+
 	t.Run("inaccessible executable-relative file remains authoritative", func(t *testing.T) {
 		withPathResolutionSeams(t,
 			func() (string, error) { return executable, nil },

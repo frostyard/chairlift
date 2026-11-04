@@ -23,7 +23,8 @@ The `frostyard-chairlift-system-integration` package also provides the
 
 The first file that exists in this order is authoritative. ChairLift does not
 fall through to a lower-priority file when that file is unreadable, malformed,
-or fails schema validation. Instead, it disables every feature group, logs a
+or fails schema validation. A symlink whose target is missing counts as an
+existing, unreadable file: it fails closed rather than falling through. Instead, it disables every feature group, logs a
 high-signal `CONFIGURATION ERROR`, and displays a persistent error toast naming
 the file and cause. Fix the authoritative file and restart ChairLift.
 
@@ -201,7 +202,8 @@ install -D -m 644 config.yml debian/tmp/usr/share/chairlift/config.yml
   unknown names and values of the wrong type are configuration errors (the
   schema is derived from the canonical config struct — decision record
   [ADR-0005](docs/adr/0005-config-schema-reflected-from-canonical-struct.md))
-- An unreadable, malformed, or schema-invalid authoritative file fails closed:
+- An unreadable (including a dangling symlink), malformed, or schema-invalid
+  authoritative file fails closed:
   all feature groups are hidden, lower-priority files are ignored, and
   ChairLift reports the path and cause in both its log and a persistent toast
 - Changes require restarting ChairLift to take effect

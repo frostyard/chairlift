@@ -201,8 +201,9 @@ An agent must not break these:
   particular, `brew_bundles_group` is independent of `brew_group`; bundle
   discovery and installs must not assume the formulae/casks expanders exist.
 - **Configuration precedence fails closed.** Only a missing candidate advances
-  to the next configuration search path. The first file that exists is
-  authoritative: read, YAML, or schema errors must disable every configurable
+  to the next configuration search path. A dangling symlink is present, not
+  missing (`Load` checks it with `Lstat`), so it is authoritative and fails
+  closed. The first file that exists is authoritative: read, YAML, or schema errors must disable every configurable
   group, emit the `CONFIGURATION ERROR` diagnostic, and remain visible in the
   UI as a persistent toast until the file is fixed and ChairLift is restarted.
 - **CI actions are immutable.** Every external `uses:` reference under

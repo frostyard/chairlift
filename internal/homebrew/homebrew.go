@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -148,6 +149,14 @@ func runBrewCommand(args ...string) (string, error) {
 // with it rather than being orphaned. cmd.Run still reaps the child.
 func runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, exe, args...)
+	if len(args) > 0 && args[0] == "tap-info" {
+		// tap-info's JSON also reports each tap's "private" flag, which brew
+		// asks the GitHub API for. On Linux its credential probe pipes into
+		// a nonexistent `git credential-osxkeychain`, and brew intermittently
+		// dies with "Error: Broken pipe". ChairLift reads only the local
+		// "trusted" key, so every tap-info runs with the API lookup off.
+		cmd.Env = append(os.Environ(), "HOMEBREW_NO_GITHUB_API=1")
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -181,10 +190,31 @@ func runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, 
 		}
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			if isUntrustedTapMessage(stderr.String()) {
-				return "", &UntrustedTapError{Message: fmt.Sprintf("Brew command failed: %s", stderr.String())}
+			// A read-only command keeps its whole stderr in the error:
+			// nothing else preserves it, and callers such as searchKind
+			// match on the full text.
+			diagnostic := stderr.String()
+			message := diagnostic
+			if len(args) > 0 && stateChangingCommands[args[0]] {
+				// A state-changing command splits its diagnosis across both
+				// streams: `brew bundle install` replays a failing entry's
+				// own installer output on stdout and prints only its
+				// restatement on stderr. Join them (stdout first), log the
+				// full text as the evidence a bug report needs, and distill
+				// one line for the user-facing message.
+				diagnostic = joinCommandStreams(stdout.String(), stderr.String())
+				if trimmed := strings.TrimSpace(diagnostic); trimmed != "" {
+					log.Printf("Command '%s' failed:\n%s", display, trimmed)
+				}
+				message = summarizeDiagnostic(diagnostic)
+				if message == "" {
+					message = exitErr.Error()
+				}
 			}
-			return "", &Error{Message: fmt.Sprintf("Brew command failed: %s", stderr.String()), Err: err}
+			if isUntrustedTapMessage(diagnostic) {
+				return "", &UntrustedTapError{Message: fmt.Sprintf("Brew command failed: %s", message)}
+			}
+			return "", &Error{Message: fmt.Sprintf("Brew command failed: %s", message), Err: err}
 		}
 		// exec.ErrNotFound covers a bare name missing from $PATH;
 		// fs.ErrNotExist covers an explicit path that does not exist.
