@@ -166,8 +166,8 @@ forced to false.
 **Structured load-error vocabulary (`internal/config/loaderror.go`).** A
 stable `ErrorKind` enumerates why loading/validating a config file could
 fail: `KindRead` ("read") for a filesystem/read failure (e.g. permission
-denied opening the file — distinct from "file does not exist", which
-`Load()` treats as absent-and-fall-back, not an error); `KindParseType`
+denied opening the file, or a dangling symlink — distinct from "file does
+not exist", which `Load()` treats as absent-and-fall-back, not an error); `KindParseType`
 ("parse/type") for a YAML syntax error, a value that decodes to the wrong
 Go type, or a malformed source graph detected by pure shape/graph
 inspection after the YAML parsed successfully (an unsupported node shape,
@@ -964,7 +964,13 @@ only indirectly, through `parseAndValidate`, in `validate_test.go`.
 each configured candidate to the exact path it will read, then calls
 `loadResolvedPath`, which reads bytes, runs `parseAndValidate`, and only then
 merges the validated overlay onto `defaultConfig()`. A missing candidate
-(`errors.Is(err, fs.ErrNotExist)`) advances to the next search location. Any
+(`errors.Is(err, fs.ErrNotExist)`) advances to the next search location
+unless `danglingSymlink(path)` reports that the directory entry is a symlink
+whose target is missing: `os.ReadFile` reports ENOENT for such a link exactly
+as for an absent path, so `Load` uses `os.Lstat` to tell them apart and treats
+the dangling link as a present, unreadable authoritative file (`KindRead`).
+Otherwise an administrator's broken `/etc/chairlift/config.yml` link would
+silently fall back to package defaults. Any
 other read failure, or any parse/type/schema failure in the first file that
 exists, makes that file authoritative: lower-priority files are not read,
 `Load` returns `disabledConfig()` plus the structured `*LoadError`, and every
@@ -975,7 +981,10 @@ a nil error are returned.
 `resolveCandidatePath` makes diagnostic paths deterministic and absolute when
 the operating system supplies a working directory: absolute candidates are
 cleaned; a relative candidate prefers a file beside the executable and
-otherwise resolves against the current working directory. Filesystem reads,
+otherwise resolves against the current working directory. The
+executable-relative probe uses `os.Lstat`, so a dangling symlink beside the
+executable stays the selected candidate and fails closed in `Load` instead of
+falling through to the working directory. Filesystem reads,
 the executable path, and the working directory have narrow package-level
 seams so precedence and permission failures are testable without relying on
 host permissions.
@@ -1298,7 +1307,8 @@ Decision records: [ADR-0003](../adr/0003-two-tier-config-with-fail-closed-semant
 3. `config.yml` — beside the executable when present, otherwise relative to
    the current working directory (development fallback)
 
-Only a missing candidate advances the search. The first existing candidate is
+Only a missing candidate advances the search; a dangling symlink is present,
+not missing. The first existing candidate is
 authoritative; a read, parse, type, or schema error disables every feature
 group and produces both a high-signal log entry and a persistent toast. If no
 file is found, all features default to enabled except

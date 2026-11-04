@@ -233,7 +233,9 @@ and an Install action; a leading comment in the Brewfile becomes its
 description. Missing directories are harmless, while unreadable configured
 paths are reported without hiding bundles found elsewhere. Repeated clicks
 cannot start overlapping installs, and `--dry-run` shows a preview without
-leaving the row marked as installed.
+leaving the row marked as installed. A failed install reports the installer's
+own error line (for example flatpak's `error: ...`), not the progress that
+preceded it; ChairLift's log keeps the complete brew output for bug reports.
 
 ---
 
@@ -266,7 +268,8 @@ Configuration files are searched in the following locations (in order):
 3. `config.yml` beside the ChairLift executable, or in the current working
    directory when no executable-relative file exists (development fallback)
 
-The first file that exists is authoritative. If it is unreadable, malformed,
+The first file that exists is authoritative (a symlink with a missing target
+counts as existing). If it is unreadable, malformed,
 or contains unknown pages, groups, fields, or invalid field types, ChairLift
 does not use a lower-priority file: it hides every configurable feature group,
 logs a `CONFIGURATION ERROR`, and shows a persistent error toast with the path
