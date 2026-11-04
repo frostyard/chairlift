@@ -12,17 +12,22 @@ import (
 )
 
 // toastMarkupViolations reports every libadwaita toast in src that can reach
-// the screen with Pango markup still on. AdwToast parses its title as markup
-// by default, so a message that contains <, > or & fails to parse and the
-// toast renders blank. A toast passes only when it is assigned to a variable
-// and that variable calls SetUseMarkup(false) before it is used as a call
-// argument (for example AddToast(toast)). A constructor whose result is not
-// assigned, such as AddToast(adw.NewToast(msg)), always fails.
-func toastMarkupViolations(filename string, src []byte) ([]string, error) {
+// the screen with Pango markup still on, and counts the toast constructors it
+// found in the syntax tree (comments and strings do not count). AdwToast
+// parses its title as markup by default, so a message that contains <, > or &
+// fails to parse and the toast renders blank.
+//
+// The rule is strict so that it can be proven without control-flow analysis:
+// the constructor result must be assigned to a variable, the very next
+// statement in the same block must be name.SetUseMarkup(false), and the
+// enclosing function (nested function literals included) must contain no
+// other name.SetUseMarkup call. Anything else is a violation, including an
+// inline constructor such as AddToast(adw.NewToast(msg)).
+func toastMarkupViolations(filename string, src []byte) ([]string, int, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, filename, src, 0)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	var violations []string
@@ -30,42 +35,46 @@ func toastMarkupViolations(filename string, src []byte) ([]string, error) {
 		violations = append(violations, fset.Position(pos).String()+": "+why)
 	}
 
+	constructors := 0
+	accepted := make(map[*ast.CallExpr]bool)
 	checkBody := func(body *ast.BlockStmt) {
-		assigned := make(map[*ast.CallExpr]bool)
 		ast.Inspect(body, func(n ast.Node) bool {
 			// A nested function literal is checked as its own body.
 			if lit, ok := n.(*ast.FuncLit); ok && lit.Body != body {
 				return false
 			}
-			assign, ok := n.(*ast.AssignStmt)
-			if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
+			block, ok := n.(*ast.BlockStmt)
+			if !ok {
 				return true
 			}
-			call, ok := assign.Rhs[0].(*ast.CallExpr)
-			if !ok || !isToastConstructor(call) {
-				return true
-			}
-			ident, ok := assign.Lhs[0].(*ast.Ident)
-			if !ok || ident.Name == "_" {
-				return true
-			}
-			assigned[call] = true
-			disabled := disablesMarkupAt(body, ident.Name, call.End())
-			if disabled == token.NoPos {
-				report(call.Pos(), ident.Name+" never calls SetUseMarkup(false)")
-				return true
-			}
-			if used := firstArgumentUse(body, ident.Name, call.End()); used != token.NoPos && used < disabled {
-				report(used, ident.Name+" is used before SetUseMarkup(false)")
-			}
-			return true
-		})
-		ast.Inspect(body, func(n ast.Node) bool {
-			if lit, ok := n.(*ast.FuncLit); ok && lit.Body != body {
-				return false
-			}
-			if call, ok := n.(*ast.CallExpr); ok && isToastConstructor(call) && !assigned[call] {
-				report(call.Pos(), "toast is not assigned, so markup cannot be disabled")
+			for i, stmt := range block.List {
+				assign, ok := stmt.(*ast.AssignStmt)
+				if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
+					continue
+				}
+				call, ok := assign.Rhs[0].(*ast.CallExpr)
+				if !ok || !isToastConstructor(call) {
+					continue
+				}
+				ident, ok := assign.Lhs[0].(*ast.Ident)
+				if !ok || ident.Name == "_" {
+					continue
+				}
+				accepted[call] = true
+				if i+1 >= len(block.List) || !isMarkupSetter(block.List[i+1], ident.Name, true) {
+					report(call.Pos(), ident.Name+" is not followed at once by "+ident.Name+".SetUseMarkup(false)")
+					continue
+				}
+				setters := 0
+				ast.Inspect(body, func(n ast.Node) bool {
+					if expr, ok := n.(*ast.ExprStmt); ok && isMarkupSetter(expr, ident.Name, false) {
+						setters++
+					}
+					return true
+				})
+				if setters != 1 {
+					report(call.Pos(), ident.Name+" calls SetUseMarkup more than once, so markup can be turned on again")
+				}
 			}
 			return true
 		})
@@ -82,7 +91,16 @@ func toastMarkupViolations(filename string, src []byte) ([]string, error) {
 		}
 		return true
 	})
-	return violations, nil
+	ast.Inspect(file, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok && isToastConstructor(call) {
+			constructors++
+			if !accepted[call] {
+				report(call.Pos(), "toast is not assigned to a variable, so markup cannot be disabled")
+			}
+		}
+		return true
+	})
+	return violations, constructors, nil
 }
 
 // isToastConstructor reports whether call is adw.NewToast or another adw
@@ -100,50 +118,31 @@ func isToastConstructor(call *ast.CallExpr) bool {
 	return strings.HasPrefix(sel.Sel.Name, "NewToast") && !strings.HasPrefix(sel.Sel.Name, "NewToastOverlay")
 }
 
-// disablesMarkupAt returns the position of the first name.SetUseMarkup(false)
-// call after from, or token.NoPos.
-func disablesMarkupAt(body *ast.BlockStmt, name string, from token.Pos) token.Pos {
-	found := token.NoPos
-	ast.Inspect(body, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok || call.Pos() < from || found != token.NoPos {
-			return found == token.NoPos
-		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "SetUseMarkup" || len(call.Args) != 1 {
-			return true
-		}
-		recv, ok := sel.X.(*ast.Ident)
-		arg, isIdent := call.Args[0].(*ast.Ident)
-		if ok && recv.Name == name && isIdent && arg.Name == "false" {
-			found = call.Pos()
-		}
+// isMarkupSetter reports whether stmt is the statement name.SetUseMarkup(arg).
+// With onlyFalse, arg must be the identifier false; otherwise any argument
+// matches.
+func isMarkupSetter(stmt ast.Stmt, name string, onlyFalse bool) bool {
+	expr, ok := stmt.(*ast.ExprStmt)
+	if !ok {
+		return false
+	}
+	call, ok := expr.X.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "SetUseMarkup" {
+		return false
+	}
+	recv, ok := sel.X.(*ast.Ident)
+	if !ok || recv.Name != name {
+		return false
+	}
+	if !onlyFalse {
 		return true
-	})
-	return found
-}
-
-// firstArgumentUse returns the position of the first call after from that
-// passes name, or its address, as an argument, or token.NoPos.
-func firstArgumentUse(body *ast.BlockStmt, name string, from token.Pos) token.Pos {
-	found := token.NoPos
-	ast.Inspect(body, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok || call.Pos() < from || found != token.NoPos {
-			return found == token.NoPos
-		}
-		for _, arg := range call.Args {
-			if unary, ok := arg.(*ast.UnaryExpr); ok && unary.Op == token.AND {
-				arg = unary.X
-			}
-			if ident, ok := arg.(*ast.Ident); ok && ident.Name == name {
-				found = arg.Pos()
-				return false
-			}
-		}
-		return true
-	})
-	return found
+	}
+	arg, ok := call.Args[0].(*ast.Ident)
+	return ok && arg.Name == "false"
 }
 
 func TestToastMarkupViolationsFixtures(t *testing.T) {
@@ -214,6 +213,52 @@ func f(w W, msg string) {
 			want: 1,
 		},
 		{
+			name: "markup disabled only inside an uncalled callback",
+			src: `package p
+func f(w W, msg string) {
+	toast := adw.NewToast(msg)
+	_ = func() { toast.SetUseMarkup(false) }
+	w.AddToast(toast)
+}`,
+			want: 1,
+		},
+		{
+			name: "markup turned on again before AddToast",
+			src: `package p
+func f(w W, msg string) {
+	toast := adw.NewToast(msg)
+	toast.SetUseMarkup(false)
+	toast.SetUseMarkup(true)
+	w.AddToast(toast)
+}`,
+			want: 1,
+		},
+		{
+			name: "markup disabled only on one branch",
+			src: `package p
+func f(w W, msg string, plain bool) {
+	toast := adw.NewToast(msg)
+	if plain {
+		toast.SetUseMarkup(false)
+	}
+	w.AddToast(toast)
+}`,
+			want: 1,
+		},
+		{
+			name: "toast in a callback with markup disabled",
+			src: `package p
+func f(w W, msg string) {
+	cb := func() {
+		toast := adw.NewToast(msg)
+		toast.SetUseMarkup(false)
+		w.AddToast(toast)
+	}
+	cb()
+}`,
+			want: 0,
+		},
+		{
 			name: "toast overlay is not a toast",
 			src: `package p
 func f() {
@@ -225,7 +270,7 @@ func f() {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := toastMarkupViolations("fixture.go", []byte(tt.src))
+			got, _, err := toastMarkupViolations("fixture.go", []byte(tt.src))
 			if err != nil {
 				t.Fatalf("parse fixture: %v", err)
 			}
@@ -236,13 +281,36 @@ func f() {
 	}
 }
 
+func TestToastMarkupViolationsCountsOnlyRealConstructors(t *testing.T) {
+	src := `package p
+// adw.NewToast(msg) in a comment is not a toast.
+const doc = "adw.NewToast(msg)"
+func f(w W, msg string) {
+	overlay := adw.NewToastOverlay()
+	toast := adw.NewToast(msg)
+	toast.SetUseMarkup(false)
+	w.AddToast(toast)
+	_ = overlay
+}`
+	violations, constructors, err := toastMarkupViolations("fixture.go", []byte(src))
+	if err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("violations = %v, want none", violations)
+	}
+	if constructors != 1 {
+		t.Fatalf("constructors = %d, want 1 (comments, strings and the overlay do not count)", constructors)
+	}
+}
+
 // TestToastsRenderPlainText fails when a toast in production code can reach
 // the screen with Pango markup on: a path or tool error that contains <, >
 // or & would then render as a blank toast.
 func TestToastsRenderPlainText(t *testing.T) {
 	root := RepoRoot()
 	checked := 0
-	toastFiles := 0
+	constructors := 0
 	for _, dir := range []string{"internal", "cmd"} {
 		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
@@ -255,17 +323,12 @@ func TestToastsRenderPlainText(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			checked++
-			if !strings.Contains(string(src), "adw.NewToast") {
-				return nil
-			}
-			violations, err := toastMarkupViolations(path, src)
+			violations, found, err := toastMarkupViolations(path, src)
 			if err != nil {
 				return err
 			}
-			if strings.Contains(strings.ReplaceAll(string(src), "adw.NewToastOverlay", ""), "adw.NewToast") {
-				toastFiles++
-			}
+			checked++
+			constructors += found
 			for _, violation := range violations {
 				t.Error(violation)
 			}
@@ -275,8 +338,8 @@ func TestToastsRenderPlainText(t *testing.T) {
 			t.Fatalf("walk %s: %v", dir, err)
 		}
 	}
-	if toastFiles == 0 {
-		t.Fatal("no production file constructs an adw toast; the check would prove nothing")
+	if constructors == 0 {
+		t.Fatal("no production code constructs an adw toast; the check would prove nothing")
 	}
-	t.Logf("toast markup check: %d Go files checked, %d construct toasts", checked, toastFiles)
+	t.Logf("toast markup check: %d Go files parsed, %d toast constructors checked", checked, constructors)
 }

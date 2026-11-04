@@ -989,8 +989,11 @@ zero, so the startup error remains visible instead of expiring. Both
 `ShowToast` and `ShowErrorToast` disable Pango markup, because AdwToast parses
 markup by default and a path or tool error containing `<`, `>` or `&` would
 otherwise render as a blank toast. `internal/installcheck`'s
-`TestToastsRenderPlainText` parses every production Go file and fails when an
-`adw.NewToast` result is shown without `SetUseMarkup(false)` first; construction
+`TestToastsRenderPlainText` parses every production Go file and fails unless
+each `adw.NewToast` result is assigned to a variable, the next statement in
+the same block is `<name>.SetUseMarkup(false)`, and the function calls
+`<name>.SetUseMarkup` nowhere else; it also fails when it finds no toast
+constructor at all; construction
 and the toast call both occur on the GTK main thread.
 
 ### Package manager wrapper pattern
