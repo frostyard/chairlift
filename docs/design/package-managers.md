@@ -1058,10 +1058,10 @@ A small standalone binary that accepts commands (`enable-feature`, `disable-feat
 subcommand's `Options` struct live in `internal/updexhelper`
 (`internal/updexhelper/updexhelper.go`), a package with no puregotk import —
 only stdlib plus `github.com/frostyard/updex/v2/updex` and `.../sysext`. That's what makes the
-logic testable at all: neither `gates_chunk` nor `make ci` ever runs `go test
-./...`, both are scoped to `go test ./internal/...`, so a `_test.go` under
-`cmd/chairlift-updex-helper` would never execute under any gate this repo
-actually runs. `ParseInvocation` accepts only `enable-feature <name>
+logic testable at all: `make ci` and the Tests workflow run `go test ./...`,
+while a `_test.go` under `cmd/chairlift-updex-helper` also needs to live in a
+headless package. The pure `internal/updexhelper` tests execute under those
+repository-wide gates. `ParseInvocation` accepts only `enable-feature <name>
 [--dry-run]`, `disable-feature <name> [--dry-run]`, and `update [--dry-run]`;
 `SupportedCommands` is the complete first-argument surface matched by the
 PolicyKit actions. `EnableOptions`, `DisableOptions`, and `UpdateOptions` set
@@ -1261,11 +1261,8 @@ of one another; each was hand-verified during development by reverting one
 of the three at a time and confirming only the test(s) that source depends
 on turn red. The package imports no puregotk, directly or transitively, so it
 never trips `docs/agents/skills/gtk-headless-tests.md`'s constraint, and it
-lives under `internal/...` so `gates_chunk`, `make ci`, and CI's identical
-`go test ./internal/... -run "^Test[^I]" -skip "Integration"` filter all
-exercise it on every run, per
-`docs/agents/skills/gate-test-scope-is-internal-only.md` — not just the
-heavier, less-frequent `make ci` deep gate.
+lives under `internal/...` so `make ci` and CI's repository-wide
+`go test ./...` unit and race gates exercise it on every run.
 
 A third regression test, **`TestGoreleaserLicenseIsGPL`**, guards a related
 but distinct drift: `.goreleaser.yaml` briefly declared `license: MIT` in

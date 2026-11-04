@@ -6,9 +6,8 @@
 // package, only shared test-time helpers. It imports no GTK bindings, directly
 // or transitively, so a _test.go living here never trips the
 // gtk-headless-tests.md constraint (docs/agents/skills/gtk-headless-tests.md),
-// and it lives under internal/... so it is actually exercised by gates_chunk,
-// make ci, and CI's `go test ./internal/...` filter, per
-// docs/agents/skills/gate-test-scope-is-internal-only.md.
+// and it lives under internal/... so it is exercised by every `go test ./...`
+// gate in make ci and CI.
 package installcheck
 
 import (

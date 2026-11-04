@@ -162,9 +162,9 @@ ci:
 	@echo "==> lint"
 	CGO_ENABLED=$(CGO_ENABLED) golangci-lint run
 	@echo "==> unit tests"
-	CGO_ENABLED=$(CGO_ENABLED) $(GOTEST) ./internal/... -run "^Test[^I]" -skip "Integration"
+	CGO_ENABLED=$(CGO_ENABLED) $(GOTEST) ./...
 	@echo "==> race detector"
-	CGO_ENABLED=1 $(GOTEST) -race -short ./internal/... -run "^Test[^I]" -skip "Integration"
+	CGO_ENABLED=1 $(GOTEST) -race -short ./...
 	@echo "==> build"
 	GOOS=linux GOARCH=amd64 $(MAKE) build BUILD_DIR=$(BUILD_DIR)/ci-linux-amd64
 	GOOS=linux GOARCH=arm64 $(MAKE) build BUILD_DIR=$(BUILD_DIR)/ci-linux-arm64

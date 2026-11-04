@@ -18,7 +18,7 @@ collects those read-only sources and their interpretation boundaries.
 | Pull request checks | Gate results attached to each proposed change, including reruns and logs | Open a pull request and select its **Checks** tab |
 | Claude code review | Maintainer-triggered, read-only AI review comments for a selected pull request | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/claude-code-review.yml) |
 | PR acceptance | Accepted and closed pull request counts over a rolling 90-day cohort | [Metric definition and reproducible query](metrics.md) |
-| Coverage | Line coverage produced by tests under `internal/...` | [Codecov](https://app.codecov.io/gh/frostyard/chairlift) |
+| Coverage | Line coverage produced by tests under `./...` | [Codecov](https://app.codecov.io/gh/frostyard/chairlift) |
 | Build artifacts | Seven-day Linux binaries for the workflow's amd64 and arm64 matrix | Open a successful workflow run and view **Artifacts** |
 | Release history | Published versions and release assets | [GitHub Releases](https://github.com/frostyard/chairlift/releases) |
 
@@ -35,8 +35,8 @@ The repository's `Tests` workflow runs on pushes and pull requests targeting
 `main`. Its jobs provide these independent signals:
 
 - **Lint** — `golangci-lint` over the Go source.
-- **Unit Tests** — headless tests under `internal/...`, with atomic coverage.
-- **Race Detection** — the same internal test scope under the race detector.
+- **Unit Tests** — all repository Go tests under `./...`, with atomic coverage.
+- **Race Detection** — the same repository-wide test scope under the race detector.
 - **Verify** — tidy-module, `go vet`, and `gofmt` checks.
 - **Build** — Linux builds for amd64 and arm64.
 
@@ -53,18 +53,16 @@ To inspect the same coverage scope locally without relying on the external
 upload, run:
 
 ```bash
-go test ./internal/... \
+go test ./... \
   -coverprofile=coverage.out \
-  -covermode=atomic \
-  -run '^Test[^I]' \
-  -skip Integration
+  -covermode=atomic
 go tool cover -func=coverage.out
 ```
 
-The test-name filters are significant: ordinary unit tests must not begin with
-`TestI` or contain `Integration`, because the gated command excludes them.
-Tests for packages that import puregotk also cannot run headlessly; decidable
-logic belongs in a pure package under `internal/`, as required by `AGENTS.md`.
+The gated commands have no `-run` or `-skip` filter, so every repository test
+runs in the ordinary unit and race gates. Tests for packages that import
+puregotk cannot run headlessly; decidable logic belongs in a pure package under
+`internal/`, as required by `AGENTS.md`.
 
 ## Nightly compliance
 
