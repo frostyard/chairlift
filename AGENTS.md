@@ -174,7 +174,10 @@ An agent must not break these:
   never replaces newer rows or counts. A load in which both installation
   queries failed (`flatpakstatus.Result.Authoritative == false`) keeps the
   last known rows and count through `actionstate.OutdatedRefresh` and only
-  reports that the check failed.
+  reports that the check failed. Because such a load keeps the old rows, the
+  per-app update button never waits for a reload to replace it: a failure or
+  dry-run restores it, and a live success removes its row and decrements the
+  Flatpak count before the reload.
 - **Homebrew application actions are typed and refresh-safe.** Search queries
   both formula and cask namespaces and carries the result kind into
   `brew install [--cask]`. Search and installed-package refreshes use separate

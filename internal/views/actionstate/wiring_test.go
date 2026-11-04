@@ -3,6 +3,7 @@ package actionstate
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -98,5 +99,62 @@ func TestUpdatesPageGuardsFlatpakUpdateRefreshes(t *testing.T) {
 	}
 	if !strings.Contains(read("views.go"), `flatpakUpdatesRefresh actionstate.RefreshGate`) {
 		t.Error("views.go does not declare flatpakUpdatesRefresh actionstate.RefreshGate")
+	}
+}
+
+// TestUpdatesPageRetiresCompletedFlatpakUpdateRows pins the per-app Flatpak
+// update button to the Homebrew upgrade discipline. The button must not wait
+// for the reload to replace it: a reload in which both installation queries
+// fail keeps the old rows, so a button left at "Updating..." would stay there.
+// A live success removes the row and decrements the Flatpak count at once; a
+// failure or a dry-run preview restores the button; only a live success
+// reloads.
+func TestUpdatesPageRetiresCompletedFlatpakUpdateRows(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller could not locate wiring_test.go")
+	}
+	viewsDir := filepath.Clean(filepath.Join(filepath.Dir(filename), ".."))
+	source, err := os.ReadFile(filepath.Join(viewsDir, "updates_page.go"))
+	if err != nil {
+		t.Fatalf("read updates_page.go: %v", err)
+	}
+	updates := string(source)
+
+	start := strings.Index(updates, `isUser := update.Installation == "user"`)
+	end := strings.Index(updates, `updateBtn.ConnectClicked(&clickedCb)`)
+	if start < 0 || end < start {
+		t.Fatal("updates_page.go has no per-app Flatpak update button handler")
+	}
+	handler := updates[start:end]
+
+	for _, required := range []string{
+		`if !flatpakUpdateGate.TryStart()`,
+		`btn.SetLabel("Updating...")`,
+		`dryRun := flatpak.IsDryRun()`,
+		`decision := actionstate.PackageUpgrade(err == nil, dryRun)`,
+		`actionmsg.Update(dryRun, appID)`,
+		`flatpakUpdateGate.Complete()`,
+		`uh.flatpakUpdateRows.Remove(row, func(row *adw.ActionRow)`,
+		`uh.updateCounts.Add(badgestate.Flatpak, -1)`,
+		`uh.updateBadgeCount()`,
+		`flatpakUpdateGate.Reset()`,
+		`btn.SetLabel("Update")`,
+	} {
+		if !strings.Contains(handler, required) {
+			t.Errorf("Flatpak update button handler does not contain %q", required)
+		}
+	}
+	if got := strings.Count(handler, `if decision.RestoreControl {`); got != 2 {
+		t.Errorf("RestoreControl branches = %d, want 2 (the failure path and the success/dry-run path)", got)
+	}
+	if !regexp.MustCompile(`if decision\.Refresh \{\s*uh\.loadFlatpakUpdates\(\)`).MatchString(handler) {
+		t.Error("the Flatpak update button must reload only under decision.Refresh")
+	}
+	if strings.Count(handler, `uh.loadFlatpakUpdates()`) != 1 {
+		t.Error("the Flatpak update button must reload exactly once, under decision.Refresh")
+	}
+	if !strings.Contains(updates, `uh.flatpakUpdateRows.Add(row)`) {
+		t.Error("Flatpak update rows are not tracked with rowset, so a completed row cannot be removed")
 	}
 }

@@ -528,10 +528,9 @@ func (uh *UserHome) loadFlatpakUpdatesGeneration(generation uint64) {
 		}
 
 		// Clear existing rows
-		for _, row := range uh.flatpakUpdateRows {
+		uh.flatpakUpdateRows.Clear(func(row *adw.ActionRow) {
 			uh.flatpakUpdatesExpander.Remove(&row.Widget)
-		}
-		uh.flatpakUpdateRows = nil
+		})
 
 		uh.flatpakUpdatesExpander.SetSubtitle(status.Subtitle)
 		uh.flatpakUpdatesExpander.SetEnableExpansion(status.Expandable)
@@ -558,24 +557,56 @@ func (uh *UserHome) loadFlatpakUpdatesGeneration(generation uint64) {
 
 			appID := update.ApplicationID
 			isUser := update.Installation == "user"
+			flatpakUpdateGate := &actionstate.Gate{}
 			clickedCb := func(btn gtk.Button) {
+				if !flatpakUpdateGate.TryStart() {
+					return
+				}
 				btn.SetSensitive(false)
 				btn.SetLabel("Updating...")
 				go func() {
-					if err := flatpak.Update(appID, isUser); err != nil {
+					err := flatpak.Update(appID, isUser)
+					dryRun := flatpak.IsDryRun()
+					decision := actionstate.PackageUpgrade(err == nil, dryRun)
+					if err != nil {
 						sgtk.RunOnMainThread(func() {
-							btn.SetSensitive(true)
-							btn.SetLabel("Update")
+							if decision.RestoreControl {
+								flatpakUpdateGate.Reset()
+								btn.SetSensitive(true)
+								btn.SetLabel("Update")
+							}
 							uh.toastAdder.ShowErrorToast(fmt.Sprintf("Update failed: %v", err))
 						})
 						return
 					}
 					sgtk.RunOnMainThread(func() {
-						uh.toastAdder.ShowToast(actionmsg.Update(flatpak.IsDryRun(), appID))
+						uh.toastAdder.ShowToast(actionmsg.Update(dryRun, appID))
+						// The control must not depend on the reload: a
+						// reload in which both installation queries fail
+						// keeps the old rows, and with them this button.
+						// A live success retires the row now; a dry-run
+						// restores the button.
+						if decision.RemoveRow {
+							flatpakUpdateGate.Complete()
+						}
+						if decision.RemoveRow && uh.flatpakUpdateRows.Remove(row, func(row *adw.ActionRow) {
+							uh.flatpakUpdatesExpander.Remove(&row.Widget)
+						}) {
+							remaining := uh.updateCounts.Add(badgestate.Flatpak, -1).Count
+							uh.flatpakUpdatesExpander.SetEnableExpansion(remaining > 0)
+							uh.updateBadgeCount()
+						}
+						if decision.RestoreControl {
+							flatpakUpdateGate.Reset()
+							btn.SetSensitive(true)
+							btn.SetLabel("Update")
+						}
 						// Refresh the updates list. Called on the main
 						// thread so concurrent completions take generations
 						// in the order they finished.
-						uh.loadFlatpakUpdates()
+						if decision.Refresh {
+							uh.loadFlatpakUpdates()
+						}
 					})
 				}()
 			}
@@ -583,7 +614,7 @@ func (uh *UserHome) loadFlatpakUpdatesGeneration(generation uint64) {
 
 			row.AddSuffix(&updateBtn.Widget)
 			uh.flatpakUpdatesExpander.AddRow(&row.Widget)
-			uh.flatpakUpdateRows = append(uh.flatpakUpdateRows, row)
+			uh.flatpakUpdateRows.Add(row)
 		}
 	})
 }

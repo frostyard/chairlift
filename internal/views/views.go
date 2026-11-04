@@ -53,7 +53,7 @@ type UserHome struct {
 	flatpakUserExpander    *adw.ExpanderRow
 	flatpakSystemExpander  *adw.ExpanderRow
 	flatpakUpdatesExpander *adw.ExpanderRow
-	flatpakUpdateRows      []*adw.ActionRow               // Store references for cleanup
+	flatpakUpdateRows      rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	flatpakUserRows        rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	flatpakSystemRows      rowset.Tracker[*adw.ActionRow] // Store references for cleanup
 	formulaeRows           rowset.Tracker[*adw.ActionRow]

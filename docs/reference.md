@@ -101,7 +101,7 @@ Those operations belong to the configured external manager.
 |-------|-----|-------------|
 | Cleanup | `maintenance_cleanup_group` | Custom cleanup scripts |
 | Homebrew Cleanup | `maintenance_brew_group` | `brew cleanup` (remove old versions and cache) |
-| Flatpak Cleanup | `maintenance_flatpak_group` | `flatpak uninstall --unused` for the user and the system installation (remove unused runtimes) |
+| Flatpak Cleanup | `maintenance_flatpak_group` | `flatpak uninstall --unused` with no scope flag, so every installation (remove unused runtimes) |
 | Optimization | `maintenance_optimization_group` | System optimization (placeholder) |
 
 `maintenance_cleanup_group` supports:

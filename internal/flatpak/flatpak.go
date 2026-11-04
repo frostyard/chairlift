@@ -635,30 +635,11 @@ func Info(appID string, user bool) (*ApplicationInfo, error) {
 	return info, nil
 }
 
-// uninstallUnusedScopes lists the installation scopes UninstallUnused cleans,
-// in order. Flatpak defaults to the system installation when no scope flag is
-// given, so a scope-less `flatpak uninstall --unused` leaves unused user
-// runtimes behind while reporting success.
-var uninstallUnusedScopes = []string{"--user", "--system"}
-
-// UninstallUnused removes unused Flatpak runtimes and extensions from both the
-// user and the system installation. Each scope runs independently, even when
-// the other fails: the non-empty outputs are joined with a newline, and every
-// scope failure is wrapped with its scope flag and returned through
-// errors.Join, so a failure in either scope is reported instead of masked.
+// UninstallUnused removes unused Flatpak runtimes and extensions. It passes
+// no scope flag on purpose: flatpak parses `uninstall` with
+// FLATPAK_BUILTIN_FLAG_ALL_DIRS, so a scope-less `--unused` cleans the user
+// installation, the default system installation and every extra system
+// installation. A --user or --system flag would narrow that.
 func UninstallUnused() (string, error) {
-	var (
-		outputs []string
-		errs    []error
-	)
-	for _, scope := range uninstallUnusedScopes {
-		output, err := runFlatpakCommand("uninstall", "--unused", "-y", scope)
-		if output != "" {
-			outputs = append(outputs, output)
-		}
-		if err != nil {
-			errs = append(errs, fmt.Errorf("%s scope: %w", scope, err))
-		}
-	}
-	return strings.Join(outputs, "\n"), errors.Join(errs...)
+	return runFlatpakCommand("uninstall", "--unused", "-y")
 }

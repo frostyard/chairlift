@@ -429,7 +429,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 | `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
-| `UninstallUnused()` | `flatpak uninstall --unused -y --user`, then `flatpak uninstall --unused -y --system` | 30m each | Maintenance cleanup of both installations; see below |
+| `UninstallUnused()` | `flatpak uninstall --unused -y` (no scope flag) | 30m | Maintenance cleanup of every installation; see below |
 | `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 30s | Key-value parsed |
 | `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 30s | Lists configured remotes |
 
@@ -461,21 +461,20 @@ iterates all four real state-changing command keys to prove dry-run returns
 before execution. This complements runner classification rather than chasing
 a percentage in isolation.
 
-### Unused-runtime cleanup covers both installations
+### Unused-runtime cleanup covers every installation
 
-`flatpak uninstall --unused` without a scope flag acts on the system
-installation only, so a scope-less cleanup left unused *user* runtimes behind
-while reporting success. `UninstallUnused` therefore runs the cleanup once per
-scope, `--user` then `--system` (the unexported `uninstallUnusedScopes`), and
-always attempts both even when the first fails. Its output is the non-empty
-scope outputs joined with a newline (under dry-run, the two
-`[DRY-RUN] Would execute: ...` previews). Each scope failure is wrapped as
-`<scope> scope: <cause>` and the failures are combined with `errors.Join`, so
-the Maintenance page's `Flatpak cleanup failed: ...` toast names the scope that
-failed and `errors.As`/`errors.Is` still reach each `*flatpak.Error`.
-`flatpak_test.go` asserts the two invocations and their order, the combined
-output, a one-scope failure that still runs the other scope, a two-scope
-failure, and the dry-run preview.
+`UninstallUnused` runs `flatpak uninstall --unused -y` with no scope flag, on
+purpose. flatpak parses `uninstall` with `FLATPAK_BUILTIN_FLAG_ALL_DIRS`
+(`app/flatpak-builtins-uninstall.c`): with no `--user`, `--system` or
+`--installation` flag, `flatpak-main.c` selects the user installation, the
+default system installation and every extra system installation from
+`/etc/flatpak/installations.d`, and the `--unused` branch visits each of them.
+This holds in flatpak 1.10, 1.14 and 1.16. Do not add a scope flag: running
+`--user` then `--system` would skip the extra installations
+(`.memory/corrections.jsonl`, 2026-11-05). `flatpak_test.go`
+(`TestUninstallUnusedCoversEveryInstallation` and the "remove unused" row of
+`TestCommandWrappersUseExpectedArguments`) asserts exactly one invocation with
+no scope flag.
 
 ### Update queries exclude runtimes
 
@@ -1198,7 +1197,7 @@ additional refresh generation because multiple Homebrew actions can request
 overlapping reloads. Not-installed and error branches change the subtitle and
 preserve the last known rows.
 
-The Updates page's per-package Homebrew upgrade button, per-app Flatpak update button, and the "Update Homebrew" self-update button (`internal/views/updates_page.go`) follow the same toast pattern: `actionmsg.Upgrade(dryRun, pkgName)`, `actionmsg.Update(flatpak.IsDryRun(), appID)`, and `actionmsg.SelfUpdate(dryRun, "Homebrew")` replace what were unconditional "upgraded"/"updated"/"updated successfully" toasts, since `upgrade` and `update` are both in their wrappers' `stateChangingCommands` and no-op under dry-run. The Flatpak update button's list refresh (`go uh.loadFlatpakUpdates()`) stays unconditional, same reasoning as the uninstall refresh above.
+The Updates page's per-package Homebrew upgrade button, per-app Flatpak update button, and the "Update Homebrew" self-update button (`internal/views/updates_page.go`) follow the same toast pattern: `actionmsg.Upgrade(dryRun, pkgName)`, `actionmsg.Update(flatpak.IsDryRun(), appID)`, and `actionmsg.SelfUpdate(dryRun, "Homebrew")` replace what were unconditional "upgraded"/"updated"/"updated successfully" toasts, since `upgrade` and `update` are both in their wrappers' `stateChangingCommands` and no-op under dry-run. The Flatpak update button follows the Homebrew upgrade decision too (`actionstate.PackageUpgrade(err == nil, dryRun)` behind a per-row `actionstate.Gate`): a failure or a dry-run preview restores the button; a live success removes the row from the `rowset.Tracker` `uh.flatpakUpdateRows`, decrements `badgestate.Flatpak` by one, and only then calls `uh.loadFlatpakUpdates()` on the main thread, which takes the next refresh generation before it starts its worker. The button must not rely on the reload to replace it: a reload in which both installation queries fail keeps the old rows, so a button left at "Updating..." would stay there. `actionstate.TestUpdatesPageRetiresCompletedFlatpakUpdateRows` pins this.
 
 The two Homebrew paths additionally use `actionstate.Gate` before spawning a
 goroutine and immediately make the clicked button insensitive with an
