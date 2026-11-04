@@ -424,7 +424,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 | `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
-| `UninstallUnused()` | `flatpak uninstall --unused -y` | 30m | Maintenance cleanup |
+| `UninstallUnused()` | `flatpak uninstall --unused -y --user`, then `flatpak uninstall --unused -y --system` | 30m each | Maintenance cleanup of both installations; see below |
 | `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 30s | Key-value parsed |
 | `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 30s | Lists configured remotes |
 
@@ -455,6 +455,22 @@ failure propagation. It table-tests application and update parsing and
 iterates all four real state-changing command keys to prove dry-run returns
 before execution. This complements runner classification rather than chasing
 a percentage in isolation.
+
+### Unused-runtime cleanup covers both installations
+
+`flatpak uninstall --unused` without a scope flag acts on the system
+installation only, so a scope-less cleanup left unused *user* runtimes behind
+while reporting success. `UninstallUnused` therefore runs the cleanup once per
+scope, `--user` then `--system` (the unexported `uninstallUnusedScopes`), and
+always attempts both even when the first fails. Its output is the non-empty
+scope outputs joined with a newline (under dry-run, the two
+`[DRY-RUN] Would execute: ...` previews). Each scope failure is wrapped as
+`<scope> scope: <cause>` and the failures are combined with `errors.Join`, so
+the Maintenance page's `Flatpak cleanup failed: ...` toast names the scope that
+failed and `errors.As`/`errors.Is` still reach each `*flatpak.Error`.
+`flatpak_test.go` asserts the two invocations and their order, the combined
+output, a one-scope failure that still runs the other scope, a two-scope
+failure, and the dry-run preview.
 
 ### Update queries exclude runtimes
 

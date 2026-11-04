@@ -162,7 +162,6 @@ esac`
 			},
 			want: []string{"info", "--show-metadata", "--user", "org.mozilla.firefox"},
 		},
-		{name: "remove unused", run: func() error { _, err := UninstallUnused(); return err }, want: []string{"uninstall", "--unused", "-y"}},
 	}
 
 	for _, tt := range tests {
@@ -174,6 +173,90 @@ esac`
 				t.Fatalf("flatpak arguments = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// installAppendingFlatpak installs a fake flatpak that appends one line per
+// invocation (its space-joined arguments) to the capture file, so tests can
+// assert on every call of a wrapper that runs flatpak more than once.
+func installAppendingFlatpak(t *testing.T, body string) string {
+	t.Helper()
+	dir := t.TempDir()
+	capture := filepath.Join(dir, "args")
+	script := filepath.Join(dir, "flatpak")
+	source := "#!/bin/sh\necho \"$@\" >> \"$CHAIRLIFT_FLATPAK_ARGS\"\n" + body + "\n"
+	if err := os.WriteFile(script, []byte(source), 0o755); err != nil {
+		t.Fatalf("write fake flatpak: %v", err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("CHAIRLIFT_FLATPAK_ARGS", capture)
+	return capture
+}
+
+func TestUninstallUnusedRunsBothScopes(t *testing.T) {
+	SetDryRun(false)
+	t.Cleanup(func() { SetDryRun(false) })
+	capture := installAppendingFlatpak(t, `case "$*" in *--user*) echo user-out;; *--system*) echo system-out;; esac`)
+
+	output, err := UninstallUnused()
+	if err != nil {
+		t.Fatalf("UninstallUnused() error = %v", err)
+	}
+	want := []string{"uninstall --unused -y --user", "uninstall --unused -y --system"}
+	if got := capturedFlatpakArgs(t, capture); !reflect.DeepEqual(got, want) {
+		t.Fatalf("flatpak invocations = %v, want %v", got, want)
+	}
+	if output != "user-out\n\nsystem-out\n" {
+		t.Fatalf("combined output = %q, want both scopes' output joined", output)
+	}
+}
+
+func TestUninstallUnusedReportsEveryScopeError(t *testing.T) {
+	SetDryRun(false)
+	t.Cleanup(func() { SetDryRun(false) })
+
+	t.Run("system fails, user still runs", func(t *testing.T) {
+		capture := installAppendingFlatpak(t, `case "$*" in *--system*) echo 'system failed' >&2; exit 1;; *) echo user-out;; esac`)
+		output, err := UninstallUnused()
+		if err == nil || !strings.Contains(err.Error(), "--system scope") || !strings.Contains(err.Error(), "system failed") {
+			t.Fatalf("error = %v, want the system scope and its stderr", err)
+		}
+		if strings.Contains(err.Error(), "--user scope") {
+			t.Fatalf("error = %v, want no user-scope failure", err)
+		}
+		if !strings.Contains(output, "user-out") {
+			t.Fatalf("output = %q, want the successful user scope's output", output)
+		}
+		if got := capturedFlatpakArgs(t, capture); len(got) != 2 {
+			t.Fatalf("flatpak invocations = %v, want both scopes attempted", got)
+		}
+	})
+
+	t.Run("both fail", func(t *testing.T) {
+		installAppendingFlatpak(t, `echo "fail $*" >&2; exit 1`)
+		_, err := UninstallUnused()
+		if err == nil || !strings.Contains(err.Error(), "--user scope") || !strings.Contains(err.Error(), "--system scope") {
+			t.Fatalf("error = %v, want both scope failures joined", err)
+		}
+		var fe *Error
+		if !errors.As(err, &fe) {
+			t.Fatalf("errors.As(*Error) = false for %v", err)
+		}
+	})
+}
+
+func TestUninstallUnusedDryRunPreviewsBothScopes(t *testing.T) {
+	SetDryRun(true)
+	t.Cleanup(func() { SetDryRun(false) })
+	t.Setenv("PATH", t.TempDir())
+
+	output, err := UninstallUnused()
+	if err != nil {
+		t.Fatalf("UninstallUnused() dry-run error = %v", err)
+	}
+	want := "[DRY-RUN] Would execute: flatpak uninstall --unused -y --user\n[DRY-RUN] Would execute: flatpak uninstall --unused -y --system"
+	if output != want {
+		t.Fatalf("dry-run output = %q, want %q", output, want)
 	}
 }
 
