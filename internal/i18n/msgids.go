@@ -62,6 +62,9 @@ const (
 	MsgErrorLog     = "Error log"
 	// Done step (new): the dry-run description (ADR-0009 preview wording).
 	MsgDryRunFinished = "[DRY-RUN] Preview: first run finished — no changes made"
+	// Done step (new): the completion could not be recorded.
+	MsgCompletionFailed     = "Could not record that the first run is finished"
+	MsgCompletionFailedDesc = "The first run starts again at your next login"
 )
 
 // Messages lists every first-run msgid, ported and new.
@@ -75,4 +78,5 @@ var Messages = []string{
 	MsgBrowsers, MsgBrowsersDesc, MsgUtilities, MsgUtilitiesDesc, MsgOffice, MsgOfficeDesc,
 	MsgProgress, MsgProgressDesc, MsgInstalling, MsgSettingUpFlathub,
 	MsgFinished, MsgFinishedDesc, MsgExit, MsgSetupFailed, MsgErrorLog, MsgDryRunFinished,
+	MsgCompletionFailed, MsgCompletionFailedDesc,
 }

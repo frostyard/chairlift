@@ -119,6 +119,15 @@ func (f *Flow) previousVisible(s Step) (Step, bool) {
 	return s, false
 }
 
+// CanClose reports whether the window may close now. It is false only on
+// the Progress step before FinishProgress: the Flatpak actions still run and
+// the completion markers are not written yet, so a close would lose them.
+// The window blocks close-request and holds the application while it is
+// false.
+func (f *Flow) CanClose() bool {
+	return f.current != StepProgress || f.progressDone
+}
+
 // CanNext reports whether Next is possible: never from Done, not from
 // Connectivity while the check runs (the result decides whether Apps shows),
 // and not from Progress until its actions finished.

@@ -57,10 +57,21 @@ Facts that constrain the move:
    (idempotent), and removes the legacy per-user copy
    `<config home>/autostart/org.frostyard.FirstSetup.autostart.desktop`. The
    Done step and `chairlift-first-run --mark-done` (for the lab, no GTK) both
-   reach it through `firstrun.Complete`. The window calls it after the
-   Progress actions end, also when some failed, and before the Done step
-   shows, as first-setup did.
-4. **The legacy marker end rule.** ChairLift always **reads**
+   reach it through `firstrun.Complete` (the window through
+   `firstrun.CompleteAt`, which also carries a missing config home). The
+   window calls it after the Progress actions end, also when some failed,
+   and before the Done step shows, as first-setup did. A completion that
+   cannot be recorded (no config home, or a `MarkDone` error) is not hidden:
+   `firstrun.Completion` carries `Err` and `ShowWarning`, and the Done step
+   shows the warning icon, an error-log entry ("Setup failed: Could not
+   record that the first run is finished" and the error text), and the text
+   "The first run starts again at your next login". There is no retry
+   button; the next login runs the first run again.
+4. **The Progress step cannot be cut short.** While the Progress actions run
+   (`Flow.CanClose` is false), the window blocks `close-request` and holds
+   the GApplication, so the Flatpak actions and the marker write finish. The
+   hold is released and close works again when Progress ends.
+5. **The legacy marker end rule.** ChairLift always **reads**
    `snow-first-setup.done`; that never ends. During the transition it also
    **writes** it (the `writeLegacyMarker` constant in
    `internal/firstrun/markers.go`), so a rollback to a first-setup image does
@@ -68,27 +79,29 @@ Facts that constrain the move:
    the first snosi main image without first-setup publishes. The change that
    removes the write records that date and the ChairLift release that drops
    it in `docs/design/overview.md` ("First-run mode").
-5. **No autostart in the deb.** ChairLift ships no autostart entry and no
+6. **No autostart in the deb.** ChairLift ships no autostart entry and no
    first-run `.desktop` file. The image owns the trigger: snosi ships
    `/etc/xdg/autostart/org.frostyard.ChairLift.FirstRun.desktop` with
    `Exec=/usr/bin/chairlift-first-run` on Snow and Snowfield (snosi
    ADR-0028). On any other distribution nothing starts on its own.
-6. **The `first_run_page` config.** A non-navigation config page with one
+7. **The `first_run_page` config.** A non-navigation config page with one
    group, `first_run_apps_group` (`enabled: true`, `apps_path:
    /usr/share/snow/first-run/apps.json`, image data from snosi in
    first-setup's JSON shape). A disabled group, a configuration error
    (ADR-0003 fail-closed), or a missing or invalid list hides the Apps step;
-   the user can still finish.
-7. **Translations through embedded `.po` files.** First-run strings go
+   the user can still finish. A configuration error also stays on screen as
+   a persistent plain-text toast (`LoadError.ToastMessage`, timeout 0), as in
+   the main window.
+8. **Translations through embedded `.po` files.** First-run strings go
    through `internal/i18n`: a small pure-Go `.po` parser over files embedded
    with `go:embed`, gettext's locale choice (`LC_ALL`, `LC_MESSAGES`, `LANG`,
    then `LANGUAGE`), no `msgfmt` step, no generated file, no new dependency.
    Unchanged first-setup strings keep their msgids and translations (ported
    from first-setup commit `b5f7de3`); new strings start untranslated.
-8. **Offline users can finish.** The connectivity step is status only (a 5 s
+9. **Offline users can finish.** The connectivity step is status only (a 5 s
    TCP dial to `dl.flathub.org:443`). Offline, the Apps step is skipped and
    the user can install applications later from ChairLift.
-9. **Dropped first-setup functions.** The live-session check (no live
+10. **Dropped first-setup functions.** The live-session check (no live
    desktop exists any more); the legacy `gtk-theme` write (libadwaita ignores
    it; only `color-scheme` is written); the `~/.bashrc` Homebrew line (moves
    to snosi as `/etc/profile.d/snosi-brew.sh`); the world-writable
@@ -99,10 +112,14 @@ Facts that constrain the move:
    and show only when `gnome-control-center` is on `PATH`; they have no
    config keys, because the first run is GNOME-only (snosi runs it only on
    GNOME images).
-10. **Dry run.** Under `--dry-run` the first run writes no marker
+11. **Dry run.** Under `--dry-run` the first run writes no marker
     (`[DRY-RUN] would write first-run markers: ...`), runs no gsettings, and
     the Flatpak wrapper skips `remote-add` and `install`. The completion is
     one decision struct, `firstrun.Completion` (ADR-0009).
+12. **The color scheme is written serially.** One `firstrun.SchemeWriter`
+    writes the Style step's choices one at a time, and the latest choice
+    wins, so quick toggles cannot leave the scheme the user did not choose
+    last.
 
 ## Consequences
 

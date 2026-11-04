@@ -1,6 +1,7 @@
 package firstrun
 
 import (
+	"errors"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -71,6 +72,80 @@ func TestCompleteReportsMarkDoneFailure(t *testing.T) {
 	}
 	if !strings.HasPrefix(decision.Log, "first-run: could not record completion: ") {
 		t.Fatalf("Complete() log = %q", decision.Log)
+	}
+	// The failure reaches the presentation: no "ready to use" claim, the
+	// warning icon, and an error-log entry with the error text.
+	assertCompletionFailure(t, decision, err)
+	if CompleteAt(false, p, nil).Err == nil {
+		t.Error("CompleteAt() lost MarkDone's error")
+	}
+}
+
+// TestCompleteAtReportsMissingConfigHome covers the window's path error: a
+// live run with no config home records nothing and must say so.
+func TestCompleteAtReportsMissingConfigHome(t *testing.T) {
+	pathsErr := errors.New("neither XDG_CONFIG_HOME nor HOME is set")
+	decision := CompleteAt(false, Paths{}, pathsErr)
+	if decision.Err == nil || !errors.Is(decision.Err, pathsErr) {
+		t.Fatalf("CompleteAt() Err = %v, want it to wrap %v", decision.Err, pathsErr)
+	}
+	assertCompletionFailure(t, decision, pathsErr)
+
+	// In dry run nothing would be written, so a missing config home is no
+	// failure.
+	if dry := CompleteAt(true, Paths{}, pathsErr); dry.Err != nil || dry.ShowWarning || dry.DoneDescription != i18n.MsgDryRunFinished {
+		t.Fatalf("CompleteAt(dry run) = %+v, want the dry-run preview", dry)
+	}
+	// Success has no warning and no error entry.
+	ok := CompleteAt(false, testPaths(t), nil)
+	if ok.Err != nil || ok.ShowWarning || ok.DoneDescription != i18n.MsgFinishedDesc || ok.ErrorLog() != nil {
+		t.Fatalf("CompleteAt(success) = %+v", ok)
+	}
+}
+
+func assertCompletionFailure(t *testing.T, decision Completion, cause error) {
+	t.Helper()
+	if !decision.ShowWarning || decision.Err == nil {
+		t.Errorf("failure outcome = %+v, want Err and ShowWarning", decision)
+	}
+	if decision.DoneDescription != i18n.MsgCompletionFailedDesc {
+		t.Errorf("DoneDescription = %q, want %q (not the success text)", decision.DoneDescription, i18n.MsgCompletionFailedDesc)
+	}
+	entries := decision.ErrorLog()
+	if len(entries) != 1 || entries[0].Title != "Setup failed: Could not record that the first run is finished" ||
+		!strings.Contains(entries[0].Message, cause.Error()) {
+		t.Errorf("ErrorLog() = %+v, want one translated entry with %q", entries, cause)
+	}
+	done := DoneState(nil, decision)
+	if !done.Warning || len(done.Entries) != 1 || done.Description != i18n.MsgCompletionFailedDesc {
+		t.Errorf("DoneState() = %+v, want the warning, the entry and the failure text", done)
+	}
+}
+
+func TestDoneState(t *testing.T) {
+	action := ErrorEntry{Title: "Setup failed: Installing Firefox", Message: "no network"}
+	failed := Completion{DoneDescription: i18n.MsgCompletionFailedDesc, Err: errors.New("disk full"), ShowWarning: true}
+	finished := Completion{DoneDescription: i18n.MsgFinishedDesc}
+	tests := []struct {
+		name        string
+		actions     []ErrorEntry
+		completion  Completion
+		wantWarning bool
+		wantEntries int
+	}{
+		{"all good", nil, finished, false, 0},
+		{"an action failed", []ErrorEntry{action}, finished, true, 1},
+		{"completion failed", nil, failed, true, 1},
+		{"both failed: action entry first", []ErrorEntry{action}, failed, true, 2},
+	}
+	for _, tt := range tests {
+		got := DoneState(tt.actions, tt.completion)
+		if got.Warning != tt.wantWarning || len(got.Entries) != tt.wantEntries || got.Description != tt.completion.DoneDescription {
+			t.Errorf("%s: DoneState() = %+v", tt.name, got)
+		}
+		if tt.wantEntries > 0 && len(tt.actions) > 0 && got.Entries[0] != action {
+			t.Errorf("%s: first entry = %+v, want the action entry", tt.name, got.Entries[0])
+		}
 	}
 }
 

@@ -1359,8 +1359,21 @@ builds `window.NewFirstRun` instead of the main window and presents it;
 `FirstRunWindow.Present` logs `first-run: window presented`, the readiness
 marker that `make e2e` and the lab read (ADR-0008 style). The window is an
 `adw.ApplicationWindow` with a header bar (Back, Next) and a `gtk.Stack` of
-`adw.StatusPage` steps. All its text goes through `i18n.T`; worker results
-return through `sgtk.RunOnMainThread`.
+`adw.StatusPage` steps, inside an `adw.ToastOverlay`. All its text goes
+through `i18n.T`; worker results return through `sgtk.RunOnMainThread`.
+
+When `config.Load` returns an error, the window shows
+`LoadError.ToastMessage()` as a persistent toast (`SetUseMarkup(false)`,
+`SetTimeout(0)`), as the main window does; the Apps step is hidden and the
+user can still finish. `internal/installcheck.TestToastsRenderPlainText`
+scans this toast too.
+
+**Close guard.** `Flow.CanClose` is false only on the Progress step before
+`FinishProgress`. The window connects `close-request` and returns
+`!Flow.CanClose()`, so a close is refused while the Flatpak actions and the
+marker write run. `startProgress` also calls `Hold` on the GApplication before
+the worker starts, and `finishProgress` calls `Release`; after Progress ends,
+close works normally.
 
 ### Steps and flow
 
@@ -1375,10 +1388,14 @@ Done and every transition:
   `ConnOnline`, `ConnOffline`). Next waits while the check runs, because the
   result decides whether Apps shows. Offline shows Check Again and Open
   Settings (`gnome-control-center wifi`); the user can go on.
-- **Style** — Light/Dark toggles. `firstrun.ApplyColorScheme` runs
-  `gsettings set org.gnome.desktop.interface color-scheme
-  prefer-light|prefer-dark` on a worker goroutine and never writes
-  `gtk-theme`; the window follows the choice through its style manager.
+- **Style** — Light/Dark toggles. Each toggle calls `Request` on the window's
+  one `firstrun.SchemeWriter` from the main thread. The writer has one worker
+  goroutine and a mutex-protected pending value: a request during a write
+  replaces the pending value, so the latest choice wins and at most the
+  running write and the latest one run. Each write is
+  `firstrun.ApplyColorScheme`: `gsettings set org.gnome.desktop.interface
+  color-scheme prefer-light|prefer-dark`, never `gtk-theme`. The window
+  follows the choice through its style manager.
 - **Apps** — visible only when the list loaded, `first_run_apps_group` is
   enabled, and the check said online (`Flow.Visible`). One `adw.ExpanderRow`
   with an enable switch per category, one `adw.SwitchRow` per app, no icons
@@ -1391,7 +1408,10 @@ Done and every transition:
   (`flatpak.Install(id, true)`). `firstrun.Execute` runs every action, also
   after a failure, and emits Running, then Succeeded or Failed per row.
 - **Done** — `Finished!`, the completion text, Exit, and an `Error log`
-  expander (`firstrun.ErrorLog`) only when an action failed. No Back, no Next.
+  expander. `firstrun.DoneState` composes it from the failed actions'
+  entries (`firstrun.ErrorLog`) and the completion outcome: the warning icon
+  and the expander show when an action failed or the completion could not be
+  recorded. No Back, no Next.
 
 The settings buttons show only when `gnome-control-center` is on `PATH`
 (`firstrun.SettingsAvailable`); they are launches, not state changes, so they
@@ -1426,9 +1446,21 @@ writer: it creates `<config home>/chairlift` (0700), writes both markers as
 empty 0644 files (an existing file is kept), and removes the legacy per-user
 `<config home>/autostart/org.frostyard.FirstSetup.autostart.desktop`.
 `firstrun.Complete(dryRun, paths)` builds the `firstrun.Completion` decision
-and calls `MarkDone` only when `WriteMarkers` is true; the window calls it
-after the Progress actions end (also when some failed) and before Done shows,
-and `chairlift-first-run --mark-done` reaches it through `Gate`. Wiring tests
+and calls `MarkDone` only when `WriteMarkers` is true;
+`chairlift-first-run --mark-done` reaches it through `Gate`. The window calls
+`firstrun.CompleteAt(dryRun, paths, pathsErr)` after the Progress actions end
+(also when some failed) and before Done shows. The outcomes:
+
+- success — `DoneDescription` "Your user account is ready to use", no
+  warning;
+- dry run — no write, `[DRY-RUN] would write first-run markers: ...`, the
+  dry-run preview text (a missing config home is no failure here);
+- a live run with no config home, or a `MarkDone` error — `Err` is set,
+  `ShowWarning` is true, the `Log` line is `first-run: could not record
+  completion: ...`, `DoneDescription` is "The first run starts again at your
+  next login", and `Completion.ErrorLog` gives one entry, "Setup failed:
+  Could not record that the first run is finished" with the error text. There
+  is no retry button. Wiring tests
 in `internal/firstrun` prove both paths reach the one writer, that only
 `MarkDone` writes files, and that only `internal/firstrun/markers.go` spells
 the marker names.

@@ -91,8 +91,8 @@ func calledFunctions(t *testing.T, dir string) map[string]map[string]bool {
 
 // TestCompletionPathsShareOneMarkerWriter proves that the Done step and
 // `chairlift-first-run --mark-done` reach the same MarkDone: main.go calls
-// Gate, Gate calls Complete, the first-run window calls Complete, and
-// Complete calls MarkDone.
+// Gate, Gate calls Complete, the first-run window calls CompleteAt,
+// CompleteAt calls Complete, and Complete calls MarkDone.
 func TestCompletionPathsShareOneMarkerWriter(t *testing.T) {
 	root := repoRoot(t)
 	main := readSource(t, filepath.Join(root, "cmd", "chairlift-first-run", "main.go"))
@@ -112,6 +112,9 @@ func TestCompletionPathsShareOneMarkerWriter(t *testing.T) {
 	if !calls["Complete"]["MarkDone"] || !calls["Complete"]["DecideCompletion"] {
 		t.Error("Complete does not call DecideCompletion and MarkDone")
 	}
+	if !calls["CompleteAt"]["Complete"] {
+		t.Error("CompleteAt does not call Complete")
+	}
 	for fn, set := range calls {
 		if set["MarkDone"] && fn != "Complete" {
 			t.Errorf("%s calls MarkDone directly; only Complete may", fn)
@@ -122,13 +125,13 @@ func TestCompletionPathsShareOneMarkerWriter(t *testing.T) {
 	for _, path := range windowFirstRunFiles(t) {
 		window.WriteString(readSource(t, path))
 	}
-	for _, fragment := range []string{"firstrun.Complete(", "firstrun.IsDryRun()"} {
+	for _, fragment := range []string{"firstrun.CompleteAt(", "firstrun.IsDryRun()", "firstrun.DoneState(", "done.Warning", "done.Entries"} {
 		if !strings.Contains(window.String(), fragment) {
 			t.Errorf("internal/window/firstrun*.go does not contain %q", fragment)
 		}
 	}
-	if strings.Contains(window.String(), "firstrun.MarkDone(") {
-		t.Error("internal/window/firstrun*.go calls MarkDone directly; it must call Complete (dry-run decision)")
+	if strings.Contains(window.String(), "firstrun.MarkDone(") || strings.Contains(window.String(), "firstrun.Complete(") {
+		t.Error("internal/window/firstrun*.go calls MarkDone or Complete directly; it must call CompleteAt, which also carries the path error")
 	}
 }
 
@@ -263,5 +266,80 @@ func TestAppSelectsFirstRunMode(t *testing.T) {
 	}
 	if strings.Index(app, `if arg == "--first-run" {`) > strings.Index(app, `gobject.NewObject(gTypeApplication`) {
 		t.Error("internal/app/app.go detects --first-run after it creates the application object")
+	}
+}
+
+// windowFirstRunSource returns internal/window/firstrun*.go joined.
+func windowFirstRunSource(t *testing.T) string {
+	t.Helper()
+	var window strings.Builder
+	for _, path := range windowFirstRunFiles(t) {
+		window.WriteString(readSource(t, path))
+	}
+	return window.String()
+}
+
+// TestWindowGuardsCloseDuringProgress proves the first-run window keeps
+// itself open and the application alive while the Progress actions run:
+// close-request returns the negation of Flow.CanClose, the application is
+// held before the worker starts and released when Progress ends.
+func TestWindowGuardsCloseDuringProgress(t *testing.T) {
+	window := windowFirstRunSource(t)
+	for _, fragment := range []string{
+		"w.win.ConnectCloseRequest(&closeCb)",
+		"return !w.flow.CanClose()",
+		"w.app.Hold()",
+		"w.app.Release()",
+	} {
+		if !strings.Contains(window, fragment) {
+			t.Errorf("internal/window/firstrun*.go does not contain %q", fragment)
+		}
+	}
+	hold := strings.Index(window, "w.app.Hold()")
+	worker := strings.Index(window, "report := firstrun.Execute(")
+	if hold < 0 || worker < 0 || hold > worker {
+		t.Error("the application is not held before the Progress worker starts")
+	}
+	finish := strings.Index(window, "func (w *FirstRunWindow) finishProgress(")
+	release := strings.Index(window, "w.app.Release()")
+	if finish < 0 || release < finish {
+		t.Error("finishProgress does not release the application")
+	}
+}
+
+// TestWindowShowsConfigErrorToast proves a configuration error stays on
+// screen as a persistent plain-text toast (AGENTS.md, ADR-0003), as the main
+// window does.
+func TestWindowShowsConfigErrorToast(t *testing.T) {
+	window := windowFirstRunSource(t)
+	for _, fragment := range []string{
+		"adw.NewToastOverlay()",
+		"w.win.SetContent(&w.toasts.Widget)",
+		"if cfgErr != nil {",
+		"toast := adw.NewToast(cfgErr.ToastMessage())",
+		"toast.SetUseMarkup(false)",
+		"toast.SetTimeout(0)",
+		"w.toasts.AddToast(toast)",
+	} {
+		if !strings.Contains(window, fragment) {
+			t.Errorf("internal/window/firstrun*.go does not contain %q", fragment)
+		}
+	}
+}
+
+// TestWindowWritesColorSchemeSerially proves the Style step goes through the
+// one SchemeWriter, so writes cannot land out of order.
+func TestWindowWritesColorSchemeSerially(t *testing.T) {
+	window := windowFirstRunSource(t)
+	for _, fragment := range []string{
+		"firstrun.NewSchemeWriter(firstrun.ApplyColorScheme)",
+		"w.scheme.Request(scheme)",
+	} {
+		if !strings.Contains(window, fragment) {
+			t.Errorf("internal/window/firstrun*.go does not contain %q", fragment)
+		}
+	}
+	if strings.Contains(window, "firstrun.ApplyColorScheme(scheme)") {
+		t.Error("internal/window/firstrun*.go calls ApplyColorScheme directly; it must use the SchemeWriter")
 	}
 }

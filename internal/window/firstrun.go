@@ -28,7 +28,11 @@ import (
 // connectivity check, the Progress actions, the color-scheme write) return
 // to it with sgtk.RunOnMainThread.
 type FirstRunWindow struct {
+	app       adw.Application
 	win       *adw.ApplicationWindow
+	toasts    *adw.ToastOverlay
+	scheme    *firstrun.SchemeWriter
+	holding   bool // the application is held while Progress runs
 	flow      *firstrun.Flow
 	paths     firstrun.Paths
 	pathsErr  error
@@ -62,6 +66,8 @@ type FirstRunWindow struct {
 // NewFirstRun builds the first-run window for app. It loads the
 // configuration and the application list (a failure hides the Apps step and
 // is logged), resolves the marker paths, and starts the connectivity check.
+// A configuration error also stays on screen as a persistent toast (ADR-0003);
+// the user can still finish.
 func NewFirstRun(app adw.Application) *FirstRunWindow {
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
@@ -78,7 +84,9 @@ func NewFirstRun(app adw.Application) *FirstRunWindow {
 	}
 
 	w := &FirstRunWindow{
+		app:          app,
 		win:          adw.NewApplicationWindow(&app.Application),
+		scheme:       firstrun.NewSchemeWriter(firstrun.ApplyColorScheme),
 		flow:         firstrun.NewFlow(apps != nil),
 		paths:        paths,
 		pathsErr:     pathsErr,
@@ -91,6 +99,20 @@ func NewFirstRun(app adw.Application) *FirstRunWindow {
 	w.win.SetTitle("ChairLift")
 	w.win.SetDefaultSize(720, 640)
 	w.buildUI()
+	if cfgErr != nil {
+		// buildUI runs on the GTK main thread and made the overlay; timeout
+		// 0 keeps the diagnostic until it is dismissed.
+		toast := adw.NewToast(cfgErr.ToastMessage())
+		toast.SetUseMarkup(false)
+		toast.SetTimeout(0)
+		w.toasts.AddToast(toast)
+	}
+	// While the Progress actions run (Flow.CanClose is false), a close would
+	// end the application and lose the completion markers: keep the window.
+	closeCb := func(gtk.Window) bool {
+		return !w.flow.CanClose()
+	}
+	w.win.ConnectCloseRequest(&closeCb)
 	w.startConnectivityCheck()
 	w.update()
 	return w
@@ -130,7 +152,9 @@ func (w *FirstRunWindow) buildUI() {
 	toolbar := adw.NewToolbarView()
 	toolbar.AddTopBar(&header.Widget)
 	toolbar.SetContent(&w.stack.Widget)
-	w.win.SetContent(&toolbar.Widget)
+	w.toasts = adw.NewToastOverlay()
+	w.toasts.SetChild(&toolbar.Widget)
+	w.win.SetContent(&w.toasts.Widget)
 }
 
 // pillButton makes a centered pill button.
@@ -285,8 +309,9 @@ func (w *FirstRunWindow) buildStyle() *adw.StatusPage {
 	return page
 }
 
-// applyColorScheme shows the scheme in this window and writes it with
-// gsettings on a worker goroutine (dry run: logged only).
+// applyColorScheme shows the scheme in this window and asks the serial
+// writer to write it with gsettings (dry run: logged only). The writer runs
+// one write at a time, and the latest choice wins.
 func (w *FirstRunWindow) applyColorScheme(scheme firstrun.ColorScheme) {
 	styleManager := adw.StyleManagerGetDefault()
 	if scheme == firstrun.SchemeDark {
@@ -294,11 +319,7 @@ func (w *FirstRunWindow) applyColorScheme(scheme firstrun.ColorScheme) {
 	} else {
 		styleManager.SetColorScheme(adw.ColorSchemeForceLightValue)
 	}
-	go func() {
-		if err := firstrun.ApplyColorScheme(scheme); err != nil {
-			log.Printf("first-run: color scheme: %v", err)
-		}
-	}()
+	w.scheme.Request(scheme)
 }
 
 // buildApps builds the application picker: one expander row with an enable
@@ -393,24 +414,23 @@ func (w *FirstRunWindow) startProgress() {
 
 	dryRun := firstrun.IsDryRun()
 	paths, pathsErr := w.paths, w.pathsErr
+	// Hold the application until the worker ends: the actions and the
+	// completion markers must finish even if the window could go away.
+	w.app.Hold()
+	w.holding = true
 	go func() {
 		report := firstrun.Execute(actions, firstrun.FlatpakRunner, func(event firstrun.Event) {
 			sgtk.RunOnMainThread(func() { w.showActionState(event) })
 		})
 		// The marker is written after the actions end, also when some
 		// failed, and before the Done step shows (as first-setup did).
-		var decision firstrun.Completion
-		if pathsErr != nil {
-			decision = firstrun.DecideCompletion(dryRun, paths)
-			log.Printf("first-run: cannot record completion: %v", pathsErr)
-		} else {
-			// Complete logs nothing itself; its Log line carries the
-			// dry-run preview, the markers written, or the failure.
-			decision, _ = firstrun.Complete(dryRun, paths)
-			log.Println(decision.Log)
-		}
-		entries := firstrun.ErrorLog(actions, report)
-		sgtk.RunOnMainThread(func() { w.finishProgress(decision, entries) })
+		// CompleteAt logs nothing itself; its Log line carries the dry-run
+		// preview, the markers written, or the failure, which the Done
+		// step also shows.
+		decision := firstrun.CompleteAt(dryRun, paths, pathsErr)
+		log.Println(decision.Log)
+		done := firstrun.DoneState(firstrun.ErrorLog(actions, report), decision)
+		sgtk.RunOnMainThread(func() { w.finishProgress(done) })
 	}()
 }
 
@@ -443,14 +463,19 @@ func (w *FirstRunWindow) showActionState(event firstrun.Event) {
 	w.actionSuffixes[event.Index] = suffix
 }
 
-// finishProgress ends the Progress step and moves to Done once.
-func (w *FirstRunWindow) finishProgress(decision firstrun.Completion, entries []firstrun.ErrorEntry) {
+// finishProgress ends the Progress step, releases the application hold, and
+// moves to Done once.
+func (w *FirstRunWindow) finishProgress(done firstrun.Done) {
 	w.flow.FinishProgress()
-	w.donePage.SetDescription(i18n.T(decision.DoneDescription))
-	if len(entries) > 0 {
+	if w.holding {
+		w.holding = false
+		w.app.Release()
+	}
+	w.donePage.SetDescription(i18n.T(done.Description))
+	if done.Warning {
 		w.donePage.SetIconName("dialog-warning-symbolic")
 	}
-	for _, entry := range entries {
+	for _, entry := range done.Entries {
 		log.Printf("first-run: %s: %s", entry.Title, entry.Message)
 		label := gtk.NewLabel(entry.Title + "\n" + entry.Message)
 		label.SetWrap(true)
@@ -462,7 +487,7 @@ func (w *FirstRunWindow) finishProgress(decision firstrun.Completion, entries []
 		label.SetMarginEnd(12)
 		w.doneLog.AddRow(&label.Widget)
 	}
-	w.doneErrors.SetVisible(len(entries) > 0)
+	w.doneErrors.SetVisible(len(done.Entries) > 0)
 	if w.flow.Current() == firstrun.StepProgress && w.flow.Next() {
 		w.exitBtn.GrabFocus()
 	}

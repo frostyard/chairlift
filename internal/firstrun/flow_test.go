@@ -186,3 +186,29 @@ func TestFlowNeighbourHelpers(t *testing.T) {
 		t.Errorf("nextVisible(Style) online = %v, want Apps", got)
 	}
 }
+
+// TestFlowCanClose pins the close guard: the window may not close on
+// Progress before its actions finish, and may close on every other step.
+func TestFlowCanClose(t *testing.T) {
+	f := NewFlow(true)
+	f.SetConnectivity(ConnOnline)
+	want := map[Step]bool{StepWelcome: true, StepConnectivity: true, StepStyle: true, StepApps: true, StepProgress: false}
+	for f.Current() != StepProgress {
+		if got := f.CanClose(); got != want[f.Current()] {
+			t.Errorf("CanClose() on %v = %v, want %v", f.Current(), got, want[f.Current()])
+		}
+		if !f.Next() {
+			t.Fatalf("stuck at %v", f.Current())
+		}
+	}
+	if f.CanClose() {
+		t.Error("CanClose() on Progress before FinishProgress = true, want false")
+	}
+	f.FinishProgress()
+	if !f.CanClose() {
+		t.Error("CanClose() on Progress after FinishProgress = false, want true")
+	}
+	if !f.Next() || f.Current() != StepDone || !f.CanClose() {
+		t.Errorf("CanClose() on Done = %v at %v, want true", f.CanClose(), f.Current())
+	}
+}

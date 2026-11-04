@@ -113,9 +113,14 @@ func TestDoneMarkerDetection(t *testing.T) {
 	}
 }
 
-func TestMarkDoneWritesBothMarkersAndRemovesLegacyAutostart(t *testing.T) {
+// TestMarkDoneWritesBothMarkersInPrivateDirectories starts from a config
+// home that does not exist, so every directory on the marker path is one
+// MarkDone creates itself; it must create them 0700 under any umask.
+func TestMarkDoneWritesBothMarkersInPrivateDirectories(t *testing.T) {
 	p := testPaths(t)
-	touch(t, p.LegacyAutostart)
+	if exists(t, p.ConfigHome) {
+		t.Fatalf("config home %s exists before MarkDone; the mode check needs a fresh one", p.ConfigHome)
+	}
 
 	if err := MarkDone(p); err != nil {
 		t.Fatalf("MarkDone() error = %v", err)
@@ -138,11 +143,27 @@ func TestMarkDoneWritesBothMarkersAndRemovesLegacyAutostart(t *testing.T) {
 			t.Errorf("created directory %s has mode %v, want 0700", dir, info.Mode().Perm())
 		}
 	}
+	if !IsDone(p) {
+		t.Error("IsDone() = false after MarkDone")
+	}
+}
+
+// TestMarkDoneRemovesLegacyAutostart puts first-setup's per-user autostart
+// copy in an existing config home; MarkDone writes both markers and removes
+// the copy. The test's own directories are not MarkDone's, so it checks no
+// directory mode.
+func TestMarkDoneRemovesLegacyAutostart(t *testing.T) {
+	p := testPaths(t)
+	touch(t, p.LegacyAutostart)
+
+	if err := MarkDone(p); err != nil {
+		t.Fatalf("MarkDone() error = %v", err)
+	}
 	if exists(t, p.LegacyAutostart) {
 		t.Error("legacy autostart copy still exists")
 	}
-	if !IsDone(p) {
-		t.Error("IsDone() = false after MarkDone")
+	if !exists(t, p.Marker) || !exists(t, p.LegacyMarker) {
+		t.Error("MarkDone did not write both markers")
 	}
 }
 
