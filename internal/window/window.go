@@ -433,6 +433,9 @@ func (w *Window) AddToast(toast *adw.Toast) {
 // ShowToast shows a simple toast message
 func (w *Window) ShowToast(message string) {
 	toast := adw.NewToast(message)
+	// AdwToast parses Pango markup by default; error and admin-supplied
+	// text containing <, > or & would fail to parse and render blank.
+	toast.SetUseMarkup(false)
 	toast.SetTimeout(3)
 	w.AddToast(toast)
 }
@@ -440,6 +443,9 @@ func (w *Window) ShowToast(message string) {
 // ShowErrorToast shows an error toast
 func (w *Window) ShowErrorToast(message string) {
 	toast := adw.NewToast(message)
+	// AdwToast parses Pango markup by default; error and admin-supplied
+	// text containing <, > or & would fail to parse and render blank.
+	toast.SetUseMarkup(false)
 	toast.SetTimeout(0) // Persist until dismissed
 	w.AddToast(toast)
 }

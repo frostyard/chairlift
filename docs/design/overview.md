@@ -985,7 +985,10 @@ path-and-cause diagnostic with `CONFIGURATION ERROR`, states that all groups
 were disabled, and instructs the user to restart after fixing the file.
 `window.New` retains the same `LoadError`, builds the toast overlay, then calls
 `ShowErrorToast` with `LoadError.ToastMessage`. `ShowErrorToast` sets timeout
-zero, so the startup error remains visible instead of expiring; construction
+zero, so the startup error remains visible instead of expiring. Both
+`ShowToast` and `ShowErrorToast` disable Pango markup, because AdwToast parses
+markup by default and a path or tool error containing `<`, `>` or `&` would
+otherwise render as a blank toast; construction
 and the toast call both occur on the GTK main thread.
 
 ### Package manager wrapper pattern
@@ -1252,6 +1255,14 @@ compacted Alt+number keys. `internal/window` uses the result for its sidebar,
 stack, actions, initial selection, and shortcuts dialog. After construction,
 `internal/app` registers `navigation.Bindings(window.NavigationItems())`, so
 the registered and advertised keys use the exact same visible inventory.
+
+Binding an accelerator does not create the action it targets. `internal/window`
+registers the `win.*` actions (`show-shortcuts`, `show-about`, and one
+`navigate-<page>` per visible page) and `internal/app` registers `app.quit`
+(`registerQuitAction`) — GTK supplies no default quit action. Because neither
+package can host a test binary, `navigation`'s
+`TestEveryAdvertisedActionIsRegistered` reads both source files and fails when
+any advertised action has no `gio.NewSimpleAction` registration.
 
 The accelerators are:
 
