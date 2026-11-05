@@ -10,6 +10,7 @@ import (
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/firstrun"
 	"github.com/frostyard/chairlift/internal/i18n"
+	"github.com/frostyard/chairlift/internal/reporting"
 	"github.com/frostyard/chairlift/internal/selfreport"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
@@ -53,6 +54,12 @@ type FirstRunWindow struct {
 	categoryRows map[string]*adw.ExpanderRow
 	appRows      map[string]*adw.SwitchRow
 
+	// The optional problem-reporting step (ADR-0015): firstrun_reporting.go.
+	reportingPage   *adw.StatusPage
+	reportingSwitch *adw.SwitchRow
+	reportingRecord reporting.Consent
+	reportingPath   string
+
 	progressGroup   *adw.PreferencesGroup
 	progressStarted bool
 	actionRows      []*adw.ActionRow
@@ -85,18 +92,24 @@ func NewFirstRun(app adw.Application) *FirstRunWindow {
 		log.Printf("first-run: cannot find the config home: %v", pathsErr)
 	}
 
+	// The optional problem-reporting step (ADR-0015) needs the reporting
+	// group and the system problem file; its switch shows the saved consent.
+	reportingOn, consent, consentPath := reportingStepAvailable(cfg)
+
 	w := &FirstRunWindow{
-		app:          app,
-		win:          adw.NewApplicationWindow(&app.Application),
-		scheme:       firstrun.NewSchemeWriter(firstrun.ApplyColorScheme),
-		flow:         firstrun.NewFlow(apps != nil),
-		paths:        paths,
-		pathsErr:     pathsErr,
-		apps:         apps,
-		selection:    firstrun.NewSelection(apps),
-		settings:     firstrun.SettingsAvailable(exec.LookPath),
-		categoryRows: make(map[string]*adw.ExpanderRow),
-		appRows:      make(map[string]*adw.SwitchRow),
+		app:             app,
+		win:             adw.NewApplicationWindow(&app.Application),
+		scheme:          firstrun.NewSchemeWriter(firstrun.ApplyColorScheme),
+		flow:            firstrun.NewFlowWithReporting(apps != nil, reportingOn),
+		reportingRecord: consent,
+		reportingPath:   consentPath,
+		paths:           paths,
+		pathsErr:        pathsErr,
+		apps:            apps,
+		selection:       firstrun.NewSelection(apps),
+		settings:        firstrun.SettingsAvailable(exec.LookPath),
+		categoryRows:    make(map[string]*adw.ExpanderRow),
+		appRows:         make(map[string]*adw.SwitchRow),
 	}
 	w.win.SetTitle("ChairLift")
 	w.win.SetDefaultSize(720, 640)
@@ -147,6 +160,9 @@ func (w *FirstRunWindow) buildUI() {
 	w.stack.AddNamed(&w.buildWelcome().Widget, firstrun.StepWelcome.String())
 	w.stack.AddNamed(&w.buildConnectivity().Widget, firstrun.StepConnectivity.String())
 	w.stack.AddNamed(&w.buildStyle().Widget, firstrun.StepStyle.String())
+	if w.flow.Visible(firstrun.StepReporting) {
+		w.stack.AddNamed(&w.buildReporting().Widget, firstrun.StepReporting.String())
+	}
 	w.stack.AddNamed(&w.buildApps().Widget, firstrun.StepApps.String())
 	w.stack.AddNamed(&w.buildProgress().Widget, firstrun.StepProgress.String())
 	w.stack.AddNamed(&w.buildDone().Widget, firstrun.StepDone.String())

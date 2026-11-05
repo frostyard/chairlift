@@ -5,7 +5,7 @@ Living design document (formerly `yeti/OVERVIEW.md`; folded into `docs/` per
 
 ## Purpose
 
-ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, OS system updates (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off. A separate first-run mode (`chairlift --first-run`, started by the pure-Go `chairlift-first-run` gate) replaces SNOW First Setup on images that ship its trigger; see [First-run mode](#first-run-mode). The Problems page shows the problems that the system checks, the user's crashes and frostyard apps recorded on this computer, and sends nothing; see [Problems page](#problems-page).
+ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, OS system updates (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off. A separate first-run mode (`chairlift --first-run`, started by the pure-Go `chairlift-first-run` gate) replaces SNOW First Setup on images that ship its trigger; see [First-run mode](#first-run-mode). The Problems page shows the problems that the system checks, the user's crashes and frostyard apps recorded on this computer, and sends nothing until the user opts in to reporting; see [Problems page](#problems-page).
 
 ## Architecture
 
@@ -1329,9 +1329,10 @@ Help page links are opened via `xdg-open` using `exec.Command`. The process is s
 ## Problems page
 
 Decision record: [ADR-0015](../adr/0015-problems-page-and-opt-in-reporting.md);
-the exact contract is [specs/problems-page.md](../specs/problems-page.md).
-The page is local only: it reads records on this computer and sends nothing
-(phase 1 of plan T857; the opt-in sender is a later task).
+the exact contracts are [specs/problems-page.md](../specs/problems-page.md) and
+[specs/problem-reporting.md](../specs/problem-reporting.md). The page reads
+records on this computer and sends nothing until the user turns reporting on
+(phase 2 of plan T857); `internal/reporting` is the only sender.
 
 ### Groups and visibility
 
@@ -1344,10 +1345,9 @@ all 3 are off, also after a configuration error (ADR-0003).
 `buildProblemsPage` builds the enabled groups with "Loading…" descriptions,
 then `loadProblems` runs `problems.Load` on a worker goroutine and fills the
 groups through `sgtk.RunOnMainThread`. The groups are nil when disabled, and
-the main-thread code nil-guards both. The reporting group has 1 row,
-`pageview.ProblemsReporting`: "Problem reports stay on this computer",
-"ChairLift does not send anything." After the groups are filled the page
-logs `problems.BuiltMarker`: `problems: page built system=<n> apps=<n>
+the main-thread code nil-guards both. See "Reporting" below for the
+reporting group's rows. After the groups are filled the page logs
+`problems.BuiltMarker`: `problems: page built system=<n> apps=<n>
 source=<outcome>` (`source=disabled` without the system group).
 
 ### Sources (`internal/problems`)
@@ -1420,12 +1420,70 @@ The view composes no text of its own.
   shows again when its last time is after the dismissal.
 
 `problems.BuildPayload` builds the `frostyard.problem/1` document of a
-reportable item from validated schema fields only; phase 1 never calls it.
-Its tests validate every payload of the fixtures against a vendored byte copy
-of core's `v1.json` (sha256 pinned) with a JSON-schema-subset validator.
+reportable item from validated schema fields only; only
+`internal/reporting` calls it, and only after the user opted in. Its tests
+validate every payload of the fixtures against a vendored byte copy of core's
+`v1.json` (sha256 pinned) with a JSON-schema-subset validator, which lives in
+`internal/problems/schemacheck` so the sender's tests use the same one.
 
 `CHAIRLIFT_PROBLEMS_FIXTURES=<absolute folder>` replaces every source, only
 with `--dry-run` (`problems.DecideFixtures`); `make e2e` uses it.
+
+### Reporting (`internal/reporting`)
+
+Full contract: [specs/problem-reporting.md](../specs/problem-reporting.md).
+`internal/reporting` is a pure leaf package (no puregotk) and the only
+production importer of `net/http`; `internal/installcheck/reporting_test.go`
+fails when another package imports it, or when another non-test Go file names
+`report.frostyard.org`.
+
+- **Consent** (`consent.go`): `$XDG_CONFIG_HOME/chairlift/reporting.json`
+  (else `$HOME/.config/chairlift/reporting.json`, 0600) records `enabled`,
+  `mode` (`ask`/`auto`), `decided_at` and the agreed `schema`. It is off
+  until the user turns it on, and every failure reads as off. A schema that
+  adds a kind or a field is a new data generation (`dataGeneration`), so
+  sending stops until the user agrees again; an enum-only schema keeps it on.
+- **Sent log** (`state.go`): `$XDG_STATE_HOME/chairlift/reports.json` (else
+  `$HOME/.local/state/chairlift/reports.json`) holds the sent entries, the
+  week of the last count and `retry_after`; at most 500 entries, none older
+  than 90 days. `LoadState`'s error stops the automatic path: it could not
+  enforce the caps.
+- **Envelope** (`envelope.go`): `ForItem` builds a report with a new
+  `report_id`, and `Prepare` indents the body for the dialog: `Report.Text()`
+  is `string(Report.Body)`, so the dialog shows exactly what is sent. Kind
+  `crash` is refused with `ErrLocalOnly`. `BuildCount`/`NewCountReport` build
+  the weekly count: `install_age` (from `/etc/machine-id`'s modification
+  time) and `channel` (`latest`/`other` from the bootc image reference).
+- **Sender** (`sender.go`): `POST <endpoint>` with `Content-Type:
+  application/json`, no `User-Agent`, a 15 s timeout, at most 8191 bytes of
+  body, no redirect followed, 2xx is success and every other answer is a
+  `*StatusError`.
+- **Run** (`run.go`): the one automatic path, in order: group off, consent,
+  ask mode, release client, the lock, the sent log, the pause; then the
+  pending reports (reportable, not `crash`, not sent this week, at most 20 in
+  24 hours), then the count when this ISO week was not counted. It reads the
+  consent again before every request, and the first failure sets
+  `retry_after` to now + 24 h and stops. A dry run previews and writes
+  nothing. `manual.go`'s `SendReport` is the dialog's send: it ignores the
+  pause (the user asked), refuses an unreadable sent log, and shares the caps
+  and the lock. Both builders encode without HTML escaping, so enum text such
+  as `<1w` stays readable.
+- **Endpoint** (`endpoint.go`): `https://report.frostyard.org/v1/report` by
+  default; `problems_reporting_group.endpoint` counts only from an
+  administrator-owned file (`config.Config.ReportEndpoint`).
+- **The windowless mode** (`cli.go`): `chairlift --send-pending-reports`
+  runs before `app.New()`, so it builds no GTK; it exits 1 for a
+  configuration error or a failed send, and 0 with 1 line when there is
+  nothing to do. It loads the dismiss store the page uses, so both paths
+  send the same items.
+- **The page** (`internal/views/problems_page.go`): the switch, mode,
+  "Sent reports", "What is sent" and "Weekly count" rows, a Report… button
+  per offered problem, and `reporting.Run` in Auto mode. The decisions come
+  from `actionmsg.Report` and `actionmsg.ReportingConsent` (ADR-0009).
+- **The first run** shows the optional Reporting step between Style and Apps
+  when the reporting group is on and `/var/lib/snosi-health/problems.json`
+  exists (`firstrun.ReportingAvailable`); ADR-0014's `Steps`, markers and
+  `--mark-done` do not change (see "First-run mode").
 
 ### ChairLift's own problems (`internal/selfreport`)
 
@@ -1717,7 +1775,7 @@ page_name:
 | `help_page`         | `help_resources_group`           | Configurable links (website, issues, chat)                                                                                                                                                              |
 | `problems_page`     | `problems_system_group`          | Problems page: snosi-health's system problems; "System checks are not available on this system" without `/var/lib/snosi-health/problems.json` ([ADR-0015](../adr/0015-problems-page-and-opt-in-reporting.md)) |
 | `problems_page`     | `problems_apps_group`            | Problems page: the user's crashes (coredumpctl) and frostyard app problem records (user journal) |
-| `problems_page`     | `problems_reporting_group`       | Problems page: the reporting row; phase 1 states that reports stay on this computer |
+| `problems_page`     | `problems_reporting_group`       | Problems page: opt-in reporting (switch, Ask/Auto mode, sent reports, weekly count); `endpoint` counts only from an administrator-owned file ([spec](../specs/problem-reporting.md)) |
 | `first_run_page`    | `first_run_apps_group`           | Not a navigation page: the first run's Apps step and its `apps_path` list (default `/usr/share/snow/first-run/apps.json`); disabled, a configuration error, or a missing/invalid list hides the step ([ADR-0014](../adr/0014-first-run-mode.md)) |
 
 ## Build and Release

@@ -18,20 +18,11 @@ const (
 	ProblemsSystemDescription = "Problems that the system checks (snosi-health) recorded"
 	ProblemsAppsTitle         = "Apps"
 	ProblemsAppsDescription   = "Crashes of your programs and problems that frostyard apps recorded in the last 90 days"
-	ProblemsReportingTitle    = "Reporting"
 	ProblemsLoading           = "Loading…"
 	ProblemsNotAvailable      = "System checks are not available on this system"
 	ProblemsUnreadable        = "System checks could not be read"
 	ProblemsNoneFound         = "No problems found"
 )
-
-// ProblemsReporting is the only row of the reporting group in phase 1.
-func ProblemsReporting() Row {
-	return Row{
-		Title:    "Problem reports stay on this computer",
-		Subtitle: "ChairLift does not send anything.",
-	}
-}
 
 // Problem returns the row text of 1 problem: the title in plain words, and
 // a subtitle with when it happened and, for some kinds, what it concerns

@@ -351,16 +351,26 @@ func TestSchemaPageGroups(t *testing.T) {
 // — rawConfig is a decoding mirror held to Config by this test, never a
 // second schema authority (the derivation in this file reads Config /
 // defaultConfig(), never rawConfig).
+//
+// Config's unexported fields take no part: they cannot come from YAML, and
+// the reflected schema skips them, so the mirror is held over the exported
+// surface only.
 func TestRawConfigMatchesConfigFields(t *testing.T) {
 	configType := reflect.TypeOf(Config{})
 	rawType := reflect.TypeOf(rawConfig{})
 
-	if configType.NumField() != rawType.NumField() {
-		t.Fatalf("Config has %d fields, rawConfig has %d", configType.NumField(), rawType.NumField())
+	exported := make([]reflect.StructField, 0, configType.NumField())
+	for i := 0; i < configType.NumField(); i++ {
+		if field := configType.Field(i); field.PkgPath == "" {
+			exported = append(exported, field)
+		}
+	}
+	if len(exported) != rawType.NumField() {
+		t.Fatalf("Config has %d exported fields, rawConfig has %d", len(exported), rawType.NumField())
 	}
 
-	for i := 0; i < configType.NumField(); i++ {
-		cf := configType.Field(i)
+	for i := 0; i < len(exported); i++ {
+		cf := exported[i]
 		rf := rawType.Field(i)
 
 		if cf.Name != rf.Name {
@@ -445,7 +455,7 @@ func TestSchemaGroupFieldsMatchesGroupConfigTags(t *testing.T) {
 		}
 	}
 
-	wantOrder := []string{"enabled", "app_id", "actions", "website", "issues", "chat", "bundles_paths", "apps_path"}
+	wantOrder := []string{"enabled", "app_id", "actions", "website", "issues", "chat", "bundles_paths", "apps_path", "endpoint"}
 	if len(got) != len(wantOrder) {
 		t.Fatalf("SchemaGroupFields() has %d fields, want %d: got %v, want %v", len(got), len(wantOrder), got, wantOrder)
 	}

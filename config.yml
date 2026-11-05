@@ -63,14 +63,17 @@ features_page:
 
 problems_page:
   # System problems recorded by snosi-health (/var/lib/snosi-health) and the
-  # user's own crashes and app problem records. Local only: ChairLift sends
-  # nothing (ADR-0015).
+  # user's own crashes and app problem records. Reporting is opt-in per user
+  # and off until the user turns it on (ADR-0015).
   problems_system_group:
     enabled: true
   problems_apps_group:
     enabled: true
   problems_reporting_group:
     enabled: true
+    # Report endpoint. Only /etc/chairlift/config.yml and
+    # /usr/share/chairlift/config.yml may set it; this fallback file may not.
+    # endpoint: https://report.frostyard.org/v1/report
 
 help_page:
   help_resources_group:

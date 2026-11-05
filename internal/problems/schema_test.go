@@ -36,8 +36,8 @@ func TestVendoredSchemaIsPinned(t *testing.T) {
 		}
 	}
 	v := loadSchema(t)
-	if v.root["title"] != SchemaID {
-		t.Errorf("schema title = %v, want %s", v.root["title"], SchemaID)
+	if title := v.Document()["title"]; title != SchemaID {
+		t.Errorf("schema title = %v, want %s", title, SchemaID)
 	}
 }
 
@@ -52,7 +52,10 @@ func TestEnumsMatchSchema(t *testing.T) {
 		t.Errorf("imageIDs = %v, schema = %v", imageIDs, got)
 	}
 	for _, kind := range Kinds {
-		def := v.resolve("#/$defs/" + kind).(map[string]any)
+		def, ok := v.Def(kind)
+		if !ok {
+			t.Fatalf("schema has no $defs entry %s", kind)
+		}
 		props := def["properties"].(map[string]any)
 		rules := detailRules[kind]
 		if len(rules) != len(props) {
@@ -132,7 +135,7 @@ func TestValidatorAcceptsEveryExample(t *testing.T) {
 	for name, data := range readExamples(t) {
 		t.Run(name, func(t *testing.T) {
 			doc := decodeJSONNumber(t, data)
-			if errs := v.Validate(doc); len(errs) > 0 {
+			if errs := validate(t, v, doc); len(errs) > 0 {
 				t.Fatalf("example %s is not valid: %v", name, errs)
 			}
 			if kind := doc.(map[string]any)["kind"]; kind != name {
@@ -202,7 +205,7 @@ func TestValidatorRejectsNegativeCases(t *testing.T) {
 	}
 	for name, doc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if errs := v.Validate(doc); len(errs) == 0 {
+			if errs := validate(t, v, doc); len(errs) == 0 {
 				t.Fatalf("validator accepted %s", name)
 			}
 		})
@@ -229,7 +232,7 @@ func TestBuildPayloadOutputsValidate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("BuildPayload(%s %s): %v", item.Kind, item.ID, err)
 		}
-		if errs := v.Validate(decodeJSONNumber(t, data)); len(errs) > 0 {
+		if errs := validate(t, v, decodeJSONNumber(t, data)); len(errs) > 0 {
 			t.Errorf("payload of %s %s is not valid: %v\n%s", item.Kind, item.ID, errs, data)
 		}
 		kinds[item.Kind] = true
@@ -253,7 +256,7 @@ func TestValidatorRejectsAPayloadKeyOutsideTheSchema(t *testing.T) {
 		}
 		doc := decodeJSONNumber(t, data).(map[string]any)
 		doc["detail"].(map[string]any)["message"] = "local text"
-		if errs := v.Validate(doc); len(errs) == 0 {
+		if errs := validate(t, v, doc); len(errs) == 0 {
 			t.Errorf("a payload of %s with a detail key outside the schema was accepted", item.Kind)
 		}
 	}

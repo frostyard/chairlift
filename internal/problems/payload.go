@@ -1,6 +1,7 @@
 package problems
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -54,7 +55,7 @@ func BuildPayload(it Item, reportID, client string) ([]byte, error) {
 	for _, f := range it.Fields {
 		detail[f.Name] = f.Value
 	}
-	data, err := json.Marshal(payload{
+	data, err := marshalDocument(payload{
 		Schema:   SchemaID,
 		ReportID: reportID,
 		Week:     it.Week,
@@ -71,6 +72,19 @@ func BuildPayload(it Item, reportID, client string) ([]byte, error) {
 		return nil, fmt.Errorf("problems: report of %d bytes is not under %d", len(data), maxPayloadBytes)
 	}
 	return data, nil
+}
+
+// marshalDocument encodes v as compact JSON without HTML escaping, so a value
+// such as "<1w" stays readable in the dialog and in the request. The trailing
+// newline of the encoder is removed.
+func marshalDocument(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte{'\n'}), nil
 }
 
 // Client returns ChairLift's v1 client string for a release version, such

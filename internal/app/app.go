@@ -202,6 +202,14 @@ func (a *Application) registerOptions() {
 		"Show the first-run setup window (started by chairlift-first-run).",
 		"",
 	)
+	a.AddMainOption(
+		"send-pending-reports",
+		0,
+		glib.GOptionFlagNoneValue,
+		glib.GOptionArgNoneValue,
+		"Send the problem reports that your consent allows, then exit; no window.",
+		"",
+	)
 }
 
 // GetGtkApplication returns the underlying GTK Application

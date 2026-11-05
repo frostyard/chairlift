@@ -5,7 +5,8 @@
 // installs/uninstalls/pins/upgrades/self-updates, Flatpak application
 // uninstalls/updates, Homebrew tap trust, bootc system update staging,
 // firmware updates through fwupd, configured custom maintenance scripts,
-// system feature toggles/updates, and Problems page dismissals.
+// system feature toggles/updates, Problems page dismissals, problem report
+// sends, and the problem-reporting consent switch.
 //
 // It is deliberately free of any puregotk/GTK import, following the
 // internal/views/trustmsg pattern, so its logic can be unit-tested on a
@@ -32,9 +33,11 @@
 // publishes a verified device list, restores the install button, and shows an
 // error toast, from fwupd's own verification of the install. ProblemDismiss
 // decides whether the Problems page writes a dismissal and hides its row
-// (problems.go). Those latter UI-side decisions have no
-// wrapper-package equivalent even though the wrappers already gate their
-// underlying command.
+// (problems.go). Report decides whether the Report dialog sends a report and
+// marks its row sent, and ReportingConsent decides whether the reporting
+// switch writes the consent file (reporting.go). Those latter UI-side
+// decisions have no wrapper-package equivalent even though the wrappers
+// already gate their underlying command.
 package actionmsg
 
 import (

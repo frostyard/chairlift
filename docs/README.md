@@ -79,9 +79,11 @@ are listed in [org-adrs.md](org-adrs.md).
   the deb, the `first_run_page` config, and embedded `.po` translations
 - [adr/0015-problems-page-and-opt-in-reporting.md](adr/0015-problems-page-and-opt-in-reporting.md)
   — a 7th page, Problems, shows snosi-health's system problems, the user's
-  crashes and frostyard app records, local only (phase 1 sends nothing);
-  every value is checked against `frostyard.problem/1` again; ChairLift
-  records its own panics and 4 coded errors through std `problems`
+  crashes and frostyard app records; every value is checked against
+  `frostyard.problem/1` again; reporting is opt-in per user (ask each time or
+  send automatically, 20 a day, one weekly count, an admin-only endpoint, and
+  no `crash` report in phase 2); ChairLift records its own panics and 4 coded
+  errors through std `problems`
 
 ### Design
 
@@ -97,8 +99,14 @@ are listed in [org-adrs.md](org-adrs.md).
 
 - [specs/problems-page.md](specs/problems-page.md) — the Problems page's
   sources and limits, the problems.json outcomes, the validation and
-  reportable rules, the merge rule, the dismiss store, the dry-run fixture
-  hook, and the `problems: page built` log marker
+  reportable rules, the merge rule, the dismiss store, the reporting group
+  and its Report dialog, the dry-run fixture hook, and the
+  `problems: page built` log marker
+- [specs/problem-reporting.md](specs/problem-reporting.md) — the opt-in
+  sender: the per-user consent file and its schema generations, the sent log,
+  the HTTP request and its limits, the automatic and manual run rules, the
+  20-a-day budget, the 24-hour pause after a failure, the one-sender lock, the
+  admin-only endpoint, and the `--send-pending-reports` exit codes
 
 ### Plans
 

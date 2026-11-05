@@ -107,11 +107,12 @@ valid page.
 
 ### Problems Page (`problems_page`)
 
-The Problems page shows problems recorded on this computer and sends nothing
+The Problems page shows problems recorded on this computer
 ([ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md)). It sits
 directly before Help in the sidebar. Each group can be turned off; with all 3
-off the page is omitted, as after a configuration error. The groups take no
-other fields: the snosi-health paths are fixed and cannot be configured.
+off the page is omitted, as after a configuration error. The snosi-health
+paths are fixed and cannot be configured, and the report endpoint is the only
+field of this page (`endpoint`, administrator-owned files only).
 
 - `problems_system_group`: Problems that Snow's `snosi-health` checks
   recorded in `/var/lib/snosi-health/problems.json` (and their local details
@@ -120,8 +121,18 @@ other fields: the snosi-health paths are fixed and cannot be configured.
 - `problems_apps_group`: Crashes of the user's own programs (from
   `coredumpctl`, the last 90 days) and problems that frostyard apps recorded
   in the user journal.
-- `problems_reporting_group`: The reporting row. In this version it states
-  that problem reports stay on this computer.
+- `problems_reporting_group`: Opt-in problem reporting. Nothing is sent until
+  the user turns the switch on; the choice and the mode live in the user's own
+  consent file, not in this configuration
+  ([specs/problem-reporting.md](docs/specs/problem-reporting.md)). The
+  optional first-run Reporting step shows only while this group is enabled and
+  `/var/lib/snosi-health/problems.json` exists.
+  - `endpoint`: the report intake URL (default
+    `https://report.frostyard.org/v1/report`). Only
+    `/etc/chairlift/config.yml` and `/usr/share/chairlift/config.yml` may set
+    it: ChairLift ignores the value from the development fallback beside the
+    executable or in the working directory (logged once), because a
+    user-writable file must not choose where a report goes.
 
 ### Help Page (`help_page`)
 

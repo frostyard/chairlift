@@ -132,10 +132,15 @@ func TestProblemsAppsStatus(t *testing.T) {
 	}
 }
 
-func TestProblemsReporting(t *testing.T) {
-	want := Row{"Problem reports stay on this computer", "ChairLift does not send anything."}
-	if got := ProblemsReporting(); got != want {
-		t.Errorf("ProblemsReporting = %+v, want %+v", got, want)
+// TestProblemsPhase1PromiseIsGone proves the phase-1 row that promised
+// nothing is sent cannot come back: reporting is now opt-in, and its rows
+// live in pageview/reporting.go.
+func TestProblemsPhase1PromiseIsGone(t *testing.T) {
+	if ReportingTitle != "Reporting" {
+		t.Errorf("ReportingTitle = %q, want Reporting", ReportingTitle)
+	}
+	if ReportingOff != "Off: nothing leaves this computer." {
+		t.Errorf("ReportingOff = %q", ReportingOff)
 	}
 }
 

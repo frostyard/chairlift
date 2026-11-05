@@ -39,9 +39,50 @@ func TestApplicationHelp(t *testing.T) {
 		"--dry-run",
 		"Don't make any changes to the system.",
 		"--first-run",
+		"--send-pending-reports",
 	} {
 		if !bytes.Contains(output, []byte(want)) {
 			t.Errorf("%s --help output does not contain %q\noutput:\n%s", app, want, output)
+		}
+	}
+}
+
+// TestSendPendingReportsDryRunNeedsNoWindow proves the windowless mode of
+// ADR-0015: `chairlift --send-pending-reports --dry-run` exits 0 with no
+// window and no GTK on a machine with no consent, says that reporting is off,
+// and writes no sent log.
+func TestSendPendingReportsDryRunNeedsNoWindow(t *testing.T) {
+	app := filepath.Join(e2eBuildDir(t), "chairlift")
+	requireExecutable(t, app)
+
+	home := t.TempDir()
+	configHome := filepath.Join(home, "config")
+	stateHome := filepath.Join(home, "state")
+	cmd := exec.Command(app, "--send-pending-reports", "--dry-run")
+	cmd.Dir = repoRoot(t)
+	cmd.Env = append(os.Environ(),
+		"LANG=C",
+		"LC_ALL=C",
+		"HOME="+home,
+		"XDG_CONFIG_HOME="+configHome,
+		"XDG_STATE_HOME="+stateHome,
+		// Keep the GTK libraries out of the way: the mode needs no display.
+		"DISPLAY=",
+		"WAYLAND_DISPLAY=",
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s --send-pending-reports --dry-run failed: %v\noutput:\n%s", app, err, output)
+	}
+	if !bytes.Contains(output, []byte("problem reporting is off")) {
+		t.Errorf("output does not say that reporting is off:\n%s", output)
+	}
+	for _, path := range []string{
+		filepath.Join(stateHome, "chairlift", "reports.json"),
+		filepath.Join(home, ".local", "state", "chairlift", "reports.json"),
+	} {
+		if _, err := os.Stat(path); err == nil {
+			t.Errorf("the dry run wrote the sent log %s", path)
 		}
 	}
 }

@@ -40,12 +40,12 @@ Facts that constrain it:
    default and each able to be turned off. The existing rule omits the page
    when all 3 are off; a configuration error turns them off (ADR-0003).
    Help moves from Alt+6 to Alt+7 when every page is visible.
-2. **Local only in phase 1.** The page shows records on this computer and
-   sends nothing. The reporting group has 1 row, "Problem reports stay on
-   this computer — ChairLift does not send anything." The opt-in switch and
-   the sender are a later task (T857 t19). `internal/problems` imports no
-   network package; a test lists its dependencies and fails on `net`,
-   `net/...` or `crypto/tls`.
+2. **Local until opt-in.** The page shows records on this computer, and it
+   sends nothing until the user turns reporting on. Phase 1 showed 1 row,
+   "Problem reports stay on this computer"; phase 2 (T857 t19) replaces it
+   with the opt-in sender of decision 10. `internal/problems` still imports
+   no network package: a test lists its dependencies and fails on `net`,
+   `net/...` or `crypto/tls`. `internal/reporting` is the only sender.
 3. **One pure package owns the data.** `internal/problems` (no puregotk)
    reads problems.json (format 1, at most 1 MiB) and details.json (at most
    4 MiB, read only when readable) at fixed paths that no user setting can
@@ -95,6 +95,45 @@ Facts that constrain it:
    builds the page from fixtures and waits for the log line
    `problems: page built system=<n> apps=<n> source=<outcome>` (ADR-0008).
 
+10. **Opt-in reporting (phase 2).** `internal/reporting` is the only sender
+    (the only production importer of `net/http`); its contract is
+    [specs/problem-reporting.md](../specs/problem-reporting.md).
+    - **Per-user consent.** `$XDG_CONFIG_HOME/chairlift/reporting.json`
+      (0600) records `enabled`, `mode` (`ask` or `auto`), the decision time
+      and the schema version the user agreed to. It is off until the user
+      turns it on, and a broken file reads as off. A schema that adds a kind
+      or a field is a new data generation: sending stops until the user
+      agrees again (a schema that only adds enum values keeps sending).
+    - **The dialog shows exactly what is sent.** The Report dialog shows
+      `Report.Text()`, and Send posts the same `Report.Body` bytes: one
+      buffer, so no second rendering can differ. The body is under 8192
+      bytes and validates against the vendored `frostyard.problem/1` schema.
+    - **Ask each time, or send automatically.** In Ask mode only the dialog
+      sends. In Auto mode the page and `chairlift --send-pending-reports`
+      send the pending reports, at most 20 in 24 hours, paced at 7 seconds
+      apart (the intake API allows 10 a minute), and each problem once per
+      week. The weekly count (install age bucket and update channel only)
+      goes at most once per ISO week.
+    - **A failed send waits 24 hours.** The first failure pauses every
+      automatic send for 24 hours, and the next run says why. An explicit
+      Report dialog send ignores the pause: the user asked for it.
+    - **One sender per host.** A non-blocking lock (`reports.lock`) keeps the
+      window and the command line apart.
+    - **Kind `crash` is never sent in phase 2.** The sender refuses it before
+      any network call, and the page offers no Report button for it.
+    - **Admin-only endpoint.** `problems_reporting_group.endpoint` counts
+      only from `/etc/chairlift/config.yml` or
+      `/usr/share/chairlift/config.yml`; the user-writable development
+      fallback is ignored with 1 log line.
+    - **A windowless mode and an optional first-run step.** `chairlift
+      --send-pending-reports` runs the automatic send and exits, with no
+      window and no GTK; `--dry-run` prints the reports and sends nothing.
+      The first run shows the optional Reporting step between Style and Apps
+      when the reporting group is on and the system problem file exists
+      (ADR-0014's steps and markers do not change).
+    - **Dry run changes nothing** (ADR-0009): `actionmsg.Report` and
+      `actionmsg.ReportingConsent` gate the toast and the write together.
+
 ## Consequences
 
 - A snosi user sees system and app problems with a plain-words title, a
@@ -104,8 +143,14 @@ Facts that constrain it:
 - The schema is a vendored byte copy with a pinned sha256; a new schema
   version needs a new copy, new enums and new hints, and the hint test
   fails until every enum value and known code has a hint.
-- The reporting row promises that nothing is sent; the opt-in sender must
-  change that row and this ADR's phase-1 rule together.
+- A user who turns reporting on decides between a per-report dialog and an
+  automatic send, sees every sent report with its `report_id`, and stops
+  sending by turning the switch off; nothing is sent before that.
+- A schema change that adds data needs a new agreement, so an upgrade never
+  widens what a user already agreed to.
+- The intake service is a network dependency of 2 code paths (the page and
+  the command line); both share `reporting.Run`, so they cannot drift.
+- Kind `crash` stays local until a later task agrees its own consent text.
 - `github.com/frostyard/std` becomes a direct dependency (v0.4.0).
 - The 7th page moves Help's Alt+number; docs that name Alt+6 for Help are
   wrong.
@@ -119,8 +164,14 @@ Facts that constrain it:
   write to their journal can fill the page; the count goes to the log.
 - **A configurable path for problems.json:** rejected — a user setting must
   not choose the file whose values a later sender may report.
-- **Send reports in this change:** rejected — consent, the sender and the
-  intake service are later tasks; phase 1 must be safe on its own.
+- **Send reports in phase 1:** rejected — consent, the sender and the intake
+  service were later tasks; phase 1 had to be safe on its own. Phase 2 adds
+  them behind the opt-in of decision 10.
+- **Render the report twice (once for the dialog, once for the request):**
+  rejected — 2 renderings can differ, and then the dialog lies. One buffer is
+  shown and posted.
+- **A machine-wide or image-level consent:** rejected — each user decides,
+  and the consent file is per user (core ADR-0069).
 - **Translate the page through `internal/i18n`:** rejected for now — the
   main window has no catalogue; translating one page alone would mix
   languages.
@@ -128,6 +179,7 @@ Facts that constrain it:
 ## References
 
 - Shapes: [specs/problems-page.md](../specs/problems-page.md),
+  [specs/problem-reporting.md](../specs/problem-reporting.md),
   [design/overview.md — Problems page](../design/overview.md#problems-page),
   [CONFIG.md](../../CONFIG.md)
 - Builds on: [ADR-0003](0003-two-tier-config-with-fail-closed-semantics.md),
@@ -139,9 +191,20 @@ Facts that constrain it:
 - Enforced by: `internal/problems` tests (schema pin and subset validator,
   forged values, hints, merge, dismiss, no network imports),
   `internal/selfreport` tests, `internal/views/pageview/problems_test.go`,
+  `internal/views/pageview/reporting_test.go`,
   `internal/views/pageview/wiring_test.go`,
   `internal/views/actionmsg` `TestProblemDismiss`,
-  `internal/navigation` tests, `internal/config/problems_config_test.go`,
-  `internal/installcheck/selfreport_test.go`, and
-  `TestApplicationStartsInDryRun` in `test/e2e/e2e_test.go`
-- Plan: T857 (problem reports), task t6; snosi ADR-0029 (the collector)
+  `internal/views/actionmsg/reporting_test.go`, `internal/navigation` tests,
+  `internal/config/problems_config_test.go`,
+  `internal/config/reporting_config_test.go`,
+  `internal/installcheck/selfreport_test.go`,
+  `internal/installcheck/reporting_test.go` (only `internal/reporting`
+  imports `net/http` or names the intake host),
+  `internal/firstrun/reporting_test.go`,
+  `internal/reporting` tests (0 requests without consent, the 20-a-day
+  budget, 1 count a week, the schema generation, the 24-hour pause, the
+  never-sent crash kind, the exact bytes, no User-Agent, no redirect, the
+  lock), and `TestApplicationStartsInDryRun` with
+  `TestSendPendingReportsDryRunNeedsNoWindow` in `test/e2e/e2e_test.go`
+- Plan: T857 (problem reports), tasks t6 and t19; snosi ADR-0029 (the
+  collector)

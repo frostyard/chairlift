@@ -52,10 +52,16 @@
   disk that needed extra steps to unlock, an integrity error, ...), crashes of
   your own programs, and problems that frostyard apps recorded. Expand a row
   to copy its details or dismiss it; a dismissed problem shows again when it
-  happens again. Problem reports stay on this computer: ChairLift sends
-  nothing. On a system without `snosi-health` the system group says "System
+  happens again. Reporting is opt-in and off by default: nothing leaves the
+  computer until you turn "Send problem reports" on. Then ChairLift either
+  shows each report before it sends it ("Ask each time") or sends it without
+  asking ("Send automatically"), at most 20 reports in 24 hours and one
+  weekly count of the image age and update channel. Every report is listed
+  with its report ID. `chairlift --send-pending-reports` does the same without
+  a window. On a system without `snosi-health` the system group says "System
   checks are not available on this system". See
-  [ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md).
+  [ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md) and
+  [specs/problem-reporting.md](docs/specs/problem-reporting.md).
 
 ---
 
@@ -331,6 +337,7 @@ chairlift/
 │   ├── firstrun/  # First-run gate, markers, steps, apps list, actions (no GTK)
 │   ├── i18n/      # .po reader and embedded first-run translations
 │   ├── problems/  # Problems page data: sources, validation, hints, dismiss store (no GTK, no network)
+│   ├── reporting/ # The only sender: consent, sent log, HTTP, run rules (no GTK)
 │   ├── selfreport/ # ChairLift's own problem records and error codes (std problems)
 │   └── version/   # Build metadata (ldflags injection)
 ├── data/          # Desktop file, icons, and PolicyKit policies
@@ -349,7 +356,8 @@ See [docs/design/overview.md](docs/design/overview.md) and [docs/design/package-
 - **`internal/firstrun`**: the first-run mode's decisions — the `chairlift-first-run` gate, the done markers and their one writer, the step flow, the application list, the Flatpak actions, the color-scheme write, and the dry-run completion decision
 - **`internal/i18n`**: a pure-Go `.po` reader and the first-run translations embedded from SNOW First Setup
 - **`internal/views/pageview`**: pure-Go row text, page status, os-release parsing, help-link ordering, and maintenance-command selection shared by all seven page builders, plus the Problems page's row, status and detail text
-- **`internal/problems`**: the Problems page's data — snosi-health's `problems.json`/`details.json`, the user's `coredumpctl` crashes and the frostyard app records of the user journal, each value checked against schema `frostyard.problem/1`, the hints, the merge rule, the dismiss store, and the report document builder that phase 1 does not call; it imports no network package
+- **`internal/problems`**: the Problems page's data — snosi-health's `problems.json`/`details.json`, the user's `coredumpctl` crashes and the frostyard app records of the user journal, each value checked against schema `frostyard.problem/1`, the hints, the merge rule, the dismiss store, and the report document builder; it imports no network package
+- **`internal/reporting`**: the only sender — the per-user consent file and its schema generations, the sent log with the 20-a-day budget, the weekly count, the 24-hour pause after a failure, the one-sender lock, the HTTPS request, and the `--send-pending-reports` mode; only this package imports `net/http`, and a kind `crash` report is never sent
 - **`internal/selfreport`**: records ChairLift's own panics and its coded internal errors in the journal through `github.com/frostyard/std/problems`
 
 ### Development Environment
