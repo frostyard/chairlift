@@ -28,6 +28,10 @@ func TestParseCoredumpsShapes(t *testing.T) {
 		{"empty", "  \n", 0, false},
 		{"bad array", `[{"time": "x"}]`, 0, true},
 		{"bad line", `{"time": 1}` + "\n{", 0, true},
+		{"time as text", `[{"time": "1793779200000000", "uid": 1000, "exe": "/usr/bin/a"}]`, 0, true},
+		{"uid as text", `[{"time": 1793779200000000, "uid": "1000", "exe": "/usr/bin/a"}]`, 0, true},
+		{"sig as text", `[{"time": 1793779200000000, "uid": 1000, "sig": "11", "exe": "/usr/bin/a"}]`, 0, true},
+		{"uid as text, 1 object a line", `{"time": 1793779200000000, "uid": "1000", "exe": "/usr/bin/a"}`, 0, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -174,7 +178,7 @@ func TestRunCoredumpctl(t *testing.T) {
 	})
 	t.Run("too large", func(t *testing.T) {
 		bin := fakeCommand(t, `head -c 4194400 /dev/zero`)
-		if _, err := RunCoredumpctl(ctx, bin); err == nil || !strings.Contains(err.Error(), "larger than") {
+		if _, err := RunCoredumpctl(ctx, bin); err == nil || !strings.Contains(err.Error(), "reached the cap") {
 			t.Fatalf("err = %v", err)
 		}
 	})

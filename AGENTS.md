@@ -108,8 +108,8 @@ control is hand-written Go, YAML, and data assets.
   `release.yml`, and `docs/org-adrs.md` for org ADRs in frostyard/core. After
   an updex bump, read the SDK source in `GOMODCACHE` for changed behavior
   (the operation lock, image gates) before merging. After a std bump, read
-  `problems` in `GOMODCACHE` (the reader's validation, `Read`'s journalctl
-  arguments) and check that updex's `reporter` use still builds.
+  `problems` in `GOMODCACHE` (the reader's validation, and `Read`'s
+  journalctl arguments, which `problems.JournalArgs` copies) and check that updex's `reporter` use still builds.
 - **Consumers.** Snow Linux images (`frostyard/snosi`) install the `.deb` from
   `https://repository.frostyard.org/debian/` (README.md); apt-publisher
   dispatches the image rebuilds. Other consumers: not stated.
@@ -191,7 +191,10 @@ An agent must not break these:
   constants, never configuration. ChairLift re-validates every detail value
   against `frostyard.problem/1` and never trusts the file's `reportable` flag
   alone; details.json text, `MESSAGE`, paths and trusted journald fields are
-  local display text and never enter `BuildPayload`. The vendored
+  local display text and never enter `BuildPayload`. The live journal read
+  is capped (`readJournal`, 8 MiB, kill at the cap); do not use std's
+  unbounded `problems.Read`. A number or boolean must be that JSON token
+  type, never JSON text. The vendored
   `internal/problems/testdata/schema/v1.json` is a pinned byte copy of core's
   schema: a new schema version is a new copy with new enums and hints, never
   an edit. Every enum value of the hinted fields and every known code needs a

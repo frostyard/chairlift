@@ -1,6 +1,8 @@
 package problems
 
 import (
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -8,11 +10,13 @@ import (
 	stdproblems "github.com/frostyard/std/problems"
 )
 
-func TestJournalReadOptions(t *testing.T) {
+func TestJournalArgs(t *testing.T) {
 	now := time.Date(2026, 11, 5, 0, 0, 0, 0, time.UTC)
-	got := JournalReadOptions(now)
-	if !got.User || got.Limit != 500 || !got.Since.Equal(now.Add(-90*24*time.Hour)) || got.Journalctl != "" {
-		t.Fatalf("JournalReadOptions = %+v", got)
+	since := now.Add(-90 * 24 * time.Hour).Unix()
+	want := []string{"--no-pager", "-q", "-o", "json", "--all", "--user",
+		"--since=@" + strconv.FormatInt(since, 10), "-n", "500", "MESSAGE_ID=8915bdd215c84cbab0c31c05a1a33e7e"}
+	if got := JournalArgs(now); !reflect.DeepEqual(got, want) {
+		t.Fatalf("JournalArgs = %q, want %q", got, want)
 	}
 }
 

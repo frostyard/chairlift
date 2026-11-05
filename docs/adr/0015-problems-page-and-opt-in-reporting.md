@@ -50,15 +50,22 @@ Facts that constrain it:
    reads problems.json (format 1, at most 1 MiB) and details.json (at most
    4 MiB, read only when readable) at fixed paths that no user setting can
    change; runs `coredumpctl --json=short --no-pager --since=-90d` and keeps
-   the user's own UID; reads the S8 records of the user journal through
-   std's `problems.Read`. Commands run with a 10-second timeout and capped
-   output. Each list holds at most 200 items. The outcome of problems.json
+   the user's own UID; reads the S8 records of the user journal by running
+   journalctl itself (std `problems.Read`'s arguments) and validating them
+   with std's `problems.ParseJSON`. std's `Read` keeps all of journalctl's
+   output in memory, and the 500-entry limit does not bound bytes, so
+   ChairLift does not call it: it reads at most 8 MiB of journalctl output
+   and 4 MiB of coredumpctl output, kills the command at the cap, and keeps
+   at most 4 KiB of standard error. Commands run with a 10-second timeout.
+   Each list holds at most 200 items. The outcome of problems.json
    is 1 of 4 (`SourceMissing`, `SourceUnreadable`, `SourceMalformed`,
    `SourceOK`); a missing file shows 1 row, "System checks are not available
    on this system".
 4. **ChairLift does not trust its inputs.** Every detail value is checked
    against the v1 rules again. A value that fails is shown, marked not
-   valid, and the item is not reportable; `Reportable` is the file's flag
+   valid, and the item is not reportable. A number or boolean given as JSON
+   text (`"retries": "1"`) is the wrong type and fails too. `Reportable` is
+   the file's flag
    AND ChairLift's own check AND a valid envelope (`image.id`,
    `image.version`). An unknown kind is shown as "An unknown problem was
    recorded" and is never reportable. details.json, `MESSAGE` and paths are

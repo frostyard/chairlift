@@ -3,14 +3,15 @@ package problems
 import (
 	"encoding/json"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	stdproblems "github.com/frostyard/std/problems"
 )
 
-// Journal read options of the apps group: the user journal of the last 90
-// days, at most 500 entries.
+// Journal read of the apps group: the user journal of the last 90 days, at
+// most 500 entries.
 const (
 	JournalWindow = 90 * 24 * time.Hour
 	JournalLimit  = 500
@@ -19,9 +20,23 @@ const (
 // maxAppMessage bounds the MESSAGE that the page shows.
 const maxAppMessage = 2048
 
-// JournalReadOptions returns the std reader options of the apps group.
-func JournalReadOptions(now time.Time) stdproblems.ReadOptions {
-	return stdproblems.ReadOptions{User: true, Since: now.Add(-JournalWindow), Limit: JournalLimit}
+// JournalArgs returns the journalctl arguments of the apps group: std's
+// problems.Read arguments for the user journal since now − JournalWindow,
+// at most JournalLimit entries. --all prints fields longer than 4096 bytes
+// (FROSTYARD_FRAMES can be longer) instead of null. ChairLift runs
+// journalctl itself, instead of std's Read, so that it can cap the output
+// (MaxJournalOutput): Read keeps all of journalctl's output in memory.
+//
+// It sets no --output-fields: std's Validate drops a record with a
+// FROSTYARD_* field that the registry does not name, and a field list would
+// hide such a field from it.
+func JournalArgs(now time.Time) []string {
+	return []string{
+		"--no-pager", "-q", "-o", "json", "--all", "--user",
+		"--since=@" + strconv.FormatInt(now.Add(-JournalWindow).Unix(), 10),
+		"-n", strconv.Itoa(JournalLimit),
+		"MESSAGE_ID=" + stdproblems.MessageID,
+	}
 }
 
 // appGroupKey is the grouping key of app problem records: app ID, version,

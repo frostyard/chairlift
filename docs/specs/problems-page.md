@@ -17,8 +17,13 @@ nothing.
 | --- | --- | --- | --- |
 | `/var/lib/snosi-health/problems.json` (format 1, snosi ADR-0029) | `problems.ReadSystem` | 1 MiB (`MaxProblemsBytes`) | see the outcomes below |
 | `/var/lib/snosi-health/details.json` (format 1, mode 0640 root:sudo) | `readDetails`, only for system items | 4 MiB (`MaxDetailsBytes`) | missing or EACCES: no details, no error; other failure: a log line, no details |
-| `coredumpctl --json=short --no-pager --since=-90d` | `problems.RunCoredumpctl`, `ParseCoredumps` | 10 s (`CommandTimeout`), 4 MiB output | not installed, or "No coredumps found" (exit 1): an empty list; other failure: a log line |
-| User journal, S8 records | std `problems.Read` with `problems.JournalReadOptions`: `User: true`, `Since: now − 90 days`, `Limit: 500` | 10 s | failure: a log line |
+| `coredumpctl --json=short --no-pager --since=-90d` | `problems.RunCoredumpctl`, `ParseCoredumps` | 10 s (`CommandTimeout`); 4 MiB of output, then killed; 4 KiB of stderr | not installed, or "No coredumps found" (exit 1): an empty list; output at the cap or another failure: a log line |
+| User journal, S8 records | `journalctl --no-pager -q -o json --all --user --since=@<now − 90 days> -n 500 MESSAGE_ID=8915bdd215c84cbab0c31c05a1a33e7e` (`problems.JournalArgs`, std `problems.Read`'s arguments), run by `readJournal`; the output goes to std `problems.ParseJSON` | 10 s; 8 MiB of output (`MaxJournalOutput`), then killed; 4 KiB of stderr | failure: a log line; at the cap: the complete lines before it are parsed and 1 log line says so |
+
+ChairLift MUST NOT call std's `problems.Read` (v0.4.0): it keeps all of
+journalctl's output in memory, and 500 entries do not bound bytes. No
+`--output-fields` is passed: std's `Validate` must see every `FROSTYARD_*`
+field to drop a record with an unregistered one.
 
 The two paths are constants (`problems.ProblemsPath`,
 `problems.DetailsPath`); no configuration key changes them.
@@ -86,7 +91,11 @@ the line is logged at once with `system=0 apps=0`.
 2. A `kind` that passes rule 1 but is not 1 of the 9 v1 kinds is shown as
    "An unknown problem was recorded" with the kind name and is never
    reportable.
-3. Every detail value is checked against the v1 rules of its kind: type,
+3. Every detail value is checked against the v1 rules of its kind: type
+   (the JSON token type: a number or boolean given as JSON text, such as
+   `"retries": "1"`, fails; so do a textual `format`, `occurrences`,
+   `reportable` or `secure`, and a textual coredumpctl `time`, `uid` or
+   `sig`),
    enum, pattern, `shipped` exactly `true`, `retries` 0 to 10, frames 1 to
    32 of at most 160 characters, `location` at most 128 characters, and the
    S8 rules (class `error` needs `code` and has no frames or location; class

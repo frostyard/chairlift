@@ -18,9 +18,6 @@ import (
 // only the entries of its own UID.
 var CoredumpArgs = []string{"--json=short", "--no-pager", "--since=-90d"}
 
-// maxCommandOutput caps the output that ChairLift reads from a command.
-const maxCommandOutput = 4 << 20
-
 // CoredumpEntry is 1 entry of the coredumpctl list.
 type CoredumpEntry struct {
 	Time   time.Time
@@ -85,33 +82,33 @@ func ParseCoredumps(data []byte) ([]CoredumpEntry, error) {
 
 // RunCoredumpctl runs `bin CoredumpArgs...` and returns its standard
 // output. A missing coredumpctl and "No coredumps found" (exit 1) give no
-// output and no error. Output larger than 4 MiB is an error.
+// output and no error. Output that reaches 4 MiB is an error: ChairLift
+// stops reading at the cap and kills coredumpctl.
 func RunCoredumpctl(ctx context.Context, bin string) ([]byte, error) {
-	var stdout, stderr cappedBuffer
-	stdout.max, stderr.max = maxCommandOutput, 4096
-	cmd := exec.CommandContext(ctx, bin, CoredumpArgs...)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if errors.Is(err, exec.ErrNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && strings.Contains(stderr.String(), "No coredumps found") {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("coredumpctl: %w: %s", err, strings.TrimSpace(stderr.String()))
-	}
-	if stdout.over {
-		return nil, fmt.Errorf("coredumpctl: output larger than %d bytes", maxCommandOutput)
-	}
-	return stdout.Bytes(), nil
+	return runCoredumpctl(ctx, execStream, bin)
 }
 
-// cappedBuffer keeps at most max bytes and records that more came. It
-// does not embed bytes.Buffer: io.Copy would use the promoted ReadFrom and
-// pass the cap.
+func runCoredumpctl(ctx context.Context, run streamFunc, bin string) ([]byte, error) {
+	res := runCapped(ctx, run, bin, CoredumpArgs, maxCommandOutput)
+	if errors.Is(res.err, exec.ErrNotFound) {
+		return nil, nil
+	}
+	if res.truncated {
+		return nil, fmt.Errorf("coredumpctl: output reached the cap of %d bytes", maxCommandOutput)
+	}
+	if res.err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(res.err, &exitErr) && exitErr.ExitCode() == 1 && strings.Contains(res.stderr, "No coredumps found") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("coredumpctl: %w: %s", res.err, strings.TrimSpace(res.stderr))
+	}
+	return res.out, nil
+}
+
+// cappedBuffer keeps at most max bytes and records that more came; it
+// keeps a command's standard error. It does not embed bytes.Buffer: io.Copy
+// would use the promoted ReadFrom and pass the cap.
 type cappedBuffer struct {
 	buf  bytes.Buffer
 	max  int
@@ -130,7 +127,6 @@ func (b *cappedBuffer) Write(p []byte) (int, error) {
 	return b.buf.Write(p)
 }
 
-func (b *cappedBuffer) Bytes() []byte  { return b.buf.Bytes() }
 func (b *cappedBuffer) String() string { return b.buf.String() }
 
 // signalNames maps the signal numbers of Linux to the v1 signal enum.

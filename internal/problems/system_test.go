@@ -42,6 +42,8 @@ func TestReadSystemOutcomes(t *testing.T) {
 		{"trailing data", writeTestFile(t, dir, "trailing.json", systemDoc()+" {}"), SourceMalformed, "not a JSON object"},
 		{"format 2", writeTestFile(t, dir, "format.json", strings.Replace(systemDoc(), `"format": 1`, `"format": 2`, 1)), SourceMalformed, "format is not 1"},
 		{"no format", writeTestFile(t, dir, "noformat.json", strings.Replace(systemDoc(), `"format": 1,`, ``, 1)), SourceMalformed, "format is not 1"},
+		{"format as text", writeTestFile(t, dir, "format-text.json", strings.Replace(systemDoc(), `"format": 1`, `"format": "1"`, 1)), SourceMalformed, "format is not 1"},
+		{"format 1.0", writeTestFile(t, dir, "format-float.json", strings.Replace(systemDoc(), `"format": 1`, `"format": 1.0`, 1)), SourceMalformed, "format is not 1"},
 		{"wrong schema", writeTestFile(t, dir, "schema.json", strings.Replace(systemDoc(), "frostyard.problem/1", "frostyard.problem/2", 1)), SourceMalformed, "schema is not"},
 		{"problems not a list", writeTestFile(t, dir, "list.json", `{"format": 1, "schema": "frostyard.problem/1", "problems": {}}`), SourceMalformed, "problems is not a list"},
 		{"problems null", writeTestFile(t, dir, "null.json", `{"format": 1, "schema": "frostyard.problem/1", "problems": null}`), SourceMalformed, "problems is not a list"},
@@ -151,6 +153,14 @@ func TestForgedValuesAreShownButNotReportable(t *testing.T) {
 		{"retries 11", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "LOCKOUT", "retries": 11}`, "retries"},
 		{"retries -1", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "LOCKOUT", "retries": -1}`, "retries"},
 		{"retries 1.5", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "LOCKOUT", "retries": 1.5}`, "retries"},
+		{"retries as text", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "LOCKOUT", "retries": "1"}`, "retries"},
+		{"retries as text 0", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "LOCKOUT", "retries": "0"}`, "retries"},
+		{"retries as boolean", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "LOCKOUT", "retries": true}`, "retries"},
+		{"retries as list", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "LOCKOUT", "retries": [1]}`, "retries"},
+		{"retries null", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "LOCKOUT", "retries": null}`, "retries"},
+		{"shipped as number", KindUnitFailed, `{"unit": "a.service", "result": "timeout", "shipped": 1}`, "shipped"},
+		{"unit as number", KindUnitFailed, `{"unit": 5, "result": "timeout", "shipped": true}`, "unit"},
+		{"frames as text", KindAppProblem, `{"app_id": "org.frostyard.nsl", "app_version": "1.0.0", "runtime": "go", "component": "gui", "class": "panic", "frames": "main.main"}`, "frames"},
 		{"tpm rc", KindTPMUnlock, `{"outcome": "recovery_key", "tpm_rc": "pcr_changed", "retries": 1}`, "tpm_rc"},
 		{"subsystem", KindIntegrityError, `{"subsystem": "btrfs", "count": "1"}`, "subsystem"},
 		{"count 11", KindIntegrityError, `{"subsystem": "composefs", "count": "11"}`, "count"},
@@ -347,6 +357,44 @@ func TestOriginNames(t *testing.T) {
 	} {
 		if origin.String() != name {
 			t.Errorf("%d.String() = %q, want %q", origin, origin.String(), name)
+		}
+	}
+}
+
+// TestQuotedNumbersAndBooleansAreNotTrusted: a number or boolean of the
+// file given as JSON text is the wrong type. occurrences falls back to 1, a
+// textual reportable flag or secure flag is not true, and the item is not
+// reportable.
+func TestQuotedNumbersAndBooleansAreNotTrusted(t *testing.T) {
+	detail := `{"install_age": "<1w", "channel": "latest"}`
+	good := problemJSON("0000000000000001", "count", detail)
+	if file := ParseSystem([]byte(systemDoc(good))); !file.Items[0].Reportable || file.Items[0].Count != 3 {
+		t.Fatalf("the control item = %+v, want reportable with count 3", file.Items[0])
+	}
+	occurrences := ParseSystem([]byte(systemDoc(strings.Replace(good, `"occurrences": 3`, `"occurrences": "3"`, 1)))).Items[0]
+	if occurrences.Count != 1 {
+		t.Errorf("a textual occurrences gave count %d, want 1", occurrences.Count)
+	}
+	for name, doc := range map[string]string{
+		"reportable as text": systemDoc(strings.Replace(good, `"reportable": true`, `"reportable": "true"`, 1)),
+		"reportable as 1":    systemDoc(strings.Replace(good, `"reportable": true`, `"reportable": 1`, 1)),
+		"secure as text":     strings.Replace(systemDoc(good), `"secure": false`, `"secure": "false"`, 1),
+		"secure as 0":        strings.Replace(systemDoc(good), `"secure": false`, `"secure": 0`, 1),
+	} {
+		it := ParseSystem([]byte(doc)).Items[0]
+		if it.Reportable {
+			t.Errorf("%s: the item is reportable", name)
+		}
+		if _, err := BuildPayload(it, "3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b", "chairlift/0.14.0"); err != ErrNotReportable {
+			t.Errorf("%s: BuildPayload err = %v", name, err)
+		}
+	}
+}
+
+func TestDecodeNumber(t *testing.T) {
+	for raw, ok := range map[string]bool{`1`: true, `-3`: true, `1.5`: true, `"1"`: false, `true`: false, `null`: false, `[1]`: false, ``: false} {
+		if _, got := decodeNumber(json.RawMessage(raw)); got != ok {
+			t.Errorf("decodeNumber(%s) ok = %v, want %v", raw, got, ok)
 		}
 	}
 }

@@ -1370,15 +1370,26 @@ source=<outcome>` (`source=disabled` without the system group).
 - `/var/lib/snosi-health/details.json` (at most 4 MiB) only for system
   items, and only when readable: EACCES (mode 0640 root:sudo) is normal.
 - The user's crashes: `coredumpctl --json=short --no-pager --since=-90d`
-  with a 10-second timeout and 4 MiB of output, kept only for the current
-  UID; "No coredumps found" (exit 1) and a missing coredumpctl are an empty
+  with a 10-second timeout; ChairLift stops reading at 4 MiB of output,
+  kills coredumpctl and logs an error. Only the current UID's entries are
+  kept; "No coredumps found" (exit 1) and a missing coredumpctl are an empty
   list.
-- The S8 app records of the user journal through std's `problems.Read`
-  (`User: true`, the last 90 days, at most 500); std drops forged records,
-  and the count goes to 1 log line only.
+- The S8 app records of the user journal: ChairLift runs journalctl itself
+  with std `problems.Read`'s arguments (`problems.JournalArgs`: `--user`,
+  the last 90 days, at most 500 entries) and a 10-second timeout, and gives
+  the output to std's `problems.ParseJSON`. It does not call std's `Read`,
+  which keeps all output in memory: a forged entry with a huge field could
+  exhaust memory, because 500 entries do not bound bytes. `readJournal`
+  reads at most 8 MiB (`MaxJournalOutput`) and 4 KiB of standard error;
+  at the cap it kills journalctl, parses only the complete lines before it
+  and logs the truncation. It passes no `--output-fields`: std's `Validate`
+  drops a record with an unregistered `FROSTYARD_*` field, and a field list
+  would hide that field from it. std drops forged records, and the count
+  goes to 1 log line only.
 
 Every detail value of every item is checked again against the v1 rules of
-its kind (`validateDetail`). A value that fails is shown, marked not valid,
+its kind (`validateDetail`); a number or boolean must be that JSON token
+type, so `"retries": "1"` fails. A value that fails is shown, marked not valid,
 and the item is not reportable; `Reportable` also needs the file's own flag,
 a valid `week` and a valid envelope. An unknown kind is shown as "An unknown
 problem was recorded" and is never reportable. A system crash that a user

@@ -1,6 +1,7 @@
 package problems
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	stdproblems "github.com/frostyard/std/problems"
@@ -65,9 +67,12 @@ type Options struct {
 	// Seen is the dismiss store; nil hides nothing.
 	Seen *Seen
 	// Coredumpctl and Journalctl are the command names; empty means
-	// "coredumpctl" and std's default "journalctl".
+	// "coredumpctl" and "journalctl".
 	Coredumpctl string
 	Journalctl  string
+
+	// stream runs the commands; nil means execStream. Tests replace it.
+	stream streamFunc
 }
 
 // Snapshot is the result of 1 load.
@@ -89,6 +94,10 @@ type Snapshot struct {
 	// JournalDropped counts journal entries that std's reader dropped
 	// because they failed validation (forged records).
 	JournalDropped int
+	// JournalTruncated is true when journalctl's output reached
+	// MaxJournalOutput: ChairLift killed journalctl and parsed only the
+	// complete lines before the cap.
+	JournalTruncated bool
 }
 
 // Load reads every source of the page and applies the merge rule and the
@@ -117,7 +126,7 @@ func Load(ctx context.Context, opts Options) Snapshot {
 	var crashes, apps []Item
 	if opts.Apps {
 		crashes, snap.CoredumpErr = loadCrashes(ctx, opts, env)
-		apps, snap.JournalDropped, snap.JournalErr = loadAppRecords(ctx, opts, env)
+		apps, snap.JournalDropped, snap.JournalTruncated, snap.JournalErr = loadAppRecords(ctx, opts, env)
 	}
 	if opts.System {
 		system, snap.Merged = MergeCrashes(system, crashes)
@@ -148,7 +157,7 @@ func loadCrashes(ctx context.Context, opts Options, env Envelope) ([]Item, error
 		}
 		cctx, cancel := context.WithTimeout(ctx, CommandTimeout)
 		defer cancel()
-		data, err = RunCoredumpctl(cctx, bin)
+		data, err = runCoredumpctl(cctx, opts.streamFunc(), bin)
 	}
 	if err != nil {
 		return nil, err
@@ -160,34 +169,67 @@ func loadCrashes(ctx context.Context, opts Options, env Envelope) ([]Item, error
 	return CrashItems(entries, opts.UID, env), nil
 }
 
-// loadAppRecords reads the app problem records of the user journal through
-// std's reader: the journal.json fixture through ParseJSON, or Read with
-// CommandTimeout.
-func loadAppRecords(ctx context.Context, opts Options, env Envelope) ([]Item, int, error) {
+// loadAppRecords reads the app problem records of the user journal: the
+// journal.json fixture, or journalctl (JournalArgs) with CommandTimeout and
+// its output capped at MaxJournalOutput. std's ParseJSON validates every
+// entry. It returns the items, the dropped count, and whether the output
+// was cut at the cap.
+func loadAppRecords(ctx context.Context, opts Options, env Envelope) ([]Item, int, bool, error) {
 	var res stdproblems.Result
 	var err error
+	truncated := false
 	if opts.Fixtures.Use {
 		var f *os.File
 		f, err = os.Open(filepath.Join(opts.Fixtures.Dir, "journal.json"))
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, 0, nil
+			return nil, 0, false, nil
 		}
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, false, err
 		}
 		defer func() { _ = f.Close() }()
 		res, err = stdproblems.ParseJSON(io.LimitReader(f, maxJournalFixtureBytes))
 	} else {
-		ropts := JournalReadOptions(opts.Now)
-		ropts.Journalctl = opts.Journalctl
-		cctx, cancel := context.WithTimeout(ctx, CommandTimeout)
-		defer cancel()
-		res, err = stdproblems.Read(cctx, ropts)
+		var data []byte
+		data, truncated, err = readJournal(ctx, opts)
+		if err == nil {
+			res, err = stdproblems.ParseJSON(bytes.NewReader(data))
+		}
 	}
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, truncated, err
 	}
-	return AppItems(res, env), res.Dropped, nil
+	return AppItems(res, env), res.Dropped, truncated, nil
+}
+
+// readJournal runs journalctl with JournalArgs and returns at most
+// MaxJournalOutput bytes of its output. When the output reaches the cap,
+// journalctl is killed and only the complete lines before the cap are
+// returned, with true.
+func readJournal(ctx context.Context, opts Options) ([]byte, bool, error) {
+	bin := opts.Journalctl
+	if bin == "" {
+		bin = "journalctl"
+	}
+	cctx, cancel := context.WithTimeout(ctx, CommandTimeout)
+	defer cancel()
+	res := runCapped(cctx, opts.streamFunc(), bin, JournalArgs(opts.Now), MaxJournalOutput)
+	if res.truncated {
+		end := bytes.LastIndexByte(res.out, '\n')
+		return res.out[:end+1], true, nil
+	}
+	if res.err != nil {
+		return nil, false, fmt.Errorf("journalctl: %w: %s", res.err, strings.TrimSpace(res.stderr))
+	}
+	return res.out, false, nil
+}
+
+// streamFunc returns the command runner of the options.
+func (o Options) streamFunc() streamFunc {
+	if o.stream != nil {
+		return o.stream
+	}
+	return execStream
 }
 
 // readFixture reads a fixture file of at most max bytes; a missing file is
@@ -229,6 +271,9 @@ func (s Snapshot) LogLines() []string {
 	}
 	if s.JournalErr != nil {
 		lines = append(lines, fmt.Sprintf("problems: app problem records not read: %v", s.JournalErr))
+	}
+	if s.JournalTruncated {
+		lines = append(lines, fmt.Sprintf("problems: journalctl output reached the cap of %d bytes; only the entries before it were read", MaxJournalOutput))
 	}
 	if s.JournalDropped > 0 {
 		lines = append(lines, fmt.Sprintf("problems: dropped %d journal records that failed validation", s.JournalDropped))

@@ -242,8 +242,8 @@ func checkField(rule fieldRule, value json.RawMessage) Field {
 		}
 		field.Value = b
 	case typeInt:
-		var n json.Number
-		if !decodeStrict(value, &n) {
+		n, ok := decodeNumber(value)
+		if !ok {
 			field.Reason = "not a whole number"
 			return field
 		}
@@ -369,6 +369,18 @@ func decodeStrict(value json.RawMessage, v any) bool {
 	dec := json.NewDecoder(bytes.NewReader(trimmed))
 	dec.UseNumber()
 	return dec.Decode(v) == nil
+}
+
+// decodeNumber returns value when it is a JSON number token. Decoding into
+// json.Number alone also accepts a JSON string of digits ("1"), which the
+// v1 integer type does not.
+func decodeNumber(value json.RawMessage) (json.Number, bool) {
+	var v any
+	if !decodeStrict(value, &v) {
+		return "", false
+	}
+	n, ok := v.(json.Number)
+	return n, ok
 }
 
 // rawDisplay gives compact display text for a raw JSON value: the string
