@@ -216,3 +216,35 @@ func TestDecideRecordsTheCurrentSchemaAndTime(t *testing.T) {
 		t.Errorf("Decide(false, auto) = %+v", off)
 	}
 }
+
+// TestFileConsentReloads proves the reader a live send uses: it reads the
+// file on every call, so a change by another ChairLift process takes effect
+// before the next request, and a read failure is off.
+func TestFileConsentReloads(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "reporting.json")
+	on := Decide(true, ModeAuto, testStart)
+	off := Decide(false, ModeAsk, testStart)
+	if err := SaveConsent(path, on); err != nil {
+		t.Fatal(err)
+	}
+	consent := FileConsent(path)
+	if got := consent(); got != on {
+		t.Fatalf("FileConsent() = %+v, want the file's value", got)
+	}
+	if err := SaveConsent(path, off); err != nil {
+		t.Fatal(err)
+	}
+	if got := consent(); got != off {
+		t.Errorf("FileConsent() after a change = %+v, want the new value", got)
+	}
+	if err := os.WriteFile(path, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := consent(); got != (Consent{}) {
+		t.Errorf("FileConsent() for a broken file = %+v, want off", got)
+	}
+	if got := FileConsent("")(); got != (Consent{}) {
+		t.Errorf("FileConsent(\"\")() = %+v, want off", got)
+	}
+}

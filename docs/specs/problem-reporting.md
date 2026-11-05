@@ -42,15 +42,21 @@ read, is larger than 64 KiB, or fails a rule above reads off plus an error.
 `reporting.SaveConsent` writes a temporary file in the same folder (0600) and
 renames it; the folder is made with 0700.
 
-**The serial consent writer.** `reporting.ConsentWriter` writes the consent:
-`Set` stores the wanted consent and a new generation at once and queues the
-write; 1 worker goroutine writes only the latest wanted value, and a result
-carries its generation, so a result for an older generation is ignored. A
-failed write restores the last persisted value as the wanted value only when
-no newer choice exists. A goroutine per choice could end out of order and
-leave the wrong consent on disk, and a fast On then Off could end with On.
-The page and the first run publish the wanted value to the in-memory consent
-at once, so a send reads a withdrawal before its next request.
+**The write is synchronous.** The consent file is about 200 bytes, so the page
+and the first-run step write it on the GTK main thread with
+`reporting.SaveConsent`: a small local file write, not an external tool call,
+so the main-thread rule allows it. 1 value in memory is the only authority. A
+successful write sets that value and redraws the widgets; a failed write keeps
+the value, puts the widgets back to it, and shows an error toast; a dry run
+sets the value and writes nothing. Because the write is synchronous, an exit
+cannot lose an Off, and no callback can restore an older value. The widgets a
+handler redraws are guarded, so they cannot start a second save.
+
+**Reading it again.** `reporting.FileConsent(path)` returns a function that
+reads the file on every call, and a read error is off. A live send uses it
+before every request, because 1 ChairLift process can write the consent while
+another sends (the first-run window and the main window can run at the same
+time). A dry run uses the in-memory value.
 
 The switch shows `Consent.Allows()`, not `Consent.Enabled`, and
 `reporting.SwitchChanged(stored, active)` decides whether the user changed it.
@@ -148,14 +154,19 @@ read, never its content.
 1. **Kind `crash` is never sent.** `ForItem` refuses it with
    `reporting.ErrLocalOnly`, `HTTPSender.Send` refuses it before any network
    call, and the page offers no Report button for it.
-2. **The order of 1 send is record, save, then send.** Both paths put the
-   entry (or the count week) in the sent log and save it **before** the
-   request. If that save fails, nothing is sent and the error is returned. A
-   failed request removes the entry again (and puts the earlier count week
-   back), sets `retry_after`, and saves; if that save fails the error is
-   returned and the entry stays recorded, which can only under-send, never
-   send the same report twice. A process that exits during a request
-   therefore under-sends, never duplicates.
+2. **The order of 1 send is reserve, check, send, settle.** Both paths
+   reserve: they put the entry (or the count week) in the sent log **and** a
+   conservative pause (`retry_after = now + 24 h`) in the same document, and
+   save it **before** the request. If that save fails, nothing is sent and the
+   error is returned. Then the consent is read once more, immediately before
+   the request; a withdrawal rolls the reservation back (entry, count week and
+   pause), saves, and stops without a failure and without a pause
+   (`SendReport` returns `ErrNoConsent`). After the request the log settles: a
+   success restores the earlier `retry_after` and saves; a failure forgets the
+   entry, keeps the pause, and saves. A failed settle save leaves the entry and
+   the pause on disk, which only under-sends: a later run then sends nothing
+   for 24 hours, and no report is sent twice. A process that exits during a
+   request leaves the same reservation behind.
 3. **The automatic path (`reporting.Run`), in this order.** The group is off
    → nothing, `Skipped` "group off". The consent does not `Allows` → "consent".
    The mode is not `auto` → "ask mode". No release client string → "not a

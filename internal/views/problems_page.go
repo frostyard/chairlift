@@ -2,7 +2,6 @@ package views
 
 import (
 	"context"
-	"errors"
 	"log"
 	"os"
 	"time"
@@ -26,10 +25,6 @@ import (
 // sendPace is the wait between 2 report requests: at most 10 requests in a
 // minute, which is the intake API's rate limit.
 const sendPace = 7 * time.Second
-
-// errNoConsentPath is the failure of a consent write when this user has no
-// config home, so the consent file has no path.
-var errNoConsentPath = errors.New("the consent file has no path")
 
 // reportRow is 1 problem row's Report… button, so a completed send can mark
 // the row. Main thread only.
@@ -196,7 +191,7 @@ func (uh *UserHome) reportedEndpoint() string {
 // switch) does nothing; a stale consent shows off, so turning it on renews
 // it (reporting.SwitchChanged).
 func (uh *UserHome) onReportingSwitched(enabled bool) {
-	if !reporting.SwitchChanged(uh.wantedConsent(), enabled) {
+	if uh.reportingApplying || !reporting.SwitchChanged(uh.consentCopy(), enabled) {
 		return
 	}
 	uh.applyReportingConsent(enabled, uh.selectedMode())
@@ -205,7 +200,10 @@ func (uh *UserHome) onReportingSwitched(enabled bool) {
 // onReportingModeSelected handles a change of the mode row. Main thread
 // only.
 func (uh *UserHome) onReportingModeSelected() {
-	current := uh.wantedConsent()
+	if uh.reportingApplying {
+		return
+	}
+	current := uh.consentCopy()
 	mode := uh.selectedMode()
 	if mode == current.Mode || !current.Allows() {
 		return
@@ -215,54 +213,52 @@ func (uh *UserHome) onReportingModeSelected() {
 
 // applyReportingConsent takes the user's choice: the decision struct from
 // internal/views/actionmsg decides the toast and whether the consent file is
-// written, exactly once (ADR-0009). The wanted consent is published at once,
-// so a send that reads it before its next request sees the change even while
-// the write runs; the serial writer saves it.
+// written, exactly once (ADR-0009).
+//
+// The consent file is about 200 bytes, so it is written here, on the GTK main
+// thread, with reporting.SaveConsent. That is a small local file write, not an
+// external tool call, so the main-thread rule allows it; and because the write
+// is synchronous, an exit cannot lose an Off and no callback can restore an
+// older value.
 func (uh *UserHome) applyReportingConsent(enabled bool, mode reporting.Mode) {
 	decision := actionmsg.ReportingConsent(IsDryRun(), enabled, string(mode))
 	if decision.Log != "" {
 		log.Println(decision.Log)
 	}
-	previous := uh.consentCopy()
 	record := reporting.Decide(enabled, mode, time.Now())
-	uh.publishConsent(record)
 	if !decision.Persist {
-		// A dry run keeps the choice for this run only, and shows it.
+		// A dry run keeps the choice in memory for this run only.
+		uh.withoutSaving(func() { uh.publishConsent(record) })
 		uh.toastAdder.ShowToast(decision.Toast)
 		return
 	}
-	writer := uh.consentWriter()
-	if writer == nil {
-		uh.publishConsent(previous)
+	path := uh.reportingConsentAt
+	if path == "" {
+		uh.withoutSaving(func() { uh.showReportingConsent(uh.consentCopy()) })
 		uh.toastAdder.ShowErrorToast("Could not save the problem reporting setting: no consent file path")
 		return
 	}
-	writer.Set(record)
+	if err := reporting.SaveConsent(path, record); err != nil {
+		log.Printf("problems: save the reporting consent: %v", err)
+		// The in-memory value stays as it was: put the widgets back to it.
+		uh.withoutSaving(func() { uh.showReportingConsent(uh.consentCopy()) })
+		uh.toastAdder.ShowErrorToast("Could not save the problem reporting setting: " + err.Error())
+		return
+	}
+	uh.withoutSaving(func() { uh.publishConsent(record) })
+	uh.toastAdder.ShowToast(decision.Toast)
+	if record.Allows() && record.Mode == reporting.ModeAuto {
+		uh.runAutomaticReports()
+	}
 }
 
-// onReportingWritten handles 1 consent write on the GTK main thread. A result
-// that a newer choice already replaced is ignored, so a slow write cannot
-// undo a later choice; a failed latest write puts the value on disk back.
-func (uh *UserHome) onReportingWritten(res reporting.ConsentResult) {
-	sgtk.RunOnMainThread(func() {
-		if res.Err != nil {
-			log.Printf("problems: save the reporting consent: %v", res.Err)
-			if res.Restored {
-				uh.publishConsent(res.Persisted)
-				uh.toastAdder.ShowErrorToast("Could not save the problem reporting setting: " + res.Err.Error())
-			}
-			return
-		}
-		writer := uh.consentWriter()
-		if writer == nil || res.Gen != writer.Current() {
-			return
-		}
-		uh.toastAdder.ShowToast(actionmsg.ReportingConsent(false, res.Consent.Allows(), string(res.Consent.Mode)).Toast)
-		if res.Consent.Allows() && res.Consent.Mode == reporting.ModeAuto {
-			uh.runAutomaticReports()
-		}
-		uh.refreshCountRow()
-	})
+// withoutSaving runs fn with the applying guard set, so the widget updates fn
+// makes cannot start a second save. Main thread only.
+func (uh *UserHome) withoutSaving(fn func()) {
+	previous := uh.reportingApplying
+	uh.reportingApplying = true
+	defer func() { uh.reportingApplying = previous }()
+	fn()
 }
 
 // publishConsent makes consent the wanted consent for the page and the send
@@ -272,24 +268,6 @@ func (uh *UserHome) publishConsent(consent reporting.Consent) {
 	uh.reportingConsent = consent
 	uh.reportingMu.Unlock()
 	uh.showReportingConsent(consent)
-}
-
-// consentWriter returns the serial consent writer, or nil. Safe from any
-// goroutine.
-func (uh *UserHome) consentWriter() *reporting.ConsentWriter {
-	uh.reportingMu.Lock()
-	defer uh.reportingMu.Unlock()
-	return uh.reportingWrite
-}
-
-// wantedConsent returns the consent the user chose last: the writer's wanted
-// value, which changes at once, so a withdrawal stops a send before its next
-// request. Safe from any goroutine.
-func (uh *UserHome) wantedConsent() reporting.Consent {
-	if writer := uh.consentWriter(); writer != nil {
-		return writer.Wanted()
-	}
-	return uh.consentCopy()
 }
 
 // consentCopy returns a copy of the wanted consent, safe from any goroutine.
@@ -404,27 +382,14 @@ func (uh *UserHome) loadProblems(systemOn, appsOn, reportingOn bool) {
 
 	items := append(append([]problems.Item(nil), snap.SystemItems...), snap.AppItems...)
 	envelope := snap.System.Envelope
-	consentPath := uh.reportingConsentAt
 	endpointErr := uh.reportingEndpointErr
 
 	sgtk.RunOnMainThread(func() {
-		// 1 serial writer for the consent: the latest choice wins, and a fast
-		// On then Off cannot end On (ADR-0015).
-		var writer *reporting.ConsentWriter
-		if reportingOn {
-			writer = reporting.NewConsentWriter(consent, func(c reporting.Consent) error {
-				if consentPath == "" {
-					return errNoConsentPath
-				}
-				return reporting.SaveConsent(consentPath, c)
-			}, uh.onReportingWritten)
-		}
 		uh.reportingMu.Lock()
 		uh.reportingConsent = consent
 		uh.reportingState = sent
 		uh.reportingItems = items
 		uh.reportingEnvelope = envelope
-		uh.reportingWrite = writer
 		uh.reportingMu.Unlock()
 		if reportingOn {
 			uh.showReportingConsent(consent)
@@ -624,10 +589,17 @@ func (uh *UserHome) reportingInput() reporting.RunInput {
 	items := uh.reportingItems
 	envelope := uh.reportingEnvelope
 	uh.reportingMu.Unlock()
+	// A live send reads the consent file again before every request, so a
+	// withdrawal from another ChairLift process (the first-run window can run
+	// at the same time) stops it; a dry run uses the in-memory value.
+	consent := uh.consentCopy
+	if !IsDryRun() && uh.reportingConsentAt != "" {
+		consent = reporting.FileConsent(uh.reportingConsentAt)
+	}
 	return reporting.RunInput{
 		Now:       time.Now,
 		GroupOn:   uh.config.IsGroupEnabled("problems_page", "problems_reporting_group"),
-		Consent:   uh.wantedConsent,
+		Consent:   consent,
 		StatePath: statePath,
 		Items:     items,
 		Envelope:  envelope,
@@ -643,7 +615,7 @@ func (uh *UserHome) reportingInput() reporting.RunInput {
 // GTK thread, then refreshes the sent list on it. It runs at most once at a
 // time.
 func (uh *UserHome) runAutomaticReports() {
-	if uh.reportingRunning || !uh.wantedConsent().Allows() || uh.reportingClient == "" || uh.reportingEndpointErr != nil {
+	if uh.reportingRunning || !uh.consentCopy().Allows() || uh.reportingClient == "" || uh.reportingEndpointErr != nil {
 		return
 	}
 	uh.reportingRunning = true

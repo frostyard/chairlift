@@ -96,43 +96,16 @@ func SendReport(ctx context.Context, in RunInput, r Report) (Entry, error) {
 		return Entry{}, ErrAlreadySent
 	}
 
-	entry := Entry{
-		ReportID:  r.ReportID,
-		Kind:      r.Kind,
-		ProblemID: r.ProblemID,
-		Week:      r.Week,
-		SentAt:    nowf().UTC(),
+	// deliver reserves the entry and saves it with a conservative pause
+	// before the request, reads the consent once more, sends, and settles the
+	// log. The dialog's send ignores a pause: the user asked for this report.
+	allowed := func() bool { return consent().Allows() }
+	entry, withdrawn, err := deliver(ctx, st, in.StatePath, in.Sender, r,
+		r.Kind == problems.KindCount, nowf, allowed, logf)
+	if withdrawn {
+		return Entry{}, ErrNoConsent
 	}
-	// Record and save before the request, as the automatic path does, so a
-	// process that exits during the request can only under-send. A failed
-	// request forgets the entry again.
-	priorWeek := st.CountWeek
-	record := func() {
-		if r.Kind == problems.KindCount {
-			st.RecordCount(r.Week, entry)
-			return
-		}
-		st.Record(entry)
-	}
-	undo := func() {
-		st.Forget(entry.ReportID)
-		if r.Kind == problems.KindCount {
-			st.SetCountWeek(priorWeek)
-		}
-	}
-	record()
-	if err := st.Save(in.StatePath); err != nil {
-		undo()
-		logf("reporting: " + err.Error())
-		return Entry{}, err
-	}
-	if err := in.Sender.Send(ctx, r.Body); err != nil {
-		undo()
-		st.Fail(nowf())
-		if saveErr := st.Save(in.StatePath); saveErr != nil {
-			logf("reporting: " + saveErr.Error())
-			return Entry{}, errors.Join(err, saveErr)
-		}
+	if err != nil {
 		return Entry{}, err
 	}
 	return entry, nil

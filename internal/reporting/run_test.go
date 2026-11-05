@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -238,31 +239,6 @@ func TestRunNeverSendsACrashReport(t *testing.T) {
 	}
 	if got := len(sender.bodies()); got != 2 {
 		t.Errorf("the sender was asked for %d bodies, want 2 (1 report and 1 count)", got)
-	}
-}
-
-// TestRunConsentTurnedOffBetweenRequestsStops proves the consent is read
-// again before each request, so turning reporting off stops a run at once.
-func TestRunConsentTurnedOffBetweenRequestsStops(t *testing.T) {
-	clk := newClock(testStart)
-	sender := &recordingSender{}
-	in := input(clk, newStatePath(t), sender, reportableItems(5))
-	// Run reads the consent before each report and again after the pace, so
-	// the first report's 3 reads allow and every later read refuses.
-	calls := 0
-	in.Consent = func() Consent {
-		calls++
-		if calls > 3 {
-			return Consent{}
-		}
-		return autoConsent()
-	}
-	res := Run(context.Background(), in)
-	if got := sender.count(); got != 1 {
-		t.Fatalf("%d requests were made, want 1", got)
-	}
-	if res.Err != nil {
-		t.Fatalf("Run: %v", res.Err)
 	}
 }
 
@@ -546,30 +522,47 @@ func validateBody(t *testing.T, v *schemacheck.Validator, body []byte) []string 
 }
 
 // TestRunWithdrawDuringThePaceStopsTheNextRequest proves the consent is read
-// again after the pace wait: turning reporting off during the wait stops the
-// next request, and that is not a failure (no pause).
+// again after the pace wait. A goroutine orders itself after the first request
+// and turns reporting off 50 ms into the 200 ms wait, so the check that
+// precedes the wait still allowed and only the check after it sees the
+// withdrawal. The save count pins that check: with it, the withdrawn report is
+// never even reserved; without it, the run reserves and rolls back 2 saves
+// more and this test fails.
 func TestRunWithdrawDuringThePaceStopsTheNextRequest(t *testing.T) {
 	clk := newClock(testStart)
 	statePath := newStatePath(t)
 	sender := &recordingSender{}
-	off := false
+	firstRequest := make(chan struct{})
+	var off atomic.Bool
+	var once sync.Once
 	in := input(clk, statePath, sender, reportableItems(3))
-	in.Pace = 50 * time.Millisecond
+	in.Pace = 200 * time.Millisecond
 	in.Consent = func() Consent {
-		if off {
+		if off.Load() {
 			return Consent{}
 		}
 		return autoConsent()
 	}
-	// Turn reporting off during the wait before the second request.
-	sender.onSend = func(n int) {
-		if n == 1 {
-			off = true
-		}
-	}
-	res := Run(context.Background(), in)
+	// The order: the first request runs, the goroutine wakes, waits 50 ms into
+	// the 200 ms pause, and turns reporting off before the wait ends.
+	go func() {
+		<-firstRequest
+		time.Sleep(50 * time.Millisecond)
+		off.Store(true)
+	}()
+	sender.onSend = func(int) { once.Do(func() { close(firstRequest) }) }
+	saves := 0
+	restoreSave(t, func(s *State, path string) error {
+		saves++
+		return s.Save(path)
+	})
+
+	res := Run(t.Context(), in)
 	if got := sender.count(); got != 1 {
-		t.Fatalf("%d requests were made, want 1", got)
+		t.Fatalf("%d requests were made, want 1: the withdrawal during the wait must stop the next one", got)
+	}
+	if saves != 2 {
+		t.Errorf("%d saves were made, want 2 (only the sent report's reservation and settle)", saves)
 	}
 	if res.Err != nil {
 		t.Fatalf("Run() error = %v, want a normal stop", res.Err)
@@ -584,6 +577,156 @@ func TestRunWithdrawDuringThePaceStopsTheNextRequest(t *testing.T) {
 	if len(st.Sent) != 1 {
 		t.Errorf("the sent log holds %d entries, want 1", len(st.Sent))
 	}
+}
+
+// TestRunWithdrawAfterTheReservationStopsTheRequest proves the consent is
+// read once more after the reservation was saved and just before the request:
+// a withdrawal then rolls the reservation back, saves, and stops without a
+// failure or a pause. The consent allows the initial read, the check before
+// the report and the check after the pace, and refuses the 1 after the
+// reservation, so the run must reach the reservation first.
+func TestRunWithdrawAfterTheReservationStopsTheRequest(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{}
+	reads := 0
+	in := input(clk, statePath, sender, reportableItems(2))
+	in.Consent = func() Consent {
+		reads++
+		if reads > 3 {
+			return Consent{}
+		}
+		return autoConsent()
+	}
+	saves := 0
+	restoreSave(t, func(s *State, path string) error {
+		saves++
+		return s.Save(path)
+	})
+	res := Run(t.Context(), in)
+	if got := sender.count(); got != 0 {
+		t.Fatalf("%d requests were made after the withdrawal, want 0", got)
+	}
+	if res.Err != nil {
+		t.Fatalf("Run() error = %v, want a normal stop", res.Err)
+	}
+	if saves != 2 {
+		t.Fatalf("%d saves were made, want 2 (the reservation and its rollback)", saves)
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if len(st.Sent) != 0 {
+		t.Errorf("the rolled-back reservation left %d entries, want 0", len(st.Sent))
+	}
+	if st.Paused(clk.Now()) {
+		t.Error("a withdrawal paused automatic sending, want no pause")
+	}
+}
+
+// TestRunReservationSaveFailureMakesNoRequest proves a failed reservation
+// save stops the run at that stage, before any request.
+func TestRunReservationSaveFailureMakesNoRequest(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{}
+	in := input(clk, statePath, sender, reportableItems(2))
+	calls := 0
+	restoreSave(t, func(s *State, path string) error {
+		calls++
+		return errors.New("the sent log could not be written")
+	})
+	res := Run(t.Context(), in)
+	if sender.count() != 0 {
+		t.Fatalf("%d requests were made without a reservation, want 0", sender.count())
+	}
+	if res.Err == nil {
+		t.Fatal("Run() error = nil, want the reservation save failure")
+	}
+	if calls != 1 {
+		t.Errorf("%d saves were attempted, want 1 (the reservation)", calls)
+	}
+	if len(res.Sent) != 0 {
+		t.Errorf("Sent holds %d entries, want 0", len(res.Sent))
+	}
+}
+
+// TestRunFailedRollbackSaveKeepsTheReservation proves a failed request whose
+// rollback save fails leaves the entry and the pause on disk (which only
+// under-sends): the state still pauses, so a new run makes no request.
+func TestRunFailedRollbackSaveKeepsTheReservation(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{err: &StatusError{Code: http.StatusServiceUnavailable}}
+	in := input(clk, statePath, sender, reportableItems(1))
+	calls := 0
+	restoreSave(t, func(s *State, path string) error {
+		calls++
+		if calls == 1 {
+			// The reservation succeeds and reaches the disk.
+			return s.Save(path)
+		}
+		return errors.New("the sent log could not be written")
+	})
+	res := Run(t.Context(), in)
+	if res.Err == nil {
+		t.Fatal("Run() error = nil, want the failed request")
+	}
+	if calls != 2 {
+		t.Fatalf("%d saves were attempted, want 2 (the reservation and the rollback)", calls)
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if !st.Paused(clk.Now()) {
+		t.Error("the reservation's pause is not on disk, so a new run could send again")
+	}
+	if len(st.Sent) != 1 {
+		t.Errorf("the sent log holds %d entries, want the reservation", len(st.Sent))
+	}
+
+	// The next run, on the pause, sends nothing.
+	restoreSave(t, (*State).Save)
+	next := input(clk, statePath, sender, reportableItems(1))
+	paused := Run(t.Context(), next)
+	if got := sender.count(); got != 1 {
+		t.Fatalf("%d requests were made, want only the failed one", got)
+	}
+	if !strings.HasPrefix(paused.Skipped, "paused until ") {
+		t.Errorf("Skipped = %q, want a pause", paused.Skipped)
+	}
+}
+
+// TestRunSuccessfulRequestLeavesNoPause proves the reservation's pause is
+// removed again after a successful request.
+func TestRunSuccessfulRequestLeavesNoPause(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{}
+	in := input(clk, statePath, sender, reportableItems(1))
+	if res := Run(t.Context(), in); res.Err != nil {
+		t.Fatalf("Run: %v", res.Err)
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if st.Paused(clk.Now()) {
+		t.Errorf("a successful request left the pause %v, want none", st.RetryAfter)
+	}
+	if len(st.Sent) != 1 {
+		t.Errorf("the sent log holds %d entries, want 1", len(st.Sent))
+	}
+}
+
+// restoreSave replaces the package's save function for the rest of the test.
+func restoreSave(t *testing.T, fn func(*State, string) error) {
+	t.Helper()
+	previous := saveState
+	saveState = fn
+	t.Cleanup(func() { saveState = previous })
 }
 
 // TestRunWithoutASenderSendsNothing proves a missing endpoint stops the run
@@ -601,39 +744,6 @@ func TestRunWithoutASenderSendsNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(statePath); err == nil {
 		t.Errorf("the run wrote the sent log %s", statePath)
-	}
-}
-
-// TestRunSaveFailureMakesNoRequest proves the order record, save, then send: a
-// sent log that cannot be written stops the run with 0 requests.
-func TestRunSaveFailureMakesNoRequest(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("a root user may write into a read-only folder")
-	}
-	clk := newClock(testStart)
-	// The sent log exists and reads, but its folder admits no new file, so the
-	// save before the request fails.
-	statePath := newStatePath(t)
-	if err := (&State{}).Save(statePath); err != nil {
-		t.Fatalf("Save: %v", err)
-	}
-	folder := filepath.Dir(statePath)
-	if err := os.Chmod(folder, 0o500); err != nil {
-		t.Fatalf("chmod: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(folder, 0o700) })
-	sender := &recordingSender{}
-	in := input(clk, statePath, sender, reportableItems(2))
-	in.Sender = sender
-	res := Run(context.Background(), in)
-	if sender.count() != 0 {
-		t.Fatalf("%d requests were made without a written sent log, want 0", sender.count())
-	}
-	if res.Err == nil {
-		t.Fatal("Run() error = nil, want the save failure")
-	}
-	if len(res.Sent) != 0 {
-		t.Errorf("Sent holds %d entries, want 0", len(res.Sent))
 	}
 }
 

@@ -107,25 +107,29 @@ type UserHome struct {
 	// Problems reporting (ADR-0015, phase 2). The widgets live on the GTK
 	// main thread; consent and reportingState are guarded by reportingMu,
 	// because the send goroutine reads the consent before every request.
-	reportingGroup       *adw.PreferencesGroup
-	reportingSwitch      *adw.SwitchRow
-	reportingMode        *adw.ComboRow
-	reportingSent        *adw.ExpanderRow
-	reportingCountRow    *adw.ActionRow
-	reportingSentRows    []*gtk.Widget
-	reportingMu          sync.Mutex
-	reportingConsent     reporting.Consent
-	reportingWrite       *reporting.ConsentWriter
+	reportingGroup    *adw.PreferencesGroup
+	reportingSwitch   *adw.SwitchRow
+	reportingMode     *adw.ComboRow
+	reportingSent     *adw.ExpanderRow
+	reportingCountRow *adw.ActionRow
+	reportingSentRows []*gtk.Widget
+	reportingMu       sync.Mutex
+	reportingConsent  reporting.Consent
+	// reportingEndpointErr is set when the configured report endpoint is not
+	// a valid URL: every send path is off then.
 	reportingEndpointErr error
-	reportingState       *reporting.State
-	reportingRows        map[string]*reportRow
-	reportingConsentAt   string
-	reportingStateAt     string
-	reportingEndpoint    string
-	reportingClient      string
-	reportingItems       []problems.Item
-	reportingEnvelope    problems.Envelope
-	reportingRunning     bool
+	// reportingApplying is true while the page itself redraws the consent
+	// widgets, so a redraw cannot start a second save. Main thread only.
+	reportingApplying  bool
+	reportingState     *reporting.State
+	reportingRows      map[string]*reportRow
+	reportingConsentAt string
+	reportingStateAt   string
+	reportingEndpoint  string
+	reportingClient    string
+	reportingItems     []problems.Item
+	reportingEnvelope  problems.Envelope
+	reportingRunning   bool
 
 	// Groups with deferred visibility
 	maintenanceBrewGroup    *adw.PreferencesGroup

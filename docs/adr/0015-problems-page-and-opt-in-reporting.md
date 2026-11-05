@@ -115,15 +115,17 @@ Facts that constrain it:
       week. The weekly count (install age bucket and update channel only)
       goes at most once per ISO week. These are 2 separate limits: the count
       does not use the 20-report budget.
-    - **1 write at a time, and 1 order for a send.** A serial consent writer
-      keeps the latest choice (`reporting.ConsentWriter`): a fast On then Off
-      ends Off, a slow write cannot undo a later choice, and a failed latest
-      write shows the value that is on disk again. A send records and saves
-      its entry BEFORE the request, so a process that exits during a request
-      can only under-send; a failed request removes the entry and pauses.
-      The consent is read again after the pace wait and just before each
-      request, so a withdrawal stops the run at once, and it is a normal
-      stop, not a failure.
+    - **A small file, written at once, and a send in 4 steps.** The consent
+      file is about 200 bytes, so the page and the first-run step write it
+      synchronously on the GTK main thread, with 1 in-memory authority: a
+      failed write keeps the value and shows an error, and no queued write can
+      restore an older choice. It is read again from the file before every
+      live request, because another ChairLift process may have turned
+      reporting off. 1 send reserves the entry (or the count week) together
+      with a conservative pause, saves, reads the consent once more, and then
+      sends; a withdrawal rolls the reservation back and stops without a
+      failure, and the log settles after the request. A process that exits
+      during a request therefore under-sends, never sends twice.
     - **A failed send waits 24 hours.** The first failure pauses every
       automatic send for 24 hours, and the next run says why. An explicit
       Report dialog send ignores the pause: the user asked for it, and the

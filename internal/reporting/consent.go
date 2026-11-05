@@ -195,6 +195,24 @@ func (c Consent) Stale() bool {
 	return c.Enabled && !c.Allows()
 }
 
+// FileConsent returns a function that reads the consent file at path again on
+// every call. 1 ChairLift process can write the file while another sends (the
+// first-run window and the main window can run at the same time), so a send
+// that calls this before every request sees a withdrawal at once. A read
+// error is off, and so is an empty path.
+func FileConsent(path string) func() Consent {
+	if path == "" {
+		return func() Consent { return Consent{} }
+	}
+	return func() Consent {
+		c, err := LoadConsent(path)
+		if err != nil {
+			return Consent{}
+		}
+		return c
+	}
+}
+
 // SwitchChanged reports whether the user changed the consent switch: active
 // is not the state the switch shows for stored. The switch shows Allows(),
 // not Enabled, because a stale consent (on, but of an older data generation)

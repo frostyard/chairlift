@@ -334,3 +334,83 @@ func TestManualSendKeepsTheEntryBeforeTheRequest(t *testing.T) {
 		t.Error("the failed send did not pause automatic sending")
 	}
 }
+
+// TestSendReportWithdrawAfterTheReservationSendsNothing proves the dialog's
+// send reads the consent again after the reservation and just before the
+// request: a withdrawal rolls the reservation back and returns ErrNoConsent
+// with no request.
+func TestSendReportWithdrawAfterTheReservationSendsNothing(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{}
+	in := input(clk, statePath, sender, nil)
+	// The send reads the consent once before the reservation and once after
+	// it: allow the first, refuse the second.
+	reads := 0
+	in.Consent = func() Consent {
+		reads++
+		if reads > 1 {
+			return Consent{}
+		}
+		return askConsent()
+	}
+	saves := 0
+	restoreSave(t, func(s *State, path string) error {
+		saves++
+		return s.Save(path)
+	})
+	if _, err := SendReport(context.Background(), in, sentReport(t)); !errors.Is(err, ErrNoConsent) {
+		t.Fatalf("SendReport() = %v, want ErrNoConsent", err)
+	}
+	if sender.count() != 0 {
+		t.Fatalf("%d requests were made after the withdrawal, want 0", sender.count())
+	}
+	if saves != 2 {
+		t.Errorf("%d saves were made, want 2 (the reservation and its rollback)", saves)
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if len(st.Sent) != 0 {
+		t.Errorf("the rolled-back reservation left %d entries, want 0", len(st.Sent))
+	}
+	if st.Paused(clk.Now()) {
+		t.Error("a withdrawal paused automatic sending, want no pause")
+	}
+}
+
+// TestSendReportRollbackSaveFailureKeepsTheReservation proves the dialog's
+// send uses the same injectable save: a failed request whose rollback save
+// fails leaves the entry and the pause on disk.
+func TestSendReportRollbackSaveFailureKeepsTheReservation(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{err: &StatusError{Code: 503}}
+	in := input(clk, statePath, sender, nil)
+	in.Consent = fixedConsent(askConsent())
+	calls := 0
+	restoreSave(t, func(s *State, path string) error {
+		calls++
+		if calls == 1 {
+			return s.Save(path)
+		}
+		return errors.New("the sent log could not be written")
+	})
+	if _, err := SendReport(context.Background(), in, sentReport(t)); err == nil {
+		t.Fatal("SendReport() = nil, want the send failure")
+	}
+	if calls != 2 {
+		t.Fatalf("%d saves were attempted, want 2 (the reservation and the rollback)", calls)
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if !st.Paused(clk.Now()) {
+		t.Error("the reservation's pause is not on disk")
+	}
+	if len(st.Sent) != 1 {
+		t.Errorf("the sent log holds %d entries, want the reservation", len(st.Sent))
+	}
+}

@@ -133,13 +133,7 @@ func SendPending(ctx context.Context, in CLIInput) int {
 		GroupOn: true,
 		// Read the consent file again before each request, so a withdrawal
 		// during the run stops it at once; a read failure is off.
-		Consent: func() Consent {
-			next, err := LoadConsent(consentPath)
-			if err != nil {
-				return Consent{}
-			}
-			return next
-		},
+		Consent:     FileConsent(consentPath),
 		StatePath:   statePath,
 		Items:       items,
 		Envelope:    snap.System.Envelope,

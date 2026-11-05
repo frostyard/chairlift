@@ -106,6 +106,12 @@ func LoadState(path string) (*State, error) {
 	return st, nil
 }
 
+// saveState writes the sent log. It is a variable so that a test can fail 1
+// save at an exact stage (the reservation, the rollback after a withdrawal,
+// or the rollback after a failed request); production always uses
+// (*State).Save.
+var saveState = (*State).Save
+
 // Save writes the sent log to path: a temporary file in the same folder
 // (mode 0600), then a rename. The folder is made with mode 0700.
 func (s *State) Save(path string) error {

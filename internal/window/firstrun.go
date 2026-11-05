@@ -59,7 +59,9 @@ type FirstRunWindow struct {
 	reportingSwitch *adw.SwitchRow
 	reportingRecord reporting.Consent
 	reportingPath   string
-	reportingWrite  *reporting.ConsentWriter
+	// reportingApplying is true while the step itself redraws the switch, so
+	// a redraw cannot start a second save. Main thread only.
+	reportingApplying bool
 
 	progressGroup   *adw.PreferencesGroup
 	progressStarted bool

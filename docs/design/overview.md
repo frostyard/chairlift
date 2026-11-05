@@ -1444,9 +1444,11 @@ fails when another package imports it, or when another non-test Go file names
   user turns it on, and every failure reads as off. A schema that adds a kind
   or a field is a new data generation (`dataGeneration`), so sending stops
   until the user agrees again; an enum-only schema keeps it on.
-  `ConsentWriter` writes the choices one at a time and the latest wins: the
-  wanted value changes at once, a result for an older generation is ignored,
-  and a failed latest write restores the value on disk.
+  The page and the first-run step write the small file synchronously on the
+  main thread with 1 in-memory authority, so a failed write keeps the value
+  and no queued write can restore an older one. `reporting.FileConsent` reads
+  the file again on every call, and a live send uses it before every request,
+  so a withdrawal from another ChairLift process stops it.
 - **Sent log** (`state.go`): `$XDG_STATE_HOME/chairlift/reports.json` (else
   `$HOME/.local/state/chairlift/reports.json`) holds the sent entries, the
   week of the last count and `retry_after`; at most 500 entries, none older
@@ -1467,12 +1469,13 @@ fails when another package imports it, or when another non-test Go file names
 - **Run** (`run.go`): the one automatic path, in order: group off, consent,
   ask mode, release client, the lock, the sent log, the pause; then the
   pending reports (reportable, not `crash`, not sent this week, at most 20 in
-  24 hours), then the count when this ISO week was not counted. It records
-  and saves each entry BEFORE its request, so a process that exits during a
-  request can only under-send, and a failed request removes the entry. It
-  reads the consent again after the pace and just before every request (a
-  withdrawal is a normal stop), and the first failure sets `retry_after` to
-  now + 24 h and stops. A dry run previews and writes
+  24 hours), then the count when this ISO week was not counted. 1 send
+  reserves (entry or count week plus a conservative pause), saves, reads the
+  consent again just before the request, and settles: a success restores the
+  earlier pause, a failure keeps it. A withdrawal rolls the reservation back
+  and stops without a failure. A process that exits during a request can only
+  under-send. `Run` reads the pause once, at its start, so its own
+  reservation never blocks the rest of the run. A dry run previews and writes
   nothing. `manual.go`'s `SendReport` is the dialog's send: it ignores the
   pause (the user asked), refuses an unreadable sent log, and shares the caps
   and the lock. Both builders encode without HTML escaping, so enum text such
@@ -1488,7 +1491,7 @@ fails when another package imports it, or when another non-test Go file names
 - **The page** (`internal/views/problems_page.go`): the switch, mode,
   "Sent reports", "What is sent" and "Weekly count" rows, a Report… button
   per offered problem, and `reporting.Run` in Auto mode. Consent changes go
-  through the page's own `ConsentWriter`, and the consent and sent log load
+  written synchronously on the main thread, and the consent and sent log load
   also when both data groups are off, so a consent can always be withdrawn. The decisions come
   from `actionmsg.Report` and `actionmsg.ReportingConsent` (ADR-0009).
 - **The first run** shows the optional Reporting step between Style and Apps

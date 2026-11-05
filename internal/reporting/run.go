@@ -141,32 +141,6 @@ func Run(ctx context.Context, in RunInput) RunResult {
 		}
 		return nil
 	}
-	// sendRecorded records the report, saves the sent log, and then sends it.
-	// The entry is on disk before the request, so a process that exits during
-	// the request can only under-send, never send the same report twice. A
-	// failed request removes the entry again and pauses automatic sending.
-	// undo restores the in-memory state; the first save's failure leaves the
-	// file untouched, because Save writes a temporary file and renames it.
-	sendRecorded := func(r Report, record func(Entry), undo func()) (Entry, error, error) {
-		entry := Entry{
-			ReportID:  r.ReportID,
-			Kind:      r.Kind,
-			ProblemID: r.ProblemID,
-			Week:      r.Week,
-			SentAt:    nowf().UTC(),
-		}
-		record(entry)
-		if err := st.Save(in.StatePath); err != nil {
-			undo()
-			return Entry{}, err, nil
-		}
-		if err := in.Sender.Send(ctx, r.Body); err != nil {
-			undo()
-			st.Fail(nowf())
-			return Entry{}, err, st.Save(in.StatePath)
-		}
-		return entry, nil, nil
-	}
 
 	left := st.Remaining(now)
 	for _, it := range in.Items {
@@ -199,11 +173,13 @@ func Run(ctx context.Context, in RunInput) RunResult {
 			logf("reporting: consent changed; stopping")
 			return res
 		}
-		entry, sendErr, saveErr := sendRecorded(r,
-			func(e Entry) { st.Record(e) },
-			func() { st.Forget(r.ReportID) })
+		entry, withdrawn, sendErr := deliver(ctx, st, in.StatePath, in.Sender, r, false, nowf, allowed, logf)
+		if withdrawn {
+			logf("reporting: consent changed; stopping")
+			return res
+		}
 		if sendErr != nil {
-			res.Err = errors.Join(sendErr, saveErr)
+			res.Err = sendErr
 			return res
 		}
 		requests++
@@ -235,19 +211,103 @@ func Run(ctx context.Context, in RunInput) RunResult {
 		logf("reporting: consent changed; stopping")
 		return res
 	}
-	priorWeek := st.CountWeek
-	entry, sendErr, saveErr := sendRecorded(r,
-		func(e Entry) { st.RecordCount(r.Week, e) },
-		func() {
-			st.Forget(r.ReportID)
-			st.SetCountWeek(priorWeek)
-		})
+	entry, withdrawn, sendErr := deliver(ctx, st, in.StatePath, in.Sender, r, true, nowf, allowed, logf)
+	if withdrawn {
+		logf("reporting: consent changed; stopping")
+		return res
+	}
 	if sendErr != nil {
-		res.Err = errors.Join(sendErr, saveErr)
+		res.Err = sendErr
 		return res
 	}
 	res.Sent = append(res.Sent, entry)
 	return res
+}
+
+// deliver makes 1 request for rep, in the order that keeps the sent log
+// honest (docs/specs/problem-reporting.md):
+//
+//  1. reserve: record the entry (or the count week) and save it together with
+//     a conservative pause (now + 24 h);
+//  2. read the consent again, just before the request: another process may
+//     have turned reporting off, and then the reservation is rolled back and
+//     the run stops without a failure;
+//  3. send;
+//  4. settle: a success restores the earlier pause and saves; a failure
+//     forgets the entry, keeps the pause and saves.
+//
+// A process that exits during a request therefore leaves the entry and the
+// pause on disk: a later run sends nothing for 24 hours and no report is
+// sent twice. withdrawn reports that step 2 stopped the send.
+func deliver(
+	ctx context.Context,
+	st *State,
+	statePath string,
+	sender Sender,
+	rep Report,
+	count bool,
+	nowf func() time.Time,
+	allowed func() bool,
+	logf func(string),
+) (Entry, bool, error) {
+	now := nowf()
+	entry := Entry{
+		ReportID:  rep.ReportID,
+		Kind:      rep.Kind,
+		ProblemID: rep.ProblemID,
+		Week:      rep.Week,
+		SentAt:    now.UTC(),
+	}
+	priorRetry, priorWeek := st.RetryAfter, st.CountWeek
+	// undo takes the reservation back, the pause included.
+	undo := func() {
+		st.Forget(entry.ReportID)
+		if count {
+			st.SetCountWeek(priorWeek)
+		}
+		st.RetryAfter = priorRetry
+	}
+
+	if count {
+		st.RecordCount(rep.Week, entry)
+	} else {
+		st.Record(entry)
+	}
+	st.Fail(now)
+	if err := saveState(st, statePath); err != nil {
+		undo()
+		return Entry{}, false, err
+	}
+
+	if !allowed() {
+		undo()
+		if err := saveState(st, statePath); err != nil {
+			logf("reporting: " + err.Error())
+		}
+		return Entry{}, true, nil
+	}
+
+	if err := sender.Send(ctx, rep.Body); err != nil {
+		// The pause of the reservation stays: a failed send pauses automatic
+		// sending for 24 hours.
+		st.Forget(entry.ReportID)
+		if count {
+			st.SetCountWeek(priorWeek)
+		}
+		if saveErr := saveState(st, statePath); saveErr != nil {
+			// The entry and the pause stay on disk, which only under-sends.
+			logf("reporting: " + saveErr.Error())
+			return Entry{}, false, errors.Join(err, saveErr)
+		}
+		return Entry{}, false, err
+	}
+
+	st.RetryAfter = priorRetry
+	if err := saveState(st, statePath); err != nil {
+		// The pause stays on disk, which only under-sends.
+		logf("reporting: " + err.Error())
+	}
+	return entry, false, nil
 }
 
 // runDry builds every report of a run that would send, logs it, and sends
