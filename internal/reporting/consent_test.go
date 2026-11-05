@@ -312,3 +312,26 @@ func TestStartsAutoRun(t *testing.T) {
 		})
 	}
 }
+
+// TestLiveConsentReadsTheFileFirst guards P1 of the T857 t19 cross-review: a
+// local withdrawal made while the file read blocks must stop the send. The
+// fake file reader publishes Off to memory and then returns its earlier On.
+func TestLiveConsentReadsTheFileFirst(t *testing.T) {
+	on := Decide(true, ModeAuto, testStart)
+	memory := on
+	file := func() Consent {
+		memory = Decide(false, ModeAuto, testStart) // the user turns it off during the read
+		return on
+	}
+	gate := LiveConsent(func() Consent { return memory }, file)
+	if got := gate(); got.Allows() {
+		t.Fatalf("LiveConsent allowed after a withdrawal during the file read: %+v", got)
+	}
+
+	// Both on: allowed and automatic.
+	memory = on
+	gate = LiveConsent(func() Consent { return memory }, func() Consent { return on })
+	if got := gate(); !got.Allows() || got.Mode != ModeAuto {
+		t.Fatalf("LiveConsent with both on = %+v, want an automatic consent that allows", got)
+	}
+}

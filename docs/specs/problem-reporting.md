@@ -64,8 +64,10 @@ value and redraws the widgets to it.
 reads the file on every call, and a read error is off. A live send uses it
 before every request, because 1 ChairLift process can write the consent while
 another sends (the first-run window and the main window can run at the same
-time). The live consent is `reporting.Stricter(inMemory(), fromFile())`: it
-allows only when both allow, and sends automatically only when both do, so a
+time). The live consent is `reporting.LiveConsent(inMemory, fromFile)`: it
+reads the file FIRST and memory second (a withdrawal made while the file read
+blocks must count), then applies `reporting.Stricter`, which allows only when
+both allow, and sends automatically only when both do, so a
 local Off stops a send at once and another process can only make it stricter.
 A dry run uses the in-memory value alone.
 

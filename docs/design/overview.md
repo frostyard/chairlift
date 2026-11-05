@@ -1448,8 +1448,8 @@ fails when another package imports it, or when another non-test Go file names
   main thread with 1 in-memory authority: a withdrawal reaches memory before
   its save, a grant only after a successful save, and no queued write can
   restore an older value. `reporting.FileConsent` reads the file again on
-  every call, and a live send uses `reporting.Stricter(memory, file)` before
-  every request, so a local Off stops it at once and another ChairLift process
+  every call, and a live send uses `reporting.LiveConsent` (it reads the file
+  first, then memory, and applies `reporting.Stricter`) before every request, so a local Off stops it at once and another ChairLift process
   can only make it stricter. The switch and the mode row stay insensitive
   until the first load published its value.
 - **Sent log** (`state.go`): `$XDG_STATE_HOME/chairlift/reports.json` (else

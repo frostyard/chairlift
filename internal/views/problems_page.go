@@ -626,10 +626,7 @@ func (uh *UserHome) reportingInput() reporting.RunInput {
 	// runs; a dry run uses the in-memory value alone.
 	consent := uh.consentCopy
 	if !IsDryRun() && uh.reportingConsentAt != "" {
-		fromFile := reporting.FileConsent(uh.reportingConsentAt)
-		consent = func() reporting.Consent {
-			return reporting.Stricter(uh.consentCopy(), fromFile())
-		}
+		consent = reporting.LiveConsent(uh.consentCopy, reporting.FileConsent(uh.reportingConsentAt))
 	}
 	return reporting.RunInput{
 		Now:       time.Now,

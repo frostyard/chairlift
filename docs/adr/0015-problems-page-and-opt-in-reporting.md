@@ -130,7 +130,8 @@ Facts that constrain it:
       while the save is in flight; a grant reaches it only after a successful
       save. A live send reads the file again before every request, because
       another ChairLift process may have turned reporting off, and combines
-      that value with the in-memory one through `reporting.Stricter`: it
+      that value with the in-memory one through `reporting.LiveConsent`
+      (the file first, then memory) and `reporting.Stricter`: it
       allows only when both allow, and sends automatically only when both do.
       1 send reserves the entry (or the count week) together with a
       conservative pause, saves, reads the consent once more, and then sends;

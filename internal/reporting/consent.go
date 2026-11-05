@@ -232,6 +232,18 @@ func Stricter(a, b Consent) Consent {
 	return out
 }
 
+// LiveConsent returns the consent gate of a live send: it reads the file
+// FIRST and the in-memory value second, then combines them with Stricter. The
+// order matters: a file read can block, and a local withdrawal that the user
+// makes during it must still count. Reading memory first would keep an older
+// On from before the read (cross-review of T857 t19, P1).
+func LiveConsent(memory, file func() Consent) func() Consent {
+	return func() Consent {
+		onDisk := file()
+		return Stricter(memory(), onDisk)
+	}
+}
+
 // StartsAutoRun reports whether a change of the consent from before to after
 // must start an automatic send: the new value allows and sends automatically,
 // and that was not already in effect.
