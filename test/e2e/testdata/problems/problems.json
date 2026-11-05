@@ -1,0 +1,253 @@
+{
+  "format": 1,
+  "schema": "frostyard.problem/1",
+  "generated": "2026-11-05T03:56:38Z",
+  "image": {
+    "id": "snow",
+    "version": "20261105100000"
+  },
+  "secure": true,
+  "client": "snosi-health/20261105100000",
+  "problems": [
+    {
+      "id": "2b4cfb6309b48807",
+      "kind": "booted_older_image",
+      "detail": {
+        "newer_version": "20261104000000",
+        "how": "unknown"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T03:56:38Z",
+      "last_seen": "2026-11-05T03:56:38Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "27d5ac0722e592bf",
+      "kind": "unit_failed",
+      "detail": {
+        "unit": "snosi-etc-drift-report.service",
+        "result": "other",
+        "shipped": true
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T03:56:38Z",
+      "last_seen": "2026-11-05T03:56:38Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "e1e8cd1cde14da30",
+      "kind": "unit_failed",
+      "detail": {
+        "result": "timeout"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T03:56:38Z",
+      "last_seen": "2026-11-05T03:56:38Z",
+      "occurrences": 1,
+      "reportable": false
+    },
+    {
+      "id": "a6d8d298c66718de",
+      "kind": "unit_failed",
+      "detail": {
+        "result": "exit-code"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T03:56:38Z",
+      "last_seen": "2026-11-05T03:56:38Z",
+      "occurrences": 1,
+      "reportable": false
+    },
+    {
+      "id": "39e7100019800a4c",
+      "kind": "unit_failed",
+      "detail": {
+        "unit": "user@.service",
+        "result": "exit-code",
+        "shipped": true
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T03:56:38Z",
+      "last_seen": "2026-11-05T03:56:38Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "955a8fafd851cd82",
+      "kind": "tpm_unlock",
+      "detail": {
+        "outcome": "ok_after_retry",
+        "tpm_rc": "PCR_CHANGED",
+        "retries": 2
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T02:56:37Z",
+      "last_seen": "2026-11-05T02:56:37Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "b9022b0f28891801",
+      "kind": "integrity_error",
+      "detail": {
+        "subsystem": "composefs",
+        "count": "1"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T02:54:58Z",
+      "last_seen": "2026-11-05T02:54:58Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "aea538950a8d8a64",
+      "kind": "integrity_error",
+      "detail": {
+        "subsystem": "dm-verity",
+        "count": "1"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T02:53:18Z",
+      "last_seen": "2026-11-05T02:53:18Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "ee2d28435365b657",
+      "kind": "integrity_error",
+      "detail": {
+        "subsystem": "fs-verity",
+        "count": "2-10"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T02:51:38Z",
+      "last_seen": "2026-11-05T02:51:38Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "2b32f07ed829da93",
+      "kind": "app_problem",
+      "detail": {
+        "app_id": "org.frostyard.pilothouse",
+        "app_version": "2.0.1",
+        "runtime": "go",
+        "component": "daemon",
+        "class": "panic",
+        "frames": [
+          "runtime.gopanic",
+          "github.com/frostyard/pilothouse/internal/broker.(*Broker).Probe",
+          "main.main"
+        ]
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T02:49:58Z",
+      "last_seen": "2026-11-05T02:49:58Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "2d92745c3c95a97f",
+      "kind": "app_problem",
+      "detail": {
+        "app_id": "org.frostyard.Frostmail",
+        "app_version": "1.2.0",
+        "runtime": "go",
+        "component": "daemon",
+        "class": "error",
+        "code": "store.migrate_failed"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T02:41:38Z",
+      "last_seen": "2026-11-05T02:41:38Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "658d8b6145a2afc2",
+      "kind": "crash",
+      "detail": {
+        "signal": "SIGABRT"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T02:39:58Z",
+      "last_seen": "2026-11-05T02:39:58Z",
+      "occurrences": 1,
+      "reportable": false
+    },
+    {
+      "id": "7353e332c0c70754",
+      "kind": "crash",
+      "detail": {
+        "exe": "gnome-shell",
+        "signal": "SIGSEGV",
+        "package": "gnome-shell",
+        "package_version": "48.4-1"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T02:36:38Z",
+      "last_seen": "2026-11-05T02:36:38Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "8d1b483b03cda85a",
+      "kind": "update_stage_failed",
+      "detail": {
+        "target_version": "20261104000000",
+        "error_class": "registry",
+        "bootc_version": "1.17.3"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T01:56:38Z",
+      "last_seen": "2026-11-05T01:56:38Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "061b613f82107709",
+      "kind": "sysext_update_failed",
+      "detail": {
+        "feature": "podman",
+        "version": "5.4.0",
+        "outcome": "other",
+        "error_class": "other"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T00:56:38Z",
+      "last_seen": "2026-11-05T00:56:38Z",
+      "occurrences": 1,
+      "reportable": true
+    },
+    {
+      "id": "19c19a6303a39c9a",
+      "kind": "sysext_update_failed",
+      "detail": {
+        "feature": "incus",
+        "outcome": "skipped_busy"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T00:56:38Z",
+      "last_seen": "2026-11-05T00:56:38Z",
+      "occurrences": 1,
+      "reportable": false
+    },
+    {
+      "id": "192ac23ef1369eed",
+      "kind": "sysext_update_failed",
+      "detail": {
+        "feature": "docker",
+        "version": "29.0.1",
+        "outcome": "failed",
+        "error_class": "network"
+      },
+      "week": "2026-W45",
+      "first_seen": "2026-11-05T00:56:38Z",
+      "last_seen": "2026-11-05T00:56:38Z",
+      "occurrences": 1,
+      "reportable": true
+    }
+  ]
+}

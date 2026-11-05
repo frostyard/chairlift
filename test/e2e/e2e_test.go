@@ -70,6 +70,10 @@ func TestApplicationStartsInDryRun(t *testing.T) {
 		"GTK_A11Y=none",
 		"GSETTINGS_BACKEND=memory",
 		"HOME="+t.TempDir(),
+		// The Problems page reads its sources from fixtures under
+		// --dry-run (ADR-0015): no snosi-health file, coredumpctl or
+		// journalctl of the host.
+		"CHAIRLIFT_PROBLEMS_FIXTURES="+problemsFixtures(t),
 	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	output := &lockedBuffer{}
@@ -86,6 +90,9 @@ func TestApplicationStartsInDryRun(t *testing.T) {
 		"Running in dry-run mode",
 		"ChairLift activated",
 		"app: window presented",
+		// 17 system problems, 1 merged into the apps group; 4 app record
+		// groups and 3 crash groups of this user.
+		"problems: page built system=16 apps=7 source=ok",
 	}
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
@@ -107,6 +114,7 @@ func TestApplicationStartsInDryRun(t *testing.T) {
 			}
 			if time.Since(readyAt) >= stabilityWindow {
 				stopProcessGroup(t, cmd, done)
+				logLinesWith(t, output.String(), "problems: ")
 				return
 			}
 		case <-timer.C:
@@ -471,6 +479,17 @@ func (buffer *lockedBuffer) String() string {
 	return buffer.Buffer.String()
 }
 
+// logLinesWith logs every output line that contains marker, so a passing
+// run shows the Problems page's marker line.
+func logLinesWith(t *testing.T, output, marker string) {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		if strings.Contains(line, marker) {
+			t.Log(line)
+		}
+	}
+}
+
 func missingOutput(output string, markers []string) string {
 	missing := make([]string, 0, len(markers))
 	for _, marker := range markers {
@@ -503,6 +522,35 @@ func stopProcessGroup(t *testing.T, cmd *exec.Cmd, done <-chan error) {
 	if waitErr := <-done; waitErr != nil {
 		t.Logf("ChairLift smoke process killed: %v", waitErr)
 	}
+}
+
+// fixtureUIDPlaceholder is the uid of the crashes in
+// testdata/problems/coredumps.json that belong to the user who runs the
+// test; problemsFixtures replaces it with that user's uid.
+const fixtureUIDPlaceholder = `"uid": 60999`
+
+// problemsFixtures copies testdata/problems into a temporary folder for the
+// CHAIRLIFT_PROBLEMS_FIXTURES hook and returns its absolute path.
+func problemsFixtures(t *testing.T) string {
+	t.Helper()
+	src := filepath.Join(repoRoot(t), "test", "e2e", "testdata", "problems")
+	dst := t.TempDir()
+	for _, name := range []string{"problems.json", "details.json", "coredumps.json", "journal.json"} {
+		data, err := os.ReadFile(filepath.Join(src, name))
+		if err != nil {
+			t.Fatalf("read problems fixture: %v", err)
+		}
+		if name == "coredumps.json" {
+			if !bytes.Contains(data, []byte(fixtureUIDPlaceholder)) {
+				t.Fatalf("%s has no %s placeholder", name, fixtureUIDPlaceholder)
+			}
+			data = bytes.ReplaceAll(data, []byte(fixtureUIDPlaceholder), []byte(fmt.Sprintf(`"uid": %d`, os.Getuid())))
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), data, 0o644); err != nil {
+			t.Fatalf("write problems fixture: %v", err)
+		}
+	}
+	return dst
 }
 
 func repoRoot(t *testing.T) string {

@@ -34,6 +34,7 @@ type UserHome struct {
 	applicationsPage *adw.ToolbarView
 	maintenancePage  *adw.ToolbarView
 	featuresPage     *adw.ToolbarView
+	problemsPage     *adw.ToolbarView
 	helpPage         *adw.ToolbarView
 
 	// PreferencesPages inside each ToolbarView - keep references to prevent GC
@@ -42,6 +43,7 @@ type UserHome struct {
 	applicationsPrefsPage *adw.PreferencesPage
 	maintenancePrefsPage  *adw.PreferencesPage
 	featuresPrefsPage     *adw.PreferencesPage
+	problemsPrefsPage     *adw.PreferencesPage
 	helpPrefsPage         *adw.PreferencesPage
 
 	// References for dynamic updates
@@ -95,6 +97,10 @@ type UserHome struct {
 	// older check that finishes late cannot replace a newer one's rows.
 	featureCheck actionstate.RefreshGate
 
+	// Problems page references (nil when the group is disabled)
+	problemsSystemGroup *adw.PreferencesGroup
+	problemsAppsGroup   *adw.PreferencesGroup
+
 	// Groups with deferred visibility
 	maintenanceBrewGroup    *adw.PreferencesGroup
 	maintenanceFlatpakGroup *adw.PreferencesGroup
@@ -131,6 +137,7 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.applicationsPage, uh.applicationsPrefsPage = uh.createPage()
 	uh.maintenancePage, uh.maintenancePrefsPage = uh.createPage()
 	uh.featuresPage, uh.featuresPrefsPage = uh.createPage()
+	uh.problemsPage, uh.problemsPrefsPage = uh.createPage()
 	uh.helpPage, uh.helpPrefsPage = uh.createPage()
 
 	// Build page content
@@ -139,6 +146,7 @@ func New(cfg *config.Config, toastAdder ToastAdder) *UserHome {
 	uh.buildApplicationsPage()
 	uh.buildMaintenancePage()
 	uh.buildFeaturesPage()
+	uh.buildProblemsPage()
 	uh.buildHelpPage()
 
 	log.Printf("views: all pages built in %s", time.Since(start))
@@ -168,6 +176,8 @@ func (uh *UserHome) GetPage(name string) *adw.ToolbarView {
 		return uh.maintenancePage
 	case "features":
 		return uh.featuresPage
+	case "problems":
+		return uh.problemsPage
 	case "help":
 		return uh.helpPage
 	default:

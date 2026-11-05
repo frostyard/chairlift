@@ -61,6 +61,17 @@ features_page:
   features_group:
     enabled: true
 
+problems_page:
+  # System problems recorded by snosi-health (/var/lib/snosi-health) and the
+  # user's own crashes and app problem records. Local only: ChairLift sends
+  # nothing (ADR-0015).
+  problems_system_group:
+    enabled: true
+  problems_apps_group:
+    enabled: true
+  problems_reporting_group:
+    enabled: true
+
 help_page:
   help_resources_group:
     enabled: true

@@ -10,6 +10,7 @@ import (
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/firstrun"
 	"github.com/frostyard/chairlift/internal/i18n"
+	"github.com/frostyard/chairlift/internal/selfreport"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
 
@@ -72,6 +73,7 @@ func NewFirstRun(app adw.Application) *FirstRunWindow {
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
 		log.Printf("first-run: configuration error; the Apps step is hidden: %v", cfgErr)
+		selfreport.Error(selfreport.CodeConfigLoadFailed, cfgErr)
 	}
 	apps, appsErr := firstrun.LoadConfiguredApps(cfg)
 	if appsErr != nil {
@@ -437,6 +439,9 @@ func (w *FirstRunWindow) startProgress() {
 		// preview, the markers written, or the failure, which the Done
 		// step also shows.
 		log.Println(decision.Log)
+		if decision.Err != nil {
+			selfreport.Error(selfreport.CodeFirstRunCompleteFailed, decision.Err)
+		}
 		sgtk.RunOnMainThread(func() { w.finishProgress(done) })
 	}()
 }

@@ -5,7 +5,7 @@ Living design document (formerly `yeti/OVERVIEW.md`; folded into `docs/` per
 
 ## Purpose
 
-ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, OS system updates (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off. A separate first-run mode (`chairlift --first-run`, started by the pure-Go `chairlift-first-run` gate) replaces SNOW First Setup on images that ship its trigger; see [First-run mode](#first-run-mode).
+ChairLift is a GTK4/Libadwaita system management GUI for [Snow Linux](https://github.com/frostyard/snosi), written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO). It provides a unified interface for managing Homebrew and Flatpak applications, OS system updates (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), and maintenance tasks. The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on/off. A separate first-run mode (`chairlift --first-run`, started by the pure-Go `chairlift-first-run` gate) replaces SNOW First Setup on images that ship its trigger; see [First-run mode](#first-run-mode). The Problems page shows the problems that the system checks, the user's crashes and frostyard apps recorded on this computer, and sends nothing; see [Problems page](#problems-page).
 
 ## Architecture
 
@@ -42,6 +42,8 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/updexhelper/ Puregotk-free argv-parsing/Options-building for cmd/chairlift-updex-helper
         ├── internal/firstrun/  Puregotk-free first-run logic: gate, markers, steps, apps list, actions
         ├── internal/i18n/      Puregotk-free .po reader and the embedded first-run translations
+        ├── internal/problems/  Puregotk-free, network-free Problems page data: sources, v1 validation, hints, dismiss store
+        ├── internal/selfreport/ ChairLift's own problem recorder (std problems) and its error codes
         └── internal/version/   Build metadata (ldflags injection)
 ```
 
@@ -51,6 +53,9 @@ internal/views/                 Page builders and event handlers (one file per p
 `app` and `window` also depend on the pure `navigation` package.
 The first-run mode adds `cmd/chairlift-first-run → firstrun → {config, flatpak, i18n}`
 (no GTK package, guarded by `internal/installcheck`) and `app → window (firstrun.go) → {firstrun, i18n}`.
+The Problems page adds `views (problems_page.go) → {problems, selfreport}` and
+`problems → {selfreport, github.com/frostyard/std/problems}`; `cmd/chairlift`,
+`window` and `updex` call `selfreport` to record ChairLift's own problems.
 
 External shared library: `github.com/frostyard/snowkit` (published module, pinned in go.mod) provides:
 
@@ -64,12 +69,12 @@ The `views.go` file defines the central `UserHome` struct that holds references 
 - `New(cfg, toastAdder)` — constructor that initializes `UserHome`
 - `ToastAdder` interface — `ShowToast(msg)`, `ShowErrorToast(msg)`, `SetUpdateBadge(count)` — implemented by Window
 
-`internal/views` imports puregotk, so it can never hold a `_test.go` (see `docs/agents/skills/gtk-headless-tests.md`). Decidable logic is therefore pushed down into nine puregotk-free leaf packages beneath it — `internal/views/actionmsg` and `internal/views/trustmsg` (toast text and UI decisions, see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg)), `internal/views/actionstate` (Homebrew update command/refresh outcomes and repeated-click gates, see [package-managers.md](./package-managers.md#view-layer-update-action-state-internalviewsactionstate)), `internal/views/badgestate` (thread-safe per-provider update counts and totals, see [package-managers.md](./package-managers.md#view-layer-update-badge-state-internalviewsbadgestate)), `internal/views/bundleview` (Brew bundle empty/error/unavailable presentation and per-row install gating, see [package-managers.md](./package-managers.md#view-layer-brew-bundle-state-internalviewsbundleview)), `internal/views/rowset` (single-row removal plus clear-then-repopulate bookkeeping, see [package-managers.md](./package-managers.md#view-layer-row-bookkeeping-internalviewsrowset)), `internal/views/flatpakstatus` (the Flatpak updates expander's subtitle text and expandable decision, applied by `loadFlatpakUpdates` from both retained `ListUpdates` errors, see [package-managers.md](./package-managers.md#view-layer-flatpak-update-status-internalviewsflatpakstatus)), `internal/views/featurestatus` (the Features page's per-feature update-status subtitle, which covers an update, a feature that waits for a newer OS image, a feature whose new version applies after a reboot, and an up-to-date feature, the any-component update decision, in which the waiting branch takes precedence over every update branch and the update over the pending-reboot branch, the whole check summarised at once by `Summarize` — one `Status` per row plus the update and waiting feature counts, and a base subtitle the page restores for every name the check did not answer for — and the features group description for all five check outcomes — `GroupDescriptionCheckFailed` when the check itself failed, and `GroupDescription` when it completed with zero features updatable, with updates found, with features waiting for a newer OS image, or with both updates and waiting features — applied by `checkFeatureUpdates`, which composes no subtitle or description text of its own and runs again after an update through `recheckFeatureUpdates`, see [package-managers.md](./package-managers.md#view-layer-feature-update-status-internalviewsfeaturestatus)), and `internal/views/pageview` (the row text, page status, os-release parsing, Help resource ordering, and maintenance-command selection shared by all six page builders, see [package-managers.md](./package-managers.md#view-layer-page-presentation-internalviewspageview)) — each table- or scenario-tested headlessly. This layout is decision record
+`internal/views` imports puregotk, so it can never hold a `_test.go` (see `docs/agents/skills/gtk-headless-tests.md`). Decidable logic is therefore pushed down into nine puregotk-free leaf packages beneath it — `internal/views/actionmsg` and `internal/views/trustmsg` (toast text and UI decisions, see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg)), `internal/views/actionstate` (Homebrew update command/refresh outcomes and repeated-click gates, see [package-managers.md](./package-managers.md#view-layer-update-action-state-internalviewsactionstate)), `internal/views/badgestate` (thread-safe per-provider update counts and totals, see [package-managers.md](./package-managers.md#view-layer-update-badge-state-internalviewsbadgestate)), `internal/views/bundleview` (Brew bundle empty/error/unavailable presentation and per-row install gating, see [package-managers.md](./package-managers.md#view-layer-brew-bundle-state-internalviewsbundleview)), `internal/views/rowset` (single-row removal plus clear-then-repopulate bookkeeping, see [package-managers.md](./package-managers.md#view-layer-row-bookkeeping-internalviewsrowset)), `internal/views/flatpakstatus` (the Flatpak updates expander's subtitle text and expandable decision, applied by `loadFlatpakUpdates` from both retained `ListUpdates` errors, see [package-managers.md](./package-managers.md#view-layer-flatpak-update-status-internalviewsflatpakstatus)), `internal/views/featurestatus` (the Features page's per-feature update-status subtitle, which covers an update, a feature that waits for a newer OS image, a feature whose new version applies after a reboot, and an up-to-date feature, the any-component update decision, in which the waiting branch takes precedence over every update branch and the update over the pending-reboot branch, the whole check summarised at once by `Summarize` — one `Status` per row plus the update and waiting feature counts, and a base subtitle the page restores for every name the check did not answer for — and the features group description for all five check outcomes — `GroupDescriptionCheckFailed` when the check itself failed, and `GroupDescription` when it completed with zero features updatable, with updates found, with features waiting for a newer OS image, or with both updates and waiting features — applied by `checkFeatureUpdates`, which composes no subtitle or description text of its own and runs again after an update through `recheckFeatureUpdates`, see [package-managers.md](./package-managers.md#view-layer-feature-update-status-internalviewsfeaturestatus)), and `internal/views/pageview` (the row text, page status, os-release parsing, Help resource ordering, and maintenance-command selection shared by all seven page builders, plus the Problems page's row, status and detail text, see [package-managers.md](./package-managers.md#view-layer-page-presentation-internalviewspageview)) — each table- or scenario-tested headlessly. This layout is decision record
 [ADR-0007](../adr/0007-pure-leaf-packages-route-around-untestable-gtk.md).
 
 ### Pages
 
-The UI defines six pages, each in its own file under `internal/views/`. The
+The UI defines seven pages, each in its own file under `internal/views/`. The
 first-run window is not a page: it lives in `internal/window/firstrun.go`, and
 `internal/navigation` does not list it. Static
 configuration may omit any functional page whose builder-backed groups are all
@@ -82,6 +87,7 @@ disabled; Help is always retained:
 | Updates      | `updates_page.go`      | bootc or native A/B (systemd-sysupdate) staged system updates, Flatpak updates, Homebrew outdated packages, untrusted-tap trust prompts |
 | System       | `system_page.go`       | OS info (`/etc/os-release`), bootc deployment status, health monitor launch                                                             |
 | Features     | `features_page.go`     | Toggle system features via `updex` tool                                                                                                 |
+| Problems     | `problems_page.go`     | Local problem records: snosi-health's system checks, the user's crashes and frostyard app records; Copy details and Dismiss ([ADR-0015](../adr/0015-problems-page-and-opt-in-reporting.md)) |
 | Help         | `help_page.go`         | Configurable links to website, issues, chat (opened via `xdg-open`)                                                                     |
 
 ## Key Patterns
@@ -135,7 +141,7 @@ Decision record: [ADR-0009](../adr/0009-dry-run-output-convention-and-single-dec
 
 The `--dry-run` / `-d` flag is propagated to wrapper packages via `SetDryRun(true)`, set once at startup in `app.New()` for homebrew, flatpak, fwupd, bootc, sysupdate, updex, `internal/firstrun` (the first run's color-scheme write and completion markers), and `internal/views` itself (`internal/views/dryrun.go` — for configured custom maintenance scripts, which have no wrapper package of their own).
 
-**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would _also_ mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `FeatureUpdateDecision.Persistent`, `FirmwareInstallDecision.PublishList`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation _and_ the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). `FeatureUpdateDecision.Persistent` is the same pattern for the Features page's Update toast: it decides whether the toast stays on screen as an error toast, and the same struct's `Recheck` decides whether the update check runs again, so the rows show the state after the update instead of the startup check's state. Sites with no second UI decision to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, and bootc stage toasts) get a plain string function instead.
+**The general rule, applied uniformly:** every state-changing view handler branches on the relevant wrapper's `IsDryRun()` (or `views.IsDryRun()` for custom scripts) to show an explicit preview toast instead of a completed/saved/installed message. Anywhere that same handler would _also_ mutate a row, a group's visibility, or a switch on success, that mutation decision is pulled out of the view and expressed as a small struct or an `actionstate.Decision` — `ScriptDecision.Execute`, `BundleInstallDecision.Complete`, `TapTrustDecision.MutateUI`, `FeatureToggleDecision.Confirm`, `FeatureUpdateDecision.Persistent`, `FirmwareInstallDecision.PublishList`, `ProblemDismissDecision.Hide`, `PackageInstall`, `PackageUninstall`, or `PackagePin`. The view computes `IsDryRun()` exactly once, builds the decision, and branches solely on it for both the mutation _and_ the toast, so a table-driven test proves the mutation gate and the toast cannot drift from it (see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg) for the full function/type list). `FeatureUpdateDecision.Persistent` is the same pattern for the Features page's Update toast: it decides whether the toast stays on screen as an error toast, and the same struct's `Recheck` decides whether the update check runs again, so the rows show the state after the update instead of the startup check's state. Sites with no second UI decision to gate (package upgrade/update/self-update, Flatpak uninstall, cleanup, Brewfile dump, and bootc stage toasts) get a plain string function instead.
 
 **Intentional exception:** bootc staging's completion **toast** is dry-run-aware (`actionmsg.BootcStage`), but its expander **subtitle** deliberately is not. The subtitle is a persistent status readout of live `bootc.GetStatus()` — what deployment is actually staged/booted right now — not a per-click completion claim, so it stays accurate and unchanged in both dry-run and live mode. Only the toast, which inherently answers "what did this click just do," needed dry-run-specific wording; there is no mutation left to gate once the subtitle is deliberately excluded, which is why `BootcStage` is string-only rather than a decision struct. Native A/B staging follows the identical split: `actionmsg.SysupdateStage` is the dry-run-aware toast, while the subtitle and rollback row re-read the real `/run/snosi` state files and partition labels in both modes.
 
@@ -150,6 +156,7 @@ Per-wrapper mechanics:
 - **Features page switch confirmation**: `onFeatureToggled` (`internal/views/features_page.go`) computes `decision := actionmsg.FeatureToggle(updex.IsDryRun(), enabled, name)` once, after a successful `updex.EnableFeature`/`DisableFeature` call, and branches solely on `decision.Confirm` to decide whether the switch confirms the flip (`toggle.SetActive(enabled)`) or reverts to its pre-click state (`toggle.SetActive(!enabled)`).
 - **First run**: the first-run window reads `firstrun.IsDryRun()` once when the Progress step starts and passes it to `firstrun.Complete`, whose `firstrun.Completion` decision (`WriteMarkers`, `Log`, `DoneDescription`) decides both whether the markers are written and the Done step's text (`[DRY-RUN] Preview: first run finished — no changes made`). `firstrun.ApplyColorScheme` logs `[DRY-RUN] would execute: gsettings ...`, and the Flatpak wrapper skips `remote-add` and `install`.
 - **Firmware install**: `installFirmwareUpdate` (`internal/views/updates_page.go`) calls `fwupd.InstallAndVerify`, then builds `decision := actionmsg.FirmwareInstall(fwupd.IsDryRun(), installErr, report, …)` once. `decision.PublishList` decides whether the verified device list is published, `decision.RestoreControl` whether the Install button comes back, and `decision.IsError` whether the toast stays on screen. `fwupdmgr` can exit 0 without flashing a device, so the view never reads the exit status as success on its own.
+- **Problems page Dismiss**: the Dismiss button (`internal/views/problems_page.go`) computes `decision := actionmsg.ProblemDismiss(IsDryRun(), item.ID, title)` once. Under dry-run `decision.Persist` and `decision.Hide` are false: nothing is written to the dismiss store, the row stays, the toast is `[DRY-RUN] Preview: dismiss <title> — no changes made`, and the log line is `[DRY-RUN] would dismiss problem <id>`. Live, the page writes the dismissal and removes the row only after the write succeeds; a failed write keeps the row and shows `actionmsg.ProblemDismissFailed`. Recording a journal problem record (`internal/selfreport`) is logging, not a system change, so it also runs under dry-run.
 
 ### Configuration-driven UI visibility
 
@@ -1319,6 +1326,113 @@ Note: `GtkShortcutsWindow` is not available in puregotk, so a custom `adw.Window
 
 Help page links are opened via `xdg-open` using `exec.Command`. The process is started asynchronously and its exit is waited on in a goroutine to avoid zombie processes.
 
+## Problems page
+
+Decision record: [ADR-0015](../adr/0015-problems-page-and-opt-in-reporting.md);
+the exact contract is [specs/problems-page.md](../specs/problems-page.md).
+The page is local only: it reads records on this computer and sends nothing
+(phase 1 of plan T857; the opt-in sender is a later task).
+
+### Groups and visibility
+
+`internal/navigation` lists `problems` (title "Problems", icon
+`dialog-warning-symbolic`, config page `problems_page`) directly before Help,
+so with every page visible Help is Alt+7. Its groups are
+`problems_system_group`, `problems_apps_group` and
+`problems_reporting_group`, all enabled by default. The page is omitted when
+all 3 are off, also after a configuration error (ADR-0003).
+`buildProblemsPage` builds the enabled groups with "Loading…" descriptions,
+then `loadProblems` runs `problems.Load` on a worker goroutine and fills the
+groups through `sgtk.RunOnMainThread`. The groups are nil when disabled, and
+the main-thread code nil-guards both. The reporting group has 1 row,
+`pageview.ProblemsReporting`: "Problem reports stay on this computer",
+"ChairLift does not send anything." After the groups are filled the page
+logs `problems.BuiltMarker`: `problems: page built system=<n> apps=<n>
+source=<outcome>` (`source=disabled` without the system group).
+
+### Sources (`internal/problems`)
+
+`internal/problems` imports no puregotk package and no network package
+(`TestNoNetworkImports`, `TestNoNetworkDependencies`). `problems.Load` reads:
+
+- `/var/lib/snosi-health/problems.json` (`ReadSystem`, at most 1 MiB) for
+  both data groups, because its envelope (`image.id`, `image.version`,
+  `secure`) is the image identity of the user items too. Its outcome is 1 of
+  4: `SourceMissing` (no file; 1 row, "System checks are not available on
+  this system"), `SourceUnreadable` (open or read failed) and
+  `SourceMalformed` (bad JSON, `format` not 1, wrong `schema`, no problems
+  list, over 1 MiB; both show "System checks could not be read", and
+  `Malformed` also records `problems.source_invalid`), and `SourceOK`. The
+  system group's text for each outcome comes from
+  `pageview.ProblemsSystemStatus`: the 3 failure rows, "No problems found"
+  with "Last checked <when>" for an empty `SourceOK`, and only the
+  description with "Last checked <when>" when items are shown.
+- `/var/lib/snosi-health/details.json` (at most 4 MiB) only for system
+  items, and only when readable: EACCES (mode 0640 root:sudo) is normal.
+- The user's crashes: `coredumpctl --json=short --no-pager --since=-90d`
+  with a 10-second timeout and 4 MiB of output, kept only for the current
+  UID; "No coredumps found" (exit 1) and a missing coredumpctl are an empty
+  list.
+- The S8 app records of the user journal through std's `problems.Read`
+  (`User: true`, the last 90 days, at most 500); std drops forged records,
+  and the count goes to 1 log line only.
+
+Every detail value of every item is checked again against the v1 rules of
+its kind (`validateDetail`). A value that fails is shown, marked not valid,
+and the item is not reportable; `Reportable` also needs the file's own flag,
+a valid `week` and a valid envelope. An unknown kind is shown as "An unknown
+problem was recorded" and is never reportable. A system crash that a user
+crash repeats (same program and signal, within the system record's time
+±1 minute) shows once, in the Apps group (`MergeCrashes`). Each list holds
+at most 200 items.
+
+### Presentation and actions
+
+Each item is an `adw.ExpanderRow`. `pageview.Problem` gives the title
+(`problems.Title`, in plain words, such as "An update could not be prepared"
+or "Frostmail stopped unexpectedly") and the subtitle (when, the count, and
+the unit, feature, version or code); `pageview.ProblemDetails` gives the
+rows inside: "What it means" (`problems.Hint`: a hint for each kind, each
+value of the hinted enums and each known code; an unknown code gets its
+class's hint), "Recorded values", and "On this computer" (details.json
+values, units, messages, the program path, and an app record's `MESSAGE`,
+`_COMM` and unit). Titles and subtitles go through `glib.MarkupEscapeText`.
+The view composes no text of its own.
+
+- **Copy details** puts `problems.DetailsText(item)` on the GDK clipboard
+  (`SetText`). It is local text: it can hold names and paths that a report
+  never holds.
+- **Dismiss** writes the id to
+  `$XDG_STATE_HOME/chairlift/problems-seen.json` (temp file and rename,
+  0600, at most 1000 ids) through `problems.Seen.Dismiss`, then removes the
+  row; see "Dry-run mode" for `actionmsg.ProblemDismiss`. A dismissed item
+  shows again when its last time is after the dismissal.
+
+`problems.BuildPayload` builds the `frostyard.problem/1` document of a
+reportable item from validated schema fields only; phase 1 never calls it.
+Its tests validate every payload of the fixtures against a vendored byte copy
+of core's `v1.json` (sha256 pinned) with a JSON-schema-subset validator.
+
+`CHAIRLIFT_PROBLEMS_FIXTURES=<absolute folder>` replaces every source, only
+with `--dry-run` (`problems.DecideFixtures`); `make e2e` uses it.
+
+### ChairLift's own problems (`internal/selfreport`)
+
+`cmd/chairlift/main.go` sets `version.Version` from the GoReleaser-stamped
+`main.buildVersion`, then calls `selfreport.Init(version.Version)` (std
+`problems.New("org.frostyard.ChairLift", version, ComponentGUI)` and
+`CrashOutput`) and defers `RecoverPanic` directly in `main`. A dev or
+snapshot version is not a release semver, so the recorder is inert and
+`Init` logs that once. 4 coded errors, constants in `internal/selfreport`
+only, are recorded at their paths: `config.load_failed` (`internal/window`
+`window.go` and `firstrun.go`, on a configuration error),
+`problems.source_invalid` (`problems_page.go`, a malformed problems.json),
+`firstrun.complete_failed` (`internal/window/firstrun.go`, the completion
+markers could not be written) and `updex.results_unreadable`
+(`internal/updex`, the helper exited 0 with unreadable results).
+`TestCodesAreRecordedAtTheirPaths` reads the source to prove each site.
+The records stay in the user's journal and show in the Apps group.
+
 ## First-run mode
 
 Decision record: [ADR-0014](../adr/0014-first-run-mode.md). The first-run
@@ -1590,12 +1704,15 @@ page_name:
 | `maintenance_page`  | `maintenance_optimization_group` | System optimization (placeholder)                                                                                                                                                                       |
 | `features_page`     | `features_group`                 | Updex feature toggles                                                                                                                                                                                   |
 | `help_page`         | `help_resources_group`           | Configurable links (website, issues, chat)                                                                                                                                                              |
+| `problems_page`     | `problems_system_group`          | Problems page: snosi-health's system problems; "System checks are not available on this system" without `/var/lib/snosi-health/problems.json` ([ADR-0015](../adr/0015-problems-page-and-opt-in-reporting.md)) |
+| `problems_page`     | `problems_apps_group`            | Problems page: the user's crashes (coredumpctl) and frostyard app problem records (user journal) |
+| `problems_page`     | `problems_reporting_group`       | Problems page: the reporting row; phase 1 states that reports stay on this computer |
 | `first_run_page`    | `first_run_apps_group`           | Not a navigation page: the first run's Apps step and its `apps_path` list (default `/usr/share/snow/first-run/apps.json`); disabled, a configuration error, or a missing/invalid list hides the step ([ADR-0014](../adr/0014-first-run-mode.md)) |
 
 ## Build and Release
 
 - **Build**: `make build` builds three binaries: `build/chairlift` (main app), `build/chairlift-updex-helper` (privileged helper), and `build/chairlift-first-run` (pure-Go first-run gate), all with `CGO_ENABLED=0`
-- **CI mirror**: `make ci` runs every host-independent gate from `.github/workflows/test.yml` in fail-fast order — go.mod tidy check, `go vet`, gofmt check, `golangci-lint`, unit tests (`./internal/...` under `-run "^Test[^I]" -skip "Integration"`), the race detector, and the build. Its build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into `build/ci-linux-<arch>/` before rebuilding natively, so a compile failure on the non-host architecture cannot pass locally. The mill's deep gate (`.mill.toml`) calls this target. Codecov's remote project status additionally rejects coverage regressions greater than one percentage point, with no fixed project or patch target; it cannot be mirrored locally. The runtime-dependent E2E job is deliberately separate: `make e2e` builds the three binaries, executes the application's `--help` path (which must list `--first-run`), boots the dry-run GTK window under a private D-Bus/Xvfb session, polls all three readiness markers for at most 30 seconds, requires one second of post-readiness stability, then terminates its private process group, stages the real `make install` layout under a temporary `DESTDIR` (which must hold an executable `usr/bin/chairlift-first-run` and no autostart path), and executes the staged `chairlift-updex-helper` rejection paths. For the first run it also checks `chairlift-first-run --help`, runs `--mark-done` and the gate against temporary homes (as `nobody` when the test runs as root), and boots `chairlift --first-run --dry-run` until it logs `first-run: window presented`, then checks that no marker exists. Its Go test package lives at `test/e2e`, imports no puregotk package, and is enforced by that explicit target rather than the `./internal/...` unit-test filter. The readiness markers are a log-line contract — decision record [ADR-0008](../adr/0008-e2e-readiness-is-a-log-marker-contract.md).
+- **CI mirror**: `make ci` runs every host-independent gate from `.github/workflows/test.yml` in fail-fast order — go.mod tidy check, `go vet`, gofmt check, `golangci-lint`, unit tests (`./internal/...` under `-run "^Test[^I]" -skip "Integration"`), the race detector, and the build. Its build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into `build/ci-linux-<arch>/` before rebuilding natively, so a compile failure on the non-host architecture cannot pass locally. The mill's deep gate (`.mill.toml`) calls this target. Codecov's remote project status additionally rejects coverage regressions greater than one percentage point, with no fixed project or patch target; it cannot be mirrored locally. The runtime-dependent E2E job is deliberately separate: `make e2e` builds the three binaries, executes the application's `--help` path (which must list `--first-run`), boots the dry-run GTK window under a private D-Bus/Xvfb session with `CHAIRLIFT_PROBLEMS_FIXTURES` set to the fixtures of `test/e2e/testdata/problems/`, polls all four readiness markers (the fourth is `problems: page built system=16 apps=7 source=ok`) for at most 30 seconds, requires one second of post-readiness stability, then terminates its private process group, stages the real `make install` layout under a temporary `DESTDIR` (which must hold an executable `usr/bin/chairlift-first-run` and no autostart path), and executes the staged `chairlift-updex-helper` rejection paths. For the first run it also checks `chairlift-first-run --help`, runs `--mark-done` and the gate against temporary homes (as `nobody` when the test runs as root), and boots `chairlift --first-run --dry-run` until it logs `first-run: window presented`, then checks that no marker exists. Its Go test package lives at `test/e2e`, imports no puregotk package, and is enforced by that explicit target rather than the `./internal/...` unit-test filter. The readiness markers are a log-line contract — decision record [ADR-0008](../adr/0008-e2e-readiness-is-a-log-marker-contract.md).
 - **Dev build**: `make dev` builds with `CGO_ENABLED=1` and `-race` flag for race detection
 - **Version**: Set via ldflags by goreleaser (`buildVersion`, `buildCommit`, `buildDate`, `buildBy`)
 - **Semantic versioning**: Uses [svu](https://github.com/caarlos0/svu) via `make bump`
@@ -1613,6 +1730,7 @@ page_name:
 - `bootc` + `/usr/libexec/bootc-update-stage` (both optional; UI gated on `bootc.IsBootcBootedCached()`, i.e. `bootc status` reporting a non-null `booted` deployment — not on any sentinel file)
 - `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` (both optional, shipped by native A/B OS images; UI gated on `sysupdate.IsNativeABCached()` and `sysupdate.StageScriptAvailable()`)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
+- Problems page: `/var/lib/snosi-health/problems.json` and `details.json` (optional, written by snosi-health), `coredumpctl` (optional), and `journalctl` (the user journal)
 - First run only: `gsettings` (the Style step), `flatpak` (the Apps step), and `gnome-control-center` (optional; the settings buttons show only when it is on `PATH`)
 
 ### Key external Go dependencies
@@ -1624,6 +1742,7 @@ page_name:
 | `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.1.3 in go.mod) |
 | `gopkg.in/yaml.v3`               | YAML config parsing                                                                         |
 | `golang.org/x/text`              | Title-casing OS release info keys                                                           |
+| `github.com/frostyard/std`       | `problems`: ChairLift's own problem records and the journal reader of the Problems page    |
 
 There is no separate Go client library dependency for bootc: status/stage types (`Status`, `Deployment`, `ProgressEvent`, etc.) are defined locally in `internal/bootc`, parsed directly from `bootc status --format json` and the stage script's line output.
 

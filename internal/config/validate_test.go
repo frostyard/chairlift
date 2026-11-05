@@ -45,7 +45,9 @@ func wantNoopRawConfig(t *testing.T, path string, data []byte) {
 		"applications_page": raw.ApplicationsPage,
 		"maintenance_page":  raw.MaintenancePage,
 		"features_page":     raw.FeaturesPage,
+		"problems_page":     raw.ProblemsPage,
 		"help_page":         raw.HelpPage,
+		"first_run_page":    raw.FirstRunPage,
 	}
 	for name, page := range pages {
 		if len(page) != 0 {

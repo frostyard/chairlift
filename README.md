@@ -44,6 +44,19 @@
   own PolicyKit actions. Shown when fwupd is installed
 - **System Maintenance**: Keep your system running smoothly
 
+### ⚠️ Problems
+
+- **Problems page**: See the problems recorded on this computer in plain
+  words, with a hint for each: system problems from Snow's `snosi-health`
+  checks (a failed system service, an update that could not be prepared, a
+  disk that needed extra steps to unlock, an integrity error, ...), crashes of
+  your own programs, and problems that frostyard apps recorded. Expand a row
+  to copy its details or dismiss it; a dismissed problem shows again when it
+  happens again. Problem reports stay on this computer: ChairLift sends
+  nothing. On a system without `snosi-health` the system group says "System
+  checks are not available on this system". See
+  [ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md).
+
 ---
 
 ## Installation
@@ -216,7 +229,7 @@ strings are translated (ported from SNOW First Setup). See
 - `Alt+1` through `Alt+N`: open the first through Nth visible page in sidebar
   order. Pages whose configurable groups are all disabled are omitted, so the
   numbers compact without gaps; Help is always retained.
-- `F1`: open Help
+- `F1`: open Help (with every page visible, Help is also `Alt+7`)
 - `Ctrl+?`: show the keyboard-shortcuts window
 - `Ctrl+Q`: quit
 
@@ -317,6 +330,8 @@ chairlift/
 │   ├── updex/     # Updex feature manager
 │   ├── firstrun/  # First-run gate, markers, steps, apps list, actions (no GTK)
 │   ├── i18n/      # .po reader and embedded first-run translations
+│   ├── problems/  # Problems page data: sources, validation, hints, dismiss store (no GTK, no network)
+│   ├── selfreport/ # ChairLift's own problem records and error codes (std problems)
 │   └── version/   # Build metadata (ldflags injection)
 ├── data/          # Desktop file, icons, and PolicyKit policies
 └── Makefile       # Build configuration
@@ -333,7 +348,9 @@ See [docs/design/overview.md](docs/design/overview.md) and [docs/design/package-
 - **`internal/views`**: GTK4/Adwaita UI — async operations dispatched via `sgtk.RunOnMainThread`, toast notifications for user feedback
 - **`internal/firstrun`**: the first-run mode's decisions — the `chairlift-first-run` gate, the done markers and their one writer, the step flow, the application list, the Flatpak actions, the color-scheme write, and the dry-run completion decision
 - **`internal/i18n`**: a pure-Go `.po` reader and the first-run translations embedded from SNOW First Setup
-- **`internal/views/pageview`**: pure-Go row text, page status, os-release parsing, help-link ordering, and maintenance-command selection shared by all six page builders
+- **`internal/views/pageview`**: pure-Go row text, page status, os-release parsing, help-link ordering, and maintenance-command selection shared by all seven page builders, plus the Problems page's row, status and detail text
+- **`internal/problems`**: the Problems page's data — snosi-health's `problems.json`/`details.json`, the user's `coredumpctl` crashes and the frostyard app records of the user journal, each value checked against schema `frostyard.problem/1`, the hints, the merge rule, the dismiss store, and the report document builder that phase 1 does not call; it imports no network package
+- **`internal/selfreport`**: records ChairLift's own panics and its coded internal errors in the journal through `github.com/frostyard/std/problems`
 
 ### Development Environment
 

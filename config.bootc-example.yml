@@ -57,6 +57,14 @@ features_page:
   features_group:
     enabled: false  # Enable only when updex is configured for this distribution
 
+problems_page:
+  problems_system_group:
+    enabled: true  # Problems recorded by snosi-health; shows "not available" when /var/lib/snosi-health/problems.json is absent
+  problems_apps_group:
+    enabled: true  # The user's own crashes (coredumpctl) and frostyard app problem records (user journal)
+  problems_reporting_group:
+    enabled: true  # Phase 1: states that problem reports stay on this computer
+
 help_page:
   help_resources_group:
     enabled: true  # Show help resources

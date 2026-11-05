@@ -15,7 +15,10 @@ type Config struct {
 	ApplicationsPage PageConfig `yaml:"applications_page"`
 	MaintenancePage  PageConfig `yaml:"maintenance_page"`
 	FeaturesPage     PageConfig `yaml:"features_page"`
-	HelpPage         PageConfig `yaml:"help_page"`
+	// ProblemsPage configures the Problems page (ADR-0015): local problem
+	// records of the system and of the user's apps.
+	ProblemsPage PageConfig `yaml:"problems_page"`
+	HelpPage     PageConfig `yaml:"help_page"`
 	// FirstRunPage configures `chairlift --first-run`. It is not a
 	// navigation page: internal/navigation never lists it.
 	FirstRunPage PageConfig `yaml:"first_run_page"`
@@ -54,6 +57,7 @@ type rawConfig struct {
 	ApplicationsPage rawPageConfig `yaml:"applications_page"`
 	MaintenancePage  rawPageConfig `yaml:"maintenance_page"`
 	FeaturesPage     rawPageConfig `yaml:"features_page"`
+	ProblemsPage     rawPageConfig `yaml:"problems_page"`
 	HelpPage         rawPageConfig `yaml:"help_page"`
 	FirstRunPage     rawPageConfig `yaml:"first_run_page"`
 }
@@ -166,6 +170,7 @@ func disabledConfig() *Config {
 		cfg.ApplicationsPage,
 		cfg.MaintenancePage,
 		cfg.FeaturesPage,
+		cfg.ProblemsPage,
 		cfg.HelpPage,
 		cfg.FirstRunPage,
 	}
@@ -190,6 +195,7 @@ func mergeConfig(def *Config, raw *rawConfig) *Config {
 		ApplicationsPage: mergePage(def.ApplicationsPage, raw.ApplicationsPage),
 		MaintenancePage:  mergePage(def.MaintenancePage, raw.MaintenancePage),
 		FeaturesPage:     mergePage(def.FeaturesPage, raw.FeaturesPage),
+		ProblemsPage:     mergePage(def.ProblemsPage, raw.ProblemsPage),
 		HelpPage:         mergePage(def.HelpPage, raw.HelpPage),
 		FirstRunPage:     mergePage(def.FirstRunPage, raw.FirstRunPage),
 	}
@@ -304,6 +310,11 @@ func defaultConfig() *Config {
 		FeaturesPage: PageConfig{
 			"features_group": GroupConfig{Enabled: true},
 		},
+		ProblemsPage: PageConfig{
+			"problems_system_group":    GroupConfig{Enabled: true},
+			"problems_apps_group":      GroupConfig{Enabled: true},
+			"problems_reporting_group": GroupConfig{Enabled: true},
+		},
 		HelpPage: PageConfig{
 			"help_resources_group": GroupConfig{
 				Enabled: true,
@@ -340,6 +351,8 @@ func (c *Config) IsGroupEnabled(pageName, groupName string) bool {
 		page = c.MaintenancePage
 	case "features_page":
 		page = c.FeaturesPage
+	case "problems_page":
+		page = c.ProblemsPage
 	case "help_page":
 		page = c.HelpPage
 	case "first_run_page":
@@ -369,6 +382,8 @@ func (c *Config) GetGroupConfig(pageName, groupName string) *GroupConfig {
 		page = c.MaintenancePage
 	case "features_page":
 		page = c.FeaturesPage
+	case "problems_page":
+		page = c.ProblemsPage
 	case "help_page":
 		page = c.HelpPage
 	case "first_run_page":
