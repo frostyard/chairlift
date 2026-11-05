@@ -5,6 +5,9 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"sync"
+	"syscall"
+	"time"
 )
 
 // Output caps of the page's commands. A command whose standard output
@@ -26,9 +29,21 @@ const (
 // its exit error. Tests replace it to give oversized output.
 type streamFunc func(ctx context.Context, name string, args []string) (io.Reader, func(kill bool) (string, error), error)
 
-// execStream is the production streamFunc.
+// commandWaitDelay bounds how long Wait waits for the I/O of a command
+// after it was killed or exited: a descendant that left the process group
+// can hold a pipe open.
+const commandWaitDelay = 2 * time.Second
+
+// execStream is the production streamFunc. The command runs in its own
+// process group. At the cap (wait(true)) and when ctx ends, the whole group
+// gets SIGKILL, so a descendant that inherited stdout or stderr dies too;
+// the parent's stdout reader is closed before Wait, and WaitDelay bounds
+// Wait in case a descendant escaped the group. Wait runs exactly once.
 func execStream(ctx context.Context, name string, args []string) (io.Reader, func(kill bool) (string, error), error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return killGroup(cmd) }
+	cmd.WaitDelay = commandWaitDelay
 	stderr := &cappedBuffer{max: maxStderr}
 	cmd.Stderr = stderr
 	stdout, err := cmd.StdoutPipe()
@@ -38,13 +53,34 @@ func execStream(ctx context.Context, name string, args []string) (io.Reader, fun
 	if err := cmd.Start(); err != nil {
 		return nil, nil, err
 	}
+	// A read that blocks on a pipe that a descendant holds open ends when
+	// ctx ends: closing the reader makes the read fail.
+	stopClose := context.AfterFunc(ctx, func() { _ = stdout.Close() })
+	var once sync.Once
+	var waitErr error
 	return stdout, func(kill bool) (string, error) {
-		if kill {
-			_ = cmd.Process.Kill()
-		}
-		err := cmd.Wait()
-		return stderr.String(), err
+		once.Do(func() {
+			stopClose()
+			if kill {
+				_ = killGroup(cmd)
+				_ = stdout.Close()
+			}
+			waitErr = cmd.Wait()
+		})
+		return stderr.String(), waitErr
 	}, nil
+}
+
+// killGroup sends SIGKILL to the process group of cmd.
+func killGroup(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	return err
 }
 
 // cappedOutput is the result of runCapped.

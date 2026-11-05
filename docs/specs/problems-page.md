@@ -20,6 +20,12 @@ nothing.
 | `coredumpctl --json=short --no-pager --since=-90d` | `problems.RunCoredumpctl`, `ParseCoredumps` | 10 s (`CommandTimeout`); 4 MiB of output, then killed; 4 KiB of stderr | not installed, or "No coredumps found" (exit 1): an empty list; output at the cap or another failure: a log line |
 | User journal, S8 records | `journalctl --no-pager -q -o json --all --user --since=@<now − 90 days> -n 500 MESSAGE_ID=8915bdd215c84cbab0c31c05a1a33e7e` (`problems.JournalArgs`, std `problems.Read`'s arguments), run by `readJournal`; the output goes to std `problems.ParseJSON` | 10 s; 8 MiB of output (`MaxJournalOutput`), then killed; 4 KiB of stderr | failure: a log line; at the cap: the complete lines before it are parsed and 1 log line says so |
 
+Each command runs in its own process group (`execStream`). At the output
+cap, and when the 10-second timeout ends, the whole group gets SIGKILL, so a
+descendant that inherited stdout or stderr dies too; ChairLift closes its end
+of stdout before it waits, waits exactly once, and `WaitDelay` (2 s) bounds
+the wait for a descendant that left the group.
+
 ChairLift MUST NOT call std's `problems.Read` (v0.4.0): it keeps all of
 journalctl's output in memory, and 500 entries do not bound bytes. No
 `--output-fields` is passed: std's `Validate` must see every `FROSTYARD_*`
