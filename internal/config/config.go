@@ -22,6 +22,12 @@ type Config struct {
 	// FirstRunPage configures `chairlift --first-run`. It is not a
 	// navigation page: internal/navigation never lists it.
 	FirstRunPage PageConfig `yaml:"first_run_page"`
+
+	// source is the exact file this configuration was read from. It is
+	// unexported, so the reflected schema and the YAML overlay never see
+	// it, and it decides whether a group's endpoint is administrator-owned
+	// (Config.ReportEndpoint).
+	source string
 }
 
 // PageConfig represents configuration for a single page
@@ -37,6 +43,11 @@ type GroupConfig struct {
 	Chat         string         `yaml:"chat,omitempty"`
 	BundlesPaths []string       `yaml:"bundles_paths,omitempty"`
 	AppsPath     string         `yaml:"apps_path,omitempty"`
+	// Endpoint overrides the problem-report endpoint. Only an
+	// administrator-owned configuration file may set it (ADR-0015): the
+	// development fallback beside the executable is user-writable, so
+	// Config.ReportEndpoint ignores the value it sets.
+	Endpoint string `yaml:"endpoint,omitempty"`
 }
 
 // ActionConfig represents a configurable action
@@ -79,6 +90,7 @@ type rawGroupConfig struct {
 	Chat         *string         `yaml:"chat"`
 	BundlesPaths *[]string       `yaml:"bundles_paths"`
 	AppsPath     *string         `yaml:"apps_path"`
+	Endpoint     *string         `yaml:"endpoint"`
 }
 
 // configPaths are the locations to search for the config file
@@ -140,7 +152,48 @@ func loadResolvedPath(path string) (*Config, *LoadError) {
 		return nil, loadErr
 	}
 
-	return mergeConfig(defaultConfig(), raw), nil
+	cfg := mergeConfig(defaultConfig(), raw)
+	cfg.source = path
+	return cfg, nil
+}
+
+// adminConfigPaths are the configuration files that only an administrator
+// can write. Every other candidate, including the development fallback
+// beside the executable and in the working directory, is user-writable.
+var adminConfigPaths = []string{
+	"/etc/chairlift/config.yml",
+	"/usr/share/chairlift/config.yml",
+}
+
+// adminConfigPath reports whether path is one of adminConfigPaths.
+func adminConfigPath(path string) bool {
+	for _, candidate := range adminConfigPaths {
+		if path == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+// ReportEndpoint returns the endpoint that problems_reporting_group sets and
+// whether the file that set it is administrator-owned. The string is the raw
+// configured value, which may be empty: the caller parses it, so this
+// package does not import the reporting package. A value from a
+// user-writable file is ignored with 1 log line, because a user setting must
+// not choose where a report goes.
+func (c *Config) ReportEndpoint() (string, bool) {
+	if c == nil {
+		return "", false
+	}
+	group, ok := c.ProblemsPage["problems_reporting_group"]
+	if !ok || group.Endpoint == "" {
+		return "", false
+	}
+	if !adminConfigPath(c.source) {
+		log.Printf("configuration: the endpoint of problems_reporting_group is ignored: %s is not administrator-owned", c.source)
+		return "", false
+	}
+	return group.Endpoint, true
 }
 
 // danglingSymlink reports whether path is a symlink whose target is missing.
@@ -254,6 +307,9 @@ func mergeGroup(def GroupConfig, raw rawGroupConfig) GroupConfig {
 	}
 	if raw.AppsPath != nil {
 		result.AppsPath = *raw.AppsPath
+	}
+	if raw.Endpoint != nil {
+		result.Endpoint = *raw.Endpoint
 	}
 
 	return result

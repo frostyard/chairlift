@@ -5,9 +5,10 @@ it validates each value, what it shows, what it writes, and the log line it
 prints when it is built. Consumers: the page builder
 `internal/views/problems_page.go`, the pure package `internal/problems`, the
 presentation in `internal/views/pageview/problems.go`, the dismiss decision
-in `internal/views/actionmsg/problems.go`, the e2e test, and the later opt-in
-sender (T857 t19), which will call `problems.BuildPayload`. Phase 1 sends
-nothing.
+in `internal/views/actionmsg/problems.go`, the e2e test, and the opt-in
+sender (`internal/reporting`), which calls `problems.BuildPayload`. Nothing is
+sent until the user turns reporting on; what is sent is
+[problem-reporting.md](problem-reporting.md).
 
 ## Interface
 
@@ -156,6 +157,35 @@ the line is logged at once with `system=0 apps=0`.
     `firstrun.complete_failed`, `updex.results_unreadable`), each at 1 real
     error path, and its panics with `RecoverPanic` deferred in `main`. A
     version that is not a release semver writes nothing.
+
+### Reporting group
+
+The group shows reporting off until the consent file was read off the main
+thread. This table is the phase-2 replacement of phase 1's single promise row
+("Problem reports stay on this computer"), which must not come back:
+
+| Row | Text (`internal/views/pageview`) | Behaviour |
+| --- | --- | --- |
+| "Send problem reports" | `ReportingSwitchTitle`, with the group description `ReportingDescription(consent)`: "Off: nothing leaves this computer.", "On: Ask each time." / "On: Send automatically.", or the stale-format text "The report format changed. Turn reporting on to agree again." | An `adw.SwitchRow`; a change writes the consent through `reporting.SaveConsent` off the main thread, and a failed write puts the switch back and shows an error toast |
+| "When a problem is found" | `ReportingMode`: "Ask each time" or "Send automatically" | An `adw.ComboRow`, sensitive only while reporting is on |
+| "Sent reports" | `SentRows(state, loc)`: the send date and the kind's title, the `report_id` below; newest first, at most 50; "No reports have been sent." when empty | An `adw.ExpanderRow` |
+| "What is sent" | `ReportingWhat`: `https://frostyard.org/privacy/problem-reports/` | Opens the privacy page with `xdg-open` |
+| "Weekly count" | `ReportingCountRow`: "Weekly count" with `Review…` | Shows in Ask mode while this ISO week's count was not sent; `Review…` opens the same dialog for the count |
+
+A problem row has a **Report…** button when
+`pageview.ReportOffered(item, allowed, state)` is true: reporting is allowed,
+the item is reportable, its kind is not `crash`, and its week was not sent.
+The button builds the report off the main thread (`reporting.ForItem`) and
+opens an `adw.AlertDialog` whose body is the report's `Text()` in a
+monospace, selectable, scrollable label, with Cancel and Send. Send takes
+`actionmsg.Report(IsDryRun(), kind)`: a dry run logs
+`[DRY-RUN] would send report <kind>` and toasts a preview; a live send calls
+`reporting.SendReport` with the same `Report` value, marks the row "Sent" on
+success, and shows an error toast on failure.
+
+In Auto mode, after the groups are filled and when the consent allows it, the
+page calls `reporting.Run` off the main thread (pace 7 s) and refreshes the
+sent list on the main thread. Under `--dry-run` `Run` logs its previews.
 
 ## Derived artifacts
 

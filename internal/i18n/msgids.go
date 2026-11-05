@@ -69,6 +69,17 @@ const (
 	// start the first run again (a marker exists) or that is unknown (no
 	// config home).
 	MsgFinishedWithErrors = "Setup finished with errors"
+
+	// Reporting step (new, ADR-0015): the optional problem-reporting consent
+	// of the first run, between Style and Apps.
+	MsgReportingTitle      = "Problem Reports"
+	MsgReportingDesc       = "ChairLift can send problem reports to frostyard so that problems get fixed. Nothing is sent until you turn this on, and you can change it at any time on the Problems page."
+	MsgReportingSwitch     = "Send problem reports"
+	MsgReportingOff        = "Off: nothing leaves this computer."
+	MsgReportingOn         = "On: each report is shown before it is sent."
+	MsgReportingOnAuto     = "On: reports are sent automatically, and ChairLift lists each one."
+	MsgReportingWhat       = "What is sent"
+	MsgReportingSaveFailed = "Could not save the problem reporting setting"
 )
 
 // Messages lists every first-run msgid, ported and new.
@@ -83,4 +94,6 @@ var Messages = []string{
 	MsgProgress, MsgProgressDesc, MsgInstalling, MsgSettingUpFlathub,
 	MsgFinished, MsgFinishedDesc, MsgExit, MsgSetupFailed, MsgErrorLog, MsgDryRunFinished,
 	MsgCompletionFailed, MsgCompletionFailedDesc, MsgFinishedWithErrors,
+	MsgReportingTitle, MsgReportingDesc, MsgReportingSwitch, MsgReportingOff,
+	MsgReportingOn, MsgReportingOnAuto, MsgReportingWhat, MsgReportingSaveFailed,
 }

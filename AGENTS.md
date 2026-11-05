@@ -181,9 +181,10 @@ An agent must not break these:
   pure `internal/views/pageview` package; its wiring test must continue to
   cover all seven page builders (it fails when a `*_page.go` file is missing
   from its table).
-- **The Problems page is local, checks every value, and sends nothing in
-  phase 1** ([ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md),
-  [spec](docs/specs/problems-page.md)). Its data lives in the pure
+- **The Problems page is local until the user opts in, and checks every
+  value** ([ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md),
+  [page spec](docs/specs/problems-page.md),
+  [reporting spec](docs/specs/problem-reporting.md)). Its data lives in the pure
   `internal/problems` package, which imports no puregotk and no network
   package (`net`, `net/...`, `crypto/tls`; guarded by
   `TestNoNetworkImports` and `TestNoNetworkDependencies`). The snosi-health
@@ -205,6 +206,24 @@ An agent must not break these:
   constants are the only spelling of each code, each code has 1 tested call
   site (`TestCodesAreRecordedAtTheirPaths`), and `main` defers
   `RecoverPanic` after `selfreport.Init(version.Version)`.
+- **`internal/reporting` is the only sender.** Nothing is sent until the
+  per-user consent (off by default, `reporting.Consent`) allows it for the
+  current schema data generation, and in Ask mode only the Report dialog
+  sends. The dialog shows `Report.Text()` and posts the same `Report.Body`
+  bytes. `internal/reporting` is the only production importer of `net/http`
+  and the only non-test Go file that names `report.frostyard.org`
+  (`internal/installcheck/reporting_test.go`); `internal/problems` must not
+  import it. One lock (`reports.lock`) keeps the GUI and `chairlift
+  --send-pending-reports` apart; the budget is 20 reports in 24 hours, 1
+  weekly count, and the first failure pauses automatic sending for 24 hours.
+  A kind `crash` report is never sent in phase 2: the sender refuses it
+  before any network call and the page offers no Report button for it. The
+  endpoint comes from `problems_reporting_group.endpoint` only in an
+  administrator-owned file (`config.Config.ReportEndpoint`); the
+  user-writable development fallback must never choose where a report goes.
+  `--send-pending-reports` runs before `app.New()` and builds no GTK. The
+  first-run Reporting step is optional, keeps ADR-0014's `Steps` and markers
+  unchanged, and is guarded by `internal/firstrun` tests in new files.
 - **Navigation behavior has one authority.** Page order, titles, icons, and
   advertised/registered accelerators live in the pure
   `internal/navigation` package. It also decides page visibility from static

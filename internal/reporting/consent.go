@@ -1,0 +1,279 @@
+// Package reporting sends the problem reports that an opted-in user allows
+// (ADR-0015, docs/specs/problem-reporting.md). It is a pure leaf package:
+// it imports no GTK binding, and only sender.go imports net/http.
+//
+// Phase 2 keeps the rule that nothing leaves the computer until the user
+// turns reporting on. A report is sent only when all of these hold: the
+// problems_reporting_group is enabled, the per-user consent file says yes
+// for the current schema generation, and either the user asked for this
+// report (the Report dialog) or the consent mode is "auto" and internal
+// budget rules allow it. A kind crash report is never sent in this phase.
+package reporting
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/frostyard/chairlift/internal/problems"
+)
+
+// Mode is the consent's automatic-send choice.
+type Mode string
+
+const (
+	// ModeAsk shows every report before it is sent: nothing is sent without
+	// the Report dialog.
+	ModeAsk Mode = "ask"
+	// ModeAuto sends pending reports without asking, and lists each one in
+	// "Sent reports".
+	ModeAuto Mode = "auto"
+)
+
+const (
+	// consentFormat is the only consent file format this package reads.
+	consentFormat = 1
+	// maxConsentBytes bounds the consent file that LoadConsent reads.
+	maxConsentBytes = 64 << 10
+	// CurrentSchema is the schema version that this build agrees to send.
+	CurrentSchema = problems.SchemaID
+)
+
+// dataGeneration is the data generation of each schema version. A schema
+// that adds a kind or a field adds data, so it gets a new number and an old
+// consent stops sending until the user agrees again; a schema that only
+// adds enum values keeps the generation, so it keeps sending.
+var dataGeneration = map[string]int{
+	"frostyard.problem/1": 1,
+}
+
+// Consent is the per-user problem-reporting decision.
+type Consent struct {
+	// Format is 1.
+	Format int `json:"format"`
+	// Enabled is the user's switch. Off is the default: a missing file, a
+	// malformed file or an unknown mode all read as off.
+	Enabled bool `json:"enabled"`
+	// Mode is ModeAsk or ModeAuto.
+	Mode Mode `json:"mode"`
+	// DecidedAt is when the user made this decision.
+	DecidedAt time.Time `json:"decided_at"`
+	// Schema is the schema version the user agreed to.
+	Schema string `json:"schema"`
+}
+
+// ConsentPath returns the consent file of this user:
+// $XDG_CONFIG_HOME/chairlift/reporting.json, else
+// $HOME/.config/chairlift/reporting.json. Only absolute values count.
+// getenv is os.Getenv in production.
+func ConsentPath(getenv func(string) string) (string, error) {
+	if dir := getenv("XDG_CONFIG_HOME"); filepath.IsAbs(dir) {
+		return filepath.Join(dir, "chairlift", "reporting.json"), nil
+	}
+	if home := getenv("HOME"); filepath.IsAbs(home) {
+		return filepath.Join(home, ".config", "chairlift", "reporting.json"), nil
+	}
+	return "", errors.New("reporting: neither XDG_CONFIG_HOME nor HOME is an absolute path")
+}
+
+// LoadConsent reads the consent file at path. A missing file is the zero
+// Consent (off) with no error. A file that is unreadable, larger than
+// 64 KiB, not format 1, or holds an unknown mode gives the zero Consent
+// (off) and the error: reporting fails closed.
+func LoadConsent(path string) (Consent, error) {
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Consent{}, nil
+	}
+	if err != nil {
+		return Consent{}, err
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxConsentBytes+1))
+	if err != nil {
+		return Consent{}, err
+	}
+	if len(data) > maxConsentBytes {
+		return Consent{}, fmt.Errorf("%s: larger than %d bytes", path, maxConsentBytes)
+	}
+	var c Consent
+	if err := json.Unmarshal(data, &c); err != nil {
+		return Consent{}, fmt.Errorf("%s: not a problem reporting consent: %w", path, err)
+	}
+	if c.Format != consentFormat {
+		return Consent{}, fmt.Errorf("%s: not a format %d problem reporting consent", path, consentFormat)
+	}
+	if c.Mode != ModeAsk && c.Mode != ModeAuto {
+		return Consent{}, fmt.Errorf("%s: %q is not a problem reporting mode", path, string(c.Mode))
+	}
+	return c, nil
+}
+
+// SaveConsent writes the consent to path: a temporary file in the same
+// folder (mode 0600), then a rename. The folder is made with mode 0700.
+func SaveConsent(path string, c Consent) error {
+	if path == "" {
+		return errors.New("reporting: the consent file has no path")
+	}
+	if c.Format == 0 {
+		c.Format = consentFormat
+	}
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writeFile(path, data, ".reporting-*.json")
+}
+
+// writeFile writes data to path with the temporary-file-then-rename rule
+// that the consent and the sent log share.
+func writeFile(path string, data []byte, pattern string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	fail := func(err error) error {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		return fail(err)
+	}
+	if _, err := tmp.Write(append(data, '\n')); err != nil {
+		return fail(err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
+}
+
+// Allows reports whether this consent sends anything at all: reporting is
+// on, and the schema the user agreed to has the data generation of the
+// current schema.
+func (c Consent) Allows() bool {
+	return c.allows(dataGeneration, CurrentSchema)
+}
+
+// allows is Allows with explicit generations, so a test can model a later
+// schema without changing the package's table.
+func (c Consent) allows(gens map[string]int, current string) bool {
+	if !c.Enabled {
+		return false
+	}
+	agreed, ok := gens[c.Schema]
+	if !ok {
+		return false
+	}
+	want, ok := gens[current]
+	if !ok {
+		return false
+	}
+	return agreed == want
+}
+
+// Stale reports whether reporting is on but the current schema adds data
+// the user has not agreed to. The page shows the switch off and says "The
+// report format changed. Turn reporting on to agree again."
+func (c Consent) Stale() bool {
+	return c.Enabled && !c.Allows()
+}
+
+// FileConsent returns a function that reads the consent file at path again on
+// every call. 1 ChairLift process can write the file while another sends (the
+// first-run window and the main window can run at the same time), so a send
+// that calls this before every request sees a withdrawal at once. A read
+// error is off, and so is an empty path.
+func FileConsent(path string) func() Consent {
+	if path == "" {
+		return func() Consent { return Consent{} }
+	}
+	return func() Consent {
+		c, err := LoadConsent(path)
+		if err != nil {
+			return Consent{}
+		}
+		return c
+	}
+}
+
+// Stricter returns the consent that 2 sources of one user's choice both
+// allow: it allows only when both allow, and its mode is ModeAuto only when
+// both are ModeAuto (else ModeAsk). The record is the in-memory one while it
+// does not allow, so a local Off stays the authority and a stale consent still
+// reads as stale; else it is the other record. A live send combines its
+// in-memory value with the file this way, so a local Off stops it at once,
+// even while the Off is still being saved, and another process can only make
+// it stricter.
+func Stricter(a, b Consent) Consent {
+	out := a
+	if a.Allows() {
+		out = b
+	}
+	if a.Mode != ModeAuto || b.Mode != ModeAuto {
+		out.Mode = ModeAsk
+	}
+	return out
+}
+
+// LiveConsent returns the consent gate of a live send: it reads the file
+// FIRST and the in-memory value second, then combines them with Stricter. The
+// order matters: a file read can block, and a local withdrawal that the user
+// makes during it must still count. Reading memory first would keep an older
+// On from before the read (cross-review of T857 t19, P1).
+func LiveConsent(memory, file func() Consent) func() Consent {
+	return func() Consent {
+		onDisk := file()
+		return Stricter(memory(), onDisk)
+	}
+}
+
+// StartsAutoRun reports whether a change of the consent from before to after
+// must start an automatic send: the new value allows and sends automatically,
+// and that was not already in effect.
+func StartsAutoRun(before, after Consent) bool {
+	if !after.Allows() || after.Mode != ModeAuto {
+		return false
+	}
+	return !before.Allows() || before.Mode != ModeAuto
+}
+
+// SwitchChanged reports whether the user changed the consent switch: active
+// is not the state the switch shows for stored. The switch shows Allows(),
+// not Enabled, because a stale consent (on, but of an older data generation)
+// shows off and must be renewable by turning the switch on.
+func SwitchChanged(stored Consent, active bool) bool {
+	return active != stored.Allows()
+}
+
+// Decide returns the consent record to save for a switch state and a mode.
+// The record names the current schema and the decision time (UTC); a mode
+// that is not ModeAuto is recorded as ModeAsk.
+func Decide(enabled bool, mode Mode, now time.Time) Consent {
+	if mode != ModeAuto {
+		mode = ModeAsk
+	}
+	return Consent{
+		Format:    consentFormat,
+		Enabled:   enabled,
+		Mode:      mode,
+		DecidedAt: now.UTC(),
+		Schema:    CurrentSchema,
+	}
+}

@@ -436,6 +436,23 @@ func ValidCode(code string) bool {
 	return codeRe.MatchString(code)
 }
 
+// ValidReportID reports whether id matches the v1 report_id pattern (a
+// lowercase UUIDv4).
+func ValidReportID(id string) bool {
+	return reportIDRe.MatchString(id)
+}
+
+// ValidClient reports whether client matches the v1 client pattern (a
+// ChairLift release semver or an snosi-health stamp).
+func ValidClient(client string) bool {
+	return clientRe.MatchString(client)
+}
+
+// ValidWeek reports whether week matches the v1 week pattern.
+func ValidWeek(week string) bool {
+	return weekRe.MatchString(week)
+}
+
 // ValidSemver reports whether version is a release version of the spec
 // (<semver>: no "v" prefix, no build metadata, only alpha, beta or rc
 // prereleases).

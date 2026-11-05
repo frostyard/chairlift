@@ -236,7 +236,10 @@ Its exported outcomes are:
   dismissed problems to the description. `ProblemDetails` returns the rows
   inside an expander: the hint, the recorded values (a field that failed its
   rule is marked "not valid", a missing one "not recorded"), and the local
-  details when there are any. `ProblemsReporting` is the reporting row.
+  details when there are any. `pageview/reporting.go` holds the reporting
+  group: `ReportingDescription`, `ReportingMode`, `ReportingWhat`,
+  `SentRows`, `ReportingCountRow` and `ReportOffered` (the Report… button's
+  rule), so the phase-1 promise row is gone.
   `problems_page.go` composes no text of its own.
 
 `pageview_test.go` calls every exported function directly and table-tests every

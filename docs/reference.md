@@ -136,21 +136,38 @@ authorization rule.
 
 ### Problems Page (`problems_page`)
 
-Local problem records; ChairLift sends nothing
+Local problem records, with opt-in reporting that is off until the user turns
+it on
 ([ADR-0015](adr/0015-problems-page-and-opt-in-reporting.md),
-[specs/problems-page.md](specs/problems-page.md)). The page sits directly
-before Help, so with every page visible Help is `Alt+7`.
+[specs/problems-page.md](specs/problems-page.md),
+[specs/problem-reporting.md](specs/problem-reporting.md)). The page sits
+directly before Help, so with every page visible Help is `Alt+7`.
 
 | Group | Key | Description |
 |-------|-----|-------------|
 | System | `problems_system_group` | Problems from `/var/lib/snosi-health/problems.json` (fixed path); "System checks are not available on this system" without the file |
 | Apps | `problems_apps_group` | The user's crashes (`coredumpctl`, last 90 days) and frostyard app problem records (user journal) |
-| Reporting | `problems_reporting_group` | States that problem reports stay on this computer |
+| Reporting | `problems_reporting_group` | The opt-in switch, the Ask/Auto mode, "Sent reports", "What is sent" and the weekly count; `endpoint` may be set only in an administrator-owned file |
 
 Each problem row expands to a hint, the recorded values, the local details,
-**Copy details** and **Dismiss**. A dismissed problem is kept in
-`$XDG_STATE_HOME/chairlift/problems-seen.json` and shows again when it
-happens again. Under `--dry-run`, Dismiss changes nothing.
+**Copy details**, **Dismiss**, and **Report…** while reporting is on. A
+dismissed problem is kept in `$XDG_STATE_HOME/chairlift/problems-seen.json`
+and shows again when it happens again. Under `--dry-run`, Dismiss changes
+nothing, and **Report…** shows the exact report without sending it.
+
+The reporting group's rows:
+
+| Row | What it does |
+|-----|--------------|
+| Send problem reports | The per-user consent switch, saved in `$XDG_CONFIG_HOME/chairlift/reporting.json`. Off by default; every failure reads as off |
+| When a problem is found | **Ask each time** (only the Report dialog sends) or **Send automatically** (at most 20 reports in 24 hours, paced at 7 seconds) |
+| Sent reports | Each sent report with its date, kind and `report_id`; newest first, at most 50 |
+| What is sent | Opens `https://frostyard.org/privacy/problem-reports/` |
+| Weekly count | In Ask mode, while this ISO week's count was not sent: **Review…** shows the count (install age bucket and update channel only) |
+
+`chairlift --send-pending-reports` runs the automatic send with no window and
+exits 1 for a configuration error or a failed send; `--dry-run` prints the
+reports instead of sending them.
 
 ### Help Page (`help_page`)
 

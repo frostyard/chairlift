@@ -142,6 +142,12 @@ func (it Item) DetailValid() bool {
 	return true
 }
 
+// ISOWeek returns the ISO 8601 week of t in UTC, such as "2026-W45".
+// A report's week is the ISO week of its send time in UTC.
+func ISOWeek(t time.Time) string {
+	return isoWeek(t)
+}
+
 // isoWeek returns the ISO 8601 week of t in UTC, such as "2026-W45".
 func isoWeek(t time.Time) string {
 	year, week := t.UTC().ISOWeek()

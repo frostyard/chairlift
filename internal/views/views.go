@@ -3,9 +3,12 @@ package views
 
 import (
 	"log"
+	"sync"
 	"time"
 
 	"github.com/frostyard/chairlift/internal/config"
+	"github.com/frostyard/chairlift/internal/problems"
+	"github.com/frostyard/chairlift/internal/reporting"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/badgestate"
 	"github.com/frostyard/chairlift/internal/views/rowset"
@@ -100,6 +103,37 @@ type UserHome struct {
 	// Problems page references (nil when the group is disabled)
 	problemsSystemGroup *adw.PreferencesGroup
 	problemsAppsGroup   *adw.PreferencesGroup
+
+	// Problems reporting (ADR-0015, phase 2). The widgets live on the GTK
+	// main thread; consent and reportingState are guarded by reportingMu,
+	// because the send goroutine reads the consent before every request.
+	reportingGroup    *adw.PreferencesGroup
+	reportingSwitch   *adw.SwitchRow
+	reportingMode     *adw.ComboRow
+	reportingSent     *adw.ExpanderRow
+	reportingCountRow *adw.ActionRow
+	reportingSentRows []*gtk.Widget
+	reportingMu       sync.Mutex
+	reportingConsent  reporting.Consent
+	// reportingEndpointErr is set when the configured report endpoint is not
+	// a valid URL: every send path is off then.
+	reportingEndpointErr error
+	// reportingApplying is true while the page itself redraws the consent
+	// widgets, so a redraw cannot start a second save. Main thread only.
+	reportingApplying bool
+	// reportingLoaded is true once the first consent load published its
+	// value: the switch and the mode row stay insensitive until then, and the
+	// handlers ignore a change before it. Main thread only.
+	reportingLoaded    bool
+	reportingState     *reporting.State
+	reportingRows      map[string]*reportRow
+	reportingConsentAt string
+	reportingStateAt   string
+	reportingEndpoint  string
+	reportingClient    string
+	reportingItems     []problems.Item
+	reportingEnvelope  problems.Envelope
+	reportingRunning   bool
 
 	// Groups with deferred visibility
 	maintenanceBrewGroup    *adw.PreferencesGroup

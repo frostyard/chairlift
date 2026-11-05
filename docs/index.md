@@ -21,7 +21,7 @@ ChairLift provides seven configurable pages:
 | **Updates** | Stage bootc or native A/B (systemd-sysupdate) system updates, apply Flatpak updates, upgrade Homebrew packages, install firmware updates through fwupd, and trust Homebrew taps. |
 | **System** | View OS information, bootc deployment status, and launch a system health monitor. |
 | **Features** | Toggle system features managed by updex. |
-| **Problems** | Problems recorded on this computer — Snow's system checks (`snosi-health`), crashes of your programs, and frostyard app problems — with a hint, Copy details and Dismiss. Nothing is sent ([ADR-0015](adr/0015-problems-page-and-opt-in-reporting.md)). |
+| **Problems** | Problems recorded on this computer — Snow's system checks (`snosi-health`), crashes of your programs, and frostyard app problems — with a hint, Copy details, Dismiss and Report…. Reporting is opt-in and off by default; then each report is either shown before it is sent or sent automatically, at most 20 a day plus one weekly count ([ADR-0015](adr/0015-problems-page-and-opt-in-reporting.md), [specs/problem-reporting.md](specs/problem-reporting.md)). |
 | **Help** | Links to the project website, issue tracker, and community chat. |
 
 A functional page is omitted when all of its groups are disabled. Help is
