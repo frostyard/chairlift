@@ -248,3 +248,67 @@ func TestFileConsentReloads(t *testing.T) {
 		t.Errorf("FileConsent(\"\")() = %+v, want off", got)
 	}
 }
+
+// TestStricter proves the rule 2 sources of one user's choice follow: it
+// allows only when both allow, and sends automatically only when both do.
+func TestStricter(t *testing.T) {
+	off := Consent{}
+	ask := Decide(true, ModeAsk, testStart)
+	auto := Decide(true, ModeAuto, testStart)
+	stale := Consent{Format: consentFormat, Enabled: true, Mode: ModeAuto, Schema: "frostyard.problem/0"}
+	tests := []struct {
+		name       string
+		a, b       Consent
+		wantAllows bool
+		wantMode   Mode
+	}{
+		{"the file is on and automatic, memory is off", off, auto, false, ModeAsk},
+		{"memory is on and automatic, the file is off", auto, off, false, ModeAsk},
+		{"both on, one asks", ask, auto, true, ModeAsk},
+		{"both on and automatic", auto, auto, true, ModeAuto},
+		{"both ask", ask, ask, true, ModeAsk},
+		{"the file is a stale consent", stale, auto, false, ModeAuto},
+		{"memory is a stale consent", stale, stale, false, ModeAuto},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Stricter(tt.a, tt.b)
+			if got.Allows() != tt.wantAllows {
+				t.Errorf("Stricter().Allows() = %v, want %v", got.Allows(), tt.wantAllows)
+			}
+			if got.Mode != tt.wantMode {
+				t.Errorf("Stricter().Mode = %q, want %q", got.Mode, tt.wantMode)
+			}
+			if got.Allows() && (!tt.a.Allows() || !tt.b.Allows()) {
+				t.Error("Stricter() allows where one source does not")
+			}
+		})
+	}
+}
+
+// TestStartsAutoRun proves when a change of the consent must start an
+// automatic send: only when it newly allows sending automatically.
+func TestStartsAutoRun(t *testing.T) {
+	off := Consent{}
+	ask := Decide(true, ModeAsk, testStart)
+	auto := Decide(true, ModeAuto, testStart)
+	tests := []struct {
+		name          string
+		before, after Consent
+		want          bool
+	}{
+		{"off to automatic", off, auto, true},
+		{"ask to automatic", ask, auto, true},
+		{"automatic to automatic", auto, auto, false},
+		{"automatic to ask", auto, ask, false},
+		{"automatic to off", auto, off, false},
+		{"off to ask", off, ask, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StartsAutoRun(tt.before, tt.after); got != tt.want {
+				t.Errorf("StartsAutoRun() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

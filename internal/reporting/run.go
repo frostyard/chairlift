@@ -136,7 +136,7 @@ func Run(ctx context.Context, in RunInput) RunResult {
 		if requests == 0 {
 			return nil
 		}
-		if !wait(ctx, in.Pace) {
+		if !waitPace(ctx, in.Pace) {
 			return ctx.Err()
 		}
 		return nil
@@ -351,6 +351,11 @@ func runDry(ctx context.Context, in RunInput, logf func(string), nowf func() tim
 	res.Previews = append(res.Previews, r)
 	return res
 }
+
+// waitPace is the pace wait. It is a variable so a test can order a step at
+// the exact moment of the wait instead of sleeping; production always uses
+// wait.
+var waitPace = wait
 
 // wait sleeps for d, or returns false when ctx ends first.
 func wait(ctx context.Context, d time.Duration) bool {

@@ -120,7 +120,11 @@ type UserHome struct {
 	reportingEndpointErr error
 	// reportingApplying is true while the page itself redraws the consent
 	// widgets, so a redraw cannot start a second save. Main thread only.
-	reportingApplying  bool
+	reportingApplying bool
+	// reportingLoaded is true once the first consent load published its
+	// value: the switch and the mode row stay insensitive until then, and the
+	// handlers ignore a change before it. Main thread only.
+	reportingLoaded    bool
 	reportingState     *reporting.State
 	reportingRows      map[string]*reportRow
 	reportingConsentAt string

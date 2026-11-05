@@ -45,18 +45,39 @@ renames it; the folder is made with 0700.
 **The write is synchronous.** The consent file is about 200 bytes, so the page
 and the first-run step write it on the GTK main thread with
 `reporting.SaveConsent`: a small local file write, not an external tool call,
-so the main-thread rule allows it. 1 value in memory is the only authority. A
-successful write sets that value and redraws the widgets; a failed write keeps
-the value, puts the widgets back to it, and shows an error toast; a dry run
-sets the value and writes nothing. Because the write is synchronous, an exit
-cannot lose an Off, and no callback can restore an older value. The widgets a
-handler redraws are guarded, so they cannot start a second save.
+so the main-thread rule allows it. An asynchronous writer is rejected: it
+brought a stale callback that could restore an older choice, a queued Off that
+an exit lost, and 2 consent values that could disagree. 1 value in memory is
+the only authority. Because the write is synchronous, an exit cannot lose an
+Off, and no callback can restore an older value. The widgets a handler
+redraws are guarded, so they cannot start a second save.
+
+**Withdrawal before the save, grant after it.** A change that withdraws (Off,
+or leaving automatic while automatic was in effect) sets the in-memory value
+BEFORE `SaveConsent` runs, so a send stops at once even while the save is in
+flight. A change that grants (On, or automatic) sets it only after a
+successful save. A failed save of a withdrawal keeps the withdrawal in memory
+(fail safe) and shows an error toast; a failed save of a grant keeps the old
+value and redraws the widgets to it.
 
 **Reading it again.** `reporting.FileConsent(path)` returns a function that
 reads the file on every call, and a read error is off. A live send uses it
 before every request, because 1 ChairLift process can write the consent while
 another sends (the first-run window and the main window can run at the same
-time). A dry run uses the in-memory value.
+time). The live consent is `reporting.Stricter(inMemory(), fromFile())`: it
+allows only when both allow, and sends automatically only when both do, so a
+local Off stops a send at once and another process can only make it stricter.
+A dry run uses the in-memory value alone.
+
+**The switch waits for the load.** The switch and the mode row are built
+insensitive and become sensitive when the first consent load published its
+value; the handlers ignore a change before that, so a slow load cannot
+overwrite a newer choice.
+
+**An automatic run starts on a new automatic choice.** `reporting.StartsAutoRun(before, after)`
+is true when `after` allows and sends automatically and that was not already
+in effect. Both the live path and the dry-run path call `Run` then; under
+`--dry-run` that only logs the previews.
 
 The switch shows `Consent.Allows()`, not `Consent.Enabled`, and
 `reporting.SwitchChanged(stored, active)` decides whether the user changed it.

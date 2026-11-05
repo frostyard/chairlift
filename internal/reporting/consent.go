@@ -213,6 +213,35 @@ func FileConsent(path string) func() Consent {
 	}
 }
 
+// Stricter returns the consent that 2 sources of one user's choice both
+// allow: it allows only when both allow, and its mode is ModeAuto only when
+// both are ModeAuto (else ModeAsk). The record is the in-memory one while it
+// does not allow, so a local Off stays the authority and a stale consent still
+// reads as stale; else it is the other record. A live send combines its
+// in-memory value with the file this way, so a local Off stops it at once,
+// even while the Off is still being saved, and another process can only make
+// it stricter.
+func Stricter(a, b Consent) Consent {
+	out := a
+	if a.Allows() {
+		out = b
+	}
+	if a.Mode != ModeAuto || b.Mode != ModeAuto {
+		out.Mode = ModeAsk
+	}
+	return out
+}
+
+// StartsAutoRun reports whether a change of the consent from before to after
+// must start an automatic send: the new value allows and sends automatically,
+// and that was not already in effect.
+func StartsAutoRun(before, after Consent) bool {
+	if !after.Allows() || after.Mode != ModeAuto {
+		return false
+	}
+	return !before.Allows() || before.Mode != ModeAuto
+}
+
 // SwitchChanged reports whether the user changed the consent switch: active
 // is not the state the switch shows for stored. The switch shows Allows(),
 // not Enabled, because a stale consent (on, but of an older data generation)

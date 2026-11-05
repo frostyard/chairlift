@@ -1445,10 +1445,13 @@ fails when another package imports it, or when another non-test Go file names
   or a field is a new data generation (`dataGeneration`), so sending stops
   until the user agrees again; an enum-only schema keeps it on.
   The page and the first-run step write the small file synchronously on the
-  main thread with 1 in-memory authority, so a failed write keeps the value
-  and no queued write can restore an older one. `reporting.FileConsent` reads
-  the file again on every call, and a live send uses it before every request,
-  so a withdrawal from another ChairLift process stops it.
+  main thread with 1 in-memory authority: a withdrawal reaches memory before
+  its save, a grant only after a successful save, and no queued write can
+  restore an older value. `reporting.FileConsent` reads the file again on
+  every call, and a live send uses `reporting.Stricter(memory, file)` before
+  every request, so a local Off stops it at once and another ChairLift process
+  can only make it stricter. The switch and the mode row stay insensitive
+  until the first load published its value.
 - **Sent log** (`state.go`): `$XDG_STATE_HOME/chairlift/reports.json` (else
   `$HOME/.local/state/chairlift/reports.json`) holds the sent entries, the
   week of the last count and `retry_after`; at most 500 entries, none older
@@ -1492,7 +1495,9 @@ fails when another package imports it, or when another non-test Go file names
   "Sent reports", "What is sent" and "Weekly count" rows, a Report… button
   per offered problem, and `reporting.Run` in Auto mode. Consent changes go
   written synchronously on the main thread, and the consent and sent log load
-  also when both data groups are off, so a consent can always be withdrawn. The decisions come
+  also when both data groups are off, so a consent can always be withdrawn. A
+  new automatic choice starts an automatic run, also under `--dry-run`, where
+  it only logs the previews (`reporting.StartsAutoRun`). The decisions come
   from `actionmsg.Report` and `actionmsg.ReportingConsent` (ADR-0009).
 - **The first run** shows the optional Reporting step between Style and Apps
   when the reporting group is on and `/var/lib/snosi-health/problems.json`

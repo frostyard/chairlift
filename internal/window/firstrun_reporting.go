@@ -76,11 +76,17 @@ func (w *FirstRunWindow) buildReporting() *adw.StatusPage {
 // synchronous an exit cannot lose an Off. One value in memory
 // (w.reportingRecord) is the only authority; a redraw sets
 // w.reportingApplying, so it cannot start a second save.
+//
+// A withdrawal (Off) reaches the in-memory value BEFORE the save, so a
+// running ChairLift window that sends stops at once; a grant reaches it only
+// after a successful save. The first run sends nothing, so this only orders
+// the text.
 func (w *FirstRunWindow) onReportingSwitched(enabled bool) {
 	if w.reportingApplying || !reporting.SwitchChanged(w.reportingRecord, enabled) {
 		return
 	}
-	mode := w.reportingRecord.Mode
+	before := w.reportingRecord
+	mode := before.Mode
 	if mode != reporting.ModeAuto {
 		mode = reporting.ModeAsk
 	}
@@ -89,6 +95,7 @@ func (w *FirstRunWindow) onReportingSwitched(enabled bool) {
 		log.Println(decision.Log)
 	}
 	record := reporting.Decide(enabled, mode, time.Now())
+	withdraw := before.Allows() && (!record.Allows() || record.Mode != reporting.ModeAuto)
 	if !decision.Persist {
 		w.reportingRecord = record
 		w.showReporting()
@@ -96,22 +103,31 @@ func (w *FirstRunWindow) onReportingSwitched(enabled bool) {
 		return
 	}
 	if w.reportingPath == "" {
+		if withdraw {
+			w.reportingRecord = record
+		}
 		w.showReporting()
 		w.toasts.AddToast(plainToast(i18n.T(i18n.MsgReportingSaveFailed)))
 		return
 	}
-	w.reportingApplying = true
-	err := reporting.SaveConsent(w.reportingPath, record)
-	w.reportingApplying = false
-	if err != nil {
+	if withdraw {
+		w.reportingRecord = record
+		w.showReporting()
+	}
+	if err := reporting.SaveConsent(w.reportingPath, record); err != nil {
 		log.Printf("first-run: save problem reporting: %v", err)
-		// The in-memory value stays as it was: put the switch back to it.
-		w.showReporting()
+		// A withdrawal stays in memory (fail safe); a grant never arrived, so
+		// the switch goes back to the value in memory.
+		if !withdraw {
+			w.showReporting()
+		}
 		w.toasts.AddToast(plainToast(i18n.T(i18n.MsgReportingSaveFailed)))
 		return
 	}
-	w.reportingRecord = record
-	w.showReporting()
+	if !withdraw {
+		w.reportingRecord = record
+		w.showReporting()
+	}
 	w.toasts.AddToast(plainToast(decision.Toast))
 }
 

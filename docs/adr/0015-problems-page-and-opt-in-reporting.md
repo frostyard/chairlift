@@ -117,15 +117,32 @@ Facts that constrain it:
       does not use the 20-report budget.
     - **A small file, written at once, and a send in 4 steps.** The consent
       file is about 200 bytes, so the page and the first-run step write it
-      synchronously on the GTK main thread, with 1 in-memory authority: a
-      failed write keeps the value and shows an error, and no queued write can
-      restore an older choice. It is read again from the file before every
-      live request, because another ChairLift process may have turned
-      reporting off. 1 send reserves the entry (or the count week) together
-      with a conservative pause, saves, reads the consent once more, and then
-      sends; a withdrawal rolls the reservation back and stops without a
-      failure, and the log settles after the request. A process that exits
-      during a request therefore under-sends, never sends twice.
+      synchronously on the GTK main thread, with 1 in-memory authority. That
+      is the decision of this ADR, and it stays: an asynchronous writer
+      brought 3 defects of its own (a stale callback could restore an older
+      choice, a queued Off was lost when the process exited, and 2 consent
+      values could disagree). The file is under 200 bytes in the user's own
+      config folder, the same place where GTK and GLib write their settings
+      synchronously; AGENTS.md requires a worker goroutine for external tool
+      calls, not for a small local file write.
+    - **A withdrawal first, a grant after the save.** A local Off reaches the
+      in-memory value BEFORE its save runs, so a send stops at once even
+      while the save is in flight; a grant reaches it only after a successful
+      save. A live send reads the file again before every request, because
+      another ChairLift process may have turned reporting off, and combines
+      that value with the in-memory one through `reporting.Stricter`: it
+      allows only when both allow, and sends automatically only when both do.
+      1 send reserves the entry (or the count week) together with a
+      conservative pause, saves, reads the consent once more, and then sends;
+      a withdrawal rolls the reservation back and stops without a failure,
+      and the log settles after the request. A process that exits during a
+      request therefore under-sends, never sends twice.
+    - **The switch waits for the load.** The switch and the mode row are
+      insensitive until the first consent load published its value, and the
+      handlers ignore a change before it, so a slow load cannot overwrite a
+      newer user choice. A dry run that switches to automatic previews its
+      reports at once: `reporting.StartsAutoRun` decides that for both
+      paths, and `Run` sends nothing and writes no file under `--dry-run`.
     - **A failed send waits 24 hours.** The first failure pauses every
       automatic send for 24 hours, and the next run says why. An explicit
       Report dialog send ignores the pause: the user asked for it, and the

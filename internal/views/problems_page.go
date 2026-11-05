@@ -119,6 +119,9 @@ func (uh *UserHome) buildReportingGroup(page *adw.PreferencesPage) {
 	uh.reportingSwitch.SetTitle(pageview.ReportingSwitchTitle)
 	uh.reportingSwitch.SetSubtitle(pageview.ReportingOff)
 	uh.reportingSwitch.SetActive(false)
+	// Insensitive until the first consent load published its value, so the
+	// load can never overwrite a choice the user made while it ran.
+	uh.reportingSwitch.SetSensitive(false)
 	notifyCb := func(_ gobject.Object, pspec uintptr) {
 		if gobject.ParamSpecNewFromInternalPtr(pspec).GetName() != "active" {
 			return
@@ -191,7 +194,7 @@ func (uh *UserHome) reportedEndpoint() string {
 // switch) does nothing; a stale consent shows off, so turning it on renews
 // it (reporting.SwitchChanged).
 func (uh *UserHome) onReportingSwitched(enabled bool) {
-	if uh.reportingApplying || !reporting.SwitchChanged(uh.consentCopy(), enabled) {
+	if !uh.reportingLoaded || uh.reportingApplying || !reporting.SwitchChanged(uh.consentCopy(), enabled) {
 		return
 	}
 	uh.applyReportingConsent(enabled, uh.selectedMode())
@@ -200,7 +203,7 @@ func (uh *UserHome) onReportingSwitched(enabled bool) {
 // onReportingModeSelected handles a change of the mode row. Main thread
 // only.
 func (uh *UserHome) onReportingModeSelected() {
-	if uh.reportingApplying {
+	if !uh.reportingLoaded || uh.reportingApplying {
 		return
 	}
 	current := uh.consentCopy()
@@ -220,34 +223,59 @@ func (uh *UserHome) onReportingModeSelected() {
 // external tool call, so the main-thread rule allows it; and because the write
 // is synchronous, an exit cannot lose an Off and no callback can restore an
 // older value.
+//
+// A withdrawal (Off, or leaving automatic) reaches the in-memory value BEFORE
+// the save, so a running send stops at once even while the save runs; a grant
+// reaches it only after a successful save.
 func (uh *UserHome) applyReportingConsent(enabled bool, mode reporting.Mode) {
 	decision := actionmsg.ReportingConsent(IsDryRun(), enabled, string(mode))
 	if decision.Log != "" {
 		log.Println(decision.Log)
 	}
+	before := uh.consentCopy()
 	record := reporting.Decide(enabled, mode, time.Now())
+	withdraw := before.Allows() && (!record.Allows() || record.Mode != reporting.ModeAuto)
+
 	if !decision.Persist {
-		// A dry run keeps the choice in memory for this run only.
+		// A dry run keeps the choice in memory for this run only. A new
+		// automatic choice previews its reports: Run sends nothing and
+		// writes no file.
 		uh.withoutSaving(func() { uh.publishConsent(record) })
 		uh.toastAdder.ShowToast(decision.Toast)
+		if reporting.StartsAutoRun(before, record) {
+			uh.runAutomaticReports()
+		}
 		return
 	}
+
 	path := uh.reportingConsentAt
 	if path == "" {
-		uh.withoutSaving(func() { uh.showReportingConsent(uh.consentCopy()) })
+		if withdraw {
+			uh.withoutSaving(func() { uh.publishConsent(record) })
+		} else {
+			uh.withoutSaving(func() { uh.showReportingConsent(uh.consentCopy()) })
+		}
 		uh.toastAdder.ShowErrorToast("Could not save the problem reporting setting: no consent file path")
 		return
 	}
+	if withdraw {
+		uh.withoutSaving(func() { uh.publishConsent(record) })
+	}
 	if err := reporting.SaveConsent(path, record); err != nil {
 		log.Printf("problems: save the reporting consent: %v", err)
-		// The in-memory value stays as it was: put the widgets back to it.
-		uh.withoutSaving(func() { uh.showReportingConsent(uh.consentCopy()) })
+		// A withdrawal stays in memory (fail safe); a grant never arrived,
+		// so the widgets go back to the value in memory.
+		if !withdraw {
+			uh.withoutSaving(func() { uh.showReportingConsent(uh.consentCopy()) })
+		}
 		uh.toastAdder.ShowErrorToast("Could not save the problem reporting setting: " + err.Error())
 		return
 	}
-	uh.withoutSaving(func() { uh.publishConsent(record) })
+	if !withdraw {
+		uh.withoutSaving(func() { uh.publishConsent(record) })
+	}
 	uh.toastAdder.ShowToast(decision.Toast)
-	if record.Allows() && record.Mode == reporting.ModeAuto {
+	if reporting.StartsAutoRun(before, record) {
 		uh.runAutomaticReports()
 	}
 }
@@ -283,6 +311,7 @@ func (uh *UserHome) showReportingConsent(consent reporting.Consent) {
 		return
 	}
 	uh.reportingSwitch.SetActive(consent.Allows())
+	uh.reportingSwitch.SetSensitive(uh.reportingLoaded)
 	if uh.reportingGroup != nil {
 		description := pageview.ReportingDescription(consent)
 		if uh.reportingEndpointErr != nil {
@@ -293,7 +322,7 @@ func (uh *UserHome) showReportingConsent(consent reporting.Consent) {
 	row := pageview.ReportingMode(consent)
 	if uh.reportingMode != nil {
 		uh.reportingMode.SetSelected(modeIndex(consent.Mode))
-		uh.reportingMode.SetSensitive(consent.Allows())
+		uh.reportingMode.SetSensitive(uh.reportingLoaded && consent.Allows())
 		uh.reportingMode.SetSubtitle(glib.MarkupEscapeText(row.Subtitle, -1))
 	}
 	if uh.reportingSent != nil {
@@ -392,6 +421,7 @@ func (uh *UserHome) loadProblems(systemOn, appsOn, reportingOn bool) {
 		uh.reportingEnvelope = envelope
 		uh.reportingMu.Unlock()
 		if reportingOn {
+			uh.reportingLoaded = true
 			uh.showReportingConsent(consent)
 			uh.showSentReports(sent)
 		}
@@ -591,10 +621,15 @@ func (uh *UserHome) reportingInput() reporting.RunInput {
 	uh.reportingMu.Unlock()
 	// A live send reads the consent file again before every request, so a
 	// withdrawal from another ChairLift process (the first-run window can run
-	// at the same time) stops it; a dry run uses the in-memory value.
+	// at the same time) stops it. It also combines that value with the
+	// in-memory one, so a local Off stops it at once, even while its save
+	// runs; a dry run uses the in-memory value alone.
 	consent := uh.consentCopy
 	if !IsDryRun() && uh.reportingConsentAt != "" {
-		consent = reporting.FileConsent(uh.reportingConsentAt)
+		fromFile := reporting.FileConsent(uh.reportingConsentAt)
+		consent = func() reporting.Consent {
+			return reporting.Stricter(uh.consentCopy(), fromFile())
+		}
 	}
 	return reporting.RunInput{
 		Now:       time.Now,

@@ -522,9 +522,9 @@ func validateBody(t *testing.T, v *schemacheck.Validator, body []byte) []string 
 }
 
 // TestRunWithdrawDuringThePaceStopsTheNextRequest proves the consent is read
-// again after the pace wait. A goroutine orders itself after the first request
-// and turns reporting off 50 ms into the 200 ms wait, so the check that
-// precedes the wait still allowed and only the check after it sees the
+// again after the pace wait. The wait is injected, so the withdrawal happens
+// inside the wait itself, after the check that precedes it: the check before
+// the report still allowed, and only the check after the wait sees the
 // withdrawal. The save count pins that check: with it, the withdrawn report is
 // never even reserved; without it, the run reserves and rolls back 2 saves
 // more and this test fails.
@@ -532,25 +532,21 @@ func TestRunWithdrawDuringThePaceStopsTheNextRequest(t *testing.T) {
 	clk := newClock(testStart)
 	statePath := newStatePath(t)
 	sender := &recordingSender{}
-	firstRequest := make(chan struct{})
 	var off atomic.Bool
-	var once sync.Once
 	in := input(clk, statePath, sender, reportableItems(3))
-	in.Pace = 200 * time.Millisecond
+	in.Pace = time.Second
 	in.Consent = func() Consent {
 		if off.Load() {
 			return Consent{}
 		}
 		return autoConsent()
 	}
-	// The order: the first request runs, the goroutine wakes, waits 50 ms into
-	// the 200 ms pause, and turns reporting off before the wait ends.
-	go func() {
-		<-firstRequest
-		time.Sleep(50 * time.Millisecond)
+	restoreWaitPace(t, func(context.Context, time.Duration) bool {
+		// The user turns reporting off while the run waits for its second
+		// request.
 		off.Store(true)
-	}()
-	sender.onSend = func(int) { once.Do(func() { close(firstRequest) }) }
+		return true
+	})
 	saves := 0
 	restoreSave(t, func(s *State, path string) error {
 		saves++
@@ -719,6 +715,14 @@ func TestRunSuccessfulRequestLeavesNoPause(t *testing.T) {
 	if len(st.Sent) != 1 {
 		t.Errorf("the sent log holds %d entries, want 1", len(st.Sent))
 	}
+}
+
+// restoreWaitPace replaces the package's pace wait for the rest of the test.
+func restoreWaitPace(t *testing.T, fn func(context.Context, time.Duration) bool) {
+	t.Helper()
+	previous := waitPace
+	waitPace = fn
+	t.Cleanup(func() { waitPace = previous })
 }
 
 // restoreSave replaces the package's save function for the rest of the test.
