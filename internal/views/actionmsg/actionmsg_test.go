@@ -1080,3 +1080,46 @@ func TestFirmwareInstall(t *testing.T) {
 		})
 	}
 }
+
+// TestProblemDismiss proves the Problems page's Dismiss decision: under
+// dry-run nothing is written or hidden and the toast is a preview; live,
+// the dismissal is written and the row hides after the write (ADR-0009).
+func TestProblemDismiss(t *testing.T) {
+	tests := []struct {
+		name   string
+		dryRun bool
+		want   ProblemDismissDecision
+	}{
+		{"dry run", true, ProblemDismissDecision{
+			Persist: false,
+			Hide:    false,
+			Toast:   "[DRY-RUN] Preview: dismiss A system service failed — no changes made",
+			Log:     "[DRY-RUN] would dismiss problem 27d5ac0722e592bf",
+		}},
+		{"live", false, ProblemDismissDecision{
+			Persist: true,
+			Hide:    true,
+			Toast:   "Dismissed: A system service failed",
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ProblemDismiss(tt.dryRun, "27d5ac0722e592bf", "A system service failed")
+			if got != tt.want {
+				t.Fatalf("ProblemDismiss = %+v, want %+v", got, tt.want)
+			}
+			if got.Hide && !got.Persist {
+				t.Fatal("a decision hides a row it does not write")
+			}
+			if tt.dryRun && (!strings.HasPrefix(got.Toast, "[DRY-RUN] Preview:") || !strings.HasSuffix(got.Toast, "— no changes made")) {
+				t.Errorf("dry-run toast %q breaks the [DRY-RUN] convention", got.Toast)
+			}
+		})
+	}
+	if got := ProblemDismissFailed("A system service failed", errors.New("read-only file system")); got != "Could not dismiss A system service failed: read-only file system" {
+		t.Errorf("ProblemDismissFailed = %q", got)
+	}
+	if got := ProblemDetailsCopied("gnome-shell stopped unexpectedly"); got != "Copied the details of gnome-shell stopped unexpectedly" {
+		t.Errorf("ProblemDetailsCopied = %q", got)
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/frostyard/chairlift/internal/selfreport"
 	"github.com/frostyard/chairlift/internal/updexhelper"
 	updexapi "github.com/frostyard/updex/v2/updex"
 )
@@ -271,7 +272,9 @@ func updateFeatures(ctx context.Context, pkexecPath string) ([]FeatureUpdate, er
 	}
 	if parseErr != nil {
 		log.Printf("updex helper: cannot read update results: %v", parseErr)
-		return nil, &ResultsUnreadableError{Message: fmt.Sprintf("cannot read update results: %v", parseErr)}
+		unreadable := &ResultsUnreadableError{Message: fmt.Sprintf("cannot read update results: %v", parseErr)}
+		selfreport.Error(selfreport.CodeUpdexResultsUnreadable, unreadable)
+		return nil, unreadable
 	}
 	return results, nil
 }

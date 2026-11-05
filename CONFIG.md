@@ -105,6 +105,24 @@ valid page.
 
 - `features_group`: System features managed by updex (requires `updex` command)
 
+### Problems Page (`problems_page`)
+
+The Problems page shows problems recorded on this computer and sends nothing
+([ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md)). It sits
+directly before Help in the sidebar. Each group can be turned off; with all 3
+off the page is omitted, as after a configuration error. The groups take no
+other fields: the snosi-health paths are fixed and cannot be configured.
+
+- `problems_system_group`: Problems that Snow's `snosi-health` checks
+  recorded in `/var/lib/snosi-health/problems.json` (and their local details
+  from `details.json` when the user may read it). Without that file the
+  group shows "System checks are not available on this system".
+- `problems_apps_group`: Crashes of the user's own programs (from
+  `coredumpctl`, the last 90 days) and problems that frostyard apps recorded
+  in the user journal.
+- `problems_reporting_group`: The reporting row. In this version it states
+  that problem reports stay on this computer.
+
 ### Help Page (`help_page`)
 
 - `help_resources_group`: Help and support resources

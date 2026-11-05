@@ -105,6 +105,17 @@ var items = []Item{
 		Groups:     []string{"features_group"},
 	},
 	{
+		Name:       "problems",
+		Title:      "Problems",
+		Icon:       "dialog-warning-symbolic",
+		ConfigPage: "problems_page",
+		Groups: []string{
+			"problems_system_group",
+			"problems_apps_group",
+			"problems_reporting_group",
+		},
+	},
+	{
 		Name:       "help",
 		Title:      "Help",
 		Icon:       "help-browser-symbolic",

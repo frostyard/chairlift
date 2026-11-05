@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/frostyard/chairlift/internal/app"
+	"github.com/frostyard/chairlift/internal/selfreport"
 	"github.com/frostyard/chairlift/internal/version"
 )
 
@@ -29,6 +30,13 @@ func main() {
 	version.Commit = buildCommit
 	version.Date = buildDate
 	version.BuiltBy = buildBy
+
+	// Record ChairLift's own panics and crashes (ADR-0015). Init records the
+	// crash of an earlier run and covers every goroutine's panics and fatal
+	// errors through the crash output file; RecoverPanic must be deferred
+	// directly here. A dev or snapshot version makes the recorder inert.
+	recorder := selfreport.Init(version.Version)
+	defer recorder.RecoverPanic()
 
 	application := app.New()
 	defer application.Unref()

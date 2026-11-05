@@ -1,0 +1,45 @@
+[
+ {
+  "time": 1793786400000000,
+  "pid": 2001,
+  "uid": 1000,
+  "gid": 1000,
+  "sig": 11,
+  "corefile": "none",
+  "exe": "/usr/bin/gnome-shell",
+  "size": 0
+ },
+ {
+  "time": 1793846210000000,
+  "pid": 4711,
+  "uid": 1000,
+  "gid": 1000,
+  "sig": 11,
+  "corefile": "none",
+  "exe": "/usr/bin/gnome-shell"
+ },
+ {
+  "time": 1793693700000000,
+  "pid": 3100,
+  "uid": 1000,
+  "gid": 1000,
+  "sig": 6,
+  "exe": "/home/brian/bin/tool"
+ },
+ {
+  "time": 1793696400000000,
+  "pid": 3200,
+  "uid": 1001,
+  "gid": 1001,
+  "sig": 11,
+  "exe": "/usr/bin/nautilus"
+ },
+ {
+  "time": 1793620800000000,
+  "pid": 3300,
+  "uid": 1000,
+  "gid": 1000,
+  "sig": 15,
+  "exe": "/usr/bin/foo"
+ }
+]

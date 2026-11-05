@@ -1,0 +1,236 @@
+{
+  "format": 1,
+  "generated": "2026-11-05T03:56:38Z",
+  "problems": {
+    "39e7100019800a4c": {
+      "kind": "unit_failed",
+      "local": {
+        "unit": "user@.service",
+        "result": "exit-code",
+        "shipped": true
+      },
+      "extra": {
+        "units": [
+          "user@1000.service"
+        ]
+      },
+      "messages": [
+        "Failed to start backup of /home/brian on host frosty-desk",
+        "brian-backup.service: Main process exited, code=exited, status=1/FAILURE"
+      ]
+    },
+    "a6d8d298c66718de": {
+      "kind": "unit_failed",
+      "local": {
+        "unit": "brian-backup.service",
+        "result": "exit-code",
+        "shipped": false
+      },
+      "extra": {
+        "units": [
+          "brian-backup.service"
+        ]
+      },
+      "messages": [
+        "Failed to start backup of /home/brian on host frosty-desk",
+        "brian-backup.service: Main process exited, code=exited, status=1/FAILURE"
+      ]
+    },
+    "e1e8cd1cde14da30": {
+      "kind": "unit_failed",
+      "local": {
+        "unit": "home-brian.mount",
+        "result": "timeout",
+        "shipped": false
+      },
+      "extra": {
+        "units": [
+          "home-brian.mount"
+        ]
+      },
+      "messages": [
+        "Failed to start backup of /home/brian on host frosty-desk",
+        "brian-backup.service: Main process exited, code=exited, status=1/FAILURE"
+      ]
+    },
+    "27d5ac0722e592bf": {
+      "kind": "unit_failed",
+      "local": {
+        "unit": "snosi-etc-drift-report.service",
+        "result": "other",
+        "shipped": true
+      },
+      "extra": {
+        "units": [
+          "snosi-etc-drift-report.service"
+        ]
+      },
+      "messages": [
+        "Failed to start backup of /home/brian on host frosty-desk",
+        "brian-backup.service: Main process exited, code=exited, status=1/FAILURE"
+      ]
+    },
+    "8d1b483b03cda85a": {
+      "kind": "update_stage_failed",
+      "local": {
+        "target_version": "20261104000000",
+        "error_class": "registry",
+        "bootc_version": "1.17.3"
+      },
+      "extra": {},
+      "messages": [
+        "Failed to start backup of /home/brian on host frosty-desk",
+        "brian-backup.service: Main process exited, code=exited, status=1/FAILURE"
+      ]
+    },
+    "2b4cfb6309b48807": {
+      "kind": "booted_older_image",
+      "local": {
+        "newer_version": "20261104000000",
+        "how": "unknown"
+      },
+      "extra": {},
+      "messages": []
+    },
+    "192ac23ef1369eed": {
+      "kind": "sysext_update_failed",
+      "local": {
+        "feature": "docker",
+        "version": "29.0.1",
+        "outcome": "failed",
+        "error_class": "network"
+      },
+      "extra": {},
+      "messages": []
+    },
+    "19c19a6303a39c9a": {
+      "kind": "sysext_update_failed",
+      "local": {
+        "feature": "incus",
+        "outcome": "skipped_busy"
+      },
+      "extra": {},
+      "messages": []
+    },
+    "061b613f82107709": {
+      "kind": "sysext_update_failed",
+      "local": {
+        "feature": "podman",
+        "version": "5.4.0",
+        "outcome": "other",
+        "error_class": "other"
+      },
+      "extra": {},
+      "messages": []
+    },
+    "955a8fafd851cd82": {
+      "kind": "tpm_unlock",
+      "local": {
+        "outcome": "ok_after_retry",
+        "tpm_rc": "PCR_CHANGED",
+        "retries": 2
+      },
+      "extra": {},
+      "messages": [
+        "ERROR:esys:src/tss2-esys/api/Esys_PolicyPCR.c:103:Esys_PolicyPCR() Esys Finish ErrorCode (0x00000128) ",
+        "ERROR:esys:src/tss2-esys/api/Esys_Unseal.c:98:Esys_Unseal() Esys Finish ErrorCode (0x00000128) "
+      ]
+    },
+    "b9022b0f28891801": {
+      "kind": "integrity_error",
+      "local": {
+        "subsystem": "composefs",
+        "count": "1"
+      },
+      "extra": {},
+      "messages": [
+        "overlayfs: lower file 'brian-notes' has the wrong fs-verity digest"
+      ]
+    },
+    "aea538950a8d8a64": {
+      "kind": "integrity_error",
+      "local": {
+        "subsystem": "dm-verity",
+        "count": "1"
+      },
+      "extra": {},
+      "messages": [
+        "device-mapper: verity: 252:0: data block 77 is corrupted"
+      ]
+    },
+    "ee2d28435365b657": {
+      "kind": "integrity_error",
+      "local": {
+        "subsystem": "fs-verity",
+        "count": "2-10"
+      },
+      "extra": {},
+      "messages": [
+        "fs-verity (nvme0n1p3, inode 4242): FILE CORRUPTED! pos=4096, level=0, want_hash=sha256:aa, real_hash=sha256:bb (file /home/brian/secret.txt)",
+        "fs-verity (nvme0n1p3, inode 4243): FILE CORRUPTED! pos=0, level=0, want_hash=sha256:cc, real_hash=sha256:dd"
+      ]
+    },
+    "7353e332c0c70754": {
+      "kind": "crash",
+      "local": {
+        "exe": "gnome-shell",
+        "signal": "SIGSEGV",
+        "package": "gnome-shell",
+        "package_version": "48.4-1"
+      },
+      "extra": {
+        "exe_path": "/usr/bin/gnome-shell"
+      },
+      "messages": [
+        "Process 4711 (gnome-shell) of user 0 dumped core.\n\nStack trace of thread 4711:\n#0 0x00007f in g_main_loop (/home/brian/.local/lib/libx.so)"
+      ]
+    },
+    "658d8b6145a2afc2": {
+      "kind": "crash",
+      "local": {
+        "exe": "tool",
+        "signal": "SIGABRT"
+      },
+      "extra": {
+        "exe_path": "/opt/brian/tool"
+      },
+      "messages": [
+        "Process 12 (tool) of user 0 dumped core."
+      ]
+    },
+    "2d92745c3c95a97f": {
+      "kind": "app_problem",
+      "local": {
+        "app_id": "org.frostyard.Frostmail",
+        "app_version": "1.2.0",
+        "runtime": "go",
+        "component": "daemon",
+        "class": "error",
+        "code": "store.migrate_failed"
+      },
+      "extra": {},
+      "messages": [
+        "migrate /home/brian/.local/share/frostmail/store.db: disk I/O error"
+      ]
+    },
+    "2b32f07ed829da93": {
+      "kind": "app_problem",
+      "local": {
+        "app_id": "org.frostyard.pilothouse",
+        "app_version": "2.0.1",
+        "runtime": "go",
+        "component": "daemon",
+        "class": "panic",
+        "frames": [
+          "runtime.gopanic",
+          "github.com/frostyard/pilothouse/internal/broker.(*Broker).Probe",
+          "main.main"
+        ]
+      },
+      "extra": {},
+      "messages": [
+        "panic: runtime error: invalid memory address"
+      ]
+    }
+  }
+}

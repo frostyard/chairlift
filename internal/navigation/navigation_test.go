@@ -174,7 +174,12 @@ func TestPageMetadataCoversEveryBuilderBackedGroup(t *testing.T) {
 			"health_group",
 		},
 		"features": {"features_group"},
-		"help":     {"help_resources_group"},
+		"problems": {
+			"problems_system_group",
+			"problems_apps_group",
+			"problems_reporting_group",
+		},
+		"help": {"help_resources_group"},
 	}
 
 	items := Items()
@@ -415,6 +420,59 @@ func TestEveryAdvertisedActionIsRegistered(t *testing.T) {
 		if !strings.Contains(app, fragment) {
 			t.Errorf("%s does not wire app.quit: missing %q", sources["app."], fragment)
 		}
+	}
+}
+
+// TestCanonicalPageOrderHasSevenPages pins the sidebar order and the
+// Alt+number key of every page when all are visible: Problems comes directly
+// before Help, so Help moves from Alt+6 to Alt+7 (ADR-0015).
+func TestCanonicalPageOrderHasSevenPages(t *testing.T) {
+	want := []struct{ name, title, icon, configPage string }{
+		{"applications", "Applications", "application-x-executable-symbolic", "applications_page"},
+		{"maintenance", "Maintenance", "emblem-system-symbolic", "maintenance_page"},
+		{"updates", "Updates", "software-update-available-symbolic", "updates_page"},
+		{"system", "System", "computer-symbolic", "system_page"},
+		{"features", "Features", "application-x-addon-symbolic", "features_page"},
+		{"problems", "Problems", "dialog-warning-symbolic", "problems_page"},
+		{"help", "Help", "help-browser-symbolic", "help_page"},
+	}
+	all := VisibleItems(func(string, string) bool { return true })
+	if len(all) != len(want) || len(Items()) != len(want) {
+		t.Fatalf("VisibleItems(all) has %d pages and Items() %d, want %d", len(all), len(Items()), len(want))
+	}
+	for i, w := range want {
+		got := all[i]
+		if got.Name != w.name || got.Title != w.title || got.Icon != w.icon || got.ConfigPage != w.configPage {
+			t.Errorf("page %d = %+v, want %+v", i, got, w)
+		}
+		if wantAccel := "<Alt>" + strconv.Itoa(i+1); got.Accelerator != wantAccel {
+			t.Errorf("%s accelerator = %q, want %q", got.Name, got.Accelerator, wantAccel)
+		}
+	}
+	if help := all[len(all)-1]; help.Display != "Alt+7" || !help.AlwaysShow {
+		t.Errorf("Help = %+v, want Alt+7 and always shown", help)
+	}
+}
+
+// TestProblemsPageOmittedOnlyWhenAllGroupsOff proves the existing page rule
+// applies to Problems: any one enabled group keeps the page, and all three
+// off omit it while the other pages stay.
+func TestProblemsPageOmittedOnlyWhenAllGroupsOff(t *testing.T) {
+	groups := []string{"problems_system_group", "problems_apps_group", "problems_reporting_group"}
+	for _, on := range groups {
+		got := VisibleItems(func(page, group string) bool {
+			return page != "problems_page" || group == on
+		})
+		if !containsPage(got, "problems") || len(got) != 7 {
+			t.Errorf("only %s on: visible = %d pages, problems kept = %v; want 7 and true", on, len(got), containsPage(got, "problems"))
+		}
+	}
+	got := VisibleItems(func(page, group string) bool { return page != "problems_page" })
+	if containsPage(got, "problems") || len(got) != 6 {
+		t.Fatalf("all Problems groups off: visible = %#v, want the 6 other pages", got)
+	}
+	if got[5].Name != "help" || got[5].Display != "Alt+6" {
+		t.Errorf("Help without Problems = %+v, want Alt+6", got[5])
 	}
 }
 

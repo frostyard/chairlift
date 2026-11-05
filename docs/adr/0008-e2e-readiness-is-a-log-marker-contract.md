@@ -16,19 +16,25 @@ a definition a test can poll.
 
 ## Decision
 
-Startup readiness is a contract of three exact stdout markers, emitted by
-`internal/app/app.go` and polled verbatim by the E2E test:
+Startup readiness is a contract of exact stdout markers (three at first, four
+since ADR-0015), emitted by `internal/app/app.go` (the fourth by the Problems
+page) and polled verbatim by the E2E test:
 
 - `"Running in dry-run mode"` (`internal/app/app.go:83`)
 - `"ChairLift activated"` (`internal/app/app.go:104`)
 - `"app: window presented"` (`internal/app/app.go:118`; the test matches the
   line's fixed prefix)
+- `"problems: page built system=16 apps=7 source=ok"` (added by
+  [ADR-0015](0015-problems-page-and-opt-in-reporting.md):
+  `problems.BuiltMarker`, logged by `internal/views/problems_page.go` after
+  the Problems page is filled from the fixtures that the test passes in
+  `CHAIRLIFT_PROBLEMS_FIXTURES`, honored with `--dry-run` only)
 
 `TestApplicationStartsInDryRun` (`test/e2e/e2e_test.go:48-118`) launches the
 built binary with `--dry-run` under `dbus-run-session -- xvfb-run -a`, in a
 sanitized environment (`LANG=C`, `LC_ALL=C`, `NO_AT_BRIDGE=1`,
 `GTK_A11Y=none`, `GSETTINGS_BACKEND=memory`, `HOME=` a temp dir), polls
-combined output every 50ms for all three markers with a 30-second timeout,
+combined output every 50ms for all the markers with a 30-second timeout,
 requires one further second of stability (the process must not exit), then
 terminates its private process group.
 

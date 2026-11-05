@@ -31,8 +31,10 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   `chairlift-first-run --help`, runs `--mark-done` and the gate against
   temporary homes (as `nobody` when the test runs as root), and starts
   `chairlift --first-run --dry-run` until it logs `first-run: window
-  presented`, with no marker written. Main-window startup polls the three
-  readiness log markers for up to 30 seconds, requires one additional second of process stability, and
+  presented`, with no marker written. Main-window startup runs with
+  `CHAIRLIFT_PROBLEMS_FIXTURES` set to `test/e2e/testdata/problems/` and
+  polls the four readiness log markers (the fourth is `problems: page built
+  system=16 apps=7 source=ok`) for up to 30 seconds, requires one additional second of process stability, and
   terminates the private process group as soon as the smoke check passes. It
   requires GTK4, Libadwaita, `dbus-run-session`, and `xvfb-run`; the hosted E2E job
   installs those runtime dependencies explicitly because ordinary unit-test
@@ -99,11 +101,15 @@ control is hand-written Go, YAML, and data assets.
 - **Internal dependencies** (`go.mod`): `github.com/frostyard/snowkit`
   (direct, GObject/main-thread helpers), `github.com/frostyard/updex/v2`
   (direct, feature SDK and the helper's engine) and `github.com/frostyard/std`
-  (indirect, pulled in by updex). Take versions from `go.mod`, never from
+  (direct since ADR-0015: its `problems` package writes ChairLift's own
+  problem records and reads the user journal's records; updex also uses its
+  `reporter`). Take versions from `go.mod`, never from
   prose. Other frostyard pins: the `frostyard/apt-publisher` dispatch in
   `release.yml`, and `docs/org-adrs.md` for org ADRs in frostyard/core. After
   an updex bump, read the SDK source in `GOMODCACHE` for changed behavior
-  (the operation lock, image gates) before merging.
+  (the operation lock, image gates) before merging. After a std bump, read
+  `problems` in `GOMODCACHE` (the reader's validation, and `Read`'s
+  journalctl arguments, which `problems.JournalArgs` copies) and check that updex's `reporter` use still builds.
 - **Consumers.** Snow Linux images (`frostyard/snosi`) install the `.deb` from
   `https://repository.frostyard.org/debian/` (README.md); apt-publisher
   dispatches the image rebuilds. Other consumers: not stated.
@@ -141,7 +147,7 @@ An agent must not break these:
   `internal/firstrun.Gate`; it ships in `frostyard-chairlift` only.
   `chairlift --first-run` uses the application ID
   `org.frostyard.ChairLift.FirstRun` and the window in
-  `internal/window/firstrun.go`; the six pages and `internal/navigation` do
+  `internal/window/firstrun.go`; the seven pages and `internal/navigation` do
   not know it. `firstrun.MarkDone` is the only writer of the markers
   (`chairlift/first-run.done` and, until ADR-0014's dated end rule, the legacy
   `snow-first-setup.done`), reached only through `firstrun.Complete`; reading
@@ -173,7 +179,32 @@ An agent must not break these:
   a test binary on ordinary CI hosts. Shared row text, page status, os-release
   parsing, help-link ordering, and maintenance-command selection live in the
   pure `internal/views/pageview` package; its wiring test must continue to
-  cover all six page builders.
+  cover all seven page builders (it fails when a `*_page.go` file is missing
+  from its table).
+- **The Problems page is local, checks every value, and sends nothing in
+  phase 1** ([ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md),
+  [spec](docs/specs/problems-page.md)). Its data lives in the pure
+  `internal/problems` package, which imports no puregotk and no network
+  package (`net`, `net/...`, `crypto/tls`; guarded by
+  `TestNoNetworkImports` and `TestNoNetworkDependencies`). The snosi-health
+  paths (`/var/lib/snosi-health/problems.json`, `details.json`) are fixed
+  constants, never configuration. ChairLift re-validates every detail value
+  against `frostyard.problem/1` and never trusts the file's `reportable` flag
+  alone; details.json text, `MESSAGE`, paths and trusted journald fields are
+  local display text and never enter `BuildPayload`. The live journal read
+  is capped (`readJournal`, 8 MiB, kill at the cap); do not use std's
+  unbounded `problems.Read`. A number or boolean must be that JSON token
+  type, never JSON text. The vendored
+  `internal/problems/testdata/schema/v1.json` is a pinned byte copy of core's
+  schema: a new schema version is a new copy with new enums and hints, never
+  an edit. Every enum value of the hinted fields and every known code needs a
+  hint. Dismiss goes through `actionmsg.ProblemDismiss` (dry run writes and
+  hides nothing). `CHAIRLIFT_PROBLEMS_FIXTURES` is honored only with
+  `--dry-run`, and `problems: page built ...` is a log contract (ADR-0008).
+  ChairLift's own problem records go through `internal/selfreport`: its code
+  constants are the only spelling of each code, each code has 1 tested call
+  site (`TestCodesAreRecordedAtTheirPaths`), and `main` defers
+  `RecoverPanic` after `selfreport.Init(version.Version)`.
 - **Navigation behavior has one authority.** Page order, titles, icons, and
   advertised/registered accelerators live in the pure
   `internal/navigation` package. It also decides page visibility from static

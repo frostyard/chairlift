@@ -9,6 +9,7 @@ import (
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/navigation"
+	"github.com/frostyard/chairlift/internal/selfreport"
 	"github.com/frostyard/chairlift/internal/version"
 	"github.com/frostyard/chairlift/internal/views"
 
@@ -62,6 +63,9 @@ func init() {
 				cfgStart := time.Now()
 				cfg, configErr := config.Load()
 				log.Printf("window: config loaded in %s", time.Since(cfgStart))
+				if configErr != nil {
+					selfreport.Error(selfreport.CodeConfigLoadFailed, configErr)
+				}
 
 				w := &Window{
 					ApplicationWindow: parent,

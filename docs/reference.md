@@ -134,6 +134,24 @@ authentication through PolicyKit and are performed by the fixed
 `/usr/bin/chairlift-updex-helper` binary. ChairLift installs no passwordless
 authorization rule.
 
+### Problems Page (`problems_page`)
+
+Local problem records; ChairLift sends nothing
+([ADR-0015](adr/0015-problems-page-and-opt-in-reporting.md),
+[specs/problems-page.md](specs/problems-page.md)). The page sits directly
+before Help, so with every page visible Help is `Alt+7`.
+
+| Group | Key | Description |
+|-------|-----|-------------|
+| System | `problems_system_group` | Problems from `/var/lib/snosi-health/problems.json` (fixed path); "System checks are not available on this system" without the file |
+| Apps | `problems_apps_group` | The user's crashes (`coredumpctl`, last 90 days) and frostyard app problem records (user journal) |
+| Reporting | `problems_reporting_group` | States that problem reports stay on this computer |
+
+Each problem row expands to a hint, the recorded values, the local details,
+**Copy details** and **Dismiss**. A dismissed problem is kept in
+`$XDG_STATE_HOME/chairlift/problems-seen.json` and shows again when it
+happens again. Under `--dry-run`, Dismiss changes nothing.
+
 ### Help Page (`help_page`)
 
 | Group | Key | Description |

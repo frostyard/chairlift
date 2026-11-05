@@ -87,6 +87,47 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 			},
 			retired: []string{"bufio.NewScanner(", "cases.Title(", "digest[:19]"},
 		},
+		{
+			file: "problems_page.go",
+			required: []string{
+				"pageview.Problem(",
+				"pageview.ProblemDetails(",
+				"pageview.ProblemsSystemStatus(",
+				"pageview.ProblemsAppsStatus(",
+				"pageview.ProblemsReporting(",
+				"glib.MarkupEscapeText(text.Title, -1)",
+				"glib.MarkupEscapeText(text.Subtitle, -1)",
+				"actionmsg.ProblemDismiss(IsDryRun(), item.ID, text.Title)",
+				"problems.DetailsText(item)",
+				"problems.BuiltMarker(",
+				"sgtk.RunOnMainThread(",
+			},
+			retired: []string{
+				`"System checks are not available on this system"`,
+				`"No problems found"`,
+				"problems.Title(",
+				"problems.Hint(",
+				"exec.Command",
+			},
+		},
+	}
+
+	// Every page builder file must be in the table above.
+	pageFiles, err := filepath.Glob(filepath.Join(viewsDir, "*_page.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pageFiles) != 7 || len(pageFiles) != len(tests) {
+		t.Fatalf("found %d page builders, the table covers %d; want 7 each", len(pageFiles), len(tests))
+	}
+	covered := map[string]bool{}
+	for _, tt := range tests {
+		covered[tt.file] = true
+	}
+	for _, path := range pageFiles {
+		if !covered[filepath.Base(path)] {
+			t.Errorf("page builder %s is not covered by the wiring test", filepath.Base(path))
+		}
 	}
 
 	for _, tt := range tests {

@@ -77,11 +77,17 @@ are listed in [org-adrs.md](org-adrs.md).
   `chairlift-first-run` gate, its own application ID, one marker writer that
   also writes first-setup's marker until the dated end rule, no autostart in
   the deb, the `first_run_page` config, and embedded `.po` translations
+- [adr/0015-problems-page-and-opt-in-reporting.md](adr/0015-problems-page-and-opt-in-reporting.md)
+  — a 7th page, Problems, shows snosi-health's system problems, the user's
+  crashes and frostyard app records, local only (phase 1 sends nothing);
+  every value is checked against `frostyard.problem/1` again; ChairLift
+  records its own panics and 4 coded errors through std `problems`
 
 ### Design
 
 - [design/overview.md](design/overview.md) — architecture entry point:
-  purpose, dependency flow, key patterns, the first-run mode, configuration,
+  purpose, dependency flow, key patterns, the Problems page, the first-run
+  mode, configuration,
   build and release (formerly `yeti/OVERVIEW.md`)
 - [design/package-managers.md](design/package-managers.md) — the Homebrew,
   Flatpak, fwupd, bootc, sysupdate, and updex wrappers and their view-layer
@@ -89,7 +95,10 @@ are listed in [org-adrs.md](org-adrs.md).
 
 ### Specs
 
-*(none yet)*
+- [specs/problems-page.md](specs/problems-page.md) — the Problems page's
+  sources and limits, the problems.json outcomes, the validation and
+  reportable rules, the merge rule, the dismiss store, the dry-run fixture
+  hook, and the `problems: page built` log marker
 
 ### Plans
 

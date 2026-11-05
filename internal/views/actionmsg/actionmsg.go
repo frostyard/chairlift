@@ -4,8 +4,8 @@
 // Brewfile dumps and installs, Homebrew/Flatpak cleanup, Homebrew package
 // installs/uninstalls/pins/upgrades/self-updates, Flatpak application
 // uninstalls/updates, Homebrew tap trust, bootc system update staging,
-// firmware updates through fwupd, configured custom maintenance scripts, and
-// system feature toggles/updates.
+// firmware updates through fwupd, configured custom maintenance scripts,
+// system feature toggles/updates, and Problems page dismissals.
 //
 // It is deliberately free of any puregotk/GTK import, following the
 // internal/views/trustmsg pattern, so its logic can be unit-tested on a
@@ -30,7 +30,9 @@
 // state. FeatureUpdate decides the toast text and whether it persists from
 // the update's per-feature results. FirmwareInstall decides whether the page
 // publishes a verified device list, restores the install button, and shows an
-// error toast, from fwupd's own verification of the install. Those latter UI-side decisions have no
+// error toast, from fwupd's own verification of the install. ProblemDismiss
+// decides whether the Problems page writes a dismissal and hides its row
+// (problems.go). Those latter UI-side decisions have no
 // wrapper-package equivalent even though the wrappers already gate their
 // underlying command.
 package actionmsg
