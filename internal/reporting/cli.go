@@ -129,9 +129,17 @@ func SendPending(ctx context.Context, in CLIInput) int {
 		newSender = func(endpoint string) Sender { return NewHTTPSender(endpoint) }
 	}
 	run := RunInput{
-		Now:         nowf,
-		GroupOn:     true,
-		Consent:     func() Consent { return consent },
+		Now:     nowf,
+		GroupOn: true,
+		// Read the consent file again before each request, so a withdrawal
+		// during the run stops it at once; a read failure is off.
+		Consent: func() Consent {
+			next, err := LoadConsent(consentPath)
+			if err != nil {
+				return Consent{}
+			}
+			return next
+		},
 		StatePath:   statePath,
 		Items:       items,
 		Envelope:    snap.System.Envelope,

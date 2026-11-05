@@ -1,6 +1,7 @@
 package window
 
 import (
+	"errors"
 	"log"
 	"os"
 	"os/exec"
@@ -35,6 +36,15 @@ func (w *FirstRunWindow) buildReporting() *adw.StatusPage {
 	page.SetDescription(i18n.T(i18n.MsgReportingDesc))
 	w.reportingPage = page
 
+	// 1 serial writer for the consent: the latest choice wins, and a fast On
+	// then Off cannot end On (ADR-0015).
+	w.reportingWrite = reporting.NewConsentWriter(w.reportingRecord, func(c reporting.Consent) error {
+		if w.reportingPath == "" {
+			return errNoConsentPath
+		}
+		return reporting.SaveConsent(w.reportingPath, c)
+	}, w.onReportingWritten)
+
 	w.reportingSwitch = adw.NewSwitchRow()
 	w.reportingSwitch.SetTitle(glib.MarkupEscapeText(i18n.T(i18n.MsgReportingSwitch), -1))
 	w.reportingSwitch.SetSubtitle(glib.MarkupEscapeText(i18n.T(i18n.MsgReportingOff), -1))
@@ -50,8 +60,8 @@ func (w *FirstRunWindow) buildReporting() *adw.StatusPage {
 	w.reportingSwitch.ConnectNotify(&notifyCb)
 	if w.reportingRecord.Allows() {
 		w.reportingSwitch.SetActive(true)
-		w.showReporting()
 	}
+	w.showReporting()
 
 	group := adw.NewPreferencesGroup()
 	group.Add(&w.reportingSwitch.Widget)
@@ -72,15 +82,14 @@ func (w *FirstRunWindow) buildReporting() *adw.StatusPage {
 	return page
 }
 
-// onReportingSwitched writes the user's choice to the consent file, off the
-// GTK thread. A dry run writes nothing (ADR-0009). A failed write puts the
-// switch back.
+// onReportingSwitched takes the user's choice. The wanted consent is stored
+// and shown at once, so the switch reflects the choice whatever the write
+// does; the serial writer saves it. A dry run writes nothing (ADR-0009).
 func (w *FirstRunWindow) onReportingSwitched(enabled bool) {
 	if !reporting.SwitchChanged(w.reportingRecord, enabled) {
 		return
 	}
-	previous := w.reportingRecord
-	mode := previous.Mode
+	mode := w.reportingRecord.Mode
 	if mode != reporting.ModeAuto {
 		mode = reporting.ModeAsk
 	}
@@ -89,34 +98,40 @@ func (w *FirstRunWindow) onReportingSwitched(enabled bool) {
 		log.Println(decision.Log)
 	}
 	record := reporting.Decide(enabled, mode, time.Now())
+	w.reportingRecord = record
+	w.showReporting()
 	if !decision.Persist {
-		w.reportingRecord = record
-		w.showReporting()
 		w.toasts.AddToast(plainToast(decision.Toast))
 		return
 	}
-	path := w.reportingPath
-	if path == "" {
-		w.reportingRecord = previous
+	if w.reportingWrite == nil {
+		w.reportingRecord = reporting.Consent{}
 		w.showReporting()
 		w.toasts.AddToast(plainToast(i18n.T(i18n.MsgReportingSaveFailed)))
 		return
 	}
-	go func() {
-		err := reporting.SaveConsent(path, record)
-		sgtk.RunOnMainThread(func() {
-			if err != nil {
-				log.Printf("first-run: save problem reporting: %v", err)
-				w.reportingRecord = previous
+	w.reportingWrite.Set(record)
+}
+
+// onReportingWritten handles 1 consent write on the GTK main thread. A result
+// that a newer choice already replaced is ignored, and a failed latest write
+// puts the value on disk back on the switch.
+func (w *FirstRunWindow) onReportingWritten(res reporting.ConsentResult) {
+	sgtk.RunOnMainThread(func() {
+		if res.Err != nil {
+			log.Printf("first-run: save problem reporting: %v", res.Err)
+			if res.Restored {
+				w.reportingRecord = res.Persisted
 				w.showReporting()
 				w.toasts.AddToast(plainToast(i18n.T(i18n.MsgReportingSaveFailed)))
-				return
 			}
-			w.reportingRecord = record
-			w.showReporting()
-			w.toasts.AddToast(plainToast(decision.Toast))
-		})
-	}()
+			return
+		}
+		if w.reportingWrite == nil || res.Gen != w.reportingWrite.Current() {
+			return
+		}
+		w.toasts.AddToast(plainToast(actionmsg.ReportingConsent(false, res.Consent.Allows(), string(res.Consent.Mode)).Toast))
+	})
 }
 
 // showReporting applies the stored consent to the step's switch and text.
@@ -126,11 +141,7 @@ func (w *FirstRunWindow) showReporting() {
 		return
 	}
 	w.reportingSwitch.SetActive(w.reportingRecord.Allows())
-	subtitle := i18n.T(i18n.MsgReportingOff)
-	if w.reportingRecord.Allows() {
-		subtitle = i18n.T(i18n.MsgReportingOn)
-	}
-	w.reportingSwitch.SetSubtitle(glib.MarkupEscapeText(subtitle, -1))
+	w.reportingSwitch.SetSubtitle(glib.MarkupEscapeText(i18n.T(firstrun.ReportingStatusMsgid(w.reportingRecord)), -1))
 }
 
 // openPrivacyPage opens the privacy page in the default browser with
@@ -144,6 +155,10 @@ func (w *FirstRunWindow) openPrivacyPage() {
 	}
 	go func() { _ = cmd.Wait() }()
 }
+
+// errNoConsentPath is the failure of a consent write when this user has no
+// config home.
+var errNoConsentPath = errors.New("first-run: the consent file has no path")
 
 // plainToast returns a toast with plain text, so an error cannot be read as
 // markup.

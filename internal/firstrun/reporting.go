@@ -4,7 +4,9 @@ import (
 	"io/fs"
 	"os"
 
+	"github.com/frostyard/chairlift/internal/i18n"
 	"github.com/frostyard/chairlift/internal/problems"
+	"github.com/frostyard/chairlift/internal/reporting"
 )
 
 // ReportingAvailable reports whether the optional problem-reporting step
@@ -23,4 +25,17 @@ func ReportingAvailable(groupOn bool, stat func(string) (fs.FileInfo, error)) bo
 	}
 	info, err := stat(problems.ProblemsPath)
 	return err == nil && info.Mode().IsRegular()
+}
+
+// ReportingStatusMsgid returns the msgid of the first run's reporting status
+// text for a consent: off, on and asking before each report, or on and
+// sending automatically. A stale consent reads as off, as its switch does.
+func ReportingStatusMsgid(c reporting.Consent) string {
+	if !c.Allows() {
+		return i18n.MsgReportingOff
+	}
+	if c.Mode == reporting.ModeAuto {
+		return i18n.MsgReportingOnAuto
+	}
+	return i18n.MsgReportingOn
 }

@@ -92,6 +92,12 @@ func Run(ctx context.Context, in RunInput) RunResult {
 	if in.DryRun {
 		return runDry(ctx, in, logf, nowf)
 	}
+	if in.Sender == nil {
+		// No endpoint is configured, so there is nowhere to send: nothing is
+		// read, written or sent.
+		res.Skipped = "no endpoint"
+		return res
+	}
 
 	dir := filepath.Dir(in.StatePath)
 	unlock, err := Lock(dir)
@@ -120,22 +126,46 @@ func Run(ctx context.Context, in RunInput) RunResult {
 		return res
 	}
 
-	save := func() {
-		if err := st.Save(in.StatePath); err != nil {
-			logf("reporting: " + err.Error())
-		}
-	}
 	allowed := func() bool {
 		next := consent()
 		return next.Allows() && next.Mode == ModeAuto
 	}
 	requests := 0
-	send := func(r Report) error {
-		if requests > 0 && !wait(ctx, in.Pace) {
+	// pace waits between 2 requests, and reports a cancelled context.
+	pace := func() error {
+		if requests == 0 {
+			return nil
+		}
+		if !wait(ctx, in.Pace) {
 			return ctx.Err()
 		}
-		requests++
-		return in.Sender.Send(ctx, r.Body)
+		return nil
+	}
+	// sendRecorded records the report, saves the sent log, and then sends it.
+	// The entry is on disk before the request, so a process that exits during
+	// the request can only under-send, never send the same report twice. A
+	// failed request removes the entry again and pauses automatic sending.
+	// undo restores the in-memory state; the first save's failure leaves the
+	// file untouched, because Save writes a temporary file and renames it.
+	sendRecorded := func(r Report, record func(Entry), undo func()) (Entry, error, error) {
+		entry := Entry{
+			ReportID:  r.ReportID,
+			Kind:      r.Kind,
+			ProblemID: r.ProblemID,
+			Week:      r.Week,
+			SentAt:    nowf().UTC(),
+		}
+		record(entry)
+		if err := st.Save(in.StatePath); err != nil {
+			undo()
+			return Entry{}, err, nil
+		}
+		if err := in.Sender.Send(ctx, r.Body); err != nil {
+			undo()
+			st.Fail(nowf())
+			return Entry{}, err, st.Save(in.StatePath)
+		}
+		return entry, nil, nil
 	}
 
 	left := st.Remaining(now)
@@ -151,33 +181,37 @@ func Run(ctx context.Context, in RunInput) RunResult {
 		}
 		if !allowed() {
 			logf("reporting: consent changed; stopping")
-			break
+			return res
 		}
 		r, err := ForItem(it, in.Client)
 		if err != nil {
 			logf("reporting: " + err.Error())
 			continue
 		}
-		if err := send(r); err != nil {
-			st.Fail(nowf())
-			save()
-			res.Err = err
+		if err := pace(); err != nil {
+			logf("reporting: stopped: " + err.Error())
 			return res
 		}
-		entry := Entry{
-			ReportID:  r.ReportID,
-			Kind:      r.Kind,
-			ProblemID: r.ProblemID,
-			Week:      r.Week,
-			SentAt:    nowf().UTC(),
+		// The consent is read again after the wait and just before the
+		// request: turning reporting off during the 7-second pace stops the
+		// next request at once, and that is not a failure.
+		if !allowed() {
+			logf("reporting: consent changed; stopping")
+			return res
 		}
-		st.Record(entry)
-		save()
+		entry, sendErr, saveErr := sendRecorded(r,
+			func(e Entry) { st.Record(e) },
+			func() { st.Forget(r.ReportID) })
+		if sendErr != nil {
+			res.Err = errors.Join(sendErr, saveErr)
+			return res
+		}
+		requests++
 		res.Sent = append(res.Sent, entry)
 		left--
 	}
 
-	if res.Err != nil || !st.CountDue(nowf()) || !in.Envelope.Valid {
+	if !st.CountDue(nowf()) || !in.Envelope.Valid {
 		return res
 	}
 	info := in.InstallInfo
@@ -193,19 +227,25 @@ func Run(ctx context.Context, in RunInput) RunResult {
 		logf("reporting: " + err.Error())
 		return res
 	}
+	if err := pace(); err != nil {
+		logf("reporting: stopped: " + err.Error())
+		return res
+	}
 	if !allowed() {
 		logf("reporting: consent changed; stopping")
 		return res
 	}
-	if err := send(r); err != nil {
-		st.Fail(nowf())
-		save()
-		res.Err = err
+	priorWeek := st.CountWeek
+	entry, sendErr, saveErr := sendRecorded(r,
+		func(e Entry) { st.RecordCount(r.Week, e) },
+		func() {
+			st.Forget(r.ReportID)
+			st.SetCountWeek(priorWeek)
+		})
+	if sendErr != nil {
+		res.Err = errors.Join(sendErr, saveErr)
 		return res
 	}
-	entry := Entry{ReportID: r.ReportID, Kind: r.Kind, Week: r.Week, SentAt: nowf().UTC()}
-	st.RecordCount(r.Week, entry)
-	save()
 	res.Sent = append(res.Sent, entry)
 	return res
 }

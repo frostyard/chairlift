@@ -113,18 +113,31 @@ Facts that constrain it:
       send the pending reports, at most 20 in 24 hours, paced at 7 seconds
       apart (the intake API allows 10 a minute), and each problem once per
       week. The weekly count (install age bucket and update channel only)
-      goes at most once per ISO week.
+      goes at most once per ISO week. These are 2 separate limits: the count
+      does not use the 20-report budget.
+    - **1 write at a time, and 1 order for a send.** A serial consent writer
+      keeps the latest choice (`reporting.ConsentWriter`): a fast On then Off
+      ends Off, a slow write cannot undo a later choice, and a failed latest
+      write shows the value that is on disk again. A send records and saves
+      its entry BEFORE the request, so a process that exits during a request
+      can only under-send; a failed request removes the entry and pauses.
+      The consent is read again after the pace wait and just before each
+      request, so a withdrawal stops the run at once, and it is a normal
+      stop, not a failure.
     - **A failed send waits 24 hours.** The first failure pauses every
       automatic send for 24 hours, and the next run says why. An explicit
-      Report dialog send ignores the pause: the user asked for it.
+      Report dialog send ignores the pause: the user asked for it, and the
+      dialog refuses a report this week's log already holds.
     - **One sender per host.** A non-blocking lock (`reports.lock`) keeps the
       window and the command line apart.
     - **Kind `crash` is never sent in phase 2.** The sender refuses it before
       any network call, and the page offers no Report button for it.
-    - **Admin-only endpoint.** `problems_reporting_group.endpoint` counts
-      only from `/etc/chairlift/config.yml` or
+    - **Admin-only endpoint, and no fallback.** `problems_reporting_group.endpoint`
+      counts only from `/etc/chairlift/config.yml` or
       `/usr/share/chairlift/config.yml`; the user-writable development
-      fallback is ignored with 1 log line.
+      fallback is ignored with 1 log line. Only `reporting.ParseEndpoint`
+      chooses the default: an endpoint that fails to parse disables every
+      send path and never falls back to the public service.
     - **A windowless mode and an optional first-run step.** `chairlift
       --send-pending-reports` runs the automatic send and exits, with no
       window and no GTK; `--dry-run` prints the reports and sends nothing.

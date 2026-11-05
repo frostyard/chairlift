@@ -343,3 +343,33 @@ func (errFake) Error() string { return "fake configuration error" }
 
 // ptr returns a pointer to v.
 func ptr[T any](v T) *T { return &v }
+
+// TestSendPendingReloadsTheConsentBeforeEachRequest proves the windowless
+// mode reads the consent file again before each request: a withdrawal during
+// the run stops the next request.
+func TestSendPendingReloadsTheConsentBeforeEachRequest(t *testing.T) {
+	env := newCLIEnv(t)
+	env.writeConsent(autoConsent())
+	env.snapshot = problems.Snapshot{
+		System:      problems.SystemFile{Envelope: validEnvelope()},
+		SystemItems: reportableItems(3),
+	}
+	sender := &recordingSender{}
+	// The user turns reporting off while the first request runs.
+	sender.onSend = func(n int) {
+		if n == 1 {
+			env.writeConsent(Decide(false, ModeAsk, testStart))
+		}
+	}
+	code, _, stderr := env.run(CLIInput{
+		Config:    testConfig(true, ""),
+		Version:   "0.15.0",
+		NewSender: func(string) Sender { return sender },
+	})
+	if code != 0 {
+		t.Fatalf("SendPending() = %d, want 0 (stderr %q)", code, stderr)
+	}
+	if got := sender.count(); got != 1 {
+		t.Fatalf("%d requests were made after a withdrawal, want 1", got)
+	}
+}

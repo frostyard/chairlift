@@ -220,3 +220,24 @@ func TestHTTPSenderStatusCodes(t *testing.T) {
 		srv.Close()
 	}
 }
+
+// TestHTTPSenderWithoutAnEndpointSendsNothing proves an empty endpoint makes
+// no request: only ParseEndpoint("") chooses the default, so an invalid
+// administrator setting can never fall back to the public service.
+func TestHTTPSenderWithoutAnEndpointSendsNothing(t *testing.T) {
+	item, _ := kindItem("unit_failed")
+	r, err := ForItem(item, "chairlift/0.14.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, sender := range map[string]*HTTPSender{
+		"empty struct": {},
+		"new empty":    NewHTTPSender(""),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := sender.Send(context.Background(), r.Body); !errors.Is(err, ErrNoEndpoint) {
+				t.Fatalf("Send() = %v, want ErrNoEndpoint", err)
+			}
+		})
+	}
+}

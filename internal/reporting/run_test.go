@@ -247,10 +247,12 @@ func TestRunConsentTurnedOffBetweenRequestsStops(t *testing.T) {
 	clk := newClock(testStart)
 	sender := &recordingSender{}
 	in := input(clk, newStatePath(t), sender, reportableItems(5))
+	// Run reads the consent before each report and again after the pace, so
+	// the first report's 3 reads allow and every later read refuses.
 	calls := 0
 	in.Consent = func() Consent {
 		calls++
-		if calls > 2 {
+		if calls > 3 {
 			return Consent{}
 		}
 		return autoConsent()
@@ -541,4 +543,150 @@ func validateBody(t *testing.T, v *schemacheck.Validator, body []byte) []string 
 		t.Fatalf("validate: %v", err)
 	}
 	return errs
+}
+
+// TestRunWithdrawDuringThePaceStopsTheNextRequest proves the consent is read
+// again after the pace wait: turning reporting off during the wait stops the
+// next request, and that is not a failure (no pause).
+func TestRunWithdrawDuringThePaceStopsTheNextRequest(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{}
+	off := false
+	in := input(clk, statePath, sender, reportableItems(3))
+	in.Pace = 50 * time.Millisecond
+	in.Consent = func() Consent {
+		if off {
+			return Consent{}
+		}
+		return autoConsent()
+	}
+	// Turn reporting off during the wait before the second request.
+	sender.onSend = func(n int) {
+		if n == 1 {
+			off = true
+		}
+	}
+	res := Run(context.Background(), in)
+	if got := sender.count(); got != 1 {
+		t.Fatalf("%d requests were made, want 1", got)
+	}
+	if res.Err != nil {
+		t.Fatalf("Run() error = %v, want a normal stop", res.Err)
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if st.Paused(clk.Now()) {
+		t.Error("a withdrawal paused automatic sending, want no pause")
+	}
+	if len(st.Sent) != 1 {
+		t.Errorf("the sent log holds %d entries, want 1", len(st.Sent))
+	}
+}
+
+// TestRunWithoutASenderSendsNothing proves a missing endpoint stops the run
+// before it reads or writes anything.
+func TestRunWithoutASenderSendsNothing(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	in := input(clk, statePath, nil, reportableItems(2))
+	res := Run(context.Background(), in)
+	if res.Skipped != "no endpoint" {
+		t.Fatalf("Skipped = %q, want no endpoint", res.Skipped)
+	}
+	if len(res.Sent) != 0 {
+		t.Errorf("Sent holds %d entries, want 0", len(res.Sent))
+	}
+	if _, err := os.Stat(statePath); err == nil {
+		t.Errorf("the run wrote the sent log %s", statePath)
+	}
+}
+
+// TestRunSaveFailureMakesNoRequest proves the order record, save, then send: a
+// sent log that cannot be written stops the run with 0 requests.
+func TestRunSaveFailureMakesNoRequest(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("a root user may write into a read-only folder")
+	}
+	clk := newClock(testStart)
+	// The sent log exists and reads, but its folder admits no new file, so the
+	// save before the request fails.
+	statePath := newStatePath(t)
+	if err := (&State{}).Save(statePath); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	folder := filepath.Dir(statePath)
+	if err := os.Chmod(folder, 0o500); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(folder, 0o700) })
+	sender := &recordingSender{}
+	in := input(clk, statePath, sender, reportableItems(2))
+	in.Sender = sender
+	res := Run(context.Background(), in)
+	if sender.count() != 0 {
+		t.Fatalf("%d requests were made without a written sent log, want 0", sender.count())
+	}
+	if res.Err == nil {
+		t.Fatal("Run() error = nil, want the save failure")
+	}
+	if len(res.Sent) != 0 {
+		t.Errorf("Sent holds %d entries, want 0", len(res.Sent))
+	}
+}
+
+// TestRunFailedRequestRemovesTheEntry proves a failed request leaves no entry
+// for that report and pauses automatic sending.
+func TestRunFailedRequestRemovesTheEntry(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{err: &StatusError{Code: http.StatusServiceUnavailable}}
+	in := input(clk, statePath, sender, reportableItems(2))
+	in.Sender = sender
+	res := Run(context.Background(), in)
+	if res.Err == nil {
+		t.Fatal("Run() error = nil, want the send failure")
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if len(st.Sent) != 0 {
+		t.Errorf("the sent log holds %d entries after a failed request, want 0", len(st.Sent))
+	}
+	if !st.Paused(clk.Now()) {
+		t.Error("a failed request did not pause automatic sending")
+	}
+	// The report is still pending, so a run after the pause sends it again.
+	clk.Advance(25 * time.Hour)
+	sender.mu.Lock()
+	sender.err = nil
+	sender.mu.Unlock()
+	after := Run(context.Background(), in)
+	if len(after.Sent) != 2 {
+		t.Errorf("after the pause %d reports were sent, want 2", len(after.Sent))
+	}
+}
+
+// TestRunKeepsTheEntryOfASuccessfulRequest proves the entry is in the file
+// after a successful send.
+func TestRunKeepsTheEntryOfASuccessfulRequest(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{}
+	in := input(clk, statePath, sender, reportableItems(1))
+	in.Sender = sender
+	res := Run(context.Background(), in)
+	if len(res.Sent) != 1 {
+		t.Fatalf("Sent holds %d entries, want 1", len(res.Sent))
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if len(st.Sent) != 1 || st.Sent[0] != res.Sent[0] {
+		t.Errorf("the file holds %+v, want the sent entry", st.Sent)
+	}
 }

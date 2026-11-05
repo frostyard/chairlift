@@ -38,9 +38,19 @@ Nothing leaves the computer unless every rule below allows it.
 | `schema` | string | yes | the schema version the user agreed to |
 
 A missing file is the zero consent (off) with no error. A file that cannot be
-read, is larger than 64 KiB, or fails a rule above reads as off plus an error.
+read, is larger than 64 KiB, or fails a rule above reads off plus an error.
 `reporting.SaveConsent` writes a temporary file in the same folder (0600) and
 renames it; the folder is made with 0700.
+
+**The serial consent writer.** `reporting.ConsentWriter` writes the consent:
+`Set` stores the wanted consent and a new generation at once and queues the
+write; 1 worker goroutine writes only the latest wanted value, and a result
+carries its generation, so a result for an older generation is ignored. A
+failed write restores the last persisted value as the wanted value only when
+no newer choice exists. A goroutine per choice could end out of order and
+leave the wrong consent on disk, and a fast On then Off could end with On.
+The page and the first run publish the wanted value to the in-memory consent
+at once, so a send reads a withdrawal before its next request.
 
 The switch shows `Consent.Allows()`, not `Consent.Enabled`, and
 `reporting.SwitchChanged(stored, active)` decides whether the user changed it.
@@ -92,6 +102,7 @@ The log keeps at most 500 entries and drops every entry older than 90 days
 | `User-Agent` | none (the request sets it to the empty string) |
 | Body | exactly the bytes `Report.Body`; at most 8191 bytes |
 | Answer | 2xx is success; every other answer is `*reporting.StatusError{Code}`; a redirect is not followed (`http.ErrUseLastResponse`) |
+| Endpoint | `HTTPSender.Endpoint`; an empty value is `ErrNoEndpoint`, and no request is made |
 | Timeout | 15 s per request |
 
 The intake API answers `202 {"status":"accepted"}` and fails with 503 (kill
@@ -107,7 +118,12 @@ default endpoint. Only `/etc/chairlift/config.yml` and
 returns the value only for those 2 files and ignores it, with 1 log line, from
 the user-writable development fallback. `reporting.ParseEndpoint` accepts an
 absolute `http` or `https` URL with a host, no user information and no
-fragment; an empty value is the default.
+fragment; an empty value is `DefaultEndpoint`. Only `ParseEndpoint` chooses
+the default: a sender with an empty endpoint sends nothing, so a value that
+fails to parse can never fall back to the public service. The page then
+disables every send path (no automatic run, no Report… button, and
+`pageview.ReportingEndpointInvalid` as the group's description), and `Run`
+with a nil `Sender` returns `Skipped` "no endpoint".
 
 ### Reports
 
@@ -132,7 +148,15 @@ read, never its content.
 1. **Kind `crash` is never sent.** `ForItem` refuses it with
    `reporting.ErrLocalOnly`, `HTTPSender.Send` refuses it before any network
    call, and the page offers no Report button for it.
-2. **The automatic path (`reporting.Run`), in this order.** The group is off
+2. **The order of 1 send is record, save, then send.** Both paths put the
+   entry (or the count week) in the sent log and save it **before** the
+   request. If that save fails, nothing is sent and the error is returned. A
+   failed request removes the entry again (and puts the earlier count week
+   back), sets `retry_after`, and saves; if that save fails the error is
+   returned and the entry stays recorded, which can only under-send, never
+   send the same report twice. A process that exits during a request
+   therefore under-sends, never duplicates.
+3. **The automatic path (`reporting.Run`), in this order.** The group is off
    → nothing, `Skipped` "group off". The consent does not `Allows` → "consent".
    The mode is not `auto` → "ask mode". No release client string → "not a
    release build". The send lock is held → "busy". The sent log is unreadable
@@ -143,27 +167,27 @@ read, never its content.
    ISO week was not counted), the envelope is valid, and the install info is
    known. Before each request it reads the consent again and stops when it no
    longer allows sending.
-3. **The first failed send pauses everything for 24 hours.** `State.Fail`
+4. **The first failed send pauses everything for 24 hours.** `State.Fail`
    sets `retry_after` to now + 24 h, the log is saved, the run stops, and
    `RunResult.Err` carries the failure. Every success is recorded and saved at
    once.
-4. **The manual path (`reporting.SendReport`) needs the group, a consent that
+5. **The manual path (`reporting.SendReport`) needs the group, a consent that
    `Allows` (either mode), a release client, a kind that is not `crash`, and
    `Remaining > 0` (else `ErrDailyLimit`), and takes the lock. It ignores a
    pause: the user asked for this report. An unreadable sent log stops it too
    (`ErrStateUnreadable`): the cap cannot be checked and the log must not be
    overwritten. A failure sets `retry_after` too. It never runs under
    `--dry-run` (`ErrDryRun`); the caller decides that with `actionmsg.Report`.
-5. **1 lock per host.** `reporting.Lock` takes a non-blocking exclusive
+6. **1 lock per host.** `reporting.Lock` takes a non-blocking exclusive
    `flock` on `<state folder>/reports.lock`. A second holder gets
    `reporting.ErrBusy`: the GUI and `chairlift --send-pending-reports` never
    send at the same time.
-6. **`--dry-run` changes nothing** (ADR-0009). `Run` with `DryRun` builds
+7. **`--dry-run` changes nothing** (ADR-0009). `Run` with `DryRun` builds
    every report, logs `[DRY-RUN] would send report <kind>` for each, returns
    them in `RunResult.Previews`, calls no sender, reads and writes no state and
    takes no lock. `actionmsg.Report(true, kind)` has `Send=false` and
    `MarkSent=false`; `actionmsg.ReportingConsent(true, …)` has `Persist=false`.
-7. **The windowless mode.** `chairlift --send-pending-reports` runs before the
+8. **The windowless mode.** `chairlift --send-pending-reports` runs before the
    GTK application object exists. A configuration error prints 1 line and
    exits 1. The group off, a consent that does not `Allows` (including a stale
    schema), ask mode, or a version that is not a release prints 1 line and
@@ -171,12 +195,13 @@ read, never its content.
    (`problems.SeenPath`, `problems.LoadSeen`) and passes it to
    `problems.Load`, so it sends no problem the user dismissed; a store that
    cannot be read sends nothing and says why. Otherwise it runs `Run` and
-   exits 1 when a send failed, else 0. `--dry-run` prints each preview's
-   `Text()` to stdout and sends nothing.
-8. `internal/reporting` is the only package whose production code imports
+   exits 1 when a send failed, else 0. It reads the consent file again before
+   each request, so a withdrawal stops the run; a read error counts as off.
+   `--dry-run` prints each preview's `Text()` to stdout and sends nothing.
+9. `internal/reporting` is the only package whose production code imports
    `net/http` and names `report.frostyard.org`. `internal/problems` imports
    neither, and does not import `internal/reporting`.
-9. A report body is under 8192 bytes and validates against the vendored
+10. A report body is under 8192 bytes and validates against the vendored
    `frostyard.problem/1` schema (`internal/problems/schemacheck`).
 
 ## Derived artifacts

@@ -200,6 +200,31 @@ func (s *State) RecordCount(week string, e Entry) {
 	s.trim(e.SentAt)
 }
 
+// Forget removes the entry with reportID: a send that failed keeps no
+// record, so the report stays pending.
+func (s *State) Forget(reportID string) {
+	if s == nil || reportID == "" {
+		return
+	}
+	kept := s.Sent[:0]
+	for _, e := range s.Sent {
+		if e.ReportID == reportID {
+			continue
+		}
+		kept = append(kept, e)
+	}
+	s.Sent = kept
+}
+
+// SetCountWeek records week as the ISO week of the last count. A caller puts
+// an earlier week back after a failed count.
+func (s *State) SetCountWeek(week string) {
+	if s == nil {
+		return
+	}
+	s.CountWeek = week
+}
+
 // Fail pauses automatic sending for RetryAfter from now.
 func (s *State) Fail(now time.Time) {
 	if s == nil {

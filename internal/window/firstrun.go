@@ -59,6 +59,7 @@ type FirstRunWindow struct {
 	reportingSwitch *adw.SwitchRow
 	reportingRecord reporting.Consent
 	reportingPath   string
+	reportingWrite  *reporting.ConsentWriter
 
 	progressGroup   *adw.PreferencesGroup
 	progressStarted bool

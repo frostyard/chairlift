@@ -26,6 +26,11 @@ const (
 	// ReportingStale is the subtitle when the report format changed: the
 	// user must agree again before anything is sent.
 	ReportingStale = "The report format changed. Turn reporting on to agree again."
+	// ReportingEndpointInvalid is the group's description when the endpoint
+	// of an administrator-owned configuration file is not a valid URL: every
+	// send path is off, because an invalid setting must never fall back to
+	// the public service.
+	ReportingEndpointInvalid = "Problem reporting is off: the report endpoint in the configuration is not valid."
 	// ReportingModeTitle is the row that chooses between asking and sending
 	// automatically.
 	ReportingModeTitle = "When a problem is found"

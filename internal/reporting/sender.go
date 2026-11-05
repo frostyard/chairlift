@@ -36,6 +36,12 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("reporting: the report endpoint answered %d", e.Code)
 }
 
+// ErrNoEndpoint is returned by a send when no report endpoint is configured.
+// Only ParseEndpoint decides the default endpoint; a sender with an empty
+// Endpoint sends nothing, so an invalid administrator setting can never fall
+// back to the public service.
+var ErrNoEndpoint = errors.New("reporting: no report endpoint is configured")
+
 // HTTPSender posts a report to the intake endpoint.
 type HTTPSender struct {
 	Endpoint string
@@ -62,6 +68,9 @@ func NewHTTPSender(endpoint string) *HTTPSender {
 // success; any other answer is a *StatusError, and a transport failure is a
 // wrapped error.
 func (s *HTTPSender) Send(ctx context.Context, body []byte) error {
+	if s.Endpoint == "" {
+		return ErrNoEndpoint
+	}
 	if len(body) >= MaxBodyBytes {
 		return fmt.Errorf("reporting: report of %d bytes is not under %d", len(body), MaxBodyBytes)
 	}
@@ -72,11 +81,7 @@ func (s *HTTPSender) Send(ctx context.Context, body []byte) error {
 	if kind == problems.KindCrash {
 		return ErrLocalOnly
 	}
-	endpoint := s.Endpoint
-	if endpoint == "" {
-		endpoint = DefaultEndpoint
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.Endpoint, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("reporting: build the report request: %w", err)
 	}
@@ -85,7 +90,7 @@ func (s *HTTPSender) Send(ctx context.Context, body []byte) error {
 	req.Header.Set("User-Agent", "")
 	client := s.Client
 	if client == nil {
-		client = NewHTTPSender(endpoint).Client
+		client = NewHTTPSender(s.Endpoint).Client
 	}
 	resp, err := client.Do(req)
 	if err != nil {

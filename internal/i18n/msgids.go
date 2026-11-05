@@ -77,6 +77,7 @@ const (
 	MsgReportingSwitch     = "Send problem reports"
 	MsgReportingOff        = "Off: nothing leaves this computer."
 	MsgReportingOn         = "On: each report is shown before it is sent."
+	MsgReportingOnAuto     = "On: reports are sent automatically, and ChairLift lists each one."
 	MsgReportingWhat       = "What is sent"
 	MsgReportingSaveFailed = "Could not save the problem reporting setting"
 )
@@ -94,5 +95,5 @@ var Messages = []string{
 	MsgFinished, MsgFinishedDesc, MsgExit, MsgSetupFailed, MsgErrorLog, MsgDryRunFinished,
 	MsgCompletionFailed, MsgCompletionFailedDesc, MsgFinishedWithErrors,
 	MsgReportingTitle, MsgReportingDesc, MsgReportingSwitch, MsgReportingOff,
-	MsgReportingOn, MsgReportingWhat, MsgReportingSaveFailed,
+	MsgReportingOn, MsgReportingOnAuto, MsgReportingWhat, MsgReportingSaveFailed,
 }

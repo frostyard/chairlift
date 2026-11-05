@@ -24,6 +24,10 @@ var (
 	ErrDailyLimit = errors.New("reporting: the daily report limit is reached")
 	// ErrDryRun is returned when a dry run reaches a send.
 	ErrDryRun = errors.New("reporting: a dry run sends nothing")
+	// ErrAlreadySent is returned for a report that this week's sent log
+	// already holds: a problem report sent in the same week, or a count of
+	// the same ISO week.
+	ErrAlreadySent = errors.New("reporting: this report was sent already")
 )
 
 // SendReport sends 1 report that the user asked for, and records it in the
@@ -55,6 +59,9 @@ func SendReport(ctx context.Context, in RunInput, r Report) (Entry, error) {
 	if r.Kind == problems.KindCrash {
 		return Entry{}, ErrLocalOnly
 	}
+	if in.Sender == nil {
+		return Entry{}, ErrNoEndpoint
+	}
 	nowf := in.Now
 	if nowf == nil {
 		nowf = time.Now
@@ -75,20 +82,20 @@ func SendReport(ctx context.Context, in RunInput, r Report) (Entry, error) {
 		logf("reporting: " + err.Error())
 		return Entry{}, err
 	}
-	save := func() {
-		if err := st.Save(in.StatePath); err != nil {
-			logf("reporting: " + err.Error())
-		}
-	}
 	now := nowf()
 	if st.Remaining(now) == 0 {
 		return Entry{}, ErrDailyLimit
 	}
-	if err := in.Sender.Send(ctx, r.Body); err != nil {
-		st.Fail(nowf())
-		save()
-		return Entry{}, err
+	// A count is due once per ISO week, and a problem report once per week:
+	// the dialog must not send either twice, also after a restart.
+	if r.Kind == problems.KindCount {
+		if r.Week != "" && st.CountWeek == r.Week {
+			return Entry{}, ErrAlreadySent
+		}
+	} else if st.WasSent(r.ProblemID, r.Week) {
+		return Entry{}, ErrAlreadySent
 	}
+
 	entry := Entry{
 		ReportID:  r.ReportID,
 		Kind:      r.Kind,
@@ -96,7 +103,37 @@ func SendReport(ctx context.Context, in RunInput, r Report) (Entry, error) {
 		Week:      r.Week,
 		SentAt:    nowf().UTC(),
 	}
-	st.Record(entry)
-	save()
+	// Record and save before the request, as the automatic path does, so a
+	// process that exits during the request can only under-send. A failed
+	// request forgets the entry again.
+	priorWeek := st.CountWeek
+	record := func() {
+		if r.Kind == problems.KindCount {
+			st.RecordCount(r.Week, entry)
+			return
+		}
+		st.Record(entry)
+	}
+	undo := func() {
+		st.Forget(entry.ReportID)
+		if r.Kind == problems.KindCount {
+			st.SetCountWeek(priorWeek)
+		}
+	}
+	record()
+	if err := st.Save(in.StatePath); err != nil {
+		undo()
+		logf("reporting: " + err.Error())
+		return Entry{}, err
+	}
+	if err := in.Sender.Send(ctx, r.Body); err != nil {
+		undo()
+		st.Fail(nowf())
+		if saveErr := st.Save(in.StatePath); saveErr != nil {
+			logf("reporting: " + saveErr.Error())
+			return Entry{}, errors.Join(err, saveErr)
+		}
+		return Entry{}, err
+	}
 	return entry, nil
 }

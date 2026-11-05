@@ -203,3 +203,134 @@ func TestSendReportIgnoresAPauseAndRecordsAFailure(t *testing.T) {
 		t.Errorf("a failed send recorded %d entries, want 0", len(after.Sent))
 	}
 }
+
+// TestSendReportWithoutASenderSendsNothing proves a missing endpoint stops
+// the dialog's send with an error and no request.
+func TestSendReportWithoutASenderSendsNothing(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	in := input(clk, statePath, nil, nil)
+	if _, err := SendReport(context.Background(), in, sentReport(t)); !errors.Is(err, ErrNoEndpoint) {
+		t.Fatalf("SendReport() = %v, want ErrNoEndpoint", err)
+	}
+	if _, err := os.Stat(statePath); err == nil {
+		t.Errorf("the send wrote the sent log %s", statePath)
+	}
+}
+
+// TestManualCountIsRecordedForItsWeek proves a count sent from the dialog
+// stops the automatic path for that week, also after a restart.
+func TestManualCountIsRecordedForItsWeek(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{}
+	in := input(clk, statePath, sender, nil)
+	in.Consent = fixedConsent(askConsent())
+	in.InstallInfo = someInstallInfo
+
+	count, err := NewCountReport(validEnvelope(), in.Client, "<1m", "latest", clk.Now())
+	if err != nil {
+		t.Fatalf("NewCountReport: %v", err)
+	}
+	if _, err := SendReport(context.Background(), in, count); err != nil {
+		t.Fatalf("SendReport: %v", err)
+	}
+	st, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if st.CountWeek != week {
+		t.Fatalf("CountWeek = %q after a manual count, want %q", st.CountWeek, week)
+	}
+
+	// A reloaded state and an automatic run in the same week send no count.
+	auto := input(clk, statePath, sender, nil)
+	auto.InstallInfo = someInstallInfo
+	res := Run(context.Background(), auto)
+	if len(res.Sent) != 0 {
+		t.Errorf("the automatic run sent %d reports, want 0", len(res.Sent))
+	}
+	if got := sender.count(); got != 1 {
+		t.Errorf("%d requests were made, want 1 (only the manual count)", got)
+	}
+
+	// The dialog refuses a second count of the same week.
+	again, err := NewCountReport(validEnvelope(), in.Client, "<1m", "latest", clk.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SendReport(context.Background(), in, again); !errors.Is(err, ErrAlreadySent) {
+		t.Fatalf("a second manual count = %v, want ErrAlreadySent", err)
+	}
+	if got := sender.count(); got != 1 {
+		t.Errorf("%d requests were made after a refused count, want 1", got)
+	}
+}
+
+// TestManualReportIsSentOnce proves the dialog sends the same report once per
+// week, also after a restart.
+func TestManualReportIsSentOnce(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	sender := &recordingSender{}
+	in := input(clk, statePath, sender, nil)
+	in.Consent = fixedConsent(askConsent())
+	r := sentReport(t)
+
+	if _, err := SendReport(context.Background(), in, r); err != nil {
+		t.Fatalf("SendReport: %v", err)
+	}
+	reloaded := input(clk, statePath, sender, nil)
+	reloaded.Consent = fixedConsent(askConsent())
+	if _, err := SendReport(context.Background(), reloaded, r); !errors.Is(err, ErrAlreadySent) {
+		t.Fatalf("a second send = %v, want ErrAlreadySent", err)
+	}
+	if got := sender.count(); got != 1 {
+		t.Fatalf("%d requests were made, want 1", got)
+	}
+}
+
+// TestManualSendKeepsTheEntryBeforeTheRequest proves the dialog records and
+// saves the entry before the request, and forgets it after a failure.
+func TestManualSendKeepsTheEntryBeforeTheRequest(t *testing.T) {
+	clk := newClock(testStart)
+	statePath := newStatePath(t)
+	var seenAtSend []Entry
+	sender := &recordingSender{}
+	in := input(clk, statePath, sender, nil)
+	in.Consent = fixedConsent(askConsent())
+	sender.onSend = func(int) {
+		st, err := LoadState(statePath)
+		if err != nil {
+			t.Errorf("the sent log is not readable during the request: %v", err)
+			return
+		}
+		seenAtSend = st.Sent
+	}
+	r := sentReport(t)
+	if _, err := SendReport(context.Background(), in, r); err != nil {
+		t.Fatalf("SendReport: %v", err)
+	}
+	if len(seenAtSend) != 1 || seenAtSend[0].ReportID != r.ReportID {
+		t.Errorf("the log held %+v during the request, want the entry", seenAtSend)
+	}
+
+	// A failed send leaves no entry and pauses automatic sending.
+	failing := &recordingSender{err: &StatusError{Code: 503}}
+	in2 := input(clk, newStatePath(t), failing, nil)
+	in2.Consent = fixedConsent(askConsent())
+	other := sentReport(t)
+	if _, err := SendReport(context.Background(), in2, other); err == nil {
+		t.Fatal("SendReport() = nil, want the send failure")
+	}
+	st, err := LoadState(in2.StatePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if len(st.Sent) != 0 {
+		t.Errorf("the failed send kept %d entries, want 0", len(st.Sent))
+	}
+	if !st.Paused(clk.Now()) {
+		t.Error("the failed send did not pause automatic sending")
+	}
+}
