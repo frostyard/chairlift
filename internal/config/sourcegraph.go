@@ -246,7 +246,7 @@ func isMergeOperandMapping(n *yaml.Node) bool {
 // exactly gopkg.in/yaml.v3 v3.0.1 decode.go's uniqueKeys predicate (inside
 // decoder.mapping): two keys are the same key when their Kind and Value
 // match, nothing else. Deliberately no third field is compared, even though
-// docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md
+// docs/design/engineering-lessons.md#yaml-key-identity-uses-the-tag
 // requires that omitted third field for *merge/dedup key identity*
 // elsewhere in this package. This is a narrow, intentional exception:
 // yaml.v3's own duplicate-key guard never looks at that field either, so a

@@ -42,7 +42,7 @@ import (
 //     it must not be added to this allowlist.
 //   - parseAndValidate is the single addition phase1c1's chunk c1 spec
 //     authorizes, spending that chunk's one frozen-allowlist entry per
-//     docs/agents/skills/frozen-allowlist-authorization-is-per-entry-not-per-chunk.md.
+//     docs/design/engineering-lessons.md#direct-call-allowlist-entries.
 //     No other new production helper c1 adds may be added here; they are
 //     exercised only indirectly, through parseAndValidate.
 //   - resolveCandidatePath is the runtime-wiring slice's one direct-test

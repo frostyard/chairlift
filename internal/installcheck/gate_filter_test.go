@@ -48,22 +48,27 @@ func gateWorkflowTestCommands(text string) []string {
 	return commands
 }
 
+// gateMakefileCITestCommands collects the go test commands of the Makefile's
+// ci and verify rules, the two rules CI runs. Every go test command in them
+// must carry the exact gate filter. verify-static and verify-template are
+// other rules and their commands are deliberately not collected.
 func gateMakefileCITestCommands(text string) []string {
 	lines := strings.Split(text, "\n")
-	inCI := false
+	inGate := false
 	var commands []string
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "\t") && !strings.HasPrefix(line, " ") && trimmed != "" {
-			if strings.HasPrefix(trimmed, "ci:") {
-				inCI = true
-				continue
-			}
-			if inCI {
-				inCI = false
+			inGate = false
+			if rule, remainder, found := strings.Cut(trimmed, ":"); found {
+				name := strings.TrimSpace(rule)
+				if (name == "ci" || name == "verify") && !strings.HasPrefix(remainder, "=") {
+					inGate = true
+					continue
+				}
 			}
 		}
-		if inCI && strings.HasPrefix(line, "\t") && (strings.Contains(line, "$(GOTEST)") || strings.Contains(trimmed, "go test")) {
+		if inGate && strings.HasPrefix(line, "\t") && (strings.Contains(line, "$(GOTEST)") || strings.Contains(trimmed, "go test")) {
 			commands = append(commands, strings.TrimSpace(strings.TrimPrefix(trimmed, "@")))
 		}
 	}
@@ -312,7 +317,7 @@ func TestGateHiddenFunctionReasons(t *testing.T) {
 }
 
 func TestGateFilterHidesNoHermeticTest(t *testing.T) {
-	workflowPath := filepath.Join(".github", "workflows", "test.yml")
+	workflowPath := filepath.Join(".github", "workflows", "ci.yml")
 	workflowData, err := os.ReadFile(filepath.Join(RepoRoot(), workflowPath))
 	if err != nil {
 		t.Fatalf("read %s: %v", workflowPath, err)
@@ -334,11 +339,11 @@ func TestGateFilterHidesNoHermeticTest(t *testing.T) {
 	}
 	makefileCommands := gateMakefileCITestCommands(string(makefileData))
 	if len(makefileCommands) < 2 {
-		t.Errorf("the gate filter changed: update this guard: %s ci target has %d go test commands, want at least 2", makefilePath, len(makefileCommands))
+		t.Errorf("the gate filter changed: update this guard: %s ci and verify targets have %d go test commands, want at least 2", makefilePath, len(makefileCommands))
 	}
 	for _, command := range makefileCommands {
 		if err := gateValidateExactFilter(command); err != nil {
-			t.Errorf("%s ci target: %v: %q", makefilePath, err, command)
+			t.Errorf("%s ci and verify targets: %v: %q", makefilePath, err, command)
 		}
 	}
 

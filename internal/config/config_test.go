@@ -13,8 +13,8 @@ import (
 // pageNames lists every page key Config exposes, matching the switch
 // statements in IsGroupEnabled/GetGroupConfig. Tests loop over this slice
 // (and, within each page, every group defaultConfig() defines) instead of
-// sampling a single page/group, per the repo's
-// regression-tests-must-cover-every-collection-entry skill.
+// sampling a single page/group, per
+// docs/design/engineering-lessons.md#check-every-collection-entry.
 var pageNames = []string{
 	"system_page",
 	"updates_page",
@@ -157,8 +157,8 @@ func TestMaintenanceCleanupGroupDefaultConsistentAcrossAbsentAndOmitted(t *testi
 // defaultBearingGroups lists every group in defaultConfig() that defines a
 // non-Enabled default field (AppID, Website/Issues/Chat, Actions,
 // BundlesPaths, or AppsPath). Enabled-only-overlay coverage loops over all of them, not
-// just one, per the repo's regression-tests-must-cover-every-collection-entry
-// skill.
+// just one, per docs/design/engineering-lessons.md
+// #check-every-collection-entry.
 var defaultBearingGroups = []struct {
 	page  string
 	group string
@@ -455,7 +455,7 @@ var isGroupEnabledCallPattern = regexp.MustCompile(`IsGroupEnabled\(\s*"updates_
 // TestUpdatesPageDefaultGroupsHaveBuilders reads internal/views/updates_page.go
 // as plain text (internal/config must never import internal/views or the
 // GTK bindings package, directly or transitively, per
-// docs/agents/skills/gtk-headless-tests.md) and asserts every group
+// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages) and asserts every group
 // defaultConfig() defines for updates_page is gated by a real
 // config.IsGroupEnabled("updates_page", ...) call in that view file. This is
 // the regression test that would have caught a group being

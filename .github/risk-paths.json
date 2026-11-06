@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "paths": [
+    {
+      "glob": ".github/risk-paths.json",
+      "why": "governance: the high-risk path list"
+    },
+    {
+      "glob": ".github/workflows/**",
+      "why": "governance: CI, the risk-paths caller and token permissions"
+    },
+    {
+      "glob": "Makefile",
+      "why": "governance: the verify gate"
+    },
+    {
+      "glob": "scripts/check-template.mjs",
+      "why": "governance: the template verification gate"
+    },
+    {
+      "glob": "scripts/check-corrections.mjs",
+      "why": "governance: the corrections validation gate"
+    },
+    {
+      "glob": "scripts/lib/**",
+      "why": "governance: the vendored risk-path validator and matcher"
+    },
+    {
+      "glob": "mise.toml",
+      "why": "supply chain: the tool pins that CI installs"
+    },
+    {
+      "glob": "mise.lock",
+      "why": "supply chain: the checksums of the tools that CI installs"
+    },
+    {
+      "glob": ".svu.yml",
+      "why": "publication: the version rule for release tags (make bump)"
+    },
+    {
+      "glob": ".goreleaser.yaml",
+      "why": "publication: release archives and the nFPM packages, with the install layout of the privileged helper and the PolicyKit policies"
+    },
+    {
+      "glob": "data/*.policy",
+      "why": "privilege: the PolicyKit actions that pkexec authorizes"
+    },
+    {
+      "glob": "data/chairlift-wrapper.sh",
+      "why": "install script: installed to /usr/bin as chairlift-wrapper"
+    },
+    {
+      "glob": "cmd/chairlift-updex-helper/**",
+      "why": "privilege: the helper that pkexec runs as root"
+    },
+    {
+      "glob": "internal/updexhelper/**",
+      "why": "privilege: the root helper's argv validation and dispatch"
+    }
+  ]
+}

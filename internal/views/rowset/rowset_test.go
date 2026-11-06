@@ -6,7 +6,7 @@ import (
 )
 
 // fakeRow stands in for an expander row without naming any widget type, so the
-// test builds and runs on a headless host (docs/agents/skills/gtk-headless-tests.md).
+// test builds and runs on a headless host (docs/design/engineering-lessons.md#no-tests-in-puregotk-packages).
 type fakeRow struct {
 	title string
 }

@@ -15,7 +15,9 @@ Thank you for helping improve ChairLift.
 ## Local setup
 
 ChairLift requires Git, Make, the Go version declared in
-[`go.mod`](go.mod), and `golangci-lint` for the complete local quality gate.
+[`go.mod`](go.mod), and the tools pinned in [`mise.toml`](mise.toml)
+(golangci-lint and Node.js; run `mise install`) for the complete local
+quality gate.
 The application builds without CGO, but the race-detector gate requires a
 working CGO toolchain. GTK4 and Libadwaita are runtime dependencies and are
 needed for E2E testing, not ordinary builds.
@@ -82,16 +84,19 @@ target requires GTK4, Libadwaita, `dbus-run-session`, GNU `timeout`, and Xvfb.
 
 ## Quality gates
 
-`make ci` is required before opening or updating a pull request. It mirrors the
-host-independent checks in the repository's `Tests` workflow:
+`make ci` is required before opening or updating a pull request. It runs
+`make verify` (the credential-free gate that changes no file) and then the
+rest of the host-independent checks in the repository's `Tests` workflow
+(`.github/workflows/ci.yml`):
 
 | Gate | What it checks |
 |---|---|
-| Verify | `go.mod`/`go.sum` remain tidy, `go vet` passes, and Go files are formatted |
-| Lint | `golangci-lint` reports no violations |
+| Verify | `go.mod`/`go.sum` remain tidy, `go vet` passes, Go files are formatted, and the template gate passes (instruction aliases, the `docs/README.md` index, risk paths, corrections, vendored files) |
+| Lint | `golangci-lint` at the `mise.toml` pin reports no violations |
 | Unit tests | Headless tests under `internal/...` pass with the CI name filters |
 | Race detection | The same internal test scope passes with the race detector |
 | Build | Linux amd64, Linux arm64, and the native binaries compile |
+| Corrections | With `BASE` set (`make ci BASE=origin/main`), `.memory/corrections.jsonl` only gains lines |
 
 The hosted workflow additionally runs `make e2e` with its runtime dependencies.
 Codecov reports the same internal test scope and rejects project coverage

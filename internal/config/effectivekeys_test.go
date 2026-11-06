@@ -10,7 +10,7 @@ import (
 // TestEffectiveKeyIdentityScalarTagAware exercises effectiveKeyIdentity
 // directly against scalar nodes, proving identity is tag-aware (Kind +
 // resolved ShortTag + Value), not Value alone
-// (docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md).
+// (docs/design/engineering-lessons.md#yaml-key-identity-uses-the-tag).
 func TestEffectiveKeyIdentityScalarTagAware(t *testing.T) {
 	bareOne := scalarNode("1")
 	taggedIntOne := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: "1"}

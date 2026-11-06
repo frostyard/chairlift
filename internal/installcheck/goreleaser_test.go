@@ -96,7 +96,7 @@ func nfpmByPackageName(t *testing.T, cfg GoreleaserConfig, packageName string) N
 // criterion is a consistency invariant across the whole nFPM block, so adding
 // or reordering a second package with the wrong bindir or polkit destinations
 // must fail here too (per
-// docs/agents/skills/regression-tests-must-cover-every-collection-entry.md).
+// docs/design/engineering-lessons.md#check-every-collection-entry).
 func TestGoreleaserNfpmLayoutMatchesUsrPrefix(t *testing.T) {
 	cfg := loadGoreleaserConfig(t)
 	if len(cfg.Nfpms) == 0 {
@@ -202,7 +202,7 @@ func TestGoreleaserPublishesSystemPackage(t *testing.T) {
 // this test instead of silently shipping mislabeled deb/rpm/apk packages.
 //
 // It iterates every nfpms[] entry rather than only nfpms[0]: per
-// docs/agents/skills/regression-tests-must-cover-every-collection-entry.md,
+// docs/design/engineering-lessons.md#check-every-collection-entry,
 // a consistency check that only special-cases the first entry stops
 // protecting anything the moment a second nfpms[] entry is added or
 // reordered with the wrong license.
@@ -286,7 +286,7 @@ func TestGoreleaserReleaseFooterUsesMetadataHomepage(t *testing.T) {
 	// also catches the URL being rewritten to a hardcoded current-owner
 	// literal, which would reintroduce the duplication this guards against —
 	// and it keeps the removed literal out of the tree, per
-	// docs/agents/skills/grep-removal-criteria-must-exclude-mill-and-tests.md.
+	// docs/design/engineering-lessons.md#assert-the-exact-remaining-set.
 	// The surviving https://goreleaser.com/pro link is unaffected.
 	if strings.Contains(footer, "github.com/") {
 		t.Errorf("release.footer contains a hardcoded repository URL literal; it must reference {{ .Metadata.Homepage }} instead. footer:\n%s", footer)
