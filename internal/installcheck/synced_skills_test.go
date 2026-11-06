@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -73,8 +74,8 @@ func TestSyncedSkillsLiveInAgentsSkills(t *testing.T) {
 		name := parts[2]
 		marker := readRepoFile(t, rel)
 		wantSource := "Source: https://github.com/frostyard/core/tree/main/.agents/skills/" + name
-		if !strings.Contains(marker, wantSource) {
-			t.Errorf("%s: marker does not contain %q", rel, wantSource)
+		if !slices.Contains(strings.Split(marker, "\n"), wantSource) {
+			t.Errorf("%s: marker has no line %q", rel, wantSource)
 		}
 	}
 }
