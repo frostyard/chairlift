@@ -7,7 +7,7 @@
 // headless host. A test binary for a package that imports puregotk panics while
 // resolving GTK/graphene shared libraries at package init, before any test
 // function runs, so logic that must be tested cannot live in the view packages.
-// See docs/agents/skills/gtk-headless-tests.md.
+// See docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
 //
 // The tracker never names a widget type: it is generic over a comparable row
 // type, and removal is performed by a caller-supplied callback, which is what

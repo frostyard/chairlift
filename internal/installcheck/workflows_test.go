@@ -97,7 +97,7 @@ func TestWorkflowActionsUseImmutableCommitSHAs(t *testing.T) {
 }
 
 func TestWorkflowUsesLeastPrivilege(t *testing.T) {
-	path := filepath.Join(".github", "workflows", "test.yml")
+	path := filepath.Join(".github", "workflows", "ci.yml")
 	workflow := readRepoFile(t, path)
 
 	var config struct {

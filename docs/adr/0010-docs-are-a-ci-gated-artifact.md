@@ -1,6 +1,6 @@
 # 0010 — Treat documentation as a CI-gated artifact split into current-state and historical
 
-- **Status:** Accepted
+- **Status:** Accepted; its list of historical docs is amended by [0016](0016-adopt-the-repository-baseline.md) (`docs/superpowers/` and the finished plans are deleted)
 - **Date:** 2026-08-12
 
 ## Context

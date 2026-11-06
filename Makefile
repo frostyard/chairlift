@@ -1,4 +1,4 @@
-.PHONY: all build build-app build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint build-linux-amd64 build-linux-arm64 install uninstall bump
+.PHONY: all build build-app build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint lint-version-check check verify verify-static verify-template ci build-linux-amd64 build-linux-arm64 install uninstall bump
 
 # Binary names
 BINARY_NAME=chairlift
@@ -40,6 +40,21 @@ GOCLEAN=$(GOCMD) clean
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
+
+# Pinned golangci-lint release, read from mise.toml — the single source of
+# every tool pin: `mise install` provisions it locally and in CI
+# (jdx/mise-action), verified against mise.lock. Bump it there in a dedicated
+# commit; never edit this line. Compared against `golangci-lint version
+# --short`, which prints the bare "MAJOR.MINOR.PATCH".
+GOLANGCI_LINT_VERSION := $(strip $(shell sed -n 's/^golangci-lint = "\(.*\)"/\1/p' mise.toml))
+# The Go release this module is built with, from go.mod's go line — the only
+# Go pin (mise reads the same line). golangci-lint must be built with a Go at
+# least this new, or its embedded gofmt and typechecker disagree with the
+# toolchain.
+GO_VERSION := $(strip $(shell sed -n 's/^go \(.*\)/\1/p' go.mod))
+# The major version of the Node on PATH (mise.toml pins it), checked by
+# make verify-template so the template gate needs no package install.
+NODE_MAJOR := $(shell node -p "process.versions.node.split('.')[0]" 2>/dev/null)
 
 # CGO is not needed with puregotk!
 CGO_ENABLED=0
@@ -96,9 +111,58 @@ install-deps:
 fmt:
 	gofmt -s -w .
 
-# Lint code (requires golangci-lint)
+# Lint code (requires golangci-lint; fails if the mise.toml pin is missing or
+# the installed release differs)
 lint:
-	golangci-lint run
+	$(MAKE) --no-print-directory lint-version-check
+	CGO_ENABLED=$(CGO_ENABLED) golangci-lint run
+
+# Fail unless the installed golangci-lint is the mise.toml pin and was built
+# with a Go no older than go.mod's go line
+lint-version-check:
+	@test -n "$(GOLANGCI_LINT_VERSION)" || { echo "mise.toml pins no golangci-lint"; exit 1; }
+	@installed="$$(golangci-lint version --short 2>/dev/null)" || { \
+		echo "golangci-lint $(GOLANGCI_LINT_VERSION) is required (not installed; run: mise install)"; exit 1; }; \
+	if [ "$$installed" != "$(GOLANGCI_LINT_VERSION)" ]; then \
+		echo "expected golangci-lint $(GOLANGCI_LINT_VERSION), found $$installed (run: mise install)"; \
+		exit 1; \
+	fi; \
+	built="$$(golangci-lint version 2>/dev/null | sed -n 's/.*built with go\([0-9.]*\).*/\1/p')"; \
+	if [ -n "$$built" ] && [ "$$(printf '%s\n%s\n' "$(GO_VERSION)" "$$built" | sort -V | head -1)" != "$(GO_VERSION)" ]; then \
+		echo "golangci-lint $(GOLANGCI_LINT_VERSION) was built with go$$built, older than go.mod's go$(GO_VERSION): bump golangci-lint first"; \
+		exit 1; \
+	fi
+
+# Check the agent surfaces, docs index, risk paths, corrections and vendored
+# copies (needs Node.js 22 or later, from mise.toml)
+verify-template:
+	@if ! command -v node >/dev/null 2>&1; then echo "FAIL: verify-template requires Node.js 22 or later (run: mise install)"; exit 1; fi
+	@if [ "$(NODE_MAJOR)" = "" ] || [ "$(NODE_MAJOR)" -lt 22 ]; then echo "FAIL: verify-template requires Node.js 22 or later (found: $$(node --version 2>/dev/null || echo missing)); run: mise install"; exit 1; fi
+	node scripts/check-template.mjs
+	node --test test/*.test.mjs
+
+# The non-mutating static checks shared by verify and ci: tidy diff, vet,
+# gofmt, the exact-pin lint, and the template gate
+verify-static:
+	@echo "==> verify: go.mod is tidy"
+	$(GOMOD) tidy -diff
+	@echo "==> verify: go vet"
+	CGO_ENABLED=$(CGO_ENABLED) $(GOCMD) vet ./...
+	@echo "==> verify: gofmt"
+	test -z "$$(gofmt -l .)"
+	@echo "==> lint"
+	$(MAKE) --no-print-directory lint
+	@echo "==> verify: template, docs index, risk paths, corrections, vendored copies"
+	$(MAKE) --no-print-directory verify-template
+
+# Credential-free, non-mutating gate for read-only reviewers: verify-static
+# plus the unit tests. It changes no file and needs no secret.
+verify: verify-static
+	@echo "==> unit tests"
+	CGO_ENABLED=$(CGO_ENABLED) $(GOTEST) ./internal/... -run "^Test[^I]" -skip "Integration"
+
+# Developer gate: format, then verify
+check: fmt verify
 
 # Cross-compile for different architectures
 build-linux-amd64:
@@ -152,27 +216,30 @@ uninstall:
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules
 	rm -f $(DESTDIR)$(POLKITACTIONSDIR)/org.frostyard.ChairLift.sysupdate.policy
 
-# One command mirrors CI's host-independent gates (verify → lint → unit → race
-# → build), in fail-fast order. The GTK/Xvfb-dependent E2E job runs separately
-# through `make e2e`. The mill's deep gate calls this target.
+# One command mirrors CI's host-independent gates. It runs verify (the
+# go.mod tidy diff, go vet, the gofmt check, the pinned golangci-lint, the
+# template gate and the unit tests), then the corrections check against BASE
+# when set, then the race detector, then the build matrix, in fail-fast order.
+# The GTK/Xvfb-dependent E2E job runs separately through `make e2e`.
+#
+# The corrections check compares .memory/corrections.jsonl with BASE: lines
+# are append-only (only an empty promoted_to may be filled in). The contract
+# starts with the gate: a BASE that does not hold
+# scripts/check-corrections.mjs had no such rule, so the comparison is skipped
+# with a notice (ADR-0016). Every BASE after the adoption holds the script.
 #
 # The build step reproduces CI's GOOS/GOARCH matrix (linux/amd64 and
 # linux/arm64) into per-arch subdirectories, then rebuilds natively so
 # build/chairlift is left runnable on this host. A host-arch-only build would
 # let an arm64 compile failure pass locally and break CI.
-.PHONY: ci
-ci:
-	@echo "==> verify: go.mod is tidy"
-	$(GOMOD) tidy
-	git diff --exit-code go.mod go.sum
-	@echo "==> verify: go vet"
-	CGO_ENABLED=$(CGO_ENABLED) $(GOCMD) vet ./...
-	@echo "==> verify: gofmt"
-	test -z "$$(gofmt -l .)"
-	@echo "==> lint"
-	CGO_ENABLED=$(CGO_ENABLED) golangci-lint run
-	@echo "==> unit tests"
-	CGO_ENABLED=$(CGO_ENABLED) $(GOTEST) ./internal/... -run "^Test[^I]" -skip "Integration"
+ci: verify
+	@if [ -n "$(BASE)" ]; then \
+		if git cat-file -e "$(BASE):scripts/check-corrections.mjs" 2>/dev/null; then \
+			node scripts/check-corrections.mjs --base "$(BASE)"; \
+		else \
+			echo "==> corrections: BASE $(BASE) predates the corrections gate; append-only comparison skipped"; \
+		fi; \
+	fi
 	@echo "==> race detector"
 	CGO_ENABLED=1 $(GOTEST) -race -short ./internal/... -run "^Test[^I]" -skip "Integration"
 	@echo "==> build"

@@ -8,8 +8,8 @@ drifting between stores.
 ## Read before working
 
 1. Read `AGENTS.md` for current repository invariants and required workflows.
-2. Read every file in `docs/agents/skills/` for durable lessons from prior
-   automated runs.
+2. Read `docs/design/engineering-lessons.md` for durable lessons from prior
+   defects and reviews.
 3. Read `.memory/README.md` and `.memory/corrections.jsonl`, when present, for
    verified corrections.
 4. Read `.claude/session-summary.md` for the latest in-progress handoff.
@@ -22,7 +22,7 @@ drifting between stores.
 - Replace `.claude/session-summary.md` when another session must continue
   active work.
 - Promote stable operating rules to `AGENTS.md`, reusable lessons to
-  `docs/agents/skills/`, architecture to `docs/design/`, and repo-local
+  `docs/design/engineering-lessons.md`, architecture to `docs/design/`, and repo-local
   decision rationale to `docs/adr/`.
 
 Keep this file as an index rather than a duplicate knowledge store. Record only

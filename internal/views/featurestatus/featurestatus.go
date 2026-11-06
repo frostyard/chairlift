@@ -55,7 +55,7 @@
 // testable at all, which is the same reason internal/views/actionmsg,
 // internal/views/trustmsg, internal/views/rowset and
 // internal/views/flatpakstatus are separate. See
-// docs/agents/skills/gtk-headless-tests.md. Importing internal/updex for the
+// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages. Importing internal/updex for the
 // CheckResult type is safe here because internal/updex is itself puregotk-free
 // (`go list -deps ./internal/updex | grep -c puregotk` prints 0).
 //

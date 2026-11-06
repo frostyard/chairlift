@@ -11,7 +11,7 @@
 // before a single test function runs. Decidable logic must therefore live in a
 // binding-free package to be testable, which is the same reason
 // internal/views/actionmsg, internal/views/trustmsg and internal/views/rowset
-// are separate. See docs/agents/skills/gtk-headless-tests.md.
+// are separate. See docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
 //
 // The package is pure and holds no state: it takes booleans rather than error
 // values (which would drag in internal/flatpak) and returns a value, so it is

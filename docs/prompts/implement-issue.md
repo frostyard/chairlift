@@ -6,7 +6,7 @@ Use this prompt for a scoped ChairLift feature, fix, or maintenance issue.
 Implement [ISSUE OR TASK] in ChairLift.
 
 Before editing:
-1. Read AGENTS.md, every file in docs/agents/skills/, and the relevant current-state documentation.
+1. Read AGENTS.md, docs/design/engineering-lessons.md, and the relevant current-state documentation.
 2. Inspect the existing implementation and tests; do not infer behavior from historical plans.
 3. State the intended change and identify affected repository invariants.
 

@@ -14,13 +14,30 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   and `build/chairlift-first-run` (all `CGO_ENABLED=0`).
 - `make test` — `go test ./...`.
 - `make fmt` — `gofmt -s -w .`.
-- `make lint` — `golangci-lint run`.
-- `make ci` — runs every **host-independent** CI gate, in CI's order (go.mod
-  tidy check, `go vet`, gofmt check, lint, unit tests, race detector, build).
+- `make lint` — `golangci-lint run`, after `make lint-version-check` proves
+  the installed golangci-lint is the `mise.toml` pin.
+- `mise install` — provisions the pinned golangci-lint and Node (`mise.toml`,
+  checksums in `mise.lock`; core ADR-0043). Go comes from go.mod's `go` line,
+  the only Go pin. Bump a tool in `mise.toml` and `mise.lock` only.
+- `make verify` — the credential-free gate that leaves `git status` unchanged
+  (core ADR-0044, [ADR-0016](docs/adr/0016-adopt-the-repository-baseline.md)):
+  `go mod tidy -diff`, `go vet`, the gofmt check, the pinned lint, the
+  template gate (`make verify-template`: `scripts/check-template.mjs` and
+  `test/check-template.test.mjs`, Node 22 or later), then the unit tests.
+  The template gate checks the instruction aliases, that every doc under
+  `docs/` is linked from `docs/README.md`, `.github/risk-paths.json`,
+  `.memory/corrections.jsonl`, and the hashes of the 2 files vendored from
+  core. The `scripts/` files and `test/check-template.test.mjs` are
+  byte-identical copies from `bketelsen/agentic-template`: copy them again,
+  never edit them here.
+- `make check` — `make fmt`, then `make verify`.
+- `make ci` — runs `make verify`, then the corrections check against `BASE`
+  when it is set (`make ci BASE=origin/main`), the race detector and the
+  build: every **host-independent** CI gate, in fail-fast order.
   The build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into
   `build/ci-linux-<arch>/`, then rebuilds natively, so a cross-arch-only
   compile failure cannot pass locally and break CI. Run it before pushing;
-  the mill's deep gate calls this exact target. Codecov's remote project status
+  the Verify job of `.github/workflows/ci.yml` runs it. Codecov's remote project status
   additionally rejects coverage regressions greater than one percentage point;
   it has no fixed coverage target and cannot be mirrored locally.
 - `make e2e` — builds the three executables, checks the application's real
@@ -59,7 +76,7 @@ to `.PHONY`; `internal/installcheck/makefile_phony_test.go` fails when a
 target is missing from `.PHONY` or `.PHONY` names a target that does not
 exist.
 
-CI (`.github/workflows/test.yml`) filters tests with `-run "^Test[^I]"
+CI (`.github/workflows/ci.yml`, workflow name `Tests`) filters tests with `-run "^Test[^I]"
 -skip "Integration"`. That filter excludes *any* test whose name begins `TestI`
 — not only `TestIntegration` — or contains `Integration` anywhere. Those names
 are reserved for tests that require a real environment (a live `brew`,
@@ -68,7 +85,8 @@ are reserved for tests that require a real environment (a live `brew`,
 by CI and therefore protects nothing. The accident is easy to make, because
 plain unit-test names such as `TestIsValid`, `TestInitConfig`, or `TestIndexOf`
 all start with `TestI` and would be silently skipped; name them so the first
-letter after `Test` is not `I` (see the GTK-headless skill below).
+letter after `Test` is not `I` (see
+[engineering lessons](docs/design/engineering-lessons.md#no-tests-in-puregotk-packages)).
 `internal/installcheck.TestGateFilterHidesNoHermeticTest` now fails when the
 filter hides a hermetic test or when a test function sits outside `./internal/...`.
 Its walk skips what the go tool's `./...` pattern skips — directories starting
@@ -139,7 +157,12 @@ An agent must not break these:
   ([ADR-0012](docs/adr/0012-firmware-updates-use-fwupds-own-polkit.md)), so
   never route them through pkexec or add a helper or policy for them. Do not
   add arbitrary privileged command execution, broaden what pkexec runs, or
-  route new mutations around the fixed helper/policy pair.
+  route new mutations around the fixed helper/policy pair. The 1 existing
+  exception: a maintenance action with `sudo: true` runs `pkexec <script>`
+  with the script path from the configuration
+  (`pageview.MaintenanceCommand`), under PolicyKit's default `pkexec` action
+  and its administrator authentication (see "Known limits" in
+  `docs/design/overview.md`). Do not widen it.
 - **First-run mode stays user-level, pure at its gate, and opt-in per image**
   ([ADR-0014](docs/adr/0014-first-run-mode.md)). `cmd/chairlift-first-run`
   imports no GTK binding (no puregotk, no snowkit; guarded by
@@ -341,18 +364,42 @@ locations instead of duplicated into competing stores.
 agents. Read `.memory/README.md` and any learning artifacts in that directory
 before working. Record verified corrections there when a session establishes
 that a prior belief about ChairLift was wrong, and promote stable rules into
-this file, `docs/agents/skills/`, or `docs/design/` as appropriate. Never record
+this file, `docs/design/engineering-lessons.md`, or `docs/design/` as appropriate. Never record
 secrets or personal data because the directory is version-controlled.
 
-## Learned agent skills
+## Learned lessons and skills
 
-**docs/agents/skills/** Read every file in `docs/agents/skills/` before
-planning, implementing, or reviewing changes. Each file is a durable lesson
-distilled from a previous automated run of
-[the mill](https://github.com/frostyard/mill) (the spec→PR harness, configured
-here via `.mill.toml`); they are binding guidance, not suggestions. New skills
-are added by the mill's harvest step and reviewed like any other change in the
-PR that carries them.
+- **Lessons.** Read
+  [docs/design/engineering-lessons.md](docs/design/engineering-lessons.md)
+  before planning, implementing, or reviewing changes. Its rules (no test file
+  in a puregotk package, gates that run only `internal/` tests, tag-aware YAML
+  key identity, a check for every collection entry, and others) are binding
+  guidance, not suggestions. Code comments link its anchors; keep them stable.
+  Add a lesson there when a defect or review shows a rule that a test cannot
+  enforce; record the correction itself in `.memory/corrections.jsonl`.
+- **Skills.** `.agents/skills/` holds the skills that frostyard/core syncs
+  (core ADR-0026; each has a `.synced-from-core` marker: edit it in core, not
+  here) and `TEMPLATE/` for a repo-local skill. `.claude/skills` is a symlink
+  to it.
+- **Working rules.** Run focused tests while you iterate and `make ci` before
+  you push. Review `git status` and `git diff` for unrelated or generated
+  files. When a review names a class of defect, fix every instance of the
+  class, not only the one it quotes. Report exactly which checks ran; when a
+  check cannot run, give the command and the reason.
+
+## Security and risk paths
+
+- Report vulnerabilities as `SECURITY.md` says (GitHub private vulnerability
+  reporting).
+- `.github/risk-paths.json` lists the high-risk paths (core ADR-0068): the
+  governance files (`Makefile`, workflows, the template gate, the risk list),
+  the tool pins, `.svu.yml`, `.goreleaser.yaml`, the PolicyKit policies
+  (`data/*.policy`), the installed wrapper script, and the root helper
+  (`cmd/chairlift-updex-helper/`, `internal/updexhelper/`). The
+  `risk-paths.yml` caller labels a PR that touches one `risk:high`. Keep the
+  list in step when a release, install or privileged path is added.
+- The PR template's `## Risk tier` section takes the tier from
+  [docs/risk-tiers.md](docs/risk-tiers.md).
 
 ## Org-wide decisions
 

@@ -84,6 +84,11 @@ are listed in [org-adrs.md](org-adrs.md).
   send automatically, 20 a day, one weekly count, an admin-only endpoint, and
   no `crash` report in phase 2); ChairLift records its own panics and 4 coded
   errors through std `problems`
+- [adr/0016-adopt-the-repository-baseline.md](adr/0016-adopt-the-repository-baseline.md)
+  — core's repository baseline: the template gate, `make verify`/`check`/`ci`
+  with `mise.toml` pins, `ci.yml`, risk paths, core skills in
+  `.agents/skills/`, the mill lessons folded into one design doc, and the
+  framework trees deleted (amends ADR-0010's historical-docs list)
 
 ### Design
 
@@ -94,6 +99,10 @@ are listed in [org-adrs.md](org-adrs.md).
 - [design/package-managers.md](design/package-managers.md) — the Homebrew,
   Flatpak, fwupd, bootc, sysupdate, and updex wrappers and their view-layer
   leaf packages (formerly `yeti/package-managers.md`)
+- [design/engineering-lessons.md](design/engineering-lessons.md) — the
+  durable test, configuration-code and documentation rules learned from past
+  defects and reviews (formerly the lesson files in `docs/agents/skills/`);
+  code comments link its anchors
 
 ### Specs
 
@@ -110,15 +119,9 @@ are listed in [org-adrs.md](org-adrs.md).
 
 ### Plans
 
-Historical plan/design artifacts from past automated runs (per
-[documentation-consistency.md](documentation-consistency.md), not sources of
-current behavior):
-
-- [plans/2026-02-27-extensions-to-features-design.md](plans/2026-02-27-extensions-to-features-design.md)
-- [plans/2026-02-27-extensions-to-features-plan.md](plans/2026-02-27-extensions-to-features-plan.md)
-- [plans/2026-02-27-feature-update-check-design.md](plans/2026-02-27-feature-update-check-design.md)
-- [plans/2026-03-04-puregotk-alignment-design.md](plans/2026-03-04-puregotk-alignment-design.md)
-- [plans/2026-03-04-puregotk-alignment-plan.md](plans/2026-03-04-puregotk-alignment-plan.md)
+No open plans. A new plan starts from [plans/TEMPLATE.md](plans/TEMPLATE.md).
+The finished plans of past automated runs were deleted with
+[ADR-0016](adr/0016-adopt-the-repository-baseline.md); Git history keeps them.
 
 ### Process and policy docs (uncategorized, indexed in place)
 
@@ -135,11 +138,10 @@ current behavior):
 - [review-rubric.md](review-rubric.md) — pull request review rubric
 - [SECURITY-AI.md](SECURITY-AI.md) — AI security policy
 - [org-adrs.md](org-adrs.md) — frostyard/core ADRs that bind this repository
-- [prompts/index.md](prompts/index.md) — reusable agent prompt catalog
-- [agents/skills/](agents/skills/) — durable learned lessons (mill harvest)
-  and core-synced skills; binding guidance for agents
-- [superpowers/](superpowers/) — historical plan/spec artifacts from past
-  superpowers runs (not sources of current behavior)
+- [prompts/index.md](prompts/index.md) — reusable agent prompt catalog:
+  [implement-issue.md](prompts/implement-issue.md),
+  [review-change.md](prompts/review-change.md),
+  [reconcile-documentation.md](prompts/reconcile-documentation.md)
 
 ## Conventions
 

@@ -10,7 +10,7 @@ import "gopkg.in/yaml.v3"
 // source nodes "the same key" for merge-precedence purposes: see
 // effectiveKeyIdentity's doc comment for the scalar and complex identity
 // rules, and
-// docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md
+// docs/design/engineering-lessons.md#yaml-key-identity-uses-the-tag
 // for why a scalar identity must include its resolved tag, not just Value.
 type effectiveKeyID struct {
 	kind    yaml.Kind

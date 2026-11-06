@@ -1,7 +1,7 @@
 # Pull request review rubric
 
 Use this rubric for every ChairLift pull request. Review the issue, read
-`AGENTS.md` and every file in `docs/agents/skills/`, then inspect the changed
+`AGENTS.md` and `docs/design/engineering-lessons.md`, then inspect the changed
 code in context rather than reviewing the diff alone.
 
 ## Review criteria
@@ -17,7 +17,7 @@ code in context rather than reviewing the diff alone.
 | Documentation | User-visible behavior, configuration, dependencies, installation layout, and repository invariants are documented where relevant. Current-state claims agree with source, config, `go.mod`, and packaging files. |
 | Maintainability | The change follows existing package boundaries and naming, reuses established helpers, keeps type and error handling explicit, and avoids adding a second source of truth. |
 
-Apply the durable lessons in `docs/agents/skills/` whenever their stated
+Apply the durable lessons in `docs/design/engineering-lessons.md` whenever their stated
 conditions match the change. A green workflow does not override a violated
 repository invariant or missing scenario coverage.
 

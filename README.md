@@ -367,8 +367,9 @@ See [docs/design/overview.md](docs/design/overview.md) and [docs/design/package-
 
 ### Testing
 
-Run `make ci` before pushing; it mirrors the hosted verify, lint, unit, race,
-and cross-architecture build gates. Run `make e2e` on a host with GTK4,
+Run `make verify` while you work and `make ci` before pushing; `make ci` mirrors
+the hosted verify, lint, unit, race, and cross-architecture build gates (run
+`mise install` first for the pinned golangci-lint and Node.js). Run `make e2e` on a host with GTK4,
 Libadwaita, `dbus-run-session`, and Xvfb to execute the built application's
 help path, start its dry-run window in a private headless session, poll bounded
 startup readiness, stage the complete install layout, and exercise the installed

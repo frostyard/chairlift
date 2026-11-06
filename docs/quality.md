@@ -5,14 +5,14 @@ It links to live reports rather than copying pass rates or coverage percentages
 that would immediately become stale. The [public metrics catalog](metrics/)
 collects those read-only sources and their interpretation boundaries.
 
-[![Tests](https://github.com/frostyard/chairlift/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/frostyard/chairlift/actions/workflows/test.yml?query=branch%3Amain)
+[![Tests](https://github.com/frostyard/chairlift/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/frostyard/chairlift/actions/workflows/ci.yml?query=branch%3Amain)
 [![Codecov](https://codecov.io/gh/frostyard/chairlift/branch/main/graph/badge.svg)](https://app.codecov.io/gh/frostyard/chairlift)
 
 ## Live signals
 
 | Signal | What it reports | Source |
 |---|---|---|
-| Tests workflow | Latest lint, unit-test, race-detection, verification, and cross-architecture build results | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/test.yml) |
+| Tests workflow | Latest lint, unit-test, race-detection, verification, and cross-architecture build results | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/ci.yml) |
 | Nightly compliance | Daily full CI, E2E, and known-vulnerability scan results for the default branch | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/nightly-compliance.yml) |
 | Issue triage | Deterministic labels applied from structured issue titles and bodies | [GitHub Actions](https://github.com/frostyard/chairlift/actions/workflows/triage.yml) |
 | Pull request checks | Gate results attached to each proposed change, including reruns and logs | Open a pull request and select its **Checks** tab |
@@ -34,14 +34,19 @@ workflow's **Unit Tests** log to distinguish those outcomes.
 The repository's `Tests` workflow runs on pushes and pull requests targeting
 `main`. Its jobs provide these independent signals:
 
-- **Lint** — `golangci-lint` over the Go source.
+- **Lint** — `golangci-lint` at the `mise.toml` pin over the Go source.
 - **Unit Tests** — headless tests under `internal/...`, with atomic coverage.
 - **Race Detection** — the same internal test scope under the race detector.
-- **Verify** — tidy-module, `go vet`, and `gofmt` checks.
+- **Verify** — `make ci` with the PR base: tidy-module, `go vet`, `gofmt`,
+  the pinned lint, the template gate (instruction aliases, the `docs/README.md`
+  index, risk paths, corrections, vendored files), the unit tests, the
+  append-only corrections check, the race detector and the build matrix.
 - **Build** — Linux builds for amd64 and arm64.
 
-`make ci` mirrors those credential-free checks locally in fail-fast order and
-also rebuilds the native binaries at the end. It is the pre-submission quality
+`make ci` mirrors those credential-free checks locally in fail-fast order
+(`make verify` first) and also rebuilds the native binaries at the end. The
+separate `Risk paths caller` workflow labels a pull request `risk:high` when
+it touches a path in `.github/risk-paths.json`. It is the pre-submission quality
 gate documented in `AGENTS.md`; Codecov's remote project status is additional
 and cannot be reproduced by that target.
 

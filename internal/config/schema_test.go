@@ -347,7 +347,7 @@ func TestSchemaPageGroups(t *testing.T) {
 // TestRawConfigMatchesConfigFields proves rawConfig's exported fields match
 // Config's exactly: same field count, same field names in the same order,
 // same yaml tag names in the same order. This is the parity test required
-// by docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md
+// by docs/design/engineering-lessons.md#derive-rules-from-the-canonical-struct
 // — rawConfig is a decoding mirror held to Config by this test, never a
 // second schema authority (the derivation in this file reads Config /
 // defaultConfig(), never rawConfig).
@@ -392,7 +392,7 @@ func TestRawConfigMatchesConfigFields(t *testing.T) {
 // omitempty option in the same order per index, and per field,
 // rawGroupConfig's type equal to
 // GroupConfig's type or exactly a pointer to it. This is the parity test
-// required by docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md:
+// required by docs/design/engineering-lessons.md#derive-rules-from-the-canonical-struct:
 // SchemaGroupFields() reads rawGroupConfig (what yaml.v3 actually decodes
 // into) because the spec designates it the field source, while this test
 // holds it to GroupConfig, the semantic authority, so the two cannot

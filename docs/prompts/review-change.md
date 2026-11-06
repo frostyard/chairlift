@@ -5,7 +5,7 @@ Use this prompt for a branch or pull-request review.
 ```text
 Review [BRANCH, COMMIT, OR DIFF] for correctness and regressions in ChairLift.
 
-Read AGENTS.md and every file in docs/agents/skills/ first. Inspect surrounding code and tests, not only the diff. Prioritize findings over summary.
+Read AGENTS.md and docs/design/engineering-lessons.md first. Inspect surrounding code and tests, not only the diff. Prioritize findings over summary.
 
 Check specifically for:
 - privileged mutations bypassing the fixed pkexec helper and PolicyKit policy;

@@ -38,5 +38,5 @@ vendor/
 Thumbs.db
 /chairlift-updex-helper
 
-# mill worktrees
+# agent worktrees
 .worktrees/

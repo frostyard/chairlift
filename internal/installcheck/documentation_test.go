@@ -104,7 +104,7 @@ func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
 		catalog := strings.Join(strings.Fields(readRepoFile(t, filepath.Join("docs", "metrics", "README.md"))), " ")
 		for _, required := range []string{
 			"../metrics.md",
-			"actions/workflows/test.yml",
+			"actions/workflows/ci.yml",
 			"actions/workflows/nightly-compliance.yml",
 			"app.codecov.io/gh/frostyard/chairlift",
 			"does not currently attach a reliable provenance marker",

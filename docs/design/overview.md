@@ -69,7 +69,7 @@ The `views.go` file defines the central `UserHome` struct that holds references 
 - `New(cfg, toastAdder)` — constructor that initializes `UserHome`
 - `ToastAdder` interface — `ShowToast(msg)`, `ShowErrorToast(msg)`, `SetUpdateBadge(count)` — implemented by Window
 
-`internal/views` imports puregotk, so it can never hold a `_test.go` (see `docs/agents/skills/gtk-headless-tests.md`). Decidable logic is therefore pushed down into nine puregotk-free leaf packages beneath it — `internal/views/actionmsg` and `internal/views/trustmsg` (toast text and UI decisions, see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg)), `internal/views/actionstate` (Homebrew update command/refresh outcomes and repeated-click gates, see [package-managers.md](./package-managers.md#view-layer-update-action-state-internalviewsactionstate)), `internal/views/badgestate` (thread-safe per-provider update counts and totals, see [package-managers.md](./package-managers.md#view-layer-update-badge-state-internalviewsbadgestate)), `internal/views/bundleview` (Brew bundle empty/error/unavailable presentation and per-row install gating, see [package-managers.md](./package-managers.md#view-layer-brew-bundle-state-internalviewsbundleview)), `internal/views/rowset` (single-row removal plus clear-then-repopulate bookkeeping, see [package-managers.md](./package-managers.md#view-layer-row-bookkeeping-internalviewsrowset)), `internal/views/flatpakstatus` (the Flatpak updates expander's subtitle text and expandable decision, applied by `loadFlatpakUpdates` from both retained `ListUpdates` errors, see [package-managers.md](./package-managers.md#view-layer-flatpak-update-status-internalviewsflatpakstatus)), `internal/views/featurestatus` (the Features page's per-feature update-status subtitle, which covers an update, a feature that waits for a newer OS image, a feature whose new version applies after a reboot, and an up-to-date feature, the any-component update decision, in which the waiting branch takes precedence over every update branch and the update over the pending-reboot branch, the whole check summarised at once by `Summarize` — one `Status` per row plus the update and waiting feature counts, and a base subtitle the page restores for every name the check did not answer for — and the features group description for all five check outcomes — `GroupDescriptionCheckFailed` when the check itself failed, and `GroupDescription` when it completed with zero features updatable, with updates found, with features waiting for a newer OS image, or with both updates and waiting features — applied by `checkFeatureUpdates`, which composes no subtitle or description text of its own and runs again after an update through `recheckFeatureUpdates`, see [package-managers.md](./package-managers.md#view-layer-feature-update-status-internalviewsfeaturestatus)), and `internal/views/pageview` (the row text, page status, os-release parsing, Help resource ordering, and maintenance-command selection shared by all seven page builders, plus the Problems page's row, status and detail text, see [package-managers.md](./package-managers.md#view-layer-page-presentation-internalviewspageview)) — each table- or scenario-tested headlessly. This layout is decision record
+`internal/views` imports puregotk, so it can never hold a `_test.go` (see `docs/design/engineering-lessons.md#no-tests-in-puregotk-packages`). Decidable logic is therefore pushed down into nine puregotk-free leaf packages beneath it — `internal/views/actionmsg` and `internal/views/trustmsg` (toast text and UI decisions, see [package-managers.md](./package-managers.md#view-layer-toast-and-decision-helpers-internalviewsactionmsg-internalviewstrustmsg)), `internal/views/actionstate` (Homebrew update command/refresh outcomes and repeated-click gates, see [package-managers.md](./package-managers.md#view-layer-update-action-state-internalviewsactionstate)), `internal/views/badgestate` (thread-safe per-provider update counts and totals, see [package-managers.md](./package-managers.md#view-layer-update-badge-state-internalviewsbadgestate)), `internal/views/bundleview` (Brew bundle empty/error/unavailable presentation and per-row install gating, see [package-managers.md](./package-managers.md#view-layer-brew-bundle-state-internalviewsbundleview)), `internal/views/rowset` (single-row removal plus clear-then-repopulate bookkeeping, see [package-managers.md](./package-managers.md#view-layer-row-bookkeeping-internalviewsrowset)), `internal/views/flatpakstatus` (the Flatpak updates expander's subtitle text and expandable decision, applied by `loadFlatpakUpdates` from both retained `ListUpdates` errors, see [package-managers.md](./package-managers.md#view-layer-flatpak-update-status-internalviewsflatpakstatus)), `internal/views/featurestatus` (the Features page's per-feature update-status subtitle, which covers an update, a feature that waits for a newer OS image, a feature whose new version applies after a reboot, and an up-to-date feature, the any-component update decision, in which the waiting branch takes precedence over every update branch and the update over the pending-reboot branch, the whole check summarised at once by `Summarize` — one `Status` per row plus the update and waiting feature counts, and a base subtitle the page restores for every name the check did not answer for — and the features group description for all five check outcomes — `GroupDescriptionCheckFailed` when the check itself failed, and `GroupDescription` when it completed with zero features updatable, with updates found, with features waiting for a newer OS image, or with both updates and waiting features — applied by `checkFeatureUpdates`, which composes no subtitle or description text of its own and runs again after an update through `recheckFeatureUpdates`, see [package-managers.md](./package-managers.md#view-layer-feature-update-status-internalviewsfeaturestatus)), and `internal/views/pageview` (the row text, page status, os-release parsing, Help resource ordering, and maintenance-command selection shared by all seven page builders, plus the Problems page's row, status and detail text, see [package-managers.md](./package-managers.md#view-layer-page-presentation-internalviewspageview)) — each table- or scenario-tested headlessly. This layout is decision record
 [ADR-0007](../adr/0007-pure-leaf-packages-route-around-untestable-gtk.md).
 
 ### Pages
@@ -263,7 +263,7 @@ this package's source-graph slice that the spec singles out for a direct
 unit test (`TestMergeKeyRecognition`, `TestShortYAMLTagNormalization` in
 `sourcegraph_test.go`) rather than only exercising them through an exported
 entry point, per
-`docs/agents/skills/helper-functions-need-direct-test-calls.md`; neither
+`docs/design/engineering-lessons.md#call-helpers-directly-in-tests`; neither
 helper is called directly by runtime loading, but both are reached indirectly
 through `resolveEffective` in the strict validator pipeline.
 
@@ -339,7 +339,7 @@ later, still-unimplemented merge-precedence pass would go on to discard in
 favor of a later `<<` entry — because this function proves every reachable
 node well-formed, not just the nodes an eventual effective-merge result
 would keep
-(`docs/agents/skills/discarded-merge-branches-still-need-validation.md`).
+(`docs/design/engineering-lessons.md#validate-discarded-merge-branches`).
 
 **Duplicate explicit-key detection (`internal/config/sourcegraph.go`).**
 Every reachable mapping's explicit keys must be pairwise unique under
@@ -349,7 +349,7 @@ parser recorded a positive line for it, that line. The identity
 deliberately compares only `Kind` and `Value`, reproducing `gopkg.in/yaml.v3`
 v3.0.1 `decode.go`'s own `uniqueKeys` predicate (inside `decoder.mapping`)
 exactly rather than the tag-aware key identity
-`docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md`
+`docs/design/engineering-lessons.md#yaml-key-identity-uses-the-tag`
 requires elsewhere in this package for merge-precedence purposes — that rule
 is about a different concern (`effectiveKeyIdentity`, described just below)
 and does not apply here, because yaml.v3's own duplicate-key guard never
@@ -390,7 +390,7 @@ yaml.ScalarNode, tag: target.ShortTag(), value: target.Value}` —
 `gopkg.in/yaml.v3` v3.0.1's `yaml.go` implements it to resolve an unset or
 `"!"` tag from the node's own value (`resolve("", n.Value)` for scalars),
 so this rule is exactly the tag-aware identity
-`docs/agents/skills/yaml-scalar-key-identity-needs-tag-not-just-value.md`
+`docs/design/engineering-lessons.md#yaml-key-identity-uses-the-tag`
 requires: a bare `1` and an explicitly `!!int`-tagged `1` are the same
 key, but a bare `1` and an explicitly `!!str`-tagged (quoted) `"1"` are not,
 and `01` and `1` are not (different `Value`). A `yaml.MappingNode` or
@@ -695,7 +695,7 @@ schema authority here — it is `Config`'s pointer-typed YAML-decoding mirror
 (`TestRawConfigMatchesConfigFields`) proves its exported fields, field order,
 and yaml tag names match `Config`'s exactly, so it stays a provably-in-sync
 mirror rather than a second source of truth per
-`docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md`.
+`docs/design/engineering-lessons.md#derive-rules-from-the-canonical-struct`.
 Both exported functions return a freshly allocated slice (and `SchemaGroups`
 an error for a page name outside `SchemaPages()`) on every call, so a caller
 mutating a returned slice cannot affect a later call. An empty or duplicate
@@ -713,7 +713,7 @@ same field count, same names and yaml tags per index, and each
 `rawGroupConfig` field type equal to `GroupConfig`'s or exactly a pointer to
 it (ignoring only that pointer-vs-value difference and `omitempty`) — so
 `rawGroupConfig` cannot silently drift from `GroupConfig` per
-`docs/agents/skills/derive-schema-from-canonical-struct-not-shadow-representation.md`.
+`docs/design/engineering-lessons.md#derive-rules-from-the-canonical-struct`.
 `SchemaActionFields()` reads `ActionConfig`'s yaml tags directly, since
 `ActionConfig` has no raw/pointer mirror. Both return a freshly allocated
 slice on every call and report an empty or duplicate field name as an error,
@@ -1326,6 +1326,30 @@ Note: `GtkShortcutsWindow` is not available in puregotk, so a custom `adw.Window
 
 Help page links are opened via `xdg-open` using `exec.Command`. The process is started asynchronously and its exit is waited on in a goroutine to avoid zombie processes.
 
+### Known limits
+
+These hold today; none is a defect with an open issue. They were first
+recorded in the retired `.planning/codebase/CONCERNS.md` and checked again
+against the code for [ADR-0016](../adr/0016-adopt-the-repository-baseline.md).
+
+- **App launch:** `launchApp` (`internal/views/applications_page.go`) passes
+  the application ID to `gtk-launch` without a check of its form. The IDs
+  come from Flatpak and desktop-file listings, never from typed input, and
+  `exec.Command` uses no shell.
+- **Maintenance scripts with `sudo: true`:** `runMaintenanceAction` runs
+  `pkexec <script>` with the script path from the configuration
+  (`pageview.MaintenanceCommand`), outside the fixed helper set of
+  "Privileged operations". PolicyKit's default `pkexec` action still asks
+  for administrator authentication, and on a packaged install the
+  configuration comes from the root-owned `/etc/chairlift` or
+  `/usr/share/chairlift` file. ChairLift neither checks the script path nor
+  logs a run beyond the error toast.
+- **Homebrew inventory:** `loadHomebrewPackages` lists formulae and then
+  casks, one after the other, under one `brewPackagesRefresh` generation.
+- **Large inventories:** no limit caps concurrent package operations, and the
+  main thread adds package rows one at a time, so an inventory of thousands
+  of packages can make the page slow to fill.
+
 ## Problems page
 
 Decision record: [ADR-0015](../adr/0015-problems-page-and-opt-in-reporting.md);
@@ -1800,14 +1824,15 @@ page_name:
 ## Build and Release
 
 - **Build**: `make build` builds three binaries: `build/chairlift` (main app), `build/chairlift-updex-helper` (privileged helper), and `build/chairlift-first-run` (pure-Go first-run gate), all with `CGO_ENABLED=0`
-- **CI mirror**: `make ci` runs every host-independent gate from `.github/workflows/test.yml` in fail-fast order — go.mod tidy check, `go vet`, gofmt check, `golangci-lint`, unit tests (`./internal/...` under `-run "^Test[^I]" -skip "Integration"`), the race detector, and the build. Its build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into `build/ci-linux-<arch>/` before rebuilding natively, so a compile failure on the non-host architecture cannot pass locally. The mill's deep gate (`.mill.toml`) calls this target. Codecov's remote project status additionally rejects coverage regressions greater than one percentage point, with no fixed project or patch target; it cannot be mirrored locally. The runtime-dependent E2E job is deliberately separate: `make e2e` builds the three binaries, executes the application's `--help` path (which must list `--first-run`), boots the dry-run GTK window under a private D-Bus/Xvfb session with `CHAIRLIFT_PROBLEMS_FIXTURES` set to the fixtures of `test/e2e/testdata/problems/`, polls all four readiness markers (the fourth is `problems: page built system=16 apps=7 source=ok`) for at most 30 seconds, requires one second of post-readiness stability, then terminates its private process group, stages the real `make install` layout under a temporary `DESTDIR` (which must hold an executable `usr/bin/chairlift-first-run` and no autostart path), and executes the staged `chairlift-updex-helper` rejection paths. For the first run it also checks `chairlift-first-run --help`, runs `--mark-done` and the gate against temporary homes (as `nobody` when the test runs as root), and boots `chairlift --first-run --dry-run` until it logs `first-run: window presented`, then checks that no marker exists. Its Go test package lives at `test/e2e`, imports no puregotk package, and is enforced by that explicit target rather than the `./internal/...` unit-test filter. The readiness markers are a log-line contract — decision record [ADR-0008](../adr/0008-e2e-readiness-is-a-log-marker-contract.md).
+- **Make gate** ([ADR-0016](../adr/0016-adopt-the-repository-baseline.md); core ADR-0043, ADR-0044): `make verify` runs the non-mutating checks — `go mod tidy -diff`, `go vet`, the gofmt check, `golangci-lint` at the `mise.toml` pin (`make lint-version-check` refuses another release), the template gate (`scripts/check-template.mjs` and `test/check-template.test.mjs`: instruction aliases, the `docs/README.md` index, `.github/risk-paths.json`, `.memory/corrections.jsonl`, vendored hashes) — and then the unit tests (`./internal/...` under `-run "^Test[^I]" -skip "Integration"`). `make check` formats first and then runs `verify`. `mise install` provisions the pinned golangci-lint and Node (22 or later is required); Go comes from go.mod.
+- **CI mirror**: `make ci` runs `make verify`, then the corrections check against `BASE` when set (`node scripts/check-corrections.mjs --base`), the race detector, and the build, in fail-fast order; the Verify job of `.github/workflows/ci.yml` runs it with the PR base. Its build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into `build/ci-linux-<arch>/` before rebuilding natively, so a compile failure on the non-host architecture cannot pass locally. Codecov's remote project status additionally rejects coverage regressions greater than one percentage point, with no fixed project or patch target; it cannot be mirrored locally. The runtime-dependent E2E job is deliberately separate: `make e2e` builds the three binaries, executes the application's `--help` path (which must list `--first-run`), boots the dry-run GTK window under a private D-Bus/Xvfb session with `CHAIRLIFT_PROBLEMS_FIXTURES` set to the fixtures of `test/e2e/testdata/problems/`, polls all four readiness markers (the fourth is `problems: page built system=16 apps=7 source=ok`) for at most 30 seconds, requires one second of post-readiness stability, then terminates its private process group, stages the real `make install` layout under a temporary `DESTDIR` (which must hold an executable `usr/bin/chairlift-first-run` and no autostart path), and executes the staged `chairlift-updex-helper` rejection paths. For the first run it also checks `chairlift-first-run --help`, runs `--mark-done` and the gate against temporary homes (as `nobody` when the test runs as root), and boots `chairlift --first-run --dry-run` until it logs `first-run: window presented`, then checks that no marker exists. Its Go test package lives at `test/e2e`, imports no puregotk package, and is enforced by that explicit target rather than the `./internal/...` unit-test filter. The readiness markers are a log-line contract — decision record [ADR-0008](../adr/0008-e2e-readiness-is-a-log-marker-contract.md).
 - **Dev build**: `make dev` builds with `CGO_ENABLED=1` and `-race` flag for race detection
 - **Version**: Set via ldflags by goreleaser (`buildVersion`, `buildCommit`, `buildDate`, `buildBy`)
 - **Semantic versioning**: Uses [svu](https://github.com/caarlos0/svu) via `make bump`
-- **CI**: GitHub Actions workflows for test, snapshot, and release (`.github/workflows/`); per [ADR-0034](../org-adrs.md), snapshot publishers use the repository-scoped `goreleaser-nightly` concurrency group with in-progress cancellation so only the newest tested `main` commit publishes to the rolling `dev` release and concurrent GoReleaser uploads cannot collide. Every external `uses:` reference in every workflow is pinned to a full 40-character commit SHA (with its version or source ref retained as a comment); `internal/installcheck.TestWorkflowActionsUseImmutableCommitSHAs` inventories both `.yml` and `.yaml` workflow files and rejects mutable tags, branches, short SHAs, and expressions while allowing repository-local `./` actions.
+- **CI**: GitHub Actions workflows for CI (`ci.yml`, workflow name `Tests`), snapshot, release, and the risk-paths caller (`risk-paths.yml`, which labels a PR `risk:high` when it touches a path in `.github/risk-paths.json`, core ADR-0068) (`.github/workflows/`); per [ADR-0034](../org-adrs.md), snapshot publishers use the repository-scoped `goreleaser-nightly` concurrency group with in-progress cancellation so only the newest tested `main` commit publishes to the rolling `dev` release and concurrent GoReleaser uploads cannot collide. Every external `uses:` reference in every workflow is pinned to a full 40-character commit SHA (with its version or source ref retained as a comment); `internal/installcheck.TestWorkflowActionsUseImmutableCommitSHAs` inventories both `.yml` and `.yaml` workflow files and rejects mutable tags, branches, short SHAs, and expressions while allowing repository-local `./` actions.
 - **Release**: GoReleaser config at `.goreleaser.yaml`. Its `metadata.homepage` is the single source of truth for the repository URL and is consumed by `release.footer`, whose "Full Changelog" link is templated from `{{ .Metadata.Homepage }}` rather than a hardcoded owner; two static tests guard that pairing — see the "Install-path consistency (`internal/installcheck`)" section of [package-managers.md](./package-managers.md#install-path-consistency-internalinstallcheck)
 - **Debian publication**: a tag push runs `.github/workflows/release.yml`. GoReleaser creates the GitHub release with the archives, `checksums.txt` and the deb/rpm/apk packages. `actions/attest-build-provenance` then attests all of them, and the final step sends a `publish-deb` `repository_dispatch` with the repository and tag to `frostyard/apt-publisher`, authenticated by `APT_PUBLISH_TOKEN`. apt-publisher is the only writer of `https://repository.frostyard.org/debian/` ([frostyard/core ADR-0055](../org-adrs.md)). It downloads every `.deb` asset of the tag, verifies its provenance against `refs/tags/<tag>`, and publishes it to the codenames registered for chairlift in its `config/producers.tsv`. After apt can download the new packages through the public URL, it dispatches `build` to the image repositories registered there (ADR-0056). The request is not `continue-on-error`, so a failed request fails the release. The rolling `dev` prerelease from `snapshot.yml` is never published to the APT repository and dispatches nothing. `internal/installcheck/release_workflow_test.go` pins the exact release and snapshot step sequences, the request's inputs, the workflow permissions and attestation subjects, and that the only `.deb` packages GoReleaser builds are the two names that must be registered with apt-publisher.
-- **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint), `make install`/`make uninstall` (system install including the three binaries, polkit policies, icons, and wrapper script, and no autostart entry; default `PREFIX=/usr`, the only prefix that matches where polkit reads policy files and the updex helper's fixed pkexec exec-path annotation — see "Privileged operations" above), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
+- **Other targets**: `make fmt` (gofmt), `make lint` (golangci-lint at the `mise.toml` pin), `make install`/`make uninstall` (system install including the three binaries, polkit policies, icons, and wrapper script, and no autostart entry; default `PREFIX=/usr`, the only prefix that matches where polkit reads policy files and the updex helper's fixed pkexec exec-path annotation — see "Privileged operations" above), `make build-linux-amd64`/`make build-linux-arm64` (cross-compilation)
 
 ### Runtime dependencies
 

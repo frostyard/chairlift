@@ -276,8 +276,8 @@ func TestParseAndValidateKnownPageWrongShape(t *testing.T) {
 // TestParseAndValidateEveryCanonicalPageAccepted iterates every page name
 // SchemaPages() returns and confirms each is accepted with a null value, so
 // no canonical page is accidentally rejected by validatePageEntries's known-
-// page check (docs/agents/skills/regression-tests-must-cover-every-
-// collection-entry.md).
+// page check (docs/design/engineering-lessons.md
+// #check-every-collection-entry).
 func TestParseAndValidateEveryCanonicalPageAccepted(t *testing.T) {
 	const path = "/etc/chairlift/config.yml"
 
