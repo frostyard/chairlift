@@ -1040,7 +1040,7 @@ Type aliases to `github.com/frostyard/updex/v2/updex`:
 
 | Function | Implementation | Mode | Timeout | Notes |
 |----------|---------------|------|---------|-------|
-| `IsInstalled()` | Go library: `client.Features()` (through the unexported `featuresLister` test seam) | Direct | 3s | Checks if updex features are configured: requires `err == nil` **and** `len(features) > 0`, because updex v2.1.3's `Features` returns an empty list with a nil error when no feature definitions exist; an empty list shows the Features page's unavailable group |
+| `IsInstalled()` | Go library: `client.Features()` (through the unexported `featuresLister` test seam) | Direct | 3s | Checks if updex features are configured: requires `err == nil` **and** `len(features) > 0`, because updex v2.2.0's `Features` returns an empty list with a nil error when no feature definitions exist; an empty list shows the Features page's unavailable group |
 | `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
 | `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
 | `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Preserves successful components when v2 reports structured partial failures, logs failed-component metadata, and returns `[]FeatureCheck`; true request failures still return an error |
@@ -1055,7 +1055,7 @@ next-boot image gate holds a feature or a rollback record holds it. The
 transfer result then carries `NeedsImage` ("needs image >= X") or
 `NotLinked` (with `Installed` false, nothing linked), or `Held` (the old links
 stay; `Installed` is true when the held link names a version). A nil error
-therefore does not mean every feature updated. updex v2.1.3 can also return an error that wraps
+therefore does not mean every feature updated. updex v2.1.3 and later can also return an error that wraps
 `sysext.ErrActivationIncomplete`: the extensions merged, but activation did
 not finish, and a reboot finishes it. On a per-transfer failure updex returns
 the results and an error together.
