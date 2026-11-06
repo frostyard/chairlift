@@ -382,7 +382,13 @@ secrets or personal data because the directory is version-controlled.
 - **Skills.** `.agents/skills/` holds the skills that frostyard/core syncs
   (core ADR-0026; each has a `.synced-from-core` marker: edit it in core, not
   here) and `TEMPLATE/` for a repo-local skill. `.claude/skills` is a symlink
-  to it.
+  to it. `.agents` stays a real directory: core's sync follows an `.agents`
+  symlink to its target. A sync pull request whose branch predates a skills
+  layout change writes to the old path, so update it from `main` and check
+  CI again before the merge.
+  `internal/installcheck.TestSyncedSkillsLiveInAgentsSkills` fails when
+  `.agents` is a symlink or a `.synced-from-core` marker lies outside
+  `.agents/skills/<name>/`.
 - **Working rules.** Run focused tests while you iterate and `make ci` before
   you push. Review `git status` and `git diff` for unrelated or generated
   files. When a review names a class of defect, fix every instance of the
