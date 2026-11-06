@@ -1333,17 +1333,21 @@ recorded in the retired `.planning/codebase/CONCERNS.md` and checked again
 against the code for [ADR-0016](../adr/0016-adopt-the-repository-baseline.md).
 
 - **App launch:** `launchApp` (`internal/views/applications_page.go`) passes
-  the application ID to `gtk-launch` without a check of its form. The IDs
-  come from Flatpak and desktop-file listings, never from typed input, and
-  `exec.Command` uses no shell.
+  the application ID to `gtk-launch` without a check of its form. Its 2
+  callers take the ID from the configuration (`app_id` of
+  `applications_installed_group`, default `io.github.kolunmi.Bazaar`, and of
+  `system_page`'s `health_group`, default `io.missioncenter.MissionCenter`),
+  never from typed input, and `exec.Command` uses no shell.
 - **Maintenance scripts with `sudo: true`:** `runMaintenanceAction` runs
   `pkexec <script>` with the script path from the configuration
   (`pageview.MaintenanceCommand`), outside the fixed helper set of
   "Privileged operations". PolicyKit's default `pkexec` action still asks
   for administrator authentication, and on a packaged install the
   configuration comes from the root-owned `/etc/chairlift` or
-  `/usr/share/chairlift` file. ChairLift neither checks the script path nor
-  logs a run beyond the error toast.
+  `/usr/share/chairlift` file. ChairLift does not check the script path.
+  It logs the title, script and `sudo` value when a run starts (and the
+  `[DRY-RUN]` line in dry-run mode), but it discards the script's output and
+  logs no result: a failure shows only as an error toast.
 - **Homebrew inventory:** `loadHomebrewPackages` lists formulae and then
   casks, one after the other, under one `brewPackagesRefresh` generation.
 - **Large inventories:** no limit caps concurrent package operations, and the

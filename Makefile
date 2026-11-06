@@ -1,4 +1,4 @@
-.PHONY: all build build-app build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint lint-version-check check verify verify-static verify-template ci build-linux-amd64 build-linux-arm64 install uninstall bump
+.PHONY: all build build-app build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint lint-version-check check verify verify-static verify-template corrections-base ci build-linux-amd64 build-linux-arm64 install uninstall bump
 
 # Binary names
 BINARY_NAME=chairlift
@@ -219,27 +219,16 @@ uninstall:
 # One command mirrors CI's host-independent gates. It runs verify (the
 # go.mod tidy diff, go vet, the gofmt check, the pinned golangci-lint, the
 # template gate and the unit tests), then the corrections check against BASE
-# when set, then the race detector, then the build matrix, in fail-fast order.
-# The GTK/Xvfb-dependent E2E job runs separately through `make e2e`.
-#
-# The corrections check compares .memory/corrections.jsonl with BASE: lines
-# are append-only (only an empty promoted_to may be filled in). The contract
-# starts with the gate: a BASE that does not hold
-# scripts/check-corrections.mjs had no such rule, so the comparison is skipped
-# with a notice (ADR-0016). Every BASE after the adoption holds the script.
+# (corrections-base), then the race detector, then the build matrix, in
+# fail-fast order. The GTK/Xvfb-dependent E2E job runs separately through
+# `make e2e`.
 #
 # The build step reproduces CI's GOOS/GOARCH matrix (linux/amd64 and
 # linux/arm64) into per-arch subdirectories, then rebuilds natively so
 # build/chairlift is left runnable on this host. A host-arch-only build would
 # let an arm64 compile failure pass locally and break CI.
 ci: verify
-	@if [ -n "$(BASE)" ]; then \
-		if git cat-file -e "$(BASE):scripts/check-corrections.mjs" 2>/dev/null; then \
-			node scripts/check-corrections.mjs --base "$(BASE)"; \
-		else \
-			echo "==> corrections: BASE $(BASE) predates the corrections gate; append-only comparison skipped"; \
-		fi; \
-	fi
+	$(MAKE) --no-print-directory corrections-base
 	@echo "==> race detector"
 	CGO_ENABLED=1 $(GOTEST) -race -short ./internal/... -run "^Test[^I]" -skip "Integration"
 	@echo "==> build"
@@ -247,6 +236,26 @@ ci: verify
 	GOOS=linux GOARCH=arm64 $(MAKE) build BUILD_DIR=$(BUILD_DIR)/ci-linux-arm64
 	$(MAKE) build
 	@echo "==> CI mirror passed"
+
+# The corrections check compares .memory/corrections.jsonl with BASE: lines
+# are append-only (only an empty promoted_to may be filled in). The contract
+# starts with the gate: a BASE that does not hold
+# scripts/check-corrections.mjs had no such rule, so the comparison is skipped
+# with a notice (ADR-0016). Every BASE after the adoption holds the script.
+#
+# A BASE that does not resolve to a commit is an error, never an old base: a
+# typo or an unfetched ref must not turn the comparison into a silent pass.
+corrections-base:
+	@if [ -z "$(BASE)" ]; then exit 0; fi; \
+	if ! git rev-parse --verify --quiet "$(BASE)^{commit}" >/dev/null; then \
+		echo "FAIL: BASE $(BASE) does not resolve to a commit (fetch it first)"; \
+		exit 1; \
+	fi; \
+	if git cat-file -e "$(BASE):scripts/check-corrections.mjs" 2>/dev/null; then \
+		node scripts/check-corrections.mjs --base "$(BASE)"; \
+	else \
+		echo "==> corrections: BASE $(BASE) predates the corrections gate; append-only comparison skipped"; \
+	fi
 
 bump: ## generate a new version with svu
 	@$(MAKE) build

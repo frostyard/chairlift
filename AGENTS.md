@@ -32,7 +32,9 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   never edit them here.
 - `make check` — `make fmt`, then `make verify`.
 - `make ci` — runs `make verify`, then the corrections check against `BASE`
-  when it is set (`make ci BASE=origin/main`), the race detector and the
+  when it is set (`make ci BASE=origin/main`; `make corrections-base` fails
+  when `BASE` does not resolve to a commit, and skips only a base that
+  predates `scripts/check-corrections.mjs`), the race detector and the
   build: every **host-independent** CI gate, in fail-fast order.
   The build step reproduces CI's `linux/amd64` + `linux/arm64` matrix into
   `build/ci-linux-<arch>/`, then rebuilds natively, so a cross-arch-only
@@ -385,7 +387,10 @@ secrets or personal data because the directory is version-controlled.
   you push. Review `git status` and `git diff` for unrelated or generated
   files. When a review names a class of defect, fix every instance of the
   class, not only the one it quotes. Report exactly which checks ran; when a
-  check cannot run, give the command and the reason.
+  check cannot run, give the command and the reason. A fact carried from an
+  old document or a research report becomes current-state text only after
+  you read every call site it describes (`git grep` the function); a
+  plausible claim about where a value comes from is not evidence.
 
 ## Security and risk paths
 
