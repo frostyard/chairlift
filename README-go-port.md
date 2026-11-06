@@ -12,7 +12,7 @@ A modern GTK4/Libadwaita system management tool written in Go using [puregotk](h
 - **Homebrew package management** - Install, update, and manage Homebrew formulae and casks
 - **System health monitoring** - View system information and health status
 - **System updates** - Check for and install system updates
-- **Maintenance tools** - System cleanup and optimization utilities
+- **Maintenance tools** - System, Homebrew, and Flatpak cleanup utilities
 - **Configuration-driven UI** - YAML-based configuration for portability
 
 ## Why puregotk?

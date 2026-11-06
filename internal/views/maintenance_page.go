@@ -146,21 +146,6 @@ func (uh *UserHome) buildMaintenancePage() {
 			}
 		}()
 	}
-
-	// Optimization group
-	if uh.config.IsGroupEnabled("maintenance_page", "maintenance_optimization_group") {
-		group := adw.NewPreferencesGroup()
-		group.SetTitle("System Optimization")
-		group.SetDescription("Optimize system performance")
-
-		// Placeholder for optimization features
-		row := adw.NewActionRow()
-		row.SetTitle("Optimization tools")
-		row.SetSubtitle("Coming soon")
-		group.Add(&row.Widget)
-
-		page.Add(group)
-	}
 }
 
 // onBrewCleanupClicked handles the Homebrew cleanup button click

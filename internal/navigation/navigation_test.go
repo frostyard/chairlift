@@ -158,7 +158,6 @@ func TestPageMetadataCoversEveryBuilderBackedGroup(t *testing.T) {
 			"maintenance_cleanup_group",
 			"maintenance_brew_group",
 			"maintenance_flatpak_group",
-			"maintenance_optimization_group",
 		},
 		"updates": {
 			"bootc_updates_group",
