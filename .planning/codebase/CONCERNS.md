@@ -20,26 +20,6 @@
 
 ## Known Bugs
 
-**openURL Does Nothing:**
-- Symptoms: Clicking any external link (website, issues, help URLs) does nothing
-- Files: `internal/views/userhome.go:1342-1346`
-- Trigger: Click any row with external link icon
-- Workaround: None - URLs don't work
-- Fix: Use `xdg-open` or `gtk_show_uri`:
-  ```go
-  func (uh *UserHome) openURL(url string) {
-      cmd := exec.Command("xdg-open", url)
-      _ = cmd.Start()
-  }
-  ```
-
-**Maintenance Actions Not Executed:**
-- Symptoms: Clicking "Run" on maintenance cleanup actions does nothing
-- Files: `internal/views/userhome.go:1347-1350`
-- Trigger: Configure maintenance actions in YAML, click Run button
-- Workaround: None
-- Fix: Implement script execution (consider `pkexec` for sudo scripts)
-
 **Unused Function Warning Suppressed:**
 - Symptoms: `cleanupProgressUI()` marked as `//nolint:unused` but never called
 - Files: `internal/views/userhome.go:2479-2498`
