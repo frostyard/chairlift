@@ -1827,7 +1827,7 @@ page_name:
 | -------------------------------- | ------------------------------------------------------------------------------------------- |
 | `codeberg.org/puregotk/puregotk` | GTK4/Adwaita bindings (no CGO)                                                              |
 | `github.com/frostyard/snowkit`   | GObject registration, main-thread dispatch                                                  |
-| `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.1.3 in go.mod) |
+| `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.2.0 in go.mod) |
 | `gopkg.in/yaml.v3`               | YAML config parsing                                                                         |
 | `golang.org/x/text`              | Title-casing OS release info keys                                                           |
 | `github.com/frostyard/std`       | `problems`: ChairLift's own problem records and the journal reader of the Problems page    |
