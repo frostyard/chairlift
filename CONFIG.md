@@ -99,7 +99,9 @@ valid page.
     - `sudo`: Boolean indicating if the script requires administrator privileges (uses pkexec)
 - `maintenance_brew_group`: Homebrew cleanup (runs `brew cleanup` to remove old versions and cache)
 - `maintenance_flatpak_group`: Flatpak cleanup (runs `flatpak uninstall --unused` with no scope flag, which covers every installation, to remove unused runtimes)
-- `maintenance_optimization_group`: System optimization tools
+- `maintenance_optimization_group`: **Deprecated.** It showed only a "Coming soon"
+  placeholder and now renders nothing. The key stays valid, so an existing
+  file that names it still loads; remove it from your configuration.
 
 ### Features Page (`features_page`)
 
@@ -197,8 +199,6 @@ maintenance_page:
   maintenance_brew_group:
     enabled: true
   maintenance_flatpak_group:
-    enabled: true
-  maintenance_optimization_group:
     enabled: true
 
 help_page:

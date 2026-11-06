@@ -359,8 +359,13 @@ func defaultConfig() *Config {
 					},
 				},
 			},
-			"maintenance_brew_group":         GroupConfig{Enabled: true},
-			"maintenance_flatpak_group":      GroupConfig{Enabled: true},
+			"maintenance_brew_group":    GroupConfig{Enabled: true},
+			"maintenance_flatpak_group": GroupConfig{Enabled: true},
+			// Deprecated: maintenance_optimization_group only ever showed a
+			// "Coming soon" placeholder and now renders nothing. It stays
+			// in the schema because an unknown group is a schema error that
+			// disables every group, and existing files name it. It is in no
+			// navigation.Item, so it cannot keep the Maintenance page visible.
 			"maintenance_optimization_group": GroupConfig{Enabled: true},
 		},
 		FeaturesPage: PageConfig{

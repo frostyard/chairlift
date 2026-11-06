@@ -54,8 +54,6 @@ maintenance_page:
     enabled: true
   maintenance_flatpak_group:
     enabled: true
-  maintenance_optimization_group:
-    enabled: true
 
 features_page:
   features_group:

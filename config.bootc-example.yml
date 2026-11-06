@@ -50,8 +50,6 @@ maintenance_page:
       - title: Clean Up Boot Entries  # Display title for the action
         script: /usr/libexec/bls-gc  # Path to the script to execute
         sudo: true  # Whether the script requires administrator privileges
-  maintenance_optimization_group:
-    enabled: true  # Show optimization tools
 
 features_page:
   features_group:

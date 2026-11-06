@@ -11,14 +11,12 @@
 - Impact: Hard to maintain, test, or modify without introducing bugs. High cognitive load for developers
 - Fix approach: Split into separate files per page (system.go, updates.go, applications.go, etc.) or extract into sub-packages. Consider a presenter/controller pattern
 
-**Unimplemented Features (Stubs):**
-- Issue: Several placeholder functions that do nothing
-- Files:
-  - `internal/views/userhome.go:1345-1350` - `openURL()` logs but never opens URLs
-  - `internal/views/userhome.go:1347-1350` - `runMaintenanceAction()` has `// TODO: Execute the script`
-  - `internal/views/userhome.go:964-970` - "Optimization tools - Coming soon" placeholder
-- Impact: Users clicking "Run" buttons, or expecting maintenance actions, get no action
-- Fix approach: Implement `xdg-open` for URLs and shell execution for scripts
+**Unimplemented Features (Stubs):** resolved.
+- `openURL()` (`internal/views/help_page.go`) runs `xdg-open`, and
+  `runMaintenanceAction()` (`internal/views/maintenance_page.go`) runs the
+  configured script.
+- The "Optimization tools - Coming soon" placeholder was removed; the
+  `maintenance_optimization_group` key is deprecated and renders nothing.
 
 ## Known Bugs
 
