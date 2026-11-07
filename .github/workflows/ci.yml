@@ -28,7 +28,7 @@ jobs:
       # golangci-lint comes from mise.toml and mise.lock, checksum-verified,
       # so CI runs exactly the release `make lint` checks for.
       - name: Install golangci-lint
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
         with:
           install: true
           install_args: golangci-lint
@@ -143,7 +143,7 @@ jobs:
       # checksum-verified: golangci-lint for the pinned lint, Node for the
       # template gate in `make verify`.
       - name: Install golangci-lint and Node
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
         with:
           install: true
           install_args: golangci-lint node
