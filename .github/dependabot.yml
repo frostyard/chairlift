@@ -1,3 +1,6 @@
+# Each entry has 1 group with `patterns: ["*"]`, so it opens at most 1
+# version-update PR for each run (frostyard/core ADR-0075). Security
+# updates stay ungrouped.
 version: 2
 updates:
   - package-ecosystem: "gomod"
@@ -5,9 +8,15 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      gomod:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
