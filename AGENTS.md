@@ -402,13 +402,19 @@ secrets or personal data because the directory is version-controlled.
 
 - Report vulnerabilities as `SECURITY.md` says (GitHub private vulnerability
   reporting).
-- `.github/risk-paths.json` lists the high-risk paths (core ADR-0068): the
-  governance files (`Makefile`, workflows, the template gate, the risk list),
-  the tool pins, `.svu.yml`, `.goreleaser.yaml`, the PolicyKit policies
-  (`data/*.policy`), the installed wrapper script, and the root helper
-  (`cmd/chairlift-updex-helper/`, `internal/updexhelper/`). The
-  `risk-paths.yml` caller labels a PR that touches one `risk:high`. Keep the
-  list in step when a release, install or privileged path is added.
+- `.github/risk-paths.json` lists the high-risk paths (core ADR-0068, amended
+  by ADR-0078): schema version 2, where each entry is a glob with a level, and
+  `default_level` (L3) covers a path that no glob matches. The governance files
+  (`Makefile`, workflows, the template gate, the risk list) are L2; the tool
+  pins, `.svu.yml`, `.goreleaser.yaml`, the PolicyKit policies
+  (`data/*.policy`), the installed wrapper script and the root helper
+  (`cmd/chairlift-updex-helper/`, `internal/updexhelper/`) are L1. The
+  `risk-paths.yml` caller, workflow name `PR triage`, runs core's
+  `pr-triage.yml` on every pull request (core ADR-0077, ADR-0078). It adds one
+  level label `level:L1` to `level:L4`, from the list at the base, and
+  `risk:high` for L1 and L2. It also removes `ready-for-human` when the head
+  moves after the label. Keep the list in step when a release, install or
+  privileged path is added.
 - The PR template's `## Risk tier` section takes the tier from
   [docs/risk-tiers.md](docs/risk-tiers.md).
 
