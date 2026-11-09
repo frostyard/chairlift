@@ -1,61 +1,76 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "default_level": "L3",
   "paths": [
     {
       "glob": ".github/risk-paths.json",
+      "level": "L2",
       "why": "governance: the high-risk path list"
     },
     {
       "glob": ".github/workflows/**",
+      "level": "L2",
       "why": "governance: CI, the risk-paths caller and token permissions"
     },
     {
       "glob": "Makefile",
+      "level": "L2",
       "why": "governance: the verify gate"
     },
     {
       "glob": "scripts/check-template.mjs",
+      "level": "L2",
       "why": "governance: the template verification gate"
     },
     {
       "glob": "scripts/check-corrections.mjs",
+      "level": "L2",
       "why": "governance: the corrections validation gate"
     },
     {
       "glob": "scripts/lib/**",
+      "level": "L2",
       "why": "governance: the vendored risk-path validator and matcher"
     },
     {
       "glob": "mise.toml",
-      "why": "supply chain: the tool pins that CI installs"
+      "level": "L1",
+      "why": "update verification: the tool pins that CI installs"
     },
     {
       "glob": "mise.lock",
-      "why": "supply chain: the checksums of the tools that CI installs"
+      "level": "L1",
+      "why": "update verification: the checksums of the tools that CI installs"
     },
     {
       "glob": ".svu.yml",
+      "level": "L1",
       "why": "publication: the version rule for release tags (make bump)"
     },
     {
       "glob": ".goreleaser.yaml",
+      "level": "L1",
       "why": "publication: release archives and the nFPM packages, with the install layout of the privileged helper and the PolicyKit policies"
     },
     {
       "glob": "data/*.policy",
-      "why": "privilege: the PolicyKit actions that pkexec authorizes"
+      "level": "L1",
+      "why": "auth: the PolicyKit actions that pkexec authorizes"
     },
     {
       "glob": "data/chairlift-wrapper.sh",
-      "why": "install script: installed to /usr/bin as chairlift-wrapper"
+      "level": "L1",
+      "why": "publication: the install script that packages put in /usr/bin as chairlift-wrapper"
     },
     {
       "glob": "cmd/chairlift-updex-helper/**",
-      "why": "privilege: the helper that pkexec runs as root"
+      "level": "L1",
+      "why": "auth: the helper that pkexec runs as root"
     },
     {
       "glob": "internal/updexhelper/**",
-      "why": "privilege: the root helper's argv validation and dispatch"
+      "level": "L1",
+      "why": "auth: the root helper's argv validation and dispatch"
     }
   ]
 }
