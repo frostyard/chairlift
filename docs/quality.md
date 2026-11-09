@@ -44,11 +44,14 @@ The repository's `Tests` workflow runs on pushes and pull requests targeting
 - **Build** — Linux builds for amd64 and arm64.
 
 `make ci` mirrors those credential-free checks locally in fail-fast order
-(`make verify` first) and also rebuilds the native binaries at the end. The
-separate `Risk paths caller` workflow labels a pull request `risk:high` when
-it touches a path in `.github/risk-paths.json`. It is the pre-submission quality
-gate documented in `AGENTS.md`; Codecov's remote project status is additional
-and cannot be reproduced by that target.
+(`make verify` first) and also rebuilds the native binaries at the end. It is
+the pre-submission quality gate documented in `AGENTS.md`; Codecov's remote
+project status is additional and cannot be reproduced by that target. The
+separate `PR triage` workflow runs core's `pr-triage.yml` on every pull
+request (core ADR-0077, ADR-0078). It adds one level label `level:L1` to
+`level:L4`, from the paths `.github/risk-paths.json` lists at the base, and
+`risk:high` for L1 and L2. It removes `ready-for-human` when the head moves
+after the label, or when the label comes while CI at the head is not green.
 
 ```bash
 make ci

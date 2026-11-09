@@ -28,8 +28,11 @@ The ones that bind ChairLift:
 - [ADR-0043 — Pin repository tools in mise and name the verify gate](https://github.com/frostyard/core/blob/main/docs/adr/0043-pin-repository-tools-in-mise-and-name-the-verify-gate.md) — `mise.toml`/`mise.lock` pin golangci-lint and Node; go.mod's `go` line is the only Go pin
 - [ADR-0044 — Expose the make gate triad in every repository](https://github.com/frostyard/core/blob/main/docs/adr/0044-expose-the-make-gate-triad-in-every-repository.md) — `make verify`, `make check`, `make ci` (ADR-0016)
 - [ADR-0053 — Name the svu config .svu.yml](https://github.com/frostyard/core/blob/main/docs/adr/0053-name-the-svu-config-svu-yml.md) — `.svu.yml`, never `.svu.yaml`
-- [ADR-0068 — Label pull requests that touch high-risk paths](https://github.com/frostyard/core/blob/main/docs/adr/0068-label-pull-requests-that-touch-high-risk-paths.md) — `.github/risk-paths.json` and the `risk-paths.yml` caller add `risk:high`
+- [ADR-0068 — Label pull requests that touch high-risk paths](https://github.com/frostyard/core/blob/main/docs/adr/0068-label-pull-requests-that-touch-high-risk-paths.md) — `.github/risk-paths.json` and the `risk-paths.yml` caller add `risk:high` (ADR-0078 amends it: the list carries a level per entry, and `risk:high` stays for L1 and L2)
 - [ADR-0071 — Hold every code repository to one baseline](https://github.com/frostyard/core/blob/main/docs/adr/0071-hold-every-code-repository-to-one-baseline.md) — rows B1 to B16 of core's `docs/specs/repository-baseline.md` (ADR-0016)
+- [ADR-0076 — Require status checks on every default branch](https://github.com/frostyard/core/blob/main/docs/adr/0076-require-status-checks-on-every-default-branch.md) — the `main` branch requires status checks; the names are on frostyard/core#222
+- [ADR-0077 — Bind ready-for-human to the head commit](https://github.com/frostyard/core/blob/main/docs/adr/0077-bind-ready-for-human-to-the-head-commit.md) — the `PR triage` caller removes `ready-for-human` when the PR head moves after the label, or when the label comes while CI at the head is not green
+- [ADR-0078 — Sort pull requests by levels L1 to L4](https://github.com/frostyard/core/blob/main/docs/adr/0078-sort-pull-requests-by-levels-l1-to-l4.md) — `.github/risk-paths.json` is schema version 2 with a level per entry, and `PR triage` adds one `level:*` label
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.
