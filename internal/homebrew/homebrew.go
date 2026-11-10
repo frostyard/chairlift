@@ -339,7 +339,11 @@ func ListOutdated() ([]Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseOutdated(output)
+}
 
+// parseOutdated reads `brew outdated --json=v2`.
+func parseOutdated(output string) ([]Package, error) {
 	var data struct {
 		Formulae []struct {
 			Name              string   `json:"name"`

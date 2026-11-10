@@ -167,3 +167,30 @@ func TestParsePackagesJSONMalformedOutputReturnsError(t *testing.T) {
 		})
 	}
 }
+
+func TestParseOutdatedKeepsTheVersionAnUpgradeBrings(t *testing.T) {
+	out := `{"formulae":[{"name":"gh","installed_versions":["2.82.0"],"current_version":"2.83.1","pinned":false},
+{"name":"go","installed_versions":["1.25.3","1.25.4"],"current_version":"1.26.0","pinned":true}],
+"casks":[{"name":"firefox","installed_versions":["141.0"],"current_version":"142.0"}]}`
+	got, err := parseOutdated(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Package{
+		{Name: "gh", Version: "2.82.0", Latest: "2.83.1", Outdated: true},
+		{Name: "go", Version: "1.25.3, 1.25.4", Latest: "1.26.0", Outdated: true, Pinned: true},
+		{Name: "firefox", Version: "141.0", Latest: "142.0", Outdated: true},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d packages, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		g, w := got[i], want[i]
+		if g.Name != w.Name || g.Version != w.Version || g.Latest != w.Latest || g.Pinned != w.Pinned || !g.Outdated {
+			t.Errorf("package %d = %+v, want %+v", i, g, w)
+		}
+	}
+	if _, err := parseOutdated("not json"); err == nil {
+		t.Error("bad JSON gave no error")
+	}
+}
