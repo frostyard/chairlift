@@ -322,7 +322,9 @@ An agent must not break these:
   and compact Alt+number over visible pages. Help is a dialog (F1), not a
   page, and `help_page` configures its links. The rail, the palette's "Go
   to" commands, the pages' links (`Env.Navigate`) and the shortcuts all go
-  through `Main.Navigate`, which applies `navigation.Resolve`; the shortcuts
+  through `Main.Navigate`, which applies `navigation.Resolve`. `Main.View`
+  calls `Palette.RunPending` first, before it takes the toasts or captures
+  the page, so a palette command shows in the frame that runs it. The shortcuts
   dialog lists `navigation.Shortcuts` of the same visible inventory, and
   `TestEveryAdvertisedShortcutWorks` presses every one. Do not reintroduce a
   second page or shortcut inventory in `internal/window` or `internal/app`.
