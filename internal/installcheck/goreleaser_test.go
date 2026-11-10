@@ -13,8 +13,8 @@ import (
 )
 
 // wantSPDXLicense is the SPDX identifier the project's actual license (GPLv3
-// text in LICENSE, gtk.LicenseGpl30Value — the GTK bindings' "GPL 3.0 or later"
-// enum value — in internal/window/window.go's about dialog) resolves to.
+// text in LICENSE, "GNU GPL 3.0" in internal/window/main.go's About dialog)
+// resolves to.
 // .goreleaser.yaml's top-level metadata.license and every nfpms[] entry's
 // license must agree with this constant; see
 // docs/design/package-managers.md's "Install-path consistency" section for the

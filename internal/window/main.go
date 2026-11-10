@@ -49,6 +49,7 @@ func NewMain(env *views.Env, store *views.Store) *Main {
 	m.Items = navigation.VisibleItems(env.Enabled)
 	m.Shell.Brand = frostui.Brand{Name: "ChairLift", Tagline: "Snow Linux command center", Logo: ui.MustParseSVG(logoSVG)}
 	m.Shell.Selected = m.Items[0].Name
+	m.Shell.Dialogs = env.Dialogs
 	env.SetNavigate(m.Navigate)
 	if env.Enabled(navigation.HelpConfigPage, navigation.HelpGroup) {
 		if g := env.Group(navigation.HelpConfigPage, navigation.HelpGroup); g != nil {
@@ -148,9 +149,13 @@ func (m *Main) menu(menu *ui.Menu) {
 	}
 }
 
-// bindShortcuts binds every shortcut navigation advertises.
+// bindShortcuts binds every shortcut navigation advertises, except the
+// palette's and the console's, which the shell binds itself.
 func (m *Main) bindShortcuts(c *ui.Context) {
 	for _, s := range navigation.Shortcuts(m.Items) {
+		if s.Action == navigation.ActionPalette || s.Action == navigation.ActionConsole {
+			continue
+		}
 		mods, key, ok := keyOf(s.Keys)
 		if !ok {
 			log.Printf("window: shortcut %v has no key binding", s.Keys)

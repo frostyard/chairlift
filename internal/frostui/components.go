@@ -82,9 +82,11 @@ func IconButton(c *ui.Context, icon, label string) ui.Element {
 // LabeledButton is a button with an icon before its label. primary makes
 // it the accent button.
 func LabeledButton(c *ui.Context, icon, label string, primary bool) ui.Element {
-	b := ui.Button(c, "")
+	var b ui.Element
 	if primary {
 		b = ui.PrimaryButton(c, "")
+	} else {
+		b = ui.Button(c, "")
 	}
 	return b.Label(label).Children(func() {
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {

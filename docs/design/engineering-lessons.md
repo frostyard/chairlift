@@ -23,37 +23,31 @@ rest; Git history keeps the originals.
 ### Tests
 
 <a id="no-tests-in-puregotk-packages"></a>
-#### No test file in a package that imports puregotk
+#### Load UI libraries late, so views can be tested
 
-puregotk loads GTK, Libadwaita, GLib and graphene with `dlopen` at package
-initialization, and panics when a library is missing. The CI runners have
-none of these libraries. So a test binary for any package that imports
-puregotk, directly or transitively, panics before a test function runs, for
-example:
+The GTK 4 window (puregotk, until ADR-0017) loaded GTK, Libadwaita, GLib and
+graphene with `dlopen` at package initialization and panicked when one was
+missing, so a test binary of any package importing it panicked before a test
+ran, on CI and anywhere without those libraries. Its window packages could
+hold no tests at all, and a host with GTK installed ran such a test green,
+hiding the problem.
 
-```
-panic: Path for library: graphene not found ...
-FAIL github.com/frostyard/chairlift/internal/views
-```
+MyGo loads GTK only in `App.Run`, and `ui.NewTester` renders a view on the
+CPU with no display, so `internal/views`, `internal/window`,
+`internal/frostui` and `internal/app` hold tests now. Keep it that way:
 
-- `internal/views`, `internal/window` and `internal/app` import puregotk and
-  must stay without `_test.go` files. A guard, a nil check or a zero-value
-  struct in the test does not help: the panic comes at init.
-- A host with GTK installed (for example through linuxbrew) runs such a test
-  green, and `make ci` passes locally. Do not trust local success for a test
-  in a puregotk package. The only safe signal: the package does not import
-  puregotk.
-- Put the decidable, widget-free logic in a small package that imports no
-  puregotk (the nine leaf packages under `internal/views/`, such as
-  `trustmsg`, `actionmsg` and `pageview`) and test it there, table-driven.
-- The CI name filter (`-run "^Test[^I]" -skip "Integration"`) is not an
-  escape hatch: a skipped test still lives in the binary that panics at init.
-- A method of a puregotk-holding struct (for example a nil guard on a widget
-  field) cannot have a headless unit test. Extract its decidable core when it
-  needs a test.
+- Never load a UI library in an `init` function or a package-level variable.
+  A package that does so makes every package importing it untestable.
+- The Tester needs Pango and cairo (text layout) but no GTK and no display:
+  the CI unit-test jobs install `libpangocairo-1.0-0` and a font. A test
+  that needs a real window, GL or AT-SPI belongs in `make e2e`.
+- Keep decisions in the pure leaf packages under `internal/views/`
+  (`pageview`, `actionmsg`, `actionstate` and the rest) anyway: a
+  table-driven test of a function is cheaper and clearer than a frame.
+- A test that cannot avoid a backend call is wrong: give the domain struct a
+  function field for the call and inject a fake.
 
-Guard: the `pageview` wiring test covers all seven page builders (see
-`AGENTS.md`, "Headless view coverage stays puregotk-free").
+Guard: `internal/installcheck.TestNoGTK4Bindings` keeps puregotk out.
 
 <a id="gates-run-only-internal-tests"></a>
 #### The gates run only the tests under `internal/`

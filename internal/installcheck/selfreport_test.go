@@ -39,7 +39,7 @@ func TestChairLiftRecordsItsProblemsWithTheReleaseVersion(t *testing.T) {
 			continue
 		}
 		found = true
-		if build.Main != "./cmd/chairlift/main.go" {
+		if build.Main != "./cmd/chairlift" {
 			t.Errorf("chairlift build main = %q", build.Main)
 		}
 		flags := strings.Join(build.Ldflags, " ")
@@ -60,7 +60,7 @@ func TestChairLiftRecordsItsProblemsWithTheReleaseVersion(t *testing.T) {
 		"version.Version = buildVersion",
 		"recorder := selfreport.Init(version.Version)",
 		"\tdefer recorder.RecoverPanic()\n",
-		"application := app.New()",
+		"app.Run(opts)",
 	}
 	last := -1
 	for _, fragment := range order {

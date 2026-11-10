@@ -49,6 +49,7 @@ are listed in [org-adrs.md](org-adrs.md).
 - [adr/0007-pure-leaf-packages-route-around-untestable-gtk.md](adr/0007-pure-leaf-packages-route-around-untestable-gtk.md)
   — puregotk-importing packages stay test-free; all decidable logic lives in
   headless leaf packages with wiring tests proving the page builders use them
+  (superseded by ADR-0017)
 - [adr/0008-e2e-readiness-is-a-log-marker-contract.md](adr/0008-e2e-readiness-is-a-log-marker-contract.md)
   — E2E startup readiness is three exact stdout markers polled under
   dbus-run-session + xvfb-run; the log lines are a public API
@@ -89,6 +90,13 @@ are listed in [org-adrs.md](org-adrs.md).
   with `mise.toml` pins, `ci.yml`, risk paths, core skills in
   `.agents/skills/`, the mill lessons folded into one design doc, and the
   framework trees deleted (amends ADR-0010's historical-docs list)
+- [adr/0017-mygo-command-center-window.md](adr/0017-mygo-command-center-window.md)
+  — the window is a MyGo command center (Overview, Updates, Apps, Features,
+  Problems, Maintenance, a palette, a console and a status bar) on GTK 3;
+  puregotk is gone, views are tested with MyGo's Tester, the console streams
+  real command output through `internal/cmdlog`, changes run in one serial
+  job queue, and the `frostui` kit stays free of ChairLift imports
+  (supersedes ADR-0007)
 
 ### Design
 
@@ -99,6 +107,9 @@ are listed in [org-adrs.md](org-adrs.md).
 - [design/package-managers.md](design/package-managers.md) — the Homebrew,
   Flatpak, fwupd, bootc, sysupdate, and updex wrappers and their view-layer
   leaf packages (formerly `yeti/package-managers.md`)
+- [design/frostui.md](design/frostui.md) — the frostyard desktop UI kit on
+  MyGo (`internal/frostui`): what it holds, its threading rules, and the plan
+  to move it to its own module for frostmail, frostnotes and frostread
 - [design/engineering-lessons.md](design/engineering-lessons.md) — the
   durable test, configuration-code and documentation rules learned from past
   defects and reviews (formerly the lesson files in `docs/agents/skills/`);

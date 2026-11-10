@@ -1,6 +1,6 @@
 # 0007 — Put all decidable logic in headless leaf packages; keep GTK packages test-free
 
-- **Status:** Accepted
+- **Status:** Superseded by [0017](0017-mygo-command-center-window.md)
 - **Date:** 2026-08-12
 
 ## Context

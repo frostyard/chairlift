@@ -367,22 +367,29 @@ func TestLoadAllCandidatesAbsentReturnsDefaultsWithoutError(t *testing.T) {
 	}
 }
 
+// TestWindowConfigFailureWiringIsPersistent checks the source wiring of
+// ADR-0003's persistent diagnostic: the app hands the load error to the
+// window, which shows it in a toast that never times out.
+// internal/window's tests check the toast itself.
 func TestWindowConfigFailureWiringIsPersistent(t *testing.T) {
-	sourcePath := filepath.Join(repoRoot(), "internal", "window", "window.go")
-	source, err := os.ReadFile(sourcePath)
-	if err != nil {
-		t.Fatalf("read %s: %v", sourcePath, err)
-	}
-
-	text := string(source)
-	for _, required := range []string{
-		"config.Load()",
-		"configError:       configErr",
-		"w.ShowErrorToast(w.configError.ToastMessage())",
-		"toast.SetTimeout(0)",
+	for file, required := range map[string][]string{
+		filepath.Join("internal", "app", "app.go"): {
+			"cfg, cfgErr := config.Load()",
+			"env.ConfigErr = cfgErr",
+		},
+		filepath.Join("internal", "window", "main.go"): {
+			"configToastText(m.Env.ConfigErr)",
+			`Type: "error", Timeout: -1`,
+		},
 	} {
-		if !strings.Contains(text, required) {
-			t.Errorf("window config-error wiring does not contain %q", required)
+		source, err := os.ReadFile(filepath.Join(repoRoot(), file))
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		for _, fragment := range required {
+			if !strings.Contains(string(source), fragment) {
+				t.Errorf("%s does not contain %q", file, fragment)
+			}
 		}
 	}
 }

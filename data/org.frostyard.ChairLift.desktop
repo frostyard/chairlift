@@ -6,4 +6,5 @@ Terminal=false
 Type=Application
 Categories=System;GTK;
 StartupNotify=true
+StartupWMClass=org.frostyard.ChairLift
 NoDisplay=false

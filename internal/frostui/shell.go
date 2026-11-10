@@ -50,8 +50,10 @@ type Shell struct {
 	Selected string
 	Palette  Palette
 	Console  ConsoleView
-	Dialogs  Dialogs
-	Info     Info
+	// Dialogs are the confirmations the shell draws; share one with the
+	// app's pages. Nil draws none.
+	Dialogs *Dialogs
+	Info    Info
 
 	splitPercent float32
 }
@@ -109,7 +111,9 @@ func (s *Shell) View(c *ui.Context, f Frame) {
 		ui.Box(c).Height(1).Background(t.Border)
 		s.statusBar(c, f)
 	})
-	s.Dialogs.View(c)
+	if s.Dialogs != nil {
+		s.Dialogs.View(c)
+	}
 	s.Info.View(c)
 	s.Palette.View(c, f.Commands)
 }

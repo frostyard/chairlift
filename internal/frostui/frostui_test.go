@@ -363,3 +363,20 @@ func TestShellShowsRailStatusAndConsole(t *testing.T) {
 		t.Errorf("console did not open with its line: %q", tt.Texts())
 	}
 }
+
+func TestLabeledButtonBuildsOneButton(t *testing.T) {
+	clicks := 0
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Row(c).Children(func() {
+			if LabeledButton(c, "view-refresh", "Check now", true).Clicked() {
+				clicks++
+			}
+		})
+	}, 400, 200)
+	if _, ok := tt.AccessByRole(ui.RoleButton, "Check now"); !ok {
+		t.Fatal("no Check now button")
+	}
+	if err := tt.Click("Check now"); err != nil || clicks != 1 {
+		t.Errorf("click: %v, clicks %d", err, clicks)
+	}
+}
