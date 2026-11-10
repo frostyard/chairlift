@@ -257,8 +257,8 @@ Features figures appear only while those pages are visible, and Maintenance show
 `pageview.HelpResources(website, issues, chat)` of `help_page`'s
 `help_resources_group` as links, or says that no help links are configured
 when the group is off or names no URL. `Main.showAbout` shows
-`frostui.AboutBody` with the version, the website, the issue tracker and the
-license (MIT,
+`frostui.AboutBody` with the version, the website, the issue tracker, the
+copyright (`LICENSE`'s line) and the license (MIT,
 [ADR-0018](../adr/0018-relicense-mit-and-drop-inherited-translations.md)).
 `Main.showShortcuts` lists `navigation.Shortcuts` of the visible pages
 through `frostui.ShortcutsBody`.

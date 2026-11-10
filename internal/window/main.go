@@ -294,7 +294,7 @@ func (m *Main) showAbout() {
 		Name: "ChairLift", Version: version.Version, Summary: "The system manager of Snow Linux.",
 		Logo: "org.frostyard.ChairLift-symbolic", Website: "https://github.com/frostyard/chairlift",
 		Issues: "https://github.com/frostyard/chairlift/issues", License: "MIT",
-		Copyright: "© 2024-2026 Frostyard", Developers: []string{"Brian Ketelsen", "ChairLift contributors"},
+		Copyright: "© 2025-2026 Brian Ketelsen", Developers: []string{"Brian Ketelsen", "ChairLift contributors"},
 	}))
 }
 

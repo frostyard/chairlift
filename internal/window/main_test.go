@@ -192,3 +192,27 @@ func TestPageConfirmationsAreDrawn(t *testing.T) {
 		t.Error("confirming did not run the action")
 	}
 }
+
+// The About dialog's copyright is LICENSE's line, with the sign for "(c)".
+func TestAboutCopyrightMatchesTheLicense(t *testing.T) {
+	license, err := os.ReadFile(filepath.Join("..", "..", "LICENSE"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ""
+	for line := range strings.Lines(string(license)) {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "Copyright (c) "); ok {
+			want = "© " + rest
+			break
+		}
+	}
+	if want == "" {
+		t.Fatal("LICENSE has no copyright line")
+	}
+	m, tt := newTestMain(t)
+	m.showAbout()
+	tt.Frame()
+	if !tt.HasText(want) {
+		t.Errorf("the About dialog does not show %q: %q", want, tt.Texts())
+	}
+}
