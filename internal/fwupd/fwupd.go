@@ -23,6 +23,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 const (
@@ -486,10 +488,12 @@ func runCommandAt(ctx context.Context, exe string, args ...string) (string, int,
 	cmd.WaitDelay = waitDelay
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	trace := cmdlog.Start(exe, args...)
+	cmd.Stdout = trace.Stdout(&stdout)
+	cmd.Stderr = trace.Stderr(&stderr)
 
 	err := cmd.Run()
+	trace.End(err)
 	if err != nil {
 		display := exe
 		if len(args) > 0 {

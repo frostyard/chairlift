@@ -4,482 +4,193 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/frostyard/chairlift/internal/config"
 )
 
-func TestResolveCoversEveryNavigationMutation(t *testing.T) {
-	items := Items()
-	for index, item := range items {
-		t.Run(item.Name, func(t *testing.T) {
-			got, ok := Resolve(item.Name, items, func(name string) bool {
-				return name == item.Name
+func TestCanonicalPageOrderIsTheCommandCenter(t *testing.T) {
+	var got []string
+	for _, item := range Items() {
+		got = append(got, item.Name)
+	}
+	want := []string{Overview, Updates, Apps, Features, Problems, Maintenance}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("page order = %v, want %v", got, want)
+	}
+}
+
+func TestResolveFindsOnlyVisiblePages(t *testing.T) {
+	visible := VisibleItems(func(page, group string) bool { return page == "features_page" })
+	if item, ok := Resolve(Features, visible); !ok || item.Title != "Features" {
+		t.Fatalf("Resolve(features) = %+v, %v", item, ok)
+	}
+	for _, page := range []string{Updates, "help", "not-a-page", ""} {
+		if item, ok := Resolve(page, visible); ok {
+			t.Errorf("Resolve(%q) = %+v, want rejection", page, item)
+		}
+	}
+}
+
+func TestOverviewAlwaysShows(t *testing.T) {
+	got := VisibleItems(func(page, group string) bool { return false })
+	if len(got) != 1 || got[0].Name != Overview {
+		t.Fatalf("VisibleItems(all disabled) = %#v, want the Overview only", got)
+	}
+	if got[0].Display() != "Alt+1" {
+		t.Errorf("Overview keys = %q, want Alt+1", got[0].Display())
+	}
+	if got := VisibleItems(nil); len(got) != 1 {
+		t.Errorf("VisibleItems(nil) = %v", got)
+	}
+}
+
+func TestVisiblePagesKeepEachGroup(t *testing.T) {
+	for _, page := range Items() {
+		for _, enabledGroup := range page.Groups {
+			got := VisibleItems(func(configPage, group string) bool {
+				return configPage == page.ConfigPage && group == enabledGroup
 			})
-			if !ok {
-				t.Fatalf("Resolve(%q) rejected an available canonical page", item.Name)
+			found := false
+			for _, item := range got {
+				found = found || item.Name == page.Name
 			}
-			want := Transition{
-				SelectedIndex: index,
-				VisibleChild:  item.Name,
-				Title:         item.Title,
-				ShowContent:   true,
+			if !found {
+				t.Errorf("VisibleItems omitted %q when %q was enabled", page.Name, enabledGroup)
 			}
-			if !reflect.DeepEqual(got, want) {
-				t.Fatalf("Resolve(%q) = %#v, want %#v", item.Name, got, want)
-			}
-		})
+		}
 	}
 }
 
-func TestResolveRejectsUnavailableAndUnknownPages(t *testing.T) {
-	tests := []struct {
-		name      string
-		page      string
-		available func(string) bool
-	}{
-		{name: "unavailable", page: "help", available: func(string) bool { return false }},
-		{name: "unknown", page: "not-a-page", available: func(string) bool { return true }},
-		{name: "nil availability predicate", page: "help"},
+func TestVisiblePagesCompactShortcuts(t *testing.T) {
+	got := VisibleItems(func(page, group string) bool {
+		return page == "problems_page" || page == "maintenance_page"
+	})
+	want := map[string]string{Overview: "Alt+1", Problems: "Alt+2", Maintenance: "Alt+3"}
+	if len(got) != len(want) {
+		t.Fatalf("visible = %v", got)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if transition, ok := Resolve(tt.page, Items(), tt.available); ok {
-				t.Fatalf("Resolve(%q) = %#v, true; want rejection", tt.page, transition)
-			}
-		})
+	for _, item := range got {
+		if item.Display() != want[item.Name] {
+			t.Errorf("%s keys = %q, want %q", item.Name, item.Display(), want[item.Name])
+		}
 	}
 }
 
-func TestShortcutsRegisterEveryAdvertisedAccelerator(t *testing.T) {
+func TestShortcutsAreUniqueAndCoverEveryPage(t *testing.T) {
 	items := Items()
-	advertised := make(map[string]Shortcut)
-	for _, shortcut := range Shortcuts(items) {
-		key := shortcut.Action + "\x00" + shortcut.Accelerator
-		if _, exists := advertised[key]; exists {
-			t.Fatalf("duplicate shortcut for action %q accelerator %q", shortcut.Action, shortcut.Accelerator)
+	shortcuts := Shortcuts(items)
+	seenKeys := map[string]string{}
+	seenActions := map[string]bool{}
+	for _, s := range shortcuts {
+		if len(s.Keys) == 0 || s.Title == "" || s.Group == "" {
+			t.Errorf("incomplete shortcut %+v", s)
 		}
-		advertised[key] = shortcut
-	}
-
-	registered := make(map[string]bool)
-	for _, binding := range Bindings(items) {
-		for _, accelerator := range binding.Accelerators {
-			registered[binding.Action+"\x00"+accelerator] = true
+		if other, ok := seenKeys[s.Display()]; ok {
+			t.Errorf("%s is bound to %s and %s", s.Display(), other, s.Action)
 		}
-	}
-	if len(registered) != len(advertised) {
-		t.Fatalf("registered shortcut count = %d, advertised count = %d", len(registered), len(advertised))
-	}
-	for key, shortcut := range advertised {
-		if !registered[key] {
-			t.Errorf("advertised shortcut %s (%s) is not registered", shortcut.Display, shortcut.Title)
-		}
+		seenKeys[s.Display()] = s.Action
+		seenActions[s.Action] = true
 	}
 	for _, item := range items {
-		key := "win.navigate-" + item.Name + "\x00" + item.Accelerator
-		shortcut, ok := advertised[key]
-		if !ok {
-			t.Errorf("page %q has no advertised navigation shortcut", item.Name)
-			continue
-		}
-		if shortcut.Display != item.Display ||
-			shortcut.Title != "Go to "+item.Title ||
-			shortcut.Group != GroupNavigation {
-			t.Errorf("page %q shortcut = %#v, want canonical item metadata", item.Name, shortcut)
+		if !seenActions[item.Name] {
+			t.Errorf("page %s has no shortcut", item.Name)
 		}
 	}
-
-	help, ok := advertised["win.navigate-help\x00F1"]
-	if !ok {
-		t.Fatal("F1 is not mapped to the Help navigation action")
-	}
-	if help.Display != "F1" || help.Title != "Help" || help.Group != GroupGeneral {
-		t.Fatalf("F1 shortcut = %#v, want advertised General/Help entry", help)
+	for _, action := range []string{ActionPalette, ActionConsole, ActionCheck, ActionShortcuts, ActionHelp, ActionQuit} {
+		if !seenActions[action] {
+			t.Errorf("general action %s has no shortcut", action)
+		}
 	}
 }
 
 func TestReturnedInventoriesCannotMutateCanonicalState(t *testing.T) {
-	gotItems := Items()
-	gotItems[0].Name = "changed"
-	gotItems[0].Groups[0] = "changed"
-	if Items()[0].Name == "changed" {
-		t.Fatal("Items returned mutable canonical storage")
+	first := Items()
+	first[0].Groups[0] = "mutated"
+	first[0].Keys[0] = "mutated"
+	shortcuts := Shortcuts(first)
+	shortcuts[len(shortcuts)-1].Keys[0] = "mutated"
+	again := Items()
+	if again[0].Groups[0] == "mutated" || again[0].Keys[0] == "mutated" {
+		t.Fatal("Items returned shared slices")
 	}
-	if Items()[0].Groups[0] == "changed" {
-		t.Fatal("Items returned mutable canonical group storage")
-	}
-
-	gotShortcuts := Shortcuts(Items())
-	gotShortcuts[0].Action = "changed"
-	if Shortcuts(Items())[0].Action == "changed" {
-		t.Fatal("Shortcuts returned mutable canonical storage")
-	}
-
-	gotBindings := Bindings(Items())
-	gotBindings[0].Accelerators[0] = "changed"
-	if Bindings(Items())[0].Accelerators[0] == "changed" {
-		t.Fatal("Bindings returned mutable canonical storage")
+	if s := Shortcuts(again); s[len(s)-1].Keys[0] == "mutated" {
+		t.Fatal("Shortcuts returned shared key slices")
 	}
 }
 
-func TestVisiblePagesOmitEveryFullyDisabledFunctionalPage(t *testing.T) {
-	for _, disabled := range Items() {
-		if disabled.AlwaysShow {
-			continue
-		}
-		t.Run(disabled.Name, func(t *testing.T) {
-			got := VisibleItems(func(page, group string) bool {
-				return page != disabled.ConfigPage
-			})
-			if containsPage(got, disabled.Name) {
-				t.Fatalf("VisibleItems retained %q when all of its groups were disabled", disabled.Name)
-			}
-			if !containsPage(got, "help") {
-				t.Fatal("VisibleItems omitted Help")
-			}
-		})
+// TestEveryConfiguredGroupHasOneHome checks that each group of the
+// configuration's pages, other than first-run and help, belongs to exactly
+// one navigation page, so no group is silently ignored.
+func TestEveryConfiguredGroupHasOneHome(t *testing.T) {
+	pages, err := config.SchemaPages()
+	if err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestPageMetadataCoversEveryBuilderBackedGroup(t *testing.T) {
-	want := map[string][]string{
-		"applications": {
-			"applications_installed_group",
-			"flatpak_user_group",
-			"flatpak_system_group",
-			"brew_group",
-			"brew_search_group",
-			"brew_bundles_group",
-		},
-		"maintenance": {
-			"maintenance_cleanup_group",
-			"maintenance_brew_group",
-			"maintenance_flatpak_group",
-		},
-		"updates": {
-			"bootc_updates_group",
-			"sysupdate_updates_group",
-			"firmware_updates_group",
-			"flatpak_updates_group",
-			"brew_updates_group",
-			"brew_trust_group",
-		},
-		"system": {
-			"system_info_group",
-			"bootc_status_group",
-			"health_group",
-		},
-		"features": {"features_group"},
-		"problems": {
-			"problems_system_group",
-			"problems_apps_group",
-			"problems_reporting_group",
-		},
-		"help": {"help_resources_group"},
-	}
-
-	items := Items()
-	if len(items) != len(want) {
-		t.Fatalf("Items() has %d pages, want %d", len(items), len(want))
-	}
-	for _, item := range items {
-		wantGroups, ok := want[item.Name]
-		if !ok {
-			t.Errorf("unexpected page metadata %q", item.Name)
-			continue
-		}
-		if !reflect.DeepEqual(item.Groups, wantGroups) {
-			t.Errorf("%s groups = %v, want %v", item.Name, item.Groups, wantGroups)
-		}
-	}
-}
-
-func TestPageMetadataMatchesViewBuilders(t *testing.T) {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller could not locate navigation_test.go")
-	}
-	viewsDir := filepath.Join(filepath.Dir(filename), "..", "views")
-	groupCall := regexp.MustCompile(
-		`IsGroupEnabled\("([^"]+)",\s*"([^"]+)"\)`,
-	)
-
+	homes := map[string]int{}
 	for _, item := range Items() {
-		t.Run(item.Name, func(t *testing.T) {
-			path := filepath.Join(viewsDir, item.Name+"_page.go")
-			source, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read %s: %v", path, err)
-			}
-
-			found := make(map[string]bool)
-			for _, match := range groupCall.FindAllStringSubmatch(string(source), -1) {
-				if match[1] != item.ConfigPage {
-					t.Errorf("builder uses config page %q, want %q", match[1], item.ConfigPage)
+		for _, g := range item.Groups {
+			homes[item.ConfigPage+"/"+g]++
+		}
+	}
+	for _, page := range pages {
+		groups, err := config.SchemaGroups(page)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, group := range groups {
+			switch page {
+			case HelpConfigPage, "first_run_page":
+				if homes[page+"/"+group] != 0 {
+					t.Errorf("group %s/%s is not a page's but a page claims it", page, group)
 				}
-				found[match[2]] = true
+				continue
 			}
-			if len(found) != len(item.Groups) {
-				t.Fatalf("builder groups = %v, navigation metadata = %v", found, item.Groups)
+			if homes[page+"/"+group] != 1 {
+				t.Errorf("group %s/%s belongs to %d pages, want 1", page, group, homes[page+"/"+group])
 			}
-			for _, group := range item.Groups {
-				if !found[group] {
-					t.Errorf("navigation group %q has no builder guard in %s", group, path)
-				}
-			}
-		})
+		}
+	}
+	helpGroups, _ := config.SchemaGroups(HelpConfigPage)
+	found := false
+	for _, g := range helpGroups {
+		found = found || g == HelpGroup
+	}
+	if !found {
+		t.Errorf("help group %s missing from the configuration schema", HelpGroup)
 	}
 }
 
-func TestVisiblePagesKeepEachBuilderBackedGroup(t *testing.T) {
-	for _, page := range Items() {
-		if page.AlwaysShow {
-			continue
-		}
-		for _, enabledGroup := range page.Groups {
-			t.Run(page.Name+"/"+enabledGroup, func(t *testing.T) {
-				got := VisibleItems(func(configPage, group string) bool {
-					return configPage == page.ConfigPage && group == enabledGroup
-				})
-				if !containsPage(got, page.Name) {
-					t.Fatalf("VisibleItems omitted %q when %q was enabled", page.Name, enabledGroup)
-				}
-			})
-		}
-	}
-}
-
-func TestVisiblePagesAlwaysKeepHelp(t *testing.T) {
-	got := VisibleItems(func(page, group string) bool { return false })
-	if len(got) != 1 || got[0].Name != "help" {
-		t.Fatalf("VisibleItems(all disabled) = %#v, want Help only", got)
-	}
-	if got[0].Accelerator != "<Alt>1" || got[0].Display != "Alt+1" {
-		t.Fatalf("Help shortcut = %q/%q, want compacted Alt+1", got[0].Accelerator, got[0].Display)
-	}
-}
-
-func TestVisiblePagesCompactShortcutsAndTransitions(t *testing.T) {
-	visible := VisibleItems(func(page, group string) bool {
-		return page == "updates_page" || page == "features_page"
-	})
-	wantNames := []string{"updates", "features", "help"}
-	if len(visible) != len(wantNames) {
-		t.Fatalf("VisibleItems selected %d pages, want %d: %#v", len(visible), len(wantNames), visible)
-	}
-	for index, wantName := range wantNames {
-		if visible[index].Name != wantName {
-			t.Fatalf("visible[%d].Name = %q, want %q", index, visible[index].Name, wantName)
-		}
-		wantAccelerator := "<Alt>" + strconv.Itoa(index+1)
-		if visible[index].Accelerator != wantAccelerator {
-			t.Errorf("visible[%d].Accelerator = %q, want %q", index, visible[index].Accelerator, wantAccelerator)
-		}
-		transition, ok := Resolve(wantName, visible, func(string) bool { return true })
-		if !ok {
-			t.Fatalf("Resolve(%q) rejected a visible page", wantName)
-		}
-		if transition.SelectedIndex != index {
-			t.Errorf("Resolve(%q).SelectedIndex = %d, want %d", wantName, transition.SelectedIndex, index)
-		}
-	}
-
-	shortcuts := Shortcuts(visible)
-	for index, item := range visible {
-		shortcut := shortcuts[index]
-		if shortcut.Action != "win.navigate-"+item.Name ||
-			shortcut.Accelerator != item.Accelerator ||
-			shortcut.Display != item.Display {
-			t.Errorf("shortcut[%d] = %#v, want compacted metadata for %#v", index, shortcut, item)
-		}
-	}
-
-	if transition, ok := Resolve("maintenance", visible, func(string) bool { return true }); ok {
-		t.Fatalf("Resolve accepted omitted Maintenance page: %#v", transition)
-	}
-
-	altBindings := make(map[string]string)
-	for _, binding := range Bindings(visible) {
-		if strings.HasPrefix(binding.Action, "win.navigate-") {
-			for _, accelerator := range binding.Accelerators {
-				if strings.HasPrefix(accelerator, "<Alt>") {
-					altBindings[accelerator] = binding.Action
-				}
-			}
-		}
-	}
-	if len(altBindings) != len(visible) {
-		t.Fatalf("Alt binding count = %d, want %d: %v", len(altBindings), len(visible), altBindings)
-	}
-	for _, item := range visible {
-		if got := altBindings[item.Accelerator]; got != "win.navigate-"+item.Name {
-			t.Errorf("%s is bound to %q, want navigate action for %q", item.Accelerator, got, item.Name)
-		}
-	}
-}
-
-func TestWindowAndAppUseCanonicalNavigation(t *testing.T) {
+// TestViewsGateEveryGroup checks that the views name every group of their
+// pages, so each group's content is behind its own switch.
+func TestViewsGateEveryGroup(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
-		t.Fatal("runtime.Caller could not locate navigation_test.go")
+		t.Fatal("runtime.Caller failed")
 	}
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
-
-	checks := map[string][]string{
-		filepath.Join(repoRoot, "internal", "window", "window.go"): {
-			`w.navigateToPage(name)`,
-			`w.navItems = navigation.VisibleItems(w.config.IsGroupEnabled)`,
-			`transition, ok := navigation.Resolve(pageName, w.navItems, func(name string) bool {`,
-			`w.sidebarList.GetRowAtIndex(int32(transition.SelectedIndex))`,
-			`w.contentStack.SetVisibleChildName(transition.VisibleChild)`,
-			`w.contentPage.SetTitle(transition.Title)`,
-			`w.splitView.SetShowContent(transition.ShowContent)`,
-			`action := gio.NewSimpleAction("navigate-"+itemName, nil)`,
-			`for _, shortcut := range navigation.Shortcuts(w.navItems)`,
-		},
-		filepath.Join(repoRoot, "internal", "app", "app.go"): {
-			`a.setupKeyboardShortcuts(win.NavigationItems())`,
-			`for _, binding := range navigation.Bindings(items)`,
-			`a.SetAccelsForAction(binding.Action, binding.Accelerators)`,
-		},
+	dir := filepath.Join(filepath.Dir(filename), "..", "views")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	for path, required := range checks {
-		source, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		for _, fragment := range required {
-			if !strings.Contains(string(source), fragment) {
-				t.Errorf("%s does not contain canonical navigation wiring %q", path, fragment)
-			}
-		}
-	}
-}
-
-// TestEveryAdvertisedActionIsRegistered guards against an accelerator bound to
-// an action nothing registers: Ctrl+Q was advertised and bound to app.quit for
-// releases while no "quit" action existed, so the shortcut silently did
-// nothing. internal/app and internal/window import puregotk and cannot host a
-// test binary, so this reads their source for the registration call.
-func TestEveryAdvertisedActionIsRegistered(t *testing.T) {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller could not locate navigation_test.go")
-	}
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", ".."))
-	sources := map[string]string{
-		"app.": filepath.Join(repoRoot, "internal", "app", "app.go"),
-		"win.": filepath.Join(repoRoot, "internal", "window", "window.go"),
-	}
-	read := make(map[string]string, len(sources))
-	for prefix, path := range sources {
-		source, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		read[prefix] = string(source)
-	}
-
-	for _, binding := range Bindings(Items()) {
-		var prefix string
-		for candidate := range sources {
-			if strings.HasPrefix(binding.Action, candidate) {
-				prefix = candidate
-			}
-		}
-		if prefix == "" {
-			t.Errorf("%s uses an action scope with no registration source", binding.Action)
+	var source strings.Builder
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
 			continue
 		}
-		name := strings.TrimPrefix(binding.Action, prefix)
-		fragment := `gio.NewSimpleAction("` + name + `", nil)`
-		if strings.HasPrefix(name, "navigate-") {
-			// Window registers every navigate-<page> action in one loop.
-			fragment = `gio.NewSimpleAction("navigate-"+itemName, nil)`
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
 		}
-		if !strings.Contains(read[prefix], fragment) {
-			t.Errorf("%s is bound to %v but %s never registers it (want %q)",
-				binding.Action, binding.Accelerators, sources[prefix], fragment)
-		}
+		source.Write(data)
 	}
-
-	// Constructing the quit action is not enough: onActivate must call
-	// registerQuitAction, and it must connect the handler and add the action.
-	app := read["app."]
-	for _, fragment := range []string{
-		"\ta.registerQuitAction()\n",
-		"quitAction.ConnectActivate(&quitActivateCb)",
-		"a.AddAction(quitAction)",
-		"a.Quit()",
-	} {
-		if !strings.Contains(app, fragment) {
-			t.Errorf("%s does not wire app.quit: missing %q", sources["app."], fragment)
+	for _, item := range Items() {
+		for _, g := range item.Groups {
+			if !strings.Contains(source.String(), `"`+g+`"`) {
+				t.Errorf("no view names group %q of page %s", g, item.Name)
+			}
 		}
 	}
-}
-
-// TestCanonicalPageOrderHasSevenPages pins the sidebar order and the
-// Alt+number key of every page when all are visible: Problems comes directly
-// before Help, so Help moves from Alt+6 to Alt+7 (ADR-0015).
-func TestCanonicalPageOrderHasSevenPages(t *testing.T) {
-	want := []struct{ name, title, icon, configPage string }{
-		{"applications", "Applications", "application-x-executable-symbolic", "applications_page"},
-		{"maintenance", "Maintenance", "emblem-system-symbolic", "maintenance_page"},
-		{"updates", "Updates", "software-update-available-symbolic", "updates_page"},
-		{"system", "System", "computer-symbolic", "system_page"},
-		{"features", "Features", "application-x-addon-symbolic", "features_page"},
-		{"problems", "Problems", "dialog-warning-symbolic", "problems_page"},
-		{"help", "Help", "help-browser-symbolic", "help_page"},
-	}
-	all := VisibleItems(func(string, string) bool { return true })
-	if len(all) != len(want) || len(Items()) != len(want) {
-		t.Fatalf("VisibleItems(all) has %d pages and Items() %d, want %d", len(all), len(Items()), len(want))
-	}
-	for i, w := range want {
-		got := all[i]
-		if got.Name != w.name || got.Title != w.title || got.Icon != w.icon || got.ConfigPage != w.configPage {
-			t.Errorf("page %d = %+v, want %+v", i, got, w)
-		}
-		if wantAccel := "<Alt>" + strconv.Itoa(i+1); got.Accelerator != wantAccel {
-			t.Errorf("%s accelerator = %q, want %q", got.Name, got.Accelerator, wantAccel)
-		}
-	}
-	if help := all[len(all)-1]; help.Display != "Alt+7" || !help.AlwaysShow {
-		t.Errorf("Help = %+v, want Alt+7 and always shown", help)
-	}
-}
-
-// TestProblemsPageOmittedOnlyWhenAllGroupsOff proves the existing page rule
-// applies to Problems: any one enabled group keeps the page, and all three
-// off omit it while the other pages stay.
-func TestProblemsPageOmittedOnlyWhenAllGroupsOff(t *testing.T) {
-	groups := []string{"problems_system_group", "problems_apps_group", "problems_reporting_group"}
-	for _, on := range groups {
-		got := VisibleItems(func(page, group string) bool {
-			return page != "problems_page" || group == on
-		})
-		if !containsPage(got, "problems") || len(got) != 7 {
-			t.Errorf("only %s on: visible = %d pages, problems kept = %v; want 7 and true", on, len(got), containsPage(got, "problems"))
-		}
-	}
-	got := VisibleItems(func(page, group string) bool { return page != "problems_page" })
-	if containsPage(got, "problems") || len(got) != 6 {
-		t.Fatalf("all Problems groups off: visible = %#v, want the 6 other pages", got)
-	}
-	if got[5].Name != "help" || got[5].Display != "Alt+6" {
-		t.Errorf("Help without Problems = %+v, want Alt+6", got[5])
-	}
-}
-
-func containsPage(items []Item, name string) bool {
-	for _, item := range items {
-		if item.Name == name {
-			return true
-		}
-	}
-	return false
 }

@@ -15,6 +15,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 const (
@@ -130,6 +132,7 @@ func runBrewCommand(args ...string) (string, error) {
 	if len(args) > 0 && stateChangingCommands[args[0]] && dryRun {
 		msg := fmt.Sprintf("[DRY-RUN] Would execute: brew %s", strings.Join(args, " "))
 		log.Println(msg)
+		cmdlog.DryRun("brew", args...)
 		return msg, nil
 	}
 
@@ -164,10 +167,12 @@ func runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, 
 	cmd.WaitDelay = waitDelay
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	trace := cmdlog.Start(exe, args...)
+	cmd.Stdout = trace.Stdout(&stdout)
+	cmd.Stderr = trace.Stderr(&stderr)
 
 	err := cmd.Run()
+	trace.End(err)
 	if err != nil {
 		display := exe
 		if len(args) > 0 {

@@ -1,5 +1,5 @@
-// ChairLift - A modern GTK4/Libadwaita system management tool
-// Written in Go using puregotk bindings
+// ChairLift is the command center of Snow Linux: a MyGo desktop app
+// written in Go with no CGO.
 package main
 
 import (
@@ -25,7 +25,7 @@ var (
 	buildBy      = "unknown"
 )
 
-// The command-line modes that end before the GTK application exists.
+// The command-line modes that end before the window exists.
 const (
 	// sendPendingFlag runs the automatic problem-report send and exits
 	// (ADR-0015).
@@ -54,18 +54,37 @@ func main() {
 	defer recorder.RecoverPanic()
 
 	// --send-pending-reports sends what the consent allows and exits, with
-	// no window and no GTK (ADR-0015).
+	// no window: MyGo loads GTK only in App.Run (ADR-0015).
 	if hasArgument(os.Args[1:], sendPendingFlag) {
 		os.Exit(sendPendingReports())
 	}
 
-	application := app.New()
-	defer application.Unref()
-	log.Printf("main: application created in %s", time.Since(processStart))
-
-	if code := application.Run(int32(len(os.Args)), os.Args); code > 0 {
-		os.Exit(int(code))
+	if hasArgument(os.Args[1:], "--help") || hasArgument(os.Args[1:], "-h") {
+		printUsage()
+		return
 	}
+
+	opts := app.ParseArgs(os.Args[1:])
+	log.Printf("main: starting the window after %s", time.Since(processStart))
+	if err := app.Run(opts); err != nil {
+		log.Printf("main: %v", err)
+		os.Exit(1)
+	}
+}
+
+// printUsage prints the command line, as GLib's option parser did.
+func printUsage() {
+	fmt.Print(`Usage:
+  chairlift [OPTION…]
+
+Help Options:
+  -h, --help                 Show help options
+
+Application Options:
+  -d, --dry-run              Don't make any changes to the system.
+  --first-run                Show the first-run setup window (started by chairlift-first-run).
+  --send-pending-reports     Send the problem reports that your consent allows, then exit; no window.
+`)
 }
 
 // hasArgument reports whether args hold name.
