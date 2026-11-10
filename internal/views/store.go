@@ -96,8 +96,8 @@ func (s *Store) EverythingJobs() []*frostui.Job {
 	return jobs
 }
 
-// UpdateEverything queues EverythingJobs and opens the console. It does
-// nothing while jobs run.
+// UpdateEverything queues EverythingJobs; their output streams to the
+// console. It does nothing while jobs run.
 func (s *Store) UpdateEverything() {
 	if s.Env.Jobs.Busy() {
 		s.Env.Toast("Wait for the running job to finish")

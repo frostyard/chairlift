@@ -188,7 +188,9 @@ func IsInstalled() bool {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "flatpak", "--version")
+	trace := cmdlog.Start("flatpak", "--version")
 	err := cmd.Run()
+	trace.End(err)
 	return err == nil
 }
 

@@ -185,10 +185,10 @@ func newFirstRun(post func(func()), d firstRunDeps) *FirstRun {
 }
 
 // start runs once, in the first frame: it starts the connectivity check.
-// The app builds this state before it creates the window, and its post
-// drops what arrives before the window exists, so a check started in
-// NewFirstRun that failed at once (offline: "network is unreachable") would
-// leave the step checking for good.
+// The app builds this state before it creates the window. Its poster keeps
+// what arrives before the window exists, but the check belongs to a shown
+// window: a check that failed at once (offline: "network is unreachable")
+// is answered on the step the user sees.
 func (w *FirstRun) start() {
 	if w.started {
 		return

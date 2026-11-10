@@ -543,7 +543,7 @@ func (p *updatesPage) Commands() []frostui.Command {
 	srcs := p.sources()
 	reason := p.everythingReason(srcs)
 	cmds := []frostui.Command{{
-		ID: "updates-everything", Title: "Update everything", Group: "Actions", Icon: "software-update-available",
+		ID: "update-everything", Title: "Update everything", Group: "Actions", Icon: "software-update-available",
 		Hint: "upgrade all updates", Disabled: reason != "", Reason: reason, Run: p.updateEverything,
 	}}
 	for _, src := range srcs {

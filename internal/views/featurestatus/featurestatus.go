@@ -53,7 +53,7 @@
 // docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
 //
 // The package is pure and holds no state, so it is safe to call from a worker
-// goroutine or from inside an sgtk.RunOnMainThread closure.
+// goroutine or from inside an Env.Post function.
 package featurestatus
 
 import (

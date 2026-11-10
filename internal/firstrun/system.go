@@ -10,6 +10,8 @@ import (
 	"os/user"
 	"strings"
 	"time"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 // ColorScheme is a value of org.gnome.desktop.interface color-scheme that
@@ -36,7 +38,9 @@ func ColorSchemeArgs(scheme ColorScheme) []string {
 var gsettingsRunner = func(args ...string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), gsettingsTimeout)
 	defer cancel()
+	trace := cmdlog.Start("gsettings", args...)
 	output, err := exec.CommandContext(ctx, "gsettings", args...).CombinedOutput()
+	trace.End(err)
 	if err != nil {
 		return fmt.Errorf("gsettings %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(output)))
 	}
@@ -137,9 +141,12 @@ func SettingsAvailable(lookPath func(string) (string, error)) bool {
 // startProcess starts argv and reaps it in the background. Tests replace it.
 var startProcess = func(argv []string) error {
 	cmd := exec.Command(argv[0], argv[1:]...)
+	trace := cmdlog.Start(argv[0], argv[1:]...)
 	if err := cmd.Start(); err != nil {
+		trace.End(err)
 		return err
 	}
+	trace.End(nil)
 	go func() { _ = cmd.Wait() }()
 	return nil
 }

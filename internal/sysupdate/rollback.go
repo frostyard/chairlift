@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 // osReleasePath is where snosi tooling reads the image identity; unlike
@@ -117,7 +119,9 @@ func RollbackVersion(ctx context.Context) (string, bool) {
 // runLsblk captures `lsblk -J -o PATH,PARTLABEL`. Separated so tests can
 // exercise the parse pipeline without a real block layout.
 func runLsblk(ctx context.Context) ([]byte, error) {
+	trace := cmdlog.Start(lsblkCommand, "-J", "-o", "PATH,PARTLABEL")
 	output, err := exec.CommandContext(ctx, lsblkCommand, "-J", "-o", "PATH,PARTLABEL").Output()
+	trace.End(err)
 	if err != nil {
 		return nil, &Error{Message: fmt.Sprintf("lsblk failed: %v", err), Err: err}
 	}

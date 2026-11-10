@@ -237,6 +237,8 @@ func (m *Main) Commands() []frostui.Command {
 	cmds = append(cmds,
 		frostui.Command{ID: "check", Title: "Check for updates", Group: "ChairLift", Icon: "view-refresh", Keys: []string{"Ctrl", "R"},
 			Disabled: m.Store.Checking(), Reason: "checking", Run: m.Store.CheckAll},
+		frostui.Command{ID: "stop-jobs", Title: "Stop the running jobs", Group: "ChairLift", Icon: "process-stop",
+			Hint: "cancel queue", Disabled: !m.Env.Jobs.Busy(), Reason: "nothing runs", Run: m.Env.Jobs.CancelAll},
 		frostui.Command{ID: "console", Title: "Show or hide the console", Group: "ChairLift", Icon: "utilities-terminal", Keys: []string{"Ctrl", "J"},
 			Run: func() { m.Shell.Console.Open = !m.Shell.Console.Open }},
 		frostui.Command{ID: "shortcuts", Title: "Keyboard shortcuts", Group: "ChairLift", Icon: "input-keyboard", Keys: []string{"Ctrl", "?"}, Run: m.showShortcuts},

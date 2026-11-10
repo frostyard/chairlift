@@ -227,9 +227,14 @@ An agent must not break these:
   thread. Only problem dismissals and report sends stay off the queue
   (ADR-0015's own lock and pacing). Pages ask first through `Env.Dialogs`.
 - **Every command shows in the console.** The backends announce each
-  external command, tee its output and report its end through
-  `internal/cmdlog` (`Start`/`Stdout`/`Stderr`/`End`, `DryRun` for previews);
-  a new `exec.Command` in a backend or a view must do the same.
+  external command and its end through `internal/cmdlog`
+  (`Start`/`End`, `DryRun` for previews) and tee its output when it is
+  human-readable (`Stdout`/`Stderr`); machine output such as journal records
+  and lsblk's JSON is not teed. A new `exec.Command` under `internal/` must do
+  the same (`internal/installcheck.TestEveryCommandIsTraced`); only
+  `internal/frostui` is exempt, and the views trace what they launch through
+  it (`launchDesktopApp`). The rail's job card and the palette stop the queue
+  (`Jobs.CancelAll`); a job that finished despite the cancel keeps its result.
 - **frostui stays extractable.** `internal/frostui` imports only the standard
   library, MyGo, purego and its own packages, and its test helpers
   (`internal/frostui/frostuitest`) only the standard library

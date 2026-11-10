@@ -180,6 +180,9 @@ func JobCard(c *ui.Context, q *Jobs) {
 		ui.Row(c).Gap(SpaceS).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Label("Working")
 			ui.Text(c, cur.Title).FontSize(12.5).Bold().SingleLine().Grow(1)
+			if IconButton(c, "process-stop", "Stop: drop the queued jobs and cancel this one where it can stop").Clicked() {
+				q.CancelAll()
+			}
 		})
 		ui.Progress(c, q.BatchFraction()).Label("Progress")
 		status := cur.Status

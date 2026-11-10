@@ -241,7 +241,9 @@ func IsInstalled() bool {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "brew", "--version")
+	trace := cmdlog.Start("brew", "--version")
 	err := cmd.Run()
+	trace.End(err)
 	return err == nil
 }
 

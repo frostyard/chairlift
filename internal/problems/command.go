@@ -8,6 +8,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 // Output caps of the page's commands. A command whose standard output
@@ -50,7 +52,11 @@ func execStream(ctx context.Context, name string, args []string) (io.Reader, fun
 	if err != nil {
 		return nil, nil, err
 	}
+	// The console shows the command and its end, not its output: journal
+	// records and coredumpctl's JSON are data, up to the read's cap.
+	trace := cmdlog.Start(name, args...)
 	if err := cmd.Start(); err != nil {
+		trace.End(err)
 		return nil, nil, err
 	}
 	// A read that blocks on a pipe that a descendant holds open ends when
@@ -66,6 +72,7 @@ func execStream(ctx context.Context, name string, args []string) (io.Reader, fun
 				_ = stdout.Close()
 			}
 			waitErr = cmd.Wait()
+			trace.End(waitErr)
 		})
 		return stderr.String(), waitErr
 	}, nil

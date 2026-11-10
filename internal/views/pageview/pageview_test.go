@@ -16,26 +16,6 @@ func TestApplicationRowsCoverEveryPresentation(t *testing.T) {
 		want Row
 	}{
 		{
-			name: "Flatpak without version",
-			got:  FlatpakApplication("Firefox", "org.mozilla.firefox", ""),
-			want: Row{Title: "Firefox", Subtitle: "org.mozilla.firefox"},
-		},
-		{
-			name: "Flatpak with version",
-			got:  FlatpakApplication("Firefox", "org.mozilla.firefox", "128.0"),
-			want: Row{Title: "Firefox", Subtitle: "org.mozilla.firefox (128.0)"},
-		},
-		{
-			name: "unpinned Homebrew package",
-			got:  HomebrewPackage("ripgrep", "14.1.1", false),
-			want: Row{Title: "ripgrep", Subtitle: "14.1.1"},
-		},
-		{
-			name: "pinned Homebrew package",
-			got:  HomebrewPackage("ripgrep", "14.1.1", true),
-			want: Row{Title: "ripgrep", Subtitle: "14.1.1 • Pinned"},
-		},
-		{
 			name: "bundle without description",
 			got:  BrewBundle("Workstation", "", "/bundles/Workstation.Brewfile"),
 			want: Row{Title: "Workstation", Subtitle: "/bundles/Workstation.Brewfile"},

@@ -246,9 +246,8 @@ func (q *Jobs) next() {
 				err = run(ctx, p)
 			}
 		}()
-		if ctx.Err() != nil && err == nil {
-			err = context.Canceled
-		}
+		// A job that finished despite a cancel (its command took no
+		// context) did its work: its own error, nil included, stands.
 		cancel()
 		q.post(func() {
 			q.current, q.cancel = nil, nil

@@ -196,7 +196,7 @@ func TestJobsCancelAll(t *testing.T) {
 	q.Enqueue(&Job{Title: "long", Run: func(ctx context.Context, _ *Progress) error {
 		close(started)
 		<-ctx.Done()
-		return nil
+		return ctx.Err()
 	}, Done: func(err error) { results = append(results, err) }},
 		&Job{Title: "next", Run: func(context.Context, *Progress) error { t.Error("a dropped job ran"); return nil },
 			Done: func(err error) { results = append(results, err) }})
@@ -350,5 +350,46 @@ func TestLabeledButtonBuildsOneButton(t *testing.T) {
 	}
 	if err := tt.Click("Check now"); err != nil || clicks != 1 {
 		t.Errorf("click: %v, clicks %d", err, clicks)
+	}
+}
+
+func TestJobsKeepAFinishedJobsResultAfterACancel(t *testing.T) {
+	sp := frostuitest.NewLoop()
+	q := NewJobs(sp.Post, nil)
+	started, release := make(chan struct{}), make(chan struct{})
+	var got []error
+	q.Enqueue(&Job{Title: "no context", Run: func(context.Context, *Progress) error {
+		close(started)
+		<-release // a command that takes no context runs to its end
+		return nil
+	}, Done: func(err error) { got = append(got, err) }})
+	<-started
+	q.CancelAll()
+	close(release)
+	sp.RunUntil(t, func() bool { return !q.Busy() })
+	if len(got) != 1 || got[0] != nil {
+		t.Errorf("results = %v, want the job's own nil: it did its work", got)
+	}
+}
+
+func TestJobCardStopCancelsTheQueue(t *testing.T) {
+	sp := frostuitest.NewLoop()
+	q := NewJobs(sp.Post, nil)
+	started := make(chan struct{})
+	var got []error
+	done := func(err error) { got = append(got, err) }
+	q.Enqueue(&Job{Title: "Updating Firefox", Run: func(ctx context.Context, _ *Progress) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}, Done: done}, &Job{Title: "Updating gh", Run: func(context.Context, *Progress) error { return nil }, Done: done})
+	<-started
+	tt := ui.NewTester(func(c *ui.Context) { JobCard(c, q) }, 400, 200)
+	if err := tt.Click("Stop: drop the queued jobs and cancel this one where it can stop"); err != nil {
+		t.Fatal(err)
+	}
+	sp.RunUntil(t, func() bool { return !q.Busy() })
+	if len(got) != 2 || !errors.Is(got[0], context.Canceled) || !errors.Is(got[1], context.Canceled) {
+		t.Errorf("results = %v, want both canceled", got)
 	}
 }

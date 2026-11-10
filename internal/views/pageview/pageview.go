@@ -37,24 +37,6 @@ type OSReleaseEntry struct {
 	IsURL bool
 }
 
-// FlatpakApplication returns the row text for an installed Flatpak application.
-func FlatpakApplication(name, applicationID, version string) Row {
-	subtitle := applicationID
-	if version != "" {
-		subtitle = fmt.Sprintf("%s (%s)", applicationID, version)
-	}
-	return Row{Title: name, Subtitle: subtitle}
-}
-
-// HomebrewPackage returns the row text for an installed Homebrew package.
-func HomebrewPackage(name, version string, pinned bool) Row {
-	subtitle := version
-	if pinned {
-		subtitle += " • Pinned"
-	}
-	return Row{Title: name, Subtitle: subtitle}
-}
-
 // BrewBundle returns the row text for a configured Homebrew bundle.
 func BrewBundle(name, description, path string) Row {
 	subtitle := path

@@ -11,7 +11,7 @@
 // The package is pure and holds no state: it takes booleans rather than error
 // values (which would drag in internal/flatpak) and returns a value, so it is
 // safe to call from a worker goroutine or from inside an
-// sgtk.RunOnMainThread closure.
+// Env.Post function.
 package flatpakstatus
 
 import "fmt"

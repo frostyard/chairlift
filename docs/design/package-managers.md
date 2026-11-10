@@ -244,11 +244,9 @@ which ADR-0017 supersedes.
 Its exported outcomes are:
 
 - `BrewBundle` returns the path alone or `description — path`, and
-  `SearchResult` preserves the result's typed Formula/Cask label.
-  `FlatpakApplication` (the application ID alone, or `ID (version)`) and
-  `HomebrewPackage` (the version, plus the pinned marker) are kept and tested,
-  but no command-center view calls them: the Apps table draws the version and
-  the pinned state in columns of its own.
+  `SearchResult` preserves the result's typed Formula/Cask label. The Apps
+  table draws an app's version and pinned state in columns of its own, so the
+  GTK rows' `FlatpakApplication` and `HomebrewPackage` are gone.
 - `UntrustedTap` combines formulae and casks in that order, strips each
   tap-qualified package prefix for display, and includes the installed count;
   the trust confirmation lists it. `FlatpakUpdate` always includes the
@@ -347,8 +345,8 @@ Its exported outcomes are:
   `ReportingDescription`, `ReportingWhat`, `SentRows`, `SentKindTitle`,
   `ReportingCountRow`, `ReportOffered` (the Report… button's rule),
   `ReportSummary`, `ReportButtonLabel` and `ReportedLabel`, so the phase-1
-  promise row is gone. `ReportingMode` is kept and tested, but the mode
-  control draws the `ReportingModeAsk`/`ReportingModeAuto` constants itself.
+  promise row is gone. The mode control draws the
+  `ReportingModeAsk`/`ReportingModeAuto` constants itself.
   `internal/views/problems_view.go` composes no text of its own.
 
 The package's tests (`pageview_test.go`, `brew_text_test.go`,
@@ -449,11 +447,8 @@ the Homebrew and Flatpak actions of the Apps and Updates pages:
   installation returned a usable result keeps the last known Flatpak rows and
   count. An installation is usable when its query succeeds or when it returns
   one or more updates together with an error.
-- `OutdatedPresentation(count)` returns `0 packages available` with expansion
-  disabled for zero, `1 package available` with expansion enabled for one,
-  and `%d packages available` with expansion enabled for larger counts. It is
-  kept and tested, but no command-center view calls it: the Homebrew source's
-  note comes from `pageview.BrewSourceNote`.
+- The Homebrew source's note comes from `pageview.BrewSourceNote`; the GTK
+  expander's `OutdatedPresentation` is gone.
 
 `actionstate_test.go` table-tests every outcome, races 64 callers against one
 action gate (requiring exactly one acquisition), and proves 64 concurrent
