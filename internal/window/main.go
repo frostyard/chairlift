@@ -243,7 +243,22 @@ func (m *Main) Commands() []frostui.Command {
 		frostui.Command{ID: "help", Title: "Help", Group: "ChairLift", Icon: "help-browser", Keys: []string{"F1"}, Run: m.showHelp},
 		frostui.Command{ID: "about", Title: "About ChairLift", Group: "ChairLift", Icon: "help-about", Run: m.showAbout},
 	)
-	return cmds
+	return uniqueCommands(cmds)
+}
+
+// uniqueCommands keeps the first command of each ID: two pages may list
+// the same shared command (Homebrew's on Apps and Updates), and the palette
+// keys its rows by ID.
+func uniqueCommands(cmds []frostui.Command) []frostui.Command {
+	seen := make(map[string]bool, len(cmds))
+	out := cmds[:0]
+	for _, c := range cmds {
+		if !seen[c.ID] {
+			seen[c.ID] = true
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func (m *Main) showShortcuts() {
