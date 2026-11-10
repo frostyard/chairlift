@@ -26,6 +26,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/activity"
+	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/frostui"
 )
@@ -137,4 +138,14 @@ func (e *Env) Record(source, title, detail string) {
 	if err := e.Activity.Add(source, title, detail); err != nil {
 		log.Printf("activity: %v", err)
 	}
+}
+
+// launchDesktopApp starts a desktop application by its desktop file ID
+// (frostui.LaunchDesktopApp: `gtk-launch <id>`, not waited for) and shows
+// the command in the console.
+func launchDesktopApp(id string) error {
+	trace := cmdlog.Start("gtk-launch", id)
+	err := frostui.LaunchDesktopApp(id)
+	trace.End(err)
+	return err
 }

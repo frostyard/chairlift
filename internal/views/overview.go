@@ -4,8 +4,6 @@ import (
 	_ "embed"
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,7 +12,6 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/activity"
-	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/navigation"
 	"github.com/frostyard/chairlift/internal/sysinfo"
@@ -39,7 +36,7 @@ type overviewPage struct {
 
 // NewOverviewPage returns the Overview page.
 func NewOverviewPage(s *Store) Page {
-	return &overviewPage{s: s, sources: s.Sources, launch: overviewLaunchApp}
+	return &overviewPage{s: s, sources: s.Sources, launch: launchDesktopApp}
 }
 
 // heroState is what the hero offers now.
@@ -249,21 +246,6 @@ func (p *overviewPage) openHealthApp() {
 		log.Printf("Failed to launch app %s: %v", id, err)
 		p.s.Env.ToastError(fmt.Sprintf("Failed to launch %s", id))
 	}
-}
-
-// overviewLaunchApp starts a desktop application by its desktop file ID
-// with gtk-launch, which finds the desktop file and launches it as the
-// desktop would, and does not wait for it: it is a GUI app.
-func overviewLaunchApp(appID string) error {
-	trace := cmdlog.Start("gtk-launch", appID)
-	cmd := exec.Command("gtk-launch", appID) //nolint:gosec // the app ID is the administrator's configuration
-	cmd.Env = os.Environ()
-	if err := cmd.Start(); err != nil {
-		trace.End(err)
-		return err
-	}
-	go func() { trace.End(cmd.Wait()) }()
-	return nil
 }
 
 func (p *overviewPage) state(t updateTally, info SystemInfo) heroState {
@@ -539,7 +521,7 @@ func (p *overviewPage) actionButtons(c *ui.Context, state heroState, tally updat
 	}
 	switch state {
 	case heroUpdate:
-		if overviewPrimaryButton(c, "software-update-available", "Update everything").Clicked() {
+		if frostui.LabeledButton(c, "software-update-available", "Update everything", true).Clicked() {
 			p.s.UpdateEverything()
 		}
 	case heroRestart:
@@ -547,22 +529,10 @@ func (p *overviewPage) actionButtons(c *ui.Context, state heroState, tally updat
 			env.Navigate(navigation.Updates)
 		}
 	case heroReview:
-		if overviewPrimaryButton(c, "go-next", review).Clicked() {
+		if frostui.LabeledButton(c, "go-next", review, true).Clicked() {
 			env.Navigate(navigation.Updates)
 		}
 	}
-}
-
-// overviewPrimaryButton is the accent button with an icon before its label.
-// frostui.LabeledButton(…, true) also builds an empty plain button before
-// its primary one, which shows as an empty box, so the hero builds its own.
-func overviewPrimaryButton(c *ui.Context, icon, label string) ui.Element {
-	return ui.PrimaryButton(c, "").Label(label).Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			frostui.Icon(c, icon)
-			ui.Text(c, label).SingleLine()
-		})
-	})
 }
 
 // figures are the strip under the hero: one figure per visible page that

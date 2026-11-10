@@ -92,7 +92,7 @@ func NewFlatpak(env *Env) *Flatpak {
 		listUpdates: flatpak.ListUpdates,
 		update:      flatpak.Update,
 		uninstall:   flatpak.Uninstall,
-		launch:      frostui.LaunchDesktopApp,
+		launch:      launchDesktopApp,
 		dryRun:      flatpak.IsDryRun,
 	}
 }
