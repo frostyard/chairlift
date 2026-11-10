@@ -426,6 +426,9 @@ func (p *overviewPage) deploymentChain(c *ui.Context, info SystemInfo) {
 	case info.Kind == "":
 		return
 	}
+	if e := sys.DeploymentsRefreshError(); e != "" {
+		defer frostui.Problem(c, "Showing the last known deployments: "+e)
+	}
 	t := c.Theme()
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Role(ui.RoleList).Label("Deployments").Children(func() {
 		deploymentChip(c.Key("rollback"), "Rollback", "document-revert", info.Rollback, false, rollbackEmpty(info))

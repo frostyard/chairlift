@@ -332,9 +332,19 @@ func (m *Maintenance) AskEverything() {
 		Details: details,
 		Action:  "Run all",
 		OnConfirm: func() {
+			// Run what the dialog listed, never more: a cleanup that was
+			// running or still being found when it opened was not shown,
+			// so it is not queued now. One that stopped being eligible
+			// (now running, or its tool gone) is left out.
+			listed := make(map[string]cleanup, len(cls))
+			for _, cl := range cls {
+				listed[cl.Key] = cl
+			}
 			var jobs []*frostui.Job
 			for _, cl := range m.idle() {
-				jobs = append(jobs, m.job(cl))
+				if shown, ok := listed[cl.Key]; ok && shown.Argv != nil && strings.Join(shown.Argv, " ") == strings.Join(cl.Argv, " ") {
+					jobs = append(jobs, m.job(cl))
+				}
 			}
 			if len(jobs) > 0 {
 				m.env.Jobs.Enqueue(jobs...)

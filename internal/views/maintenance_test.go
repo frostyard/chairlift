@@ -818,3 +818,24 @@ func TestPrivilegedJobsCannotBeStopped(t *testing.T) {
 		}
 	}
 }
+
+func TestMaintenanceCleanEverythingRunsOnlyWhatItListed(t *testing.T) {
+	f := newMaintFixture(t, maintConfig(), false)
+	f.start()
+	// Homebrew's check has not ended when the dialog opens: it is not
+	// listed, and must not be queued when its check ends before the click.
+	f.m.brew = maintToolUnknown
+	tt := f.tester()
+	f.click(tt, "Clean everything")
+	if !tt.HasText("Runs 3 cleanups, one after the other.") {
+		t.Fatalf("the dialog does not list 3 cleanups: %q", tt.Texts())
+	}
+	f.m.brew = maintToolPresent
+	f.click(tt, "Run all")
+	f.settle()
+	_, order := f.fake.ran()
+	want := []string{"pkexec /usr/libexec/bls-gc", "/usr/libexec/snow-trim-caches ", "flatpak"}
+	if !reflect.DeepEqual(order, want) {
+		t.Errorf("ran %q, want only the listed %q", order, want)
+	}
+}

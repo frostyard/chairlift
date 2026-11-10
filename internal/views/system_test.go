@@ -718,11 +718,60 @@ func TestSystemReadsBootcFromSnosiWhenStatusNeedsRoot(t *testing.T) {
 		t.Errorf("a current host: kind %q items %+v", s2.Info().Kind, s2.Source().Items())
 	}
 
-	// No state files: nothing says what runs.
+	// No state files, as after a reboot: still a bootc host with its
+	// stager, so Stage stays offered and the booted version comes from
+	// os-release.
 	f.suStatus = sysupdate.Status{}
 	env3, q3 := sysEnv(t, sysConfig(sysAllGroups...), false)
 	s3 := sysStart(t, env3, q3, f)
-	if s3.Info().Kind != "" || s3.Source().Status().Available {
-		t.Errorf("no snosi state still read a bootc host: %+v", s3.Info())
+	info3 := s3.Info()
+	if info3.Kind != KindBootc || !info3.Booted.Present || info3.Booted.Version == "" || info3.Staged.Present {
+		t.Errorf("after a reboot: %+v", info3)
+	}
+	if src := s3.Source(); src == nil || !src.Status().Available || len(src.Items()) != 1 {
+		t.Errorf("after a reboot the image source offers %+v", src.Items())
+	}
+
+	// Without the stager the host is not one ChairLift can stage.
+	f.bootcScript = false
+	env4, q4 := sysEnv(t, sysConfig(sysAllGroups...), false)
+	if s4 := sysStart(t, env4, q4, f); s4.Info().Kind != "" {
+		t.Errorf("without the stager: %+v", s4.Info())
+	}
+}
+
+func TestSystemFailedStatusKeepsTheKnownDeployments(t *testing.T) {
+	f := newSysFake()
+	f.bootcHost, f.bootcScript = true, true
+	f.status = sysBootcStatus("2026.11.05", "", "2026.10.29")
+	env, q := sysEnv(t, sysConfig(sysAllGroups...), false)
+	s := sysStart(t, env, q, f)
+	if !s.Info().Booted.Present || len(s.Source().Items()) != 1 {
+		t.Fatalf("first load: %+v items %+v", s.Info(), s.Source().Items())
+	}
+	f.mu.Lock()
+	f.status, f.statusErr = nil, errors.New("bootc status timed out")
+	f.mu.Unlock()
+	s.Source().Refresh()
+	q.until(t, "the refresh", func() bool { return !s.checking })
+	info := s.Info()
+	if info.Booted.Version != "2026.11.05" || info.Rollback.Version != "2026.10.29" {
+		t.Errorf("a failed refresh dropped the deployments: %+v", info)
+	}
+	if s.DeploymentsError() != "" || !strings.Contains(s.DeploymentsRefreshError(), "timed out") {
+		t.Errorf("errors: %q / %q", s.DeploymentsError(), s.DeploymentsRefreshError())
+	}
+	st := s.Source().Status()
+	if !strings.Contains(st.Err, "timed out") || len(s.Source().Items()) != 1 {
+		t.Errorf("status %+v items %+v: want the error shown and the item kept", st, s.Source().Items())
+	}
+	// A good read clears the error.
+	f.mu.Lock()
+	f.status, f.statusErr = sysBootcStatus("2026.11.05", "", "2026.10.29"), nil
+	f.mu.Unlock()
+	s.Source().Refresh()
+	q.until(t, "the refresh", func() bool { return !s.checking })
+	if s.DeploymentsRefreshError() != "" {
+		t.Errorf("a good read kept the error %q", s.DeploymentsRefreshError())
 	}
 }

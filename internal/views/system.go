@@ -107,6 +107,9 @@ type deployments struct {
 	builtAt   string // the booted image's build time (bootc)
 	// rollbackUnknown: the source cannot tell the rollback.
 	rollbackUnknown bool
+	// refreshErr is the error of a read that failed after a good one: the
+	// last known deployments stay, and the error shows beside them.
+	refreshErr string
 
 	booted, staged, rollback Deployment
 	// stagedID identifies the staged image (its full digest or version
@@ -194,6 +197,10 @@ func (s *System) DeploymentsLoading() bool { return s.checking && !s.depsLoaded 
 
 // DeploymentsError is the last status read's failure, "" when it worked.
 func (s *System) DeploymentsError() string { return s.deps.err }
+
+// DeploymentsRefreshError is the error of the latest read when it failed
+// after a good one: the deployments shown are the last known.
+func (s *System) DeploymentsRefreshError() string { return s.deps.refreshErr }
 
 // Source is the system image update source (bootc or native A/B), nil when
 // neither updates group is enabled. Its status is unavailable until a load
@@ -305,13 +312,13 @@ func (s *System) readDeployments(ctx context.Context, wantBootc, wantNative bool
 		// unprivileged boot gate reads false on a bootc host. The snosi
 		// stager records what it checked and staged in /run/snosi on bootc
 		// hosts too: read the deployments from there, or nothing.
-		st := s.sysupdateStatus()
-		if st.Check == nil && st.Staged == nil {
-			return d
-		}
+		// After a reboot /run/snosi is empty until the stager's timer
+		// runs: the host is still a bootc host with its stager (core
+		// ADR-0005), so Stage stays offered and the booted version comes
+		// from os-release.
 		d.kind = KindBootc
 		d.stageable = true
-		d.fromSnosiBootc(st)
+		d.fromSnosiBootc(s.sysupdateStatus())
 	}
 	return d
 }
@@ -392,6 +399,12 @@ func (d *deployments) fromSysupdate(status sysupdate.Status) {
 }
 
 func (s *System) applyDeployments(d deployments) {
+	if d.err != "" && s.depsLoaded && s.deps.err == "" && s.deps.kind == d.kind {
+		// A failed read after a good one keeps what is known.
+		kept := s.deps
+		kept.refreshErr = d.err
+		d = kept
+	}
 	s.deps, s.depsLoaded, s.checkedAt = d, true, s.now()
 	if d.staged.Present {
 		s.runCurrent = false
@@ -635,6 +648,8 @@ func (src *imageSource) Status() SourceStatus {
 		st.Err = s.stageErr
 	case s.deps.err != "":
 		st.Err = s.deps.err
+	case s.deps.refreshErr != "":
+		st.Err = s.deps.refreshErr
 	}
 	return st
 }
