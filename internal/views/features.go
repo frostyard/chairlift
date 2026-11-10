@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/featurestatus"
+	"github.com/frostyard/frostui"
 )
 
 // The Features page's configuration page and its one group.

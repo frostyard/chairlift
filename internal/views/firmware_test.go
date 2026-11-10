@@ -10,8 +10,8 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/fwupd"
+	"github.com/frostyard/frostui/frostuitest"
 )
 
 var (

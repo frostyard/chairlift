@@ -133,9 +133,12 @@ control is hand-written Go, YAML, and data assets.
   invariant above. `snapshot.yml` only refreshes the rolling `dev` prerelease.
 - **External UI dependency:** `github.com/egoist/mygo` (direct, the window;
   pinned in go.mod). It is young and has one main author: keep its calls
-  behind `internal/frostui` and the views, and read its source in `GOMODCACHE`
-  after a bump (the theme reset per frame, `Window.Update` semantics, the
-  Tester).
+  behind `github.com/frostyard/frostui` and the views, and read its source in
+  `GOMODCACHE` after a bump (the theme reset per frame, `Window.Update`
+  semantics, the Tester). `github.com/frostyard/frostui` (direct, the UI kit
+  on MyGo; pinned in go.mod) requires its own MyGo version, so bump the two
+  together. Until its v1 a minor version may change its API: after a bump,
+  read the `API changes` section of its `docs/design/frostui.md`.
 - **Internal dependencies** (`go.mod`): `github.com/frostyard/updex/v2`
   (direct, feature SDK and the helper's engine) and `github.com/frostyard/std`
   (direct since ADR-0015: its `problems` package writes ChairLift's own
@@ -184,7 +187,7 @@ An agent must not break these:
   `docs/design/overview.md`). Do not widen it.
 - **First-run mode stays user-level, pure at its gate, and opt-in per image**
   ([ADR-0014](docs/adr/0014-first-run-mode.md)). `cmd/chairlift-first-run`
-  imports no UI toolkit (no MyGo, no `internal/frostui`, no GTK binding;
+  imports no UI toolkit (no MyGo, no frostui, no GTK binding;
   guarded by `internal/installcheck.TestFirstRunGateImportsNoGTK`) and only
   calls `internal/firstrun.Gate`; it ships in `frostyard-chairlift` only.
   `chairlift --first-run` uses the application ID
@@ -239,22 +242,20 @@ An agent must not break these:
   human-readable (`Stdout`/`Stderr`); machine output such as journal records
   and lsblk's JSON is not teed. A new `exec.Command` under `internal/` must do
   the same (`internal/installcheck.TestEveryCommandIsTraced` parses each
-  file and counts `cmdlog.Start` calls per function, closures included); only
-  `internal/frostui` is exempt, and the views trace what they launch through
-  it (`launchDesktopApp`). The rail's job card and the palette stop the queue
+  file and counts `cmdlog.Start` calls per function, closures included). The
+  frostui module is outside that walk, so the views trace what they launch
+  through it (`launchDesktopApp`). The rail's job card and the palette stop the queue
   (`Jobs.CancelAll`); a job that finished despite the cancel keeps its result.
-- **frostui stays extractable.** `internal/frostui` imports only the standard
-  library, MyGo, purego and its own packages, and its test helpers
-  (`internal/frostui/frostuitest`) only the standard library
-  (`TestFrostUIImportsNoChairLift`); put ChairLift-specific UI in
-  `internal/views` or `internal/window`, and move a view helper that is not
-  ChairLift-specific into the kit. See
+- **The UI kit is a module.** ChairLift depends on
+  `github.com/frostyard/frostui` (version in go.mod) and holds no copy of it;
+  never add one back under `internal/`. The module guards its own imports. Put
+  ChairLift-specific UI in `internal/views` or `internal/window`, and propose
+  a view helper that is not ChairLift-specific to the module. See
   [docs/design/frostui.md](docs/design/frostui.md).
-- **Views are tested headless.** `internal/views`, `internal/window`,
-  `internal/frostui` and `internal/app` hold tests that render with
-  `ui.NewTester`; backends are injected as function fields, so no test runs
+- **Views are tested headless.** `internal/views`, `internal/window` and
+  `internal/app` hold tests that render with `ui.NewTester`; backends are injected as function fields, so no test runs
   brew, flatpak, bootc, fwupdmgr, updex or pkexec. A test that stands in for
-  the UI thread posts to a `frostuitest.Loop`. Decisions still live in the
+  the UI thread posts to a `frostuitest.Loop` (`github.com/frostyard/frostui/frostuitest`). Decisions still live in the
   pure leaf packages (`pageview`, `actionmsg`, `actionstate`, `bundleview`,
   `featurestatus`, `flatpakstatus`, `trustmsg`). No package may load a UI
   library at init (`TestNoGTK4Bindings` keeps puregotk out).

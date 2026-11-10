@@ -11,11 +11,11 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/flatpak"
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/flatpakstatus"
 	"github.com/frostyard/chairlift/internal/views/pageview"
+	"github.com/frostyard/frostui"
 )
 
 // Flatpak holds the installed Flatpak apps and the Flatpak update source.

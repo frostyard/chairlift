@@ -8,8 +8,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/views/pageview"
+	"github.com/frostyard/frostui"
 )
 
 // updatesPage is the Updates page: the header with "Check now" and "Update
@@ -342,7 +342,7 @@ func (p *updatesPage) runCard(c *ui.Context, srcs []UpdateSource) {
 				frostui.Caption(c, "Last run: "+summary).SingleLine()
 			}
 		})
-		frostui.Pipeline(c, stages)
+		frostui.Pipeline(c, stages).Label("Update run")
 	})
 }
 

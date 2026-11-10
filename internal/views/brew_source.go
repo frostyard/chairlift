@@ -10,12 +10,12 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
 	"github.com/frostyard/chairlift/internal/views/pageview"
 	"github.com/frostyard/chairlift/internal/views/trustmsg"
+	"github.com/frostyard/frostui"
 )
 
 // brewUpdates is the Homebrew update source's state: the outdated packages

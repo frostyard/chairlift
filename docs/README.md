@@ -96,7 +96,7 @@ are listed in [org-adrs.md](org-adrs.md).
   Problems, Maintenance, a palette, a console and a status bar) on GTK 3;
   puregotk is gone, views are tested with MyGo's Tester, the console streams
   real command output through `internal/cmdlog`, changes run in one serial
-  job queue, and the `frostui` kit stays free of ChairLift imports
+  job queue, and the UI kit is the `github.com/frostyard/frostui` module
   (supersedes ADR-0007)
 - [adr/0018-relicense-mit-and-drop-inherited-translations.md](adr/0018-relicense-mit-and-drop-inherited-translations.md)
   — ChairLift is MIT-licensed (`LICENSE`, the package metadata, the About
@@ -116,9 +116,9 @@ are listed in [org-adrs.md](org-adrs.md).
 - [design/package-managers.md](design/package-managers.md) — the Homebrew,
   Flatpak, fwupd, bootc, sysupdate, and updex wrappers and their view-layer
   leaf packages (formerly `yeti/package-managers.md`)
-- [design/frostui.md](design/frostui.md) — the frostyard desktop UI kit on
-  MyGo (`internal/frostui`): what it holds, its threading rules, and the plan
-  to move it to its own module for frostmail, frostnotes and frostread
+- [design/frostui.md](design/frostui.md) — where the frostyard desktop UI
+  kit on MyGo lives now (the `github.com/frostyard/frostui` module), and what
+  ChairLift draws itself
 - [design/engineering-lessons.md](design/engineering-lessons.md) — the
   durable test, configuration-code and documentation rules learned from past
   defects and reviews (formerly the lesson files in `docs/agents/skills/`);

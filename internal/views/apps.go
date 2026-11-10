@@ -10,8 +10,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/navigation"
+	"github.com/frostyard/frostui"
 )
 
 // The Apps page's tabs.

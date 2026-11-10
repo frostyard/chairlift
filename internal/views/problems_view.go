@@ -7,10 +7,10 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/problems"
 	"github.com/frostyard/chairlift/internal/reporting"
 	"github.com/frostyard/chairlift/internal/views/pageview"
+	"github.com/frostyard/frostui"
 )
 
 // reportsColumnWidth is the width of the reporting card beside the

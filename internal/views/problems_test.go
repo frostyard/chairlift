@@ -15,10 +15,10 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/problems"
 	"github.com/frostyard/chairlift/internal/reporting"
 	"github.com/frostyard/chairlift/internal/views/pageview"
+	"github.com/frostyard/frostui"
 )
 
 // The e2e fixtures (test/e2e/testdata/problems): 16 system problems and 7

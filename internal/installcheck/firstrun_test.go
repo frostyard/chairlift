@@ -18,9 +18,9 @@ import (
 // firstRunPurePackages are the packages of the first-run gate binary and the
 // first-run logic. A done user's login runs the gate, which must exit before
 // any UI toolkit loads: if one of them pulled in a UI binding (the former
-// puregotk/snowkit GTK 4 stack, MyGo, or ChairLift's frostui kit on top of
-// it), chairlift-first-run would no longer be the small pure-Go process
-// ADR-0014 makes it.
+// puregotk/snowkit GTK 4 stack, MyGo, or the frostui module on top of it),
+// chairlift-first-run would no longer be the small pure-Go process ADR-0014
+// makes it.
 var firstRunPurePackages = []string{
 	"./cmd/chairlift-first-run",
 	"./internal/firstrun",
@@ -33,7 +33,7 @@ var firstRunUIPackages = []string{
 	"codeberg.org/puregotk",
 	"github.com/frostyard/snowkit",
 	"github.com/egoist/mygo",
-	"github.com/frostyard/chairlift/internal/frostui",
+	"github.com/frostyard/frostui",
 }
 
 // goListDeps returns the transitive dependencies of pkg, built pure Go.
@@ -83,7 +83,7 @@ func TestFirstRunGateImportsNoGTK(t *testing.T) {
 	}
 	t.Run("the window uses the toolkit", func(t *testing.T) {
 		deps := goListDeps(t, goTool, "./internal/window")
-		for _, ui := range []string{"github.com/egoist/mygo/ui", "github.com/frostyard/chairlift/internal/frostui"} {
+		for _, ui := range []string{"github.com/egoist/mygo/ui", "github.com/frostyard/frostui"} {
 			if !slices.Contains(deps, ui) {
 				t.Errorf("go list -deps ./internal/window does not list %s; the prefixes no longer match the toolkit", ui)
 			}

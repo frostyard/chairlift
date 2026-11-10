@@ -33,8 +33,8 @@ hold no tests at all, and a host with GTK installed ran such a test green,
 hiding the problem.
 
 MyGo loads GTK only in `App.Run`, and `ui.NewTester` renders a view on the
-CPU with no display, so `internal/views`, `internal/window`,
-`internal/frostui` and `internal/app` hold tests now. Keep it that way:
+CPU with no display, so `internal/views`, `internal/window` and
+`internal/app` hold tests now, as does the frostui module. Keep it that way:
 
 - Never load a UI library in an `init` function or a package-level variable.
   A package that does so makes every package importing it untestable.

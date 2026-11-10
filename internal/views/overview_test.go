@@ -16,9 +16,9 @@ import (
 
 	"github.com/frostyard/chairlift/internal/activity"
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/navigation"
 	"github.com/frostyard/chairlift/internal/sysinfo"
+	"github.com/frostyard/frostui"
 )
 
 // ovSource is an update source with the items a test gives it.

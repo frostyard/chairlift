@@ -7,9 +7,9 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/frostui"
-	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/navigation"
+	"github.com/frostyard/frostui"
+	"github.com/frostyard/frostui/frostuitest"
 )
 
 // appsBrew is a Homebrew inventory as Brew.Apps would give it.

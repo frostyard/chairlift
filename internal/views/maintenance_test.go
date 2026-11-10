@@ -20,10 +20,10 @@ import (
 	"github.com/frostyard/chairlift/internal/activity"
 	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/frostui"
-	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/sysinfo"
 	"github.com/frostyard/chairlift/internal/views/pageview"
+	"github.com/frostyard/frostui"
+	"github.com/frostyard/frostui/frostuitest"
 )
 
 // maintFake records what the page asked the backends to do.

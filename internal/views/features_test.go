@@ -13,9 +13,9 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/frostui"
-	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/updex"
+	"github.com/frostyard/frostui"
+	"github.com/frostyard/frostui/frostuitest"
 	updexapi "github.com/frostyard/updex/v2/updex"
 )
 

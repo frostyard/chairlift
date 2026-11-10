@@ -12,8 +12,8 @@ import (
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/flatpak"
-	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/views/flatpakstatus"
+	"github.com/frostyard/frostui/frostuitest"
 )
 
 // fpConfig enables exactly the Flatpak groups asked for, and turns the

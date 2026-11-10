@@ -151,16 +151,16 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 // TestEveryCommandIsTraced keeps AGENTS.md's "Every command shows in the
 // console" true: each function in a production file under internal/ that
 // starts an external command also announces it through internal/cmdlog
-// (checkCommandTracing). The kit (internal/frostui) is exempt: it cannot
-// import ChairLift, and the views trace what they launch through it
-// (launchDesktopApp).
+// (checkCommandTracing). The UI kit is a module of its own
+// (github.com/frostyard/frostui), outside this walk; the views trace what
+// they launch through it (launchDesktopApp).
 func TestEveryCommandIsTraced(t *testing.T) {
 	root := RepoRoot()
 	files, commands, starts := 0, 0, 0
 	for _, p := range goFilesUnder(t, filepath.Join(root, "internal")) {
 		rel, _ := filepath.Rel(root, p)
 		rel = filepath.ToSlash(rel)
-		if strings.HasSuffix(rel, "_test.go") || strings.HasPrefix(rel, "internal/frostui/") || strings.HasPrefix(rel, "internal/cmdlog/") {
+		if strings.HasSuffix(rel, "_test.go") || strings.HasPrefix(rel, "internal/cmdlog/") {
 			continue
 		}
 		src, err := os.ReadFile(p)

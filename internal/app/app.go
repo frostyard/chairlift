@@ -23,7 +23,6 @@ import (
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/firstrun"
 	"github.com/frostyard/chairlift/internal/flatpak"
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/selfreport"
@@ -31,6 +30,7 @@ import (
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/views"
 	"github.com/frostyard/chairlift/internal/window"
+	"github.com/frostyard/frostui"
 )
 
 // AppID is the main window's application ID: the Wayland app ID and the

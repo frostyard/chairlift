@@ -5,7 +5,7 @@ Living design document (formerly `yeti/OVERVIEW.md`; folded into `docs/` per
 
 ## Purpose
 
-ChairLift is the command center of [Snow Linux](https://github.com/frostyard/snosi): a system-management GUI written in Go on [MyGo](https://mygo.egoist.dev) (`github.com/egoist/mygo`), which draws its own widgets on GTK 3 and OpenGL loaded at run time with purego — no CGO ([ADR-0017](../adr/0017-mygo-command-center-window.md)). One window manages the OS image (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), Flatpak apps, Homebrew packages, device firmware (fwupd), the problems recorded on the computer, and cleanups. The window is a command center: a top bar with a command palette, a left rail of six pages (Overview, Updates, Apps, Features, Problems, Maintenance), a console that streams the commands ChairLift runs and their output (see [The console](#the-console-internalcmdlog) for the few that bypass it), and a status bar; Help is a dialog. The UI is YAML-configuration-driven: every card sits behind its configuration group, which makes ChairLift portable to other Linux distributions by toggling groups off. A separate first-run mode (`chairlift --first-run`, started by the pure-Go `chairlift-first-run` gate) replaces SNOW First Setup on images that ship its trigger; see [First-run mode](#first-run-mode). The Problems page shows the problems that the system checks, the user's crashes and frostyard apps recorded on this computer, and sends nothing until the user opts in to reporting; see [Problems page](#problems-page). The UI kit the window is drawn with, `internal/frostui`, has its own design document: [frostui.md](./frostui.md).
+ChairLift is the command center of [Snow Linux](https://github.com/frostyard/snosi): a system-management GUI written in Go on [MyGo](https://mygo.egoist.dev) (`github.com/egoist/mygo`), which draws its own widgets on GTK 3 and OpenGL loaded at run time with purego — no CGO ([ADR-0017](../adr/0017-mygo-command-center-window.md)). One window manages the OS image (staged via the snow `bootc-update-stage` script on bootc installs, or the snow `snosi-sysupdate-stage` script on native A/B installs), system features (via updex), Flatpak apps, Homebrew packages, device firmware (fwupd), the problems recorded on the computer, and cleanups. The window is a command center: a top bar with a command palette, a left rail of six pages (Overview, Updates, Apps, Features, Problems, Maintenance), a console that streams the commands ChairLift runs and their output (see [The console](#the-console-internalcmdlog) for the few that bypass it), and a status bar; Help is a dialog. The UI is YAML-configuration-driven: every card sits behind its configuration group, which makes ChairLift portable to other Linux distributions by toggling groups off. A separate first-run mode (`chairlift --first-run`, started by the pure-Go `chairlift-first-run` gate) replaces SNOW First Setup on images that ship its trigger; see [First-run mode](#first-run-mode). The Problems page shows the problems that the system checks, the user's crashes and frostyard apps recorded on this computer, and sends nothing until the user opts in to reporting; see [Problems page](#problems-page). The UI kit the window is drawn with is a module of its own, `github.com/frostyard/frostui`; see [frostui.md](./frostui.md).
 
 ## Architecture
 
@@ -37,7 +37,6 @@ internal/views/                 The six pages and the state they share, drawn th
         │                       ├── internal/views/featurestatus/ │ table-tested
         │                       └── internal/views/pageview/      ┘
         │
-        ├── internal/frostui/   frostyard's UI kit on MyGo: shell, palette, console, job queue, dialogs, cards (imports no ChairLift package)
         ├── internal/navigation/ The six pages in rail order, shortcuts, page visibility, pure navigation transitions
         ├── internal/cmdlog/    Command tracer: the backends report each command, its output and its end; the console subscribes
         ├── internal/sysinfo/   Host facts: /proc readings, statfs, uptime, kernel, DMI model, Secure Boot state
@@ -63,8 +62,8 @@ internal/views/                 The six pages and the state they share, drawn th
 
 `cmd/chairlift → app → window → views → {config, homebrew, flatpak, fwupd, bootc, sysupdate, updex, problems, reporting, sysinfo, activity, cmdlog}`.
 `app` also sets every backend's dry-run flag, opens `activity`, and installs the `cmdlog` sink that feeds the console.
-`window` and `views` draw through `frostui`, which imports only MyGo, purego and the standard library
-(`internal/installcheck.TestFrostUIImportsNoChairLift`), and both read the pure `navigation` package.
+`window` and `views` draw through `github.com/frostyard/frostui` (frostyard's UI kit on MyGo: shell, palette, console, job queue, dialogs, cards), a module of its own that imports only MyGo, purego and the standard library,
+and both read the pure `navigation` package.
 The backends that run commands (`homebrew`, `flatpak`, `fwupd`, `bootc`, `updex`, `stageexec`) report them through `cmdlog`, a leaf that imports no UI and no backend.
 The first-run mode adds `cmd/chairlift-first-run → firstrun → {config, flatpak, i18n}`
 (no UI toolkit, guarded by `internal/installcheck.TestFirstRunGateImportsNoGTK`) and `app → window (firstrun*.go) → {firstrun, i18n, reporting}`.
@@ -1764,7 +1763,7 @@ against the code for [ADR-0016](../adr/0016-adopt-the-repository-baseline.md),
 and again after the MyGo port.
 
 - **App launch:** `launchDesktopApp` (`internal/views/env.go`, over
-  `frostui.LaunchDesktopApp` in `internal/frostui/launch.go`) passes the
+  `frostui.LaunchDesktopApp` in the frostui module) passes the
   application ID to `gtk-launch` without a check of its form. The IDs come
   from the configuration (`app_id` of `applications_installed_group`, default
   `io.github.kolunmi.Bazaar`, and of `system_page`'s `health_group`, default
@@ -2039,7 +2038,7 @@ distribution nothing starts on its own.
   `frostyard-chairlift` only) is pure Go: `internal/installcheck`'s
   `TestFirstRunGateImportsNoGTK` fails when `go list -deps` of it,
   `internal/firstrun` or `internal/i18n` contains a UI toolkit package
-  (puregotk, snowkit, MyGo or `internal/frostui`), and proves that
+  (puregotk, snowkit, MyGo or `github.com/frostyard/frostui`), and proves that
   `internal/window` does depend on MyGo and frostui, so the prefixes still
   match. The gate starts no UI at all, so it exits at once on every later
   login; `main.go` only calls
@@ -2367,7 +2366,8 @@ the configuration page, not always the page of the window that shows it (see
 
 | Module                           | Purpose                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------- |
-| `github.com/egoist/mygo`         | The window: MyGo's native UI (`mygo/ui`) on GTK 3 and OpenGL, the headless `ui.Tester`; kept behind `internal/frostui` and the views ([ADR-0017](../adr/0017-mygo-command-center-window.md)) |
+| `github.com/egoist/mygo`         | The window: MyGo's native UI (`mygo/ui`) on GTK 3 and OpenGL, the headless `ui.Tester`; kept behind frostui and the views ([ADR-0017](../adr/0017-mygo-command-center-window.md)) |
+| `github.com/frostyard/frostui`   | The UI kit on MyGo: shell, palette, console, job queue, dialogs, cards; `frostuitest` for the tests' UI thread ([frostui.md](./frostui.md)) |
 | `github.com/ebitengine/purego`   | Calling C without CGO: MyGo's library loading, and `frostui.SetAppID`'s `g_set_prgname`      |
 | `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.2.0 in go.mod) |
 | `gopkg.in/yaml.v3`               | YAML config parsing                                                                         |
@@ -2381,5 +2381,5 @@ There is no separate Go client library dependency for bootc: status/stage types 
 ## Subsystem Details
 
 - [Package Manager Wrappers](./package-managers.md) — Homebrew (including tap trust), Flatpak, fwupd, bootc, sysupdate and Updex wrapper details, and the pure view-layer leaf packages
-- [frostui](./frostui.md) — the UI kit: shell, palette, console, job queue, dialogs, components, and how it moves to its own module
+- [frostui](./frostui.md) — where the UI kit lives now, and what ChairLift draws itself
 - [Engineering lessons](./engineering-lessons.md) — binding rules learned from defects and reviews

@@ -50,11 +50,12 @@ program name. GTK 3 and GTK 4 cannot share a process.
   first-run wizard keeps ADR-0014's sequence. Stop drops the queued jobs and
   cancels the running one, except a job a cancel cannot stop (pkexec,
   firmware, updex), which finishes first.
-- **The UI kit is frostyard's, not ChairLift's.** `internal/frostui` holds
-  the shell, cards, dialogs, palette, console, job queue, pipeline and
-  gauges, imports only MyGo, purego and the standard library
-  (`TestFrostUIImportsNoChairLift`), and is written to move to its own
-  module for frostmail, frostnotes and frostread
+- **The UI kit is frostyard's, not ChairLift's.** The kit holds the shell,
+  cards, dialogs, palette, console, job queue, pipeline and gauges, and
+  imports only MyGo, purego and the standard library. It began here as
+  `internal/frostui` and moved, before this decision merged, to its own
+  module, `github.com/frostyard/frostui`, for frostmail, frostnotes and
+  frostread; ChairLift requires that module and keeps no copy
   ([design/frostui.md](../design/frostui.md)).
 - **Views are tested.** Packages that import MyGo may hold tests: they use
   `ui.NewTester`, which needs Pango and cairo but no display. Pure leaf

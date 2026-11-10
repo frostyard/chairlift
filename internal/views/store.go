@@ -1,8 +1,8 @@
 package views
 
 import (
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/navigation"
+	"github.com/frostyard/frostui"
 )
 
 // Store is ChairLift's state: one part per domain, each owned by its file,

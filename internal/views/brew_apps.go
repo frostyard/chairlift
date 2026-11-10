@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
 	"github.com/frostyard/chairlift/internal/views/actionstate"
+	"github.com/frostyard/frostui"
 )
 
 // brewInventory is the installed formulae and casks (brew_group).

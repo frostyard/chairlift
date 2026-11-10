@@ -28,7 +28,7 @@ import (
 	"github.com/frostyard/chairlift/internal/activity"
 	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/frostui"
+	"github.com/frostyard/frostui"
 )
 
 // Env is what every page gets from the window.

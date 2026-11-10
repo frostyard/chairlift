@@ -8,10 +8,10 @@ import (
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/firstrun"
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/i18n"
 	"github.com/frostyard/chairlift/internal/reporting"
 	"github.com/frostyard/chairlift/internal/views/actionmsg"
+	"github.com/frostyard/frostui"
 )
 
 // This file holds the optional problem-reporting step of the first run

@@ -12,9 +12,9 @@ import (
 
 	"github.com/frostyard/chairlift/internal/activity"
 	"github.com/frostyard/chairlift/internal/config"
-	"github.com/frostyard/chairlift/internal/frostui"
-	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/fwupd"
+	"github.com/frostyard/frostui"
+	"github.com/frostyard/frostui/frostuitest"
 )
 
 // The helpers of updates_test.go and firmware_test.go start with "upd" and
@@ -229,6 +229,16 @@ func TestUpdateEverythingQueuesDefaultJobsInSourceOrder(t *testing.T) {
 	p.updateEverything()
 	if toasts := env.TakeToasts(); len(toasts) != 1 || toasts[0].Title != "Nothing to update" {
 		t.Errorf("toasts = %+v", toasts)
+	}
+}
+
+// frostui names a Pipeline "Pipeline"; ChairLift's run keeps its own name
+// for screen readers.
+func TestUpdatesPipelineIsNamedForScreenReaders(t *testing.T) {
+	env, _, p, _, _, _, _ := updSetup(t)
+	tt := ui.NewTester(updView(env, p), 1128, 3000)
+	if _, ok := tt.AccessByRole(ui.RoleList, "Update run"); !ok {
+		t.Errorf("no list named Update run on the page: %q", tt.Texts())
 	}
 }
 

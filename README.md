@@ -53,7 +53,7 @@ ChairLift is written in Go on [MyGo](https://mygo.egoist.dev), which draws its o
 
 - `cmd/chairlift`, `cmd/chairlift-updex-helper` (the privileged helper), `cmd/chairlift-first-run` (the first-run gate)
 - `internal/app` and `internal/window`: the application, the command-center window and the first-run wizard
-- `internal/views`: the six pages and their state; `internal/frostui`: the UI kit
+- `internal/views`: the six pages and their state, drawn with the [frostui](https://github.com/frostyard/frostui) UI kit
 - `internal/cmdlog`: the command tracer behind the console
 - `internal/homebrew`, `flatpak`, `fwupd`, `bootc`, `sysupdate`, `updex`: the backends
 - `internal/config`, `navigation`, `problems`, `reporting`: configuration, pages, problem records, reports

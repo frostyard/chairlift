@@ -5,8 +5,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/frostui"
 )
 
 // brewPage draws what draw draws as a page's content, on the window's

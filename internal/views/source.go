@@ -5,7 +5,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"github.com/frostyard/chairlift/internal/frostui"
+	"github.com/frostyard/frostui"
 )
 
 // SourceID names one of the five update sources, in the order the Updates

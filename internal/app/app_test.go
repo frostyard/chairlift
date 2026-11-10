@@ -13,11 +13,11 @@ import (
 	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/firstrun"
 	"github.com/frostyard/chairlift/internal/flatpak"
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/sysupdate"
 	"github.com/frostyard/chairlift/internal/updex"
+	"github.com/frostyard/frostui"
 )
 
 type fakeWindow struct {

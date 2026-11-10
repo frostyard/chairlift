@@ -4,8 +4,8 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/firstrun"
-	"github.com/frostyard/chairlift/internal/frostui"
 	"github.com/frostyard/chairlift/internal/i18n"
+	"github.com/frostyard/frostui"
 )
 
 // The first-run wizard's metrics, in DIPs. Its toasts (frostui.TopToasts)
