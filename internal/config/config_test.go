@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -448,39 +448,36 @@ func groupKeys(page PageConfig) []string {
 	return keys
 }
 
-// isGroupEnabledCallPattern matches config.IsGroupEnabled("updates_page",
-// "<name>") calls in Go source text, capturing the group-name argument.
-var isGroupEnabledCallPattern = regexp.MustCompile(`IsGroupEnabled\(\s*"updates_page"\s*,\s*"([^"]+)"\s*\)`)
-
-// TestUpdatesPageDefaultGroupsHaveBuilders reads internal/views/updates_page.go
-// as plain text (internal/config must never import internal/views or the
-// GTK bindings package, directly or transitively, per
-// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages) and asserts every group
-// defaultConfig() defines for updates_page is gated by a real
-// config.IsGroupEnabled("updates_page", ...) call in that view file. This is
-// the regression test that would have caught a group being
-// declared/defaulted/shipped/documented with no view ever checking it: a
-// group with no matching IsGroupEnabled call fails this test.
+// TestUpdatesPageDefaultGroupsHaveBuilders reads the views' source as plain
+// text (internal/config must never import internal/views) and asserts every
+// group defaultConfig() defines for updates_page is named there as a
+// literal, the key the views gate its card with. This is the regression test
+// that would have caught a group being declared, defaulted, shipped and
+// documented with no view ever checking it; internal/navigation's
+// TestViewsGateEveryGroup checks every page's groups the same way.
 func TestUpdatesPageDefaultGroupsHaveBuilders(t *testing.T) {
-	path := filepath.Join(repoRoot(), "internal", "views", "updates_page.go")
-	src, err := os.ReadFile(path)
+	dir := filepath.Join(repoRoot(), "internal", "views")
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("reading %s: %v", path, err)
+		t.Fatal(err)
 	}
-
-	matches := isGroupEnabledCallPattern.FindAllStringSubmatch(string(src), -1)
-	if len(matches) == 0 {
-		t.Fatalf("found zero IsGroupEnabled(\"updates_page\", ...) calls in %s; regex may no longer match the source", path)
+	var src strings.Builder
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		src.Write(data)
 	}
-
-	gated := make(map[string]bool, len(matches))
-	for _, m := range matches {
-		gated[m[1]] = true
+	if !strings.Contains(src.String(), `"updates_page"`) {
+		t.Fatal(`no view names "updates_page"`)
 	}
-
 	for name := range defaultConfig().UpdatesPage {
-		if !gated[name] {
-			t.Errorf("defaultConfig().UpdatesPage group %q has no matching config.IsGroupEnabled(\"updates_page\", ...) call in %s", name, path)
+		if !strings.Contains(src.String(), `"`+name+`"`) {
+			t.Errorf("defaultConfig().UpdatesPage group %q is named by no view in internal/views", name)
 		}
 	}
 }

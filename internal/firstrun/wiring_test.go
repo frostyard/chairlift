@@ -305,7 +305,7 @@ func TestAppSelectsFirstRunMode(t *testing.T) {
 		`frostui.SetAppID(o.ID(), "ChairLift")`,
 		"mygo.App.SetName(o.ID())",
 		"firstrun.SetDryRun(true)",
-		"fr := window.NewFirstRun(post)",
+		"fr := window.NewFirstRun(p.post)",
 		"win.OnClose(func(e *mygo.CloseEvent) {",
 		"if !fr.CanClose() {",
 		"e.PreventDefault()",
@@ -324,7 +324,7 @@ func TestAppSelectsFirstRunMode(t *testing.T) {
 	if setName < 0 || lock < setName || run < lock {
 		t.Error("internal/app/app.go does not choose the application ID before the single-instance lock and the run")
 	}
-	newWindow := strings.Index(app, "fr := window.NewFirstRun(post)")
+	newWindow := strings.Index(app, "fr := window.NewFirstRun(p.post)")
 	guard := strings.Index(app, "if !fr.CanClose() {")
 	presented := strings.Index(app, "fr.Presented()")
 	if newWindow < 0 || guard < newWindow || presented < guard {

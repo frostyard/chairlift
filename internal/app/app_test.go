@@ -6,8 +6,7 @@ import (
 )
 
 type fakeWindow struct {
-	mu  sync.Mutex
-	ran []string
+	mu sync.Mutex
 }
 
 func (f *fakeWindow) Update(fn func()) {
