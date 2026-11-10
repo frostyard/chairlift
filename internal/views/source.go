@@ -41,6 +41,18 @@ type UpdateItem struct {
 	Confirm bool
 	// Action labels the row's button: "Update", "Stage", "Install…".
 	Action string
+	// JobKey is the key of the job that updates the item when it is not
+	// Key: one job may update several items, as the one updex helper run
+	// updates every feature.
+	JobKey string
+}
+
+// jobKey is the key of the job that updates it.
+func (it UpdateItem) jobKey() string {
+	if it.JobKey != "" {
+		return it.JobKey
+	}
+	return it.Key
 }
 
 // SourceStatus is the state of one source's last check.

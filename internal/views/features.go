@@ -549,12 +549,10 @@ func (f *Features) updated(results []updex.FeatureUpdate, err error) {
 	}
 }
 
-// changed reports whether an update run changed something: it ended
-// without an error, or a feature updated although it did not.
+// changed reports whether an update run changed something: a feature the
+// classified outcomes call updated, or a merge whose activation did not
+// finish. An all-current or empty run changed nothing.
 func changed(results []updex.FeatureUpdate, err error) bool {
-	if err == nil {
-		return results != nil
-	}
 	var activation *updex.ActivationIncompleteError
 	if errors.As(err, &activation) {
 		return true
@@ -679,6 +677,8 @@ func (s *featureSource) Items() []UpdateItem {
 			From:   from,
 			To:     to,
 			Action: "Update",
+			// One helper run updates every feature: its job is each row's.
+			JobKey: featuresUpdateKey,
 		})
 	}
 	return items

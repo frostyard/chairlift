@@ -67,7 +67,7 @@ func (p *updatesPage) track(srcs []UpdateSource) {
 	p.noteBatch()
 	for _, src := range srcs {
 		id := src.ID()
-		p.shown[id] = updatesMerge(p.shown[id], src.Items(), func(key string) bool { return p.ranJob(id, key) != nil })
+		p.shown[id] = updatesMerge(p.shown[id], src.Items(), func(it UpdateItem) bool { return p.ranJob(id, it.jobKey()) != nil })
 	}
 }
 
@@ -89,7 +89,7 @@ func (p *updatesPage) noteBatch() {
 // updatesMerge returns the items a card lists: prev's order, each item
 // replaced by its current form; items that left cur only while kept says
 // so (the run updated them); then the new items of cur.
-func updatesMerge(prev, cur []UpdateItem, kept func(key string) bool) []UpdateItem {
+func updatesMerge(prev, cur []UpdateItem, kept func(it UpdateItem) bool) []UpdateItem {
 	now := make(map[string]UpdateItem, len(cur))
 	for _, it := range cur {
 		now[it.Key] = it
@@ -100,7 +100,7 @@ func updatesMerge(prev, cur []UpdateItem, kept func(key string) bool) []UpdateIt
 		if c, ok := now[it.Key]; ok {
 			out = append(out, c)
 			seen[it.Key] = true
-		} else if kept(it.Key) {
+		} else if kept(it) {
 			out = append(out, it)
 			seen[it.Key] = true
 		}
@@ -157,7 +157,7 @@ func updatesDefault(src UpdateSource) int {
 // sourcePending reports whether a job of src waits or runs.
 func (p *updatesPage) sourcePending(src UpdateSource) bool {
 	for _, it := range src.Items() {
-		if p.env.Jobs.Pending(string(src.ID()), it.Key) {
+		if p.env.Jobs.Pending(string(src.ID()), it.jobKey()) {
 			return true
 		}
 	}
@@ -360,7 +360,7 @@ func (p *updatesPage) stage(src UpdateSource, now time.Time) (st frostui.Stage, 
 	}
 	var spent time.Duration
 	for _, it := range p.shown[src.ID()] {
-		job := p.jobOf(src.ID(), it.Key)
+		job := p.jobOf(src.ID(), it.jobKey())
 		step := frostui.Step{Title: it.Title, State: updatesStepState(it, job)}
 		if d, ok := updatesJobTime(job, now); ok {
 			step.Note = frostui.Duration(d)
@@ -456,7 +456,7 @@ func (p *updatesPage) sourceCard(c *ui.Context, src UpdateSource) {
 // itemRow is one item: its name and detail, the versions, and its button
 // or what its job did.
 func (p *updatesPage) itemRow(c *ui.Context, src UpdateSource, it UpdateItem) {
-	job := p.jobOf(src.ID(), it.Key)
+	job := p.jobOf(src.ID(), it.jobKey())
 	ui.Row(c).Key([2]any{"row", it.Key}).Gap(frostui.SpaceM).Padding(frostui.SpaceS, 0).AlignItems(ui.Center).Children(func() {
 		ui.Avatar(c, it.Title, nil).Size(32, 32)
 		ui.Column(c).Grow(1).Gap(1).Children(func() {
@@ -485,7 +485,12 @@ func (p *updatesPage) itemAction(c *ui.Context, src UpdateSource, it UpdateItem,
 		frostui.JobStatus(c, frostui.RowStatus{State: frostui.StepRunning, Text: doing, Label: doing + " " + it.Title, Compact: true})
 		return
 	case job != nil && job.State == frostui.JobDone:
-		frostui.JobStatus(c, frostui.RowStatus{State: frostui.StepDone, Text: updatesDone(it.Action), Compact: true})
+		done := updatesDone(it.Action)
+		if p.env.DryRun {
+			// A preview changed nothing (ADR-0009).
+			done = "Previewed"
+		}
+		frostui.JobStatus(c, frostui.RowStatus{State: frostui.StepDone, Text: done, Compact: true})
 		return
 	case job != nil && job.State == frostui.JobFailed:
 		msg := "Failed"

@@ -322,7 +322,7 @@ func TestUpdatesWords(t *testing.T) {
 func TestUpdatesMergeKeepsPlaces(t *testing.T) {
 	a, b, c, d := UpdateItem{Key: "a"}, UpdateItem{Key: "b", Title: "old"}, UpdateItem{Key: "c"}, UpdateItem{Key: "d"}
 	b2 := UpdateItem{Key: "b", Title: "new"}
-	got := updatesMerge([]UpdateItem{a, b, c}, []UpdateItem{d, b2}, func(key string) bool { return key == "a" })
+	got := updatesMerge([]UpdateItem{a, b, c}, []UpdateItem{d, b2}, func(it UpdateItem) bool { return it.Key == "a" })
 	keys := []string{}
 	for _, it := range got {
 		keys = append(keys, it.Key+it.Title)
@@ -625,5 +625,45 @@ func TestUpdatesSubtitleNeverCallsAFailedCheckUpToDate(t *testing.T) {
 	fakes[2].status.Err, fakes[3].status.Err = "", ""
 	if got := p.subtitle(srcs); !strings.HasPrefix(got, "Everything is up to date") {
 		t.Errorf("none failed: subtitle = %q", got)
+	}
+}
+
+func TestItemsShowTheirSharedJob(t *testing.T) {
+	env, q, p, _, fakes, _, _ := updSetup(t)
+	features := fakes[1]
+	for i := range features.items {
+		features.items[i].JobKey = "/update" // one helper run updates every feature
+	}
+	srcs := []UpdateSource{features}
+	release := make(chan struct{})
+	env.Jobs.Enqueue(&frostui.Job{Source: string(features.ID()), Key: "/update", Title: "Updating features",
+		Run: func(context.Context, *frostui.Progress) error { <-release; return nil }})
+	q.Flush()
+	p.track(srcs)
+	steps := updSteps(p, srcs)
+	for _, it := range features.items {
+		if steps[it.Title] != frostui.StepRunning {
+			t.Errorf("%s: step %v while the shared job runs, want running", it.Title, steps[it.Title])
+		}
+	}
+	if !p.sourcePending(features) {
+		t.Error("the source is not pending while its shared job runs")
+	}
+	close(release)
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
+}
+
+func TestUpdatesDryRunRowSaysPreviewed(t *testing.T) {
+	updIcons(t)
+	env, q, p, _, _, _, _ := updSetup(t)
+	env.DryRun = true
+	tt := ui.NewTester(updView(env, p), 1128, 3000)
+	if err := tt.Click("Update gh"); err != nil {
+		t.Fatal(err)
+	}
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
+	tt.Frame()
+	if !tt.HasText("Previewed") || tt.HasText("Updated") {
+		t.Errorf("a dry run's row must say Previewed, not Updated: %q", tt.Texts())
 	}
 }
