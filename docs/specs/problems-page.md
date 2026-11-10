@@ -2,11 +2,15 @@
 
 This contract governs what ChairLift's Problems page (ADR-0015) reads, how
 it validates each value, what it shows, what it writes, and the log line it
-prints when it is built. Consumers: the page builder
-`internal/views/problems_page.go`, the pure package `internal/problems`, the
-presentation in `internal/views/pageview/problems.go`, the dismiss decision
-in `internal/views/actionmsg/problems.go`, the e2e test, and the opt-in
-sender (`internal/reporting`), which calls `problems.BuildPayload`. Nothing is
+prints when it is built. Consumers: the Problems domain and page of the
+command center — `internal/views/problems.go` (the loads, the log marker,
+dismiss and `Summary`, which the Overview and the status bar show),
+`internal/views/problems_reporting.go` (consent, sends and the Report dialog)
+and `internal/views/problems_view.go` (the problem cards and the reporting
+card) — the pure package `internal/problems`, the presentation in
+`internal/views/pageview/problems.go` and `problems_card.go`, the dismiss
+decision in `internal/views/actionmsg/problems.go`, the e2e test, and the
+opt-in sender (`internal/reporting`), which calls `problems.BuildPayload`. Nothing is
 sent until the user turns reporting on; what is sent is
 [problem-reporting.md](problem-reporting.md).
 
@@ -37,11 +41,11 @@ The two paths are constants (`problems.ProblemsPath`,
 
 ### problems.json outcomes (`problems.SourceOutcome`)
 
-| Outcome | When | System group shows |
+| Outcome | When | System section shows |
 | --- | --- | --- |
-| `SourceMissing` (the zero value) | the file does not exist | 1 row: "System checks are not available on this system" |
-| `SourceUnreadable` | opening or reading fails (permission, I/O, a directory) | 1 row: "System checks could not be read", "See the log for details." |
-| `SourceMalformed` | not 1 JSON object, `format` is not 1, `schema` is not `frostyard.problem/1`, `problems` is not a list, or larger than 1 MiB | the same row as `SourceUnreadable`; ChairLift records the coded error `problems.source_invalid` |
+| `SourceMissing` (the zero value) | the file does not exist | 1 status card: "System checks are not available on this system" |
+| `SourceUnreadable` | opening or reading fails (permission, I/O, a directory) | 1 status card: "System checks could not be read", "See the log for details." |
+| `SourceMalformed` | not 1 JSON object, `format` is not 1, `schema` is not `frostyard.problem/1`, `problems` is not a list, or larger than 1 MiB | the same card as `SourceUnreadable`; ChairLift records the coded error `problems.source_invalid` |
 | `SourceOK` | the file was parsed | its items; with none, "No problems found" and "Last checked <when>" from `generated` |
 
 Unknown top-level keys are ignored. `generated` that is not RFC 3339 gives
@@ -79,15 +83,17 @@ file is an empty source.
 
 ### Log marker
 
-After the groups are filled, on the GTK main thread, the page logs exactly
-1 line from `problems.BuiltMarker`:
+After a load published the problems, on the UI thread
+(`Problems.loadProblems`, through `Env.Post`), the page logs exactly 1 line
+from `problems.BuiltMarker`:
 
 ```text
 problems: page built system=<shown system items> apps=<shown app items> source=<missing|unreadable|malformed|ok|disabled>
 ```
 
 `source=disabled` when the system group is off. With both data groups off
-the line is logged at once with `system=0 apps=0`.
+`Problems.Start` logs the line at once with `system=0 apps=0
+source=disabled`.
 
 ## Rules
 
@@ -131,7 +137,7 @@ the line is logged at once with `system=0 apps=0`.
    [`first_seen` − 1 minute, `last_seen` + 1 minute], show once: the user
    item in the Apps group.
 8. details.json, `MESSAGE`, paths and trusted journald fields are local
-   display text. They appear in the expanded row and in "Copy details"
+   display text. They appear in the open problem card and in "Copy details"
    (`problems.DetailsText`), never in a payload. Each message is cut to 1024
    characters, at most 5 messages; display text has control characters
    replaced.
@@ -144,7 +150,7 @@ the line is logged at once with `system=0 apps=0`.
     mode 0700, at most 1000 ids (the oldest dismissals go first). An item is
     hidden while its last time is not after its dismiss time. The dismiss
     time is the later of now and the item's last time. A failed write keeps
-    the row and shows an error toast.
+    the card and shows an error toast.
 11. Under `--dry-run` Dismiss writes nothing and hides nothing; the toast is
     `[DRY-RUN] Preview: dismiss <title> — no changes made` and the log line
     `[DRY-RUN] would dismiss problem <id>`.
@@ -158,34 +164,71 @@ the line is logged at once with `system=0 apps=0`.
     error path, and its panics with `RecoverPanic` deferred in `main`. A
     version that is not a release semver writes nothing.
 
-### Reporting group
+### Presentation
 
-The group shows reporting off until the consent file was read off the main
-thread. This table is the phase-2 replacement of phase 1's single promise row
-("Problem reports stay on this computer"), which must not come back:
+The page (`problems_view.go`) shows the problem lists on the left and the
+reporting card beside them; with both data groups off the reporting card
+stands alone. Every text comes from `internal/views/pageview`; the view
+composes none of its own. The page header's subtitle is
+`ProblemsSubtitle`, and its reload button (and the palette's "Reload
+problems") runs `Problems.Reload`.
 
-| Row | Text (`internal/views/pageview`) | Behaviour |
+Each data group is a section: a header with its icon, its title and note
+(`ProblemsSystemSection`/`ProblemsSystemSectionNote`,
+`ProblemsAppsSection`/`ProblemsAppsSectionNote`) and its status notes
+(`ProblemsSystemNotes`, `ProblemsAppsNotes`: "Last checked <when>" and the
+count of hidden dismissed problems), then "Loading…" before the first load, 1
+status card when `ProblemsSystemStatus`/`ProblemsAppsStatus` has a row for
+the outcome, or 1 card per problem. A problem card is a button
+(`ui.ButtonBase`, so the keyboard and screen readers reach it) whose header
+shows the kind's icon, the title and subtitle of `ProblemCardText` ("<subject>
+· last seen <when>"), and a count pill ("once" or "<n> times") toned by
+`ProblemSeverity`. A click opens the card: the hint and the rows of
+`ProblemDetails` (the recorded values and what this computer adds, selectable,
+in a monospace font), "First seen <when>", and the actions **Copy details**
+(`problems.DetailsText` on the window's clipboard), **Report…**
+(`ReportButtonLabel`, or a disabled **Sent**, `ReportedLabel`, after a send
+this run), and **Dismiss**.
+
+The palette also offers "Turn problem reports on/off" while the reporting
+group is on and, in Auto mode, "Send pending reports".
+
+### Reporting card
+
+The card shows reporting off until the first load read the consent file on a
+worker goroutine and published it; until then its switch and mode control are
+disabled and their handlers ignore every change. This table is the phase-2
+replacement of phase 1's single promise row ("Problem reports stay on this
+computer"), which must not come back:
+
+| Control | Text (`internal/views/pageview`) | Behaviour |
 | --- | --- | --- |
-| "Send problem reports" | `ReportingSwitchTitle`, with the group description `ReportingDescription(consent)`: "Off: nothing leaves this computer.", "On: Ask each time." / "On: Send automatically.", or the stale-format text "The report format changed. Turn reporting on to agree again." | An `adw.SwitchRow`; a change writes the consent through `reporting.SaveConsent` off the main thread, and a failed write puts the switch back and shows an error toast |
-| "When a problem is found" | `ReportingMode`: "Ask each time" or "Send automatically" | An `adw.ComboRow`, sensitive only while reporting is on |
-| "Sent reports" | `SentRows(state, loc)`: the send date and the kind's title, the `report_id` below; newest first, at most 50; "No reports have been sent." when empty | An `adw.ExpanderRow` |
-| "What is sent" | `ReportingWhat`: `https://frostyard.org/privacy/problem-reports/` | Opens the privacy page with `xdg-open` |
-| "Weekly count" | `ReportingCountRow`: "Weekly count" with `Review…` | Shows in Ask mode while this ISO week's count was not sent; `Review…` opens the same dialog for the count |
+| Header | `ReportingCardTitle` ("Problem reports") with `ReportingDescription(consent)`: "Off: nothing leaves this computer.", "On: Ask each time." / "On: Send automatically.", or the stale-format text "The report format changed. Turn reporting on to agree again."; `ReportingEndpointInvalid` instead when the configured endpoint is not valid | — |
+| "Send problem reports" | `ReportingSwitchTitle` | A switch showing `Consent.Allows()`; a change goes through `actionmsg.ReportingConsent` and writes the consent with `reporting.SaveConsent`, synchronously on the UI thread ([problem-reporting.md](problem-reporting.md)); a failed write keeps the value in memory and shows an error toast |
+| "When a problem is found" | `ReportingModeTitle` over 2 segments, `ReportingModeAsk` ("Ask each time") and `ReportingModeAuto` ("Send automatically") | Enabled only while reporting is on |
+| Limits | `ReportingLimits()`: at most 20 reports a day, each problem once a week, plus one weekly count | — |
+| "Send pending reports" | `ReportingSendPending` | Shows in Auto mode only; runs `reporting.Run` now, disabled with its reason while it cannot (loading, not Auto mode, an invalid endpoint, not a release build, a run going) |
+| "Weekly count" | `ReportingCountRow`: "Weekly count" with `Review…` | Shows in Ask mode while this ISO week's count was not sent; `Review…` opens the same Report dialog for the count |
+| "What is sent" | `ReportingWhat`: `https://frostyard.org/privacy/problem-reports/` | A link that MyGo's URL opener opens in the default browser |
+| Sent reports | `ReportingSentSummary` ("No reports have been sent.", "1 report sent", "<n> reports sent") over `SentRows(state, loc)`: the send date and the kind's title, the `report_id` below; newest first, at most 50 | A collapsible list (only the summary while nothing was sent), disabled while reporting is off |
 
-A problem row has a **Report…** button when
-`pageview.ReportOffered(item, allowed, state)` is true: reporting is allowed,
-the item is reportable, its kind is not `crash`, and its week was not sent.
-The button builds the report off the main thread (`reporting.ForItem`) and
-opens an `adw.AlertDialog` whose body is the report's `Text()` in a
-monospace, selectable, scrollable label, with Cancel and Send. Send takes
-`actionmsg.Report(IsDryRun(), kind)`: a dry run logs
-`[DRY-RUN] would send report <kind>` and toasts a preview; a live send calls
-`reporting.SendReport` with the same `Report` value, marks the row "Sent" on
-success, and shows an error toast on failure.
+A problem card has a **Report…** button when the reporting group is on and
+`pageview.ReportOffered(item, allowed, state)` is true: reporting is allowed
+with a valid endpoint, the item is reportable, its kind is not `crash`, and
+its week was not sent. The button builds the report on a worker goroutine
+(`reporting.ForItem`) and opens the Report dialog: a modal with the
+problem's title, `ReportSummary(kind)`, and the report's `Text()` in a
+monospace, selectable box that scrolls both ways, with Cancel and Send. Send
+takes `actionmsg.Report(dryRun, kind)`: a dry run logs `[DRY-RUN] would send
+report <kind>` and toasts a preview; a live send calls `reporting.SendReport`
+with the same `Report` value on a worker goroutine, marks the card "Sent" and
+adds the entry to the sent list on success, and shows an error toast on
+failure.
 
-In Auto mode, after the groups are filled and when the consent allows it, the
-page calls `reporting.Run` off the main thread (pace 7 s) and refreshes the
-sent list on the main thread. Under `--dry-run` `Run` logs its previews.
+In Auto mode, after a load published the problems and when the consent
+allows it, the page calls `reporting.Run` on a worker goroutine (pace 7 s)
+and refreshes the sent list on the UI thread. Under `--dry-run` `Run` logs its
+previews.
 
 ## Derived artifacts
 

@@ -167,7 +167,7 @@ step with `GroupConfig`.
 #### Leaf-package docs enumerate, and change with the package
 
 `docs/design/overview.md` and `docs/design/package-managers.md` name the
-puregotk-free leaf packages under `internal/views/` by count and by name.
+pure leaf packages under `internal/views/` by count and by name.
 The change that adds or removes a leaf package also updates that count and
 list. The prose for a leaf package names each distinct outcome and the
 exported function that produces it (for example

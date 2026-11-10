@@ -2,6 +2,12 @@
 
 ChairLift can be configured to show or hide specific feature groups, making it more portable across different Linux distributions.
 
+ChairLift's window is a command center: a left rail of six pages (Overview,
+Updates, Apps, Features, Problems, Maintenance), a command palette, a console
+and a status bar, with Help as a dialog. The configuration keeps its page
+names (`system_page`, `applications_page`, ...), which no longer match the
+window's pages one to one; each section below says where its groups show.
+
 ## Configuration File Location
 
 ChairLift searches for the configuration file in the following locations (in order):
@@ -44,44 +50,57 @@ page_name:
     enabled: true/false
 ```
 
-When every functional group on a page is disabled, that page is omitted from
-the sidebar, content stack, shortcuts dialog, and Alt+number bindings. The
-remaining Alt+number shortcuts compact in sidebar order. Help remains visible
-even when `help_resources_group` is disabled, so the application always has a
-valid page.
+Every group gates its own card, tab or update source. When every group that
+a page of the window shows is disabled, that page is omitted from the rail,
+the command palette's "Go to" commands, the shortcuts dialog and the
+Alt+number bindings, and the remaining Alt+number shortcuts compact in rail
+order. The Overview always shows, so the window always has a page. Help is a
+dialog (F1), not a page: it is always reachable, and with
+`help_resources_group` disabled it lists no links.
 
 ## Available Pages and Groups
 
-### System Page (`system_page`)
+### System Page (`system_page`): the Overview
 
-- `system_info_group`: Operating system information from /etc/os-release
-- `bootc_status_group`: System status information from bootc (when available)
-- `health_group`: System health monitoring and performance tools
+- `system_info_group`: The System details card: this computer (host name,
+  model, kernel, Secure Boot, uptime, image) and the fields of
+  `/etc/os-release`
+- `bootc_status_group`: The system image hero with the deployment chain
+  (rollback, booted, staged) on a bootc or native A/B host, and the
+  read-only deployment chain on the Maintenance page
+- `health_group`: The live processor and memory chart and the button that
+  opens the system monitor
   - `app_id`: Application ID for the system monitoring tool (default: `io.missioncenter.MissionCenter`)
 
-### Updates Page (`updates_page`)
+### Updates Page (`updates_page`): the Updates page
 
-- `bootc_updates_group`: System-wide bootc updates
-- `sysupdate_updates_group`: System-wide native A/B (systemd-sysupdate) updates; shown only on native A/B installs
+Each group is an update source of the Updates page; the Features source
+follows `features_page`'s `features_group`. A source shows only where its
+tool applies, and "Update everything" runs every source except firmware.
+
+- `bootc_updates_group`: The system image on bootc installs, staged for the
+  next restart
+- `sysupdate_updates_group`: The system image on native A/B (systemd-sysupdate) installs, staged for the next restart; shown only on native A/B installs
 - `flatpak_updates_group`: Available Flatpak application updates (user and system)
-- `brew_updates_group`: Homebrew package updates and outdated packages
-- `brew_trust_group`: Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); only shown when there is something to trust
+- `brew_updates_group`: Outdated Homebrew packages, and the update of Homebrew itself
+- `brew_trust_group`: Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust), as banners on the Homebrew card; only shown when there is something to trust
 - `firmware_updates_group`: Device firmware updates from the Linux Vendor
-  Firmware Service (fwupd), installed one device at a time; only shown when
-  the `fwupdmgr` client is installed
+  Firmware Service (fwupd), installed one device at a time after a
+  confirmation; only shown when the `fwupdmgr` client is installed
 
-### Applications Page (`applications_page`)
+### Applications Page (`applications_page`): the Apps page
 
-- `applications_installed_group`: External Flatpak manager link for discovering
-  and installing new applications; ChairLift itself lists and uninstalls
+- `applications_installed_group`: The Apps page's button that opens the
+  external software center for discovering and installing new
+  applications; ChairLift itself lists, updates, opens and uninstalls
   installed Flatpaks but does not directly install them
-  - `app_id`: Application ID for the Flatpak manager (default: `io.github.kolunmi.Bazaar`)
-- `flatpak_user_group`: User-installed Flatpak applications with uninstall actions
-- `flatpak_system_group`: System-wide Flatpak applications with uninstall actions
-- `brew_group`: Installed Homebrew formulae/casks with uninstall actions and
-  formula pin/unpin actions
-- `brew_search_group`: Search and install Homebrew formulae and casks
-- `brew_bundles_group`: Curated Homebrew package bundles
+  - `app_id`: Application ID for the software center (default: `io.github.kolunmi.Bazaar`)
+- `flatpak_user_group`: User-installed Flatpak applications in the Installed table
+- `flatpak_system_group`: System-wide Flatpak applications in the Installed table
+- `brew_group`: Installed Homebrew formulae/casks in the Installed table, with
+  uninstall actions, formula pin/unpin actions, and the export to `~/Brewfile`
+- `brew_search_group`: The Find more tab: search and install Homebrew formulae and casks
+- `brew_bundles_group`: The Bundles tab: curated Homebrew package bundles
   - `bundles_paths`: Array of directories searched for immediate
     `*.Brewfile` entries (default: `['/usr/share/snow/bundles']`). Missing
     directories are ignored so one configuration can cover multiple
@@ -90,9 +109,12 @@ valid page.
     path does not duplicate a row; same-named Brewfiles in different
     directories remain distinct and show their full paths.
 
-### Maintenance Page (`maintenance_page`)
+### Maintenance Page (`maintenance_page`): the Maintenance page
 
-- `maintenance_cleanup_group`: System cleanup utilities (disabled by default)
+Each group is a row of the Clean up card; every cleanup asks first, and
+"Clean everything" runs them one after the other.
+
+- `maintenance_cleanup_group`: System cleanup scripts (disabled by default)
   - `actions`: Array of maintenance scripts that can be executed
     - `title`: Display name for the action
     - `script`: Absolute path to the script to execute
@@ -103,15 +125,17 @@ valid page.
   placeholder and now renders nothing. The key stays valid, so an existing
   file that names it still loads; remove it from your configuration.
 
-### Features Page (`features_page`)
+### Features Page (`features_page`): the Features page
 
-- `features_group`: System features managed by updex (requires `updex` command)
+- `features_group`: System features managed by updex: the Features page and
+  the Updates page's features source (requires features configured for
+  updex)
 
-### Problems Page (`problems_page`)
+### Problems Page (`problems_page`): the Problems page
 
 The Problems page shows problems recorded on this computer
 ([ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md)). It sits
-directly before Help in the sidebar. Each group can be turned off; with all 3
+between Features and Maintenance in the rail. Each group can be turned off; with all 3
 off the page is omitted, as after a configuration error. The snosi-health
 paths are fixed and cannot be configured, and the report endpoint is the only
 field of this page (`endpoint`, administrator-owned files only).
@@ -123,8 +147,9 @@ field of this page (`endpoint`, administrator-owned files only).
 - `problems_apps_group`: Crashes of the user's own programs (from
   `coredumpctl`, the last 90 days) and problems that frostyard apps recorded
   in the user journal.
-- `problems_reporting_group`: Opt-in problem reporting. Nothing is sent until
-  the user turns the switch on; the choice and the mode live in the user's own
+- `problems_reporting_group`: Opt-in problem reporting, the reporting card
+  beside the problem lists. Nothing is sent until the user turns the switch
+  on; the choice and the mode live in the user's own
   consent file, not in this configuration
   ([specs/problem-reporting.md](docs/specs/problem-reporting.md)). The
   optional first-run Reporting step shows only while this group is enabled and
@@ -136,16 +161,18 @@ field of this page (`endpoint`, administrator-owned files only).
     executable or in the working directory (logged once), because a
     user-writable file must not choose where a report goes.
 
-### Help Page (`help_page`)
+### Help Page (`help_page`): the Help dialog
 
-- `help_resources_group`: Help and support resources
+Help is a dialog (F1, the main menu, the command palette), not a page.
+
+- `help_resources_group`: The Help dialog's links
   - `website`: URL to the project website
   - `issues`: URL to the issue tracker for bug reports and feature requests
   - `chat`: URL to community chat or discussions
 
 ### First-Run Page (`first_run_page`)
 
-This page is not in the sidebar. It configures `chairlift --first-run`
+This page is not in the rail. It configures `chairlift --first-run`
 ([ADR-0014](docs/adr/0014-first-run-mode.md)).
 
 - `first_run_apps_group`: The first run's Apps step (application picker)
@@ -232,7 +259,7 @@ install -D -m 644 config.yml debian/tmp/usr/share/chairlift/config.yml
 
 ## Notes
 
-- Groups with `enabled: false` will be completely hidden from the UI
+- Groups with `enabled: false` are completely hidden from the UI, and their data is never loaded
 - A configuration file is applied as an overlay on top of the built-in
   defaults, field by field, not as a full replacement:
   - An omitted `enabled` key inherits that group's documented default
