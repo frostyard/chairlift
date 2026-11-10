@@ -20,6 +20,7 @@ import (
 	"github.com/frostyard/chairlift/internal/activity"
 	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/config"
+	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/sysinfo"
 	"github.com/frostyard/chairlift/internal/views/pageview"
 	"github.com/frostyard/frostui"
@@ -803,6 +804,9 @@ func TestPrivilegedJobsCannotBeStopped(t *testing.T) {
 	s := NewSystem(env)
 	if j := s.stageJob(); !j.Unstoppable {
 		t.Error("the stage job (pkexec stage script) is stoppable")
+	}
+	if j := NewFirmware(env).installJob(fwupd.Update{DeviceID: "dock"}, false); !j.Unstoppable {
+		t.Error("the firmware install job is stoppable")
 	}
 	m := NewMaintenance(env, nil)
 	for _, tc := range []struct {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
+	"github.com/frostyard/chairlift/internal/activity"
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/frostui"
@@ -682,6 +683,86 @@ func TestFeaturesSourceItemsAndJobs(t *testing.T) {
 	h.ui.settle(t)
 	if h.fake.count("update") != 1 {
 		t.Errorf("calls = %v", h.fake.Calls())
+	}
+}
+
+// Each real item names the one job that updates every feature, so its step
+// follows that job. A hand-set JobKey on a fake would not see the line go.
+func TestFeatureItemsFollowTheirSharedJob(t *testing.T) {
+	checks := append(snowChecks(), updex.FeatureCheck{Feature: "dev", Results: []updex.CheckResult{
+		{Component: "dev-a", CurrentVersion: "1", NewestVersion: "2", UpdateAvailable: true},
+	}})
+	hold := make(chan struct{})
+	h := newFeaturesHarness(t, enabledFeatures(), false, &fakeUpdex{features: snowFeatures(), checks: checks, hold: hold})
+	h.start(t)
+	src := h.f.Source()
+	items := src.Items()
+	if len(items) != 2 {
+		t.Fatalf("Items = %+v, want two", items)
+	}
+	for _, it := range items {
+		if it.JobKey != featuresUpdateKey {
+			t.Errorf("%s: JobKey = %q, want %q", it.Key, it.JobKey, featuresUpdateKey)
+		}
+	}
+	srcs := []UpdateSource{src}
+	p := newUpdatesPage(h.env, func() []UpdateSource { return srcs })
+	h.env.Jobs.Enqueue(src.Jobs()...)
+	p.track(srcs)
+	steps := updSteps(p, srcs)
+	for _, it := range items {
+		if steps[it.Title] != frostui.StepRunning {
+			t.Errorf("%s: step %v while the shared job runs, want running", it.Title, steps[it.Title])
+		}
+	}
+	close(hold)
+	h.ui.RunUntil(t, func() bool { return !h.env.Jobs.Busy() })
+}
+
+// Only a run the classified outcomes call updated changed anything, so only
+// it, or a merge whose activation did not finish, writes an activity entry.
+func TestFeaturesUpdateRecordsOnlyARealChange(t *testing.T) {
+	feature := func(transfers ...updex.TransferUpdate) []updex.FeatureUpdate {
+		return []updex.FeatureUpdate{{Feature: "docker", Results: transfers}}
+	}
+	for _, tc := range []struct {
+		name    string
+		results []updex.FeatureUpdate
+		err     error
+		want    int
+	}{
+		{name: "empty"},
+		{name: "all current", results: feature(updex.TransferUpdate{Component: "docker", Installed: true})},
+		{name: "held", results: feature(updex.TransferUpdate{Component: "docker", Held: true, NextActionMessage: "held at 1"})},
+		{name: "held after a download", results: feature(updex.TransferUpdate{Component: "docker", Downloaded: true, Held: true})},
+		{name: "updated", results: feature(updex.TransferUpdate{Component: "docker", Version: "28.5.2", Downloaded: true, Linked: true}), want: 1},
+		{name: "activation incomplete", err: &updex.ActivationIncompleteError{Message: "command failed (exit 3)"}, want: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newFeaturesHarness(t, enabledFeatures(), false, &fakeUpdex{
+				features: snowFeatures(), checks: snowChecks(), results: tc.results, updateErr: tc.err,
+			})
+			log, err := activity.Open("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h.env.Activity = log
+			h.start(t)
+			h.f.UpdateAll()
+			h.ui.settle(t)
+			if h.fake.count("update") != 1 {
+				t.Fatalf("calls = %v, want one update", h.fake.Calls())
+			}
+			got := log.Recent(10)
+			if len(got) != tc.want {
+				t.Fatalf("activity = %+v, want %d entries", got, tc.want)
+			}
+			for _, e := range got {
+				if e.Source != string(SourceFeatures) || e.Title != "Updated features" {
+					t.Errorf("entry = %+v", e)
+				}
+			}
+		})
 	}
 }
 

@@ -46,6 +46,11 @@ var (
 	// executable is the fwupdmgr command name. It is a variable only so tests
 	// can substitute a fake script; production always uses "fwupdmgr".
 	executable = "fwupdmgr"
+
+	// runInstall runs the install command. It is a variable only so a test
+	// can see the context Install gives it; production always uses
+	// runCommandAt.
+	runInstall = runCommandAt
 )
 
 // deviceIDPattern matches a fwupd device id: exactly 40 lowercase hexadecimal
@@ -437,7 +442,7 @@ func Install(deviceID string) error {
 
 	// No deadline: fwupd's daemon does the flash, so a deadline would kill
 	// only this client and free the job queue while the device is written.
-	_, _, err := runCommandAt(context.Background(), executable, args...)
+	_, _, err := runInstall(context.Background(), executable, args...)
 	return err
 }
 

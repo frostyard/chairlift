@@ -55,6 +55,38 @@ func awaitRun(t *testing.T, done <-chan error) error {
 	}
 }
 
+// fwupd's daemon does the flash, so a deadline would kill only the client
+// and free the job queue while the device is written.
+func TestFwupdInstallPassesNoDeadline(t *testing.T) {
+	const deviceID = "0123456789abcdef0123456789abcdef01234567"
+	saved := runInstall
+	t.Cleanup(func() { runInstall = saved })
+	var (
+		ran         bool
+		hasDeadline bool
+		gotExe      string
+		gotArgs     []string
+	)
+	runInstall = func(ctx context.Context, exe string, args ...string) (string, int, error) {
+		ran = true
+		_, hasDeadline = ctx.Deadline()
+		gotExe, gotArgs = exe, args
+		return "", 0, nil
+	}
+	if err := Install(deviceID); err != nil {
+		t.Fatal(err)
+	}
+	if !ran {
+		t.Fatal("Install ran nothing")
+	}
+	if hasDeadline {
+		t.Error("Install gave the command a deadline")
+	}
+	if gotExe != executable || strings.Join(gotArgs, " ") != strings.Join(installArgs(deviceID), " ") {
+		t.Errorf("ran %s %q", gotExe, gotArgs)
+	}
+}
+
 func TestRunFwupdCommandAt(t *testing.T) {
 	t.Run("success captures stdout and exit code", func(t *testing.T) {
 		script := fakeFwupdmgr(t, `echo "hello from fwupdmgr"`)
