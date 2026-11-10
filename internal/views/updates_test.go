@@ -663,6 +663,58 @@ func TestUpdateItemsShowTheirSharedJob(t *testing.T) {
 	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 }
 
+func TestUpdateStageCountsASharedJobOnce(t *testing.T) {
+	env, q, p, _, fakes, _, _ := updSetup(t)
+	features := fakes[1]
+	features.items = []UpdateItem{
+		{Key: "a", Title: "a", JobKey: "/update"},
+		{Key: "b", Title: "b", JobKey: "/update"},
+		{Key: "c", Title: "c", JobKey: "/update"},
+	}
+	srcs := []UpdateSource{features}
+	release := make(chan struct{})
+	job := &frostui.Job{Source: string(features.ID()), Key: "/update", Title: "Updating features",
+		Run: func(context.Context, *frostui.Progress) error { <-release; return nil }}
+	env.Jobs.Enqueue(job)
+	p.track(srcs)
+	now := job.Started.Add(time.Minute)
+	st, _, running := p.stage(features, now)
+	if !running || len(st.Steps) != 3 {
+		t.Fatalf("running = %v, steps = %+v", running, st.Steps)
+	}
+	for _, step := range st.Steps {
+		if step.Note != "1m 00s" {
+			t.Errorf("%s: note = %q, want the job's own time", step.Title, step.Note)
+		}
+	}
+	if st.Note != "1m 00s" {
+		t.Errorf("stage note = %q: 3 items on 1 job took 1 minute", st.Note)
+	}
+	close(release)
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
+}
+
+func TestUpdateStageAddsDifferentJobs(t *testing.T) {
+	env, q, p, _, fakes, _, _ := updSetup(t)
+	features := fakes[1]
+	features.items = []UpdateItem{{Key: "a", Title: "a"}, {Key: "b", Title: "b"}}
+	srcs := []UpdateSource{features}
+	release := make(chan struct{})
+	first := &frostui.Job{Source: string(features.ID()), Key: "a", Title: "First"}
+	second := &frostui.Job{Source: string(features.ID()), Key: "b", Title: "Second",
+		Run: func(context.Context, *frostui.Progress) error { <-release; return nil }}
+	env.Jobs.Enqueue(first, second)
+	q.RunUntil(t, func() bool { return second.State == frostui.JobRunning })
+	p.track(srcs)
+	now := second.Started.Add(2 * time.Minute)
+	first.Started, first.Ended = now.Add(-time.Minute), now
+	if st, _, _ := p.stage(features, now); st.Note != "3m 00s" {
+		t.Errorf("stage note = %q, want both jobs' time", st.Note)
+	}
+	close(release)
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
+}
+
 func TestUpdatesDryRunRowSaysPreviewed(t *testing.T) {
 	updIcons(t)
 	env, q, p, _, _, _, _ := updSetup(t)

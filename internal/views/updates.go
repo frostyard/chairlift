@@ -359,12 +359,16 @@ func (p *updatesPage) stage(src UpdateSource, now time.Time) (st frostui.Stage, 
 		st.Empty = "Check failed"
 	}
 	var spent time.Duration
+	counted := map[int]bool{} // items that share a job count its time once
 	for _, it := range p.shown[src.ID()] {
 		job := p.jobOf(src.ID(), it.jobKey())
 		step := frostui.Step{Title: it.Title, State: updatesStepState(it, job)}
 		if d, ok := updatesJobTime(job, now); ok {
 			step.Note = frostui.Duration(d)
-			spent += d
+			if !counted[job.ID] {
+				counted[job.ID] = true
+				spent += d
+			}
 			running = running || job.State == frostui.JobRunning
 		}
 		asks = asks || (it.Confirm && !it.Held)
