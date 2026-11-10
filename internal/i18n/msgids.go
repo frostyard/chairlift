@@ -9,6 +9,8 @@ const (
 	// Header bar (ported).
 	MsgBack = "Back"
 	MsgNext = "Next"
+	// Toasts (new): the name of the button that closes a toast.
+	MsgClose = "Close"
 
 	// Welcome step (ported). MsgHello carries one "{}" placeholder for the
 	// user's name; use Format.
@@ -84,7 +86,7 @@ const (
 
 // Messages lists every first-run msgid, ported and new.
 var Messages = []string{
-	MsgBack, MsgNext,
+	MsgBack, MsgNext, MsgClose,
 	MsgHello, MsgWelcomeDesc, MsgStart, MsgAccessibility,
 	MsgCheckingConnection, MsgCheckingDesc, MsgOpenSettings, MsgNoInternet,
 	MsgConnectionAvailable, MsgConnectionDesc, MsgOfflineDesc, MsgCheckAgain,
