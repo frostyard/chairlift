@@ -101,7 +101,8 @@ are listed in [org-adrs.md](org-adrs.md).
 - [adr/0018-relicense-mit-and-drop-inherited-translations.md](adr/0018-relicense-mit-and-drop-inherited-translations.md)
   — ChairLift is MIT-licensed (`LICENSE`, the package metadata, the About
   dialog); the first-run translations ported from SNOW First Setup are
-  deleted because their translators' license cannot be changed; the `.po`
+  deleted because their translators' license cannot be changed, and the
+  first run's sentences are written again; the `.po`
   machinery stays, reads an injectable `fs.FS`, and new catalogs must be
   contributed under MIT (amends ADR-0014's translations)
 

@@ -129,3 +129,6 @@ project's [MIT license](LICENSE). Do not copy code, text or translations
 from a project under a copyleft or otherwise incompatible license, including
 SNOW First Setup and Vanilla OS First Setup
 ([ADR-0018](docs/adr/0018-relicense-mit-and-drop-inherited-translations.md)).
+The first run's sentences are ChairLift's own, and a test rejects First
+Setup's; single-word and short labels such as Back and Next are common UI
+words.

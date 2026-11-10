@@ -279,11 +279,11 @@ func TestFormat(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"Hello {}!", []string{"Ada"}, "Hello Ada!"},
+		{"Welcome, {}", []string{"Ada"}, "Welcome, Ada"},
 		{"{} and {}", []string{"a", "b"}, "a and b"},
 		{"{} and {}", []string{"a"}, "a and {}"},
 		{"no placeholder", []string{"a"}, "no placeholder"},
-		{"Hello {}!", nil, "Hello {}!"},
+		{"Welcome, {}", nil, "Welcome, {}"},
 	}
 	for _, tt := range tests {
 		if got := Format(tt.in, tt.args...); got != tt.want {

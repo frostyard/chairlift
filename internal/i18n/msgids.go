@@ -4,7 +4,8 @@ package i18n
 // through T with one of these constants, and a string no catalog translates
 // shows the English msgid. Changing a msgid drops its translations in every
 // catalog. TestEveryEmbeddedMsgidIsAFirstRunMsgid fails when an embedded .po
-// file holds a msgid that is not in Messages.
+// file holds a msgid that is not in Messages. The sentences are ChairLift's
+// own: TestNoMsgidCopiesFirstSetup fails on one of First Setup's (ADR-0018).
 const (
 	// Header bar.
 	MsgBack = "Back"
@@ -14,24 +15,24 @@ const (
 
 	// Welcome step. MsgHello carries one "{}" placeholder for the
 	// user's name; use Format.
-	MsgHello         = "Hello {}!"
-	MsgWelcomeDesc   = "Let's set up your user account"
+	MsgHello         = "Welcome, {}"
+	MsgWelcomeDesc   = "A few short steps get this computer ready."
 	MsgStart         = "Start"
 	MsgAccessibility = "Accessibility"
 
 	// Connectivity step.
 	MsgCheckingConnection  = "Checking Connection"
-	MsgCheckingDesc        = "Please wait until the connection check is done"
+	MsgCheckingDesc        = "This takes a few seconds."
 	MsgOpenSettings        = "Open Settings"
-	MsgNoInternet          = "No Internet Connection!"
+	MsgNoInternet          = "You are offline"
 	MsgConnectionAvailable = "Connection available"
-	MsgConnectionDesc      = "You have a working internet connection"
+	MsgConnectionDesc      = "This computer can reach the internet."
 	MsgOfflineDesc         = "You can continue without a connection and install applications later from ChairLift"
 	MsgCheckAgain          = "Check Again"
 
 	// Style step.
 	MsgColorScheme     = "Color Scheme"
-	MsgColorSchemeDesc = "Choose a color scheme for your system"
+	MsgColorSchemeDesc = "Pick a light or dark look for the desktop."
 	MsgLight           = "Light"
 	MsgLightMode       = "Light Mode"
 	MsgDark            = "Dark"
@@ -39,24 +40,24 @@ const (
 
 	// Apps step.
 	MsgApplications     = "Applications"
-	MsgApplicationsDesc = "Choose which applications to install."
-	MsgSelectApps       = "Select the applications you want to install"
+	MsgApplicationsDesc = "Install a starter set from Flathub."
+	MsgSelectApps       = "Use the switches to keep only what you want."
 	MsgBrowsers         = "Browsers"
-	MsgBrowsersDesc     = "Surf the web with your favorite browsers"
+	MsgBrowsersDesc     = "Apps for browsing the web"
 	MsgUtilities        = "Common Utilities"
-	MsgUtilitiesDesc    = "Useful utilities to enhance your desktop experience"
+	MsgUtilitiesDesc    = "Small tools for everyday tasks"
 	MsgOffice           = "Office"
-	MsgOfficeDesc       = "The LibreOffice suite"
+	MsgOfficeDesc       = "Documents, spreadsheets and slides"
 
 	// Progress step.
 	MsgProgress         = "Progress"
-	MsgProgressDesc     = "Some steps still take some time"
+	MsgProgressDesc     = "This can take several minutes."
 	MsgInstalling       = "Installing"
 	MsgSettingUpFlathub = "Setting up Flathub"
 
 	// Done step.
 	MsgFinished     = "Finished!"
-	MsgFinishedDesc = "Your user account is ready to use"
+	MsgFinishedDesc = "This computer is ready."
 	MsgExit         = "Exit"
 	MsgSetupFailed  = "Setup failed: "
 	MsgErrorLog     = "Error log"

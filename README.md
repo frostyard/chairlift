@@ -66,7 +66,7 @@ The Problems page reads problem records on this computer and sends nothing until
 
 ## Credits
 
-ChairLift began as an adaptation of [Vanilla OS First Setup](https://github.com/Vanilla-OS/first-setup). It has since been rewritten: none of First Setup's code or translations remain.
+ChairLift began as an adaptation of [Vanilla OS First Setup](https://github.com/Vanilla-OS/first-setup). It has since been rewritten: none of First Setup's code, sentences or translations remain. The first run's single-word and short labels, such as Back and Next, are common UI words.
 
 ## Develop
 

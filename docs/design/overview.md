@@ -2099,7 +2099,7 @@ normally, and the Done step's Exit calls `mygo.App.Quit`.
 `firstrun.Flow` owns the order Welcome, Connectivity, Style, Apps, Progress,
 Done and every transition:
 
-- **Welcome** — `Hello {}!` with `firstrun.WelcomeName` (the GECOS full name's
+- **Welcome** — `Welcome, {}` with `firstrun.WelcomeName` (the GECOS full name's
   first comma field, else the login name, else `$USER`/`$LOGNAME`), Start, and
   Accessibility (`gnome-control-center universal-access`).
 - **Connectivity** — status only: `firstrun.CheckConnectivity` dials
@@ -2173,7 +2173,7 @@ and calls `MarkDone` only when `WriteMarkers` is true;
 `firstrun.CompleteAt(dryRun, paths, pathsErr)` after the Progress actions end
 (also when some failed) and before Done shows. The outcomes:
 
-- success — `DoneDescription` "Your user account is ready to use", no
+- success — `DoneDescription` "This computer is ready.", no
   warning;
 - dry run — no write, `[DRY-RUN] would write first-run markers: ...`, the
   dry-run preview text (a missing config home is no failure here);
@@ -2224,7 +2224,8 @@ date is not set yet.
 ### Translations
 
 No translation is shipped: the first run shows English in every locale.
-The catalogs inherited from first-setup were removed with the MIT relicense
+The catalogs inherited from first-setup were removed with the MIT relicense,
+and the msgids' sentences written again in ChairLift's own words
 ([ADR-0018](../adr/0018-relicense-mit-and-drop-inherited-translations.md));
 `internal/i18n/po/README.md` says how to add an MIT-licensed one. The
 machinery stays. `internal/i18n` embeds the `internal/i18n/po` directory

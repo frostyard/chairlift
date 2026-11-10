@@ -8,7 +8,8 @@
 ChairLift began as an adaptation of Vanilla OS First Setup and carried that
 project's license, GPL-3.0-or-later. It has since been rewritten. The window is Go on MyGo
 ([ADR-0017](0017-mygo-command-center-window.md)), the first-run mode is Go
-([ADR-0014](0014-first-run-mode.md)), and none of First Setup's code remains.
+([ADR-0014](0014-first-run-mode.md)), and none of First Setup's code or
+sentences remain (decision 5).
 Brian Ketelsen holds the copyright on all of ChairLift's code, so he can
 relicense it.
 
@@ -50,6 +51,18 @@ The rest of the translation machinery is ChairLift's own: the `.po` parser
    Setup, Vanilla OS First Setup or any other copyleft or incompatibly
    licensed source. `CONTRIBUTING.md` and `internal/i18n/po/README.md` say
    so.
+5. **The first run's sentences are written again.** The English msgids that
+   ADR-0014 ported were First Setup's text too. Every sentence-length msgid in
+   `internal/i18n/msgids.go` is now in ChairLift's own words, and
+   `TestNoMsgidCopiesFirstSetup` fails when a msgid equals one of First
+   Setup's sentences; it compares SHA-256 hashes, so the test does not carry
+   them. Single words and short labels (Back, Next, Light, Dark Mode, Open
+   Settings, Applications and the like) stay: they are common UI words, the
+   ordinary names of those controls. One test fixture also stays:
+   `internal/firstrun/testdata/first-setup-apps.json` is first-setup's
+   `apps.json`, a list of application names and Flatpak IDs. It is factual
+   data that proves ChairLift reads the file the images ship, and no binary
+   embeds it.
 
 ## Consequences
 
@@ -58,6 +71,8 @@ The rest of the translation machinery is ChairLift's own: the `.po` parser
   the earlier `LICENSE` and the deleted catalogs.
 - Users with a non-English locale lose the first-run translations they had
   and see English until MIT translations are contributed.
+- No first-run sentence had to keep First Setup's wording for a translation
+  to apply, because no catalog ships, so the new wording costs no translation.
 - The `internal/i18n` tests no longer exercise real catalogs. They prove the
   parser, the locale choice and the per-message fallback with catalogs that
   the tests write.
@@ -93,5 +108,5 @@ The rest of the translation machinery is ChairLift's own: the `.po` parser
 - Builds on: [ADR-0016](0016-adopt-the-repository-baseline.md) (the
   repository baseline's license row, which the MIT `LICENSE` meets)
 - Enforced by: `internal/installcheck.TestGoreleaserLicenseIsMIT`,
-  `internal/i18n` tests (`TestEveryEmbeddedMsgidIsAFirstRunMsgid` and the
-  translator tests)
+  `internal/i18n` tests (`TestEveryEmbeddedMsgidIsAFirstRunMsgid`,
+  `TestNoMsgidCopiesFirstSetup` and the translator tests)
