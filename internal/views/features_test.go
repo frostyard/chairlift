@@ -851,3 +851,38 @@ func TestSnapshotFeatures(t *testing.T) {
 		snapshot(t, ui.NewTesterWith(many.view, 1128, 2100, ui.TesterOptions{Dark: dark}), name)
 	}
 }
+
+// A deadline on the helper would kill only pkexec and free the queue while
+// it goes on as root, so neither of its jobs has one.
+func TestFeatureHelperJobsHaveNoDeadline(t *testing.T) {
+	h := newFeaturesHarness(t, enabledFeatures(), false, &fakeUpdex{features: snowFeatures(), checks: snowChecks()})
+	h.start(t)
+	toggled, toggleDeadline := false, false
+	h.f.enable = func(ctx context.Context, _ string) error {
+		toggled = true
+		_, toggleDeadline = ctx.Deadline()
+		return nil
+	}
+	h.f.toggle("incus", "Incus", true)
+	h.ui.settle(t)
+	if !toggled {
+		t.Fatal("the toggle ran nothing")
+	}
+	if toggleDeadline {
+		t.Error("the toggle has a deadline")
+	}
+
+	updated, updateDeadline := false, false
+	h.f.update = func(ctx context.Context) ([]updex.FeatureUpdate, error) {
+		updated = true
+		_, updateDeadline = ctx.Deadline()
+		return nil, nil
+	}
+	_ = h.f.updateJob().Run(context.Background(), nil)
+	if !updated {
+		t.Fatal("the update ran nothing")
+	}
+	if updateDeadline {
+		t.Error("the update has a deadline")
+	}
+}

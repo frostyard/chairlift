@@ -551,14 +551,12 @@ func (s *System) stageJob() *frostui.Job {
 		stage, dryRun = s.sysupdateStage, s.sysupdateDryRun
 	}
 	res := &stageResult{}
-	// The stage script runs as root through pkexec: a cancel could signal
-	// only the unprivileged parent while the stage goes on, so the job is
-	// Unstoppable and finishes first.
+	// The stage script runs as root through pkexec: a cancel or a deadline
+	// could signal only the unprivileged parent while the stage goes on, so
+	// the job is Unstoppable, has no deadline and finishes first.
 	job := &frostui.Job{Source: string(SourceImage), Key: imageItemKey, Title: "Staging the " + name + " image", Unstoppable: true}
 	job.Run = func(ctx context.Context, p *frostui.Progress) error {
 		p.Set(-1, "Checking for updates…")
-		ctx, cancel := context.WithTimeout(ctx, bootc.DefaultTimeout)
-		defer cancel()
 		events := make(chan bootc.ProgressEvent)
 		errc := make(chan error, 1)
 		go func() { errc <- stage(ctx, events) }()

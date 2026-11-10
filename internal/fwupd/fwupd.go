@@ -30,10 +30,6 @@ import (
 const (
 	// readTimeout bounds the read-only update query.
 	readTimeout = 60 * time.Second
-	// mutationTimeout bounds a firmware install, which downloads a firmware
-	// image and writes it to the device. It is far larger than the read
-	// budget because a slow device can take many minutes to flash.
-	mutationTimeout = 30 * time.Minute
 	// waitDelay bounds how long Wait blocks after the process group has been
 	// signalled, so a straggler holding the stdout/stderr pipes cannot keep
 	// Wait open forever.
@@ -439,10 +435,9 @@ func Install(deviceID string) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), mutationTimeout)
-	defer cancel()
-
-	_, _, err := runCommandAt(ctx, executable, args...)
+	// No deadline: fwupd's daemon does the flash, so a deadline would kill
+	// only this client and free the job queue while the device is written.
+	_, _, err := runCommandAt(context.Background(), executable, args...)
 	return err
 }
 

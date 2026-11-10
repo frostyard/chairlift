@@ -775,3 +775,27 @@ func TestSystemFailedStatusKeepsTheKnownDeployments(t *testing.T) {
 		t.Errorf("a good read kept the error %q", s.DeploymentsRefreshError())
 	}
 }
+
+// A deadline on the stage would kill only pkexec and free the queue while
+// the stage goes on as root, so the job has none.
+func TestSystemStageHasNoDeadline(t *testing.T) {
+	env, q := sysEnv(t, sysConfig(sysAllGroups...), false)
+	f := newSysFake()
+	f.bootcHost, f.bootcScript = true, true
+	f.status = sysBootcStatus("2026.11.05", "", "2026.10.29")
+	s := sysStart(t, env, q, f)
+	ran, hasDeadline := false, false
+	s.bootcStage = func(ctx context.Context, ch chan<- bootc.ProgressEvent) error {
+		defer close(ch)
+		ran = true
+		_, hasDeadline = ctx.Deadline()
+		return nil
+	}
+	_ = s.stageJob().Run(context.Background(), nil)
+	if !ran {
+		t.Fatal("the job staged nothing")
+	}
+	if hasDeadline {
+		t.Error("the stage has a deadline")
+	}
+}

@@ -240,7 +240,9 @@ An agent must not break these:
   the queue (ADR-0015's own lock and pacing); the first-run wizard keeps
   ADR-0014's own sequence of steps. Pages ask first through `Env.Dialogs`. A
   job whose work a cancel cannot stop (pkexec, firmware, updex) is
-  `Unstoppable`: Stop drops the jobs queued after it and lets it finish.
+  `Unstoppable` and has no deadline: Stop drops the jobs queued after it and
+  lets it finish, and a timeout would kill only the client and free the
+  queue while the work goes on.
 - **Every command shows in the console.** The backends announce each
   external command and its end through `internal/cmdlog`
   (`Start`/`End`, `DryRun` for previews) and tee its output when it is
