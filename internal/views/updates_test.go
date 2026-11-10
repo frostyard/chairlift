@@ -628,7 +628,7 @@ func TestUpdatesSubtitleNeverCallsAFailedCheckUpToDate(t *testing.T) {
 	}
 }
 
-func TestItemsShowTheirSharedJob(t *testing.T) {
+func TestUpdateItemsShowTheirSharedJob(t *testing.T) {
 	env, q, p, _, fakes, _, _ := updSetup(t)
 	features := fakes[1]
 	for i := range features.items {
