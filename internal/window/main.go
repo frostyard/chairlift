@@ -39,7 +39,10 @@ type Main struct {
 	Quit func()
 
 	configToast bool
-	help        []pageview.HelpResource
+	// closeRefused is the title of the job a refused close waits for, until
+	// the next frame shows why the window stayed.
+	closeRefused string
+	help         []pageview.HelpResource
 }
 
 // NewMain builds the main window's state from the configuration in env.
@@ -67,6 +70,25 @@ func (m *Main) Navigate(page string) {
 	}
 }
 
+// CanClose reports whether closing the window now is safe: false while a
+// job a cancel cannot stop runs, since the app would end with the work
+// still going on, and a new ChairLift's empty queue could start a second
+// change beside it. A stoppable job or one that only waits does not hold
+// the window. The app vetoes the window's close, and so mygo.App.Quit and
+// SIGTERM too, while it is false; a refusal shows a toast in the next frame.
+// It runs on the UI thread.
+func (m *Main) CanClose() bool {
+	job := m.Env.Jobs.Current()
+	if job == nil || !job.Unstoppable {
+		return true
+	}
+	title := job.Title
+	log.Printf("window: close refused while %q runs", title)
+	// A close draws no frame of its own: the post asks for one.
+	m.Env.Post(func() { m.closeRefused = title })
+	return false
+}
+
 // View draws the window.
 func (m *Main) View(c *ui.Context) {
 	for _, t := range m.Env.TakeToasts() {
@@ -77,6 +99,11 @@ func (m *Main) View(c *ui.Context) {
 		// ChairLift restarts (ADR-0003).
 		m.configToast = true
 		c.AddToast(ui.Toast{ID: "config-error", Title: "Configuration error", Description: configToastText(m.Env.ConfigErr), Type: "error", Timeout: -1})
+	}
+	if m.closeRefused != "" {
+		// One ID: closing again replaces the toast instead of stacking it.
+		c.AddToast(ui.Toast{ID: "close-refused", Title: closeRefusedText(m.closeRefused), Type: "info"})
+		m.closeRefused = ""
 	}
 	m.bindShortcuts(c)
 	if _, ok := navigation.Resolve(m.Shell.Selected, m.Items); !ok {
@@ -101,6 +128,11 @@ func (m *Main) View(c *ui.Context) {
 		StatusEnd:   m.statusEnd(),
 		ConsoleData: m.Env.Console,
 	})
+}
+
+// closeRefusedText says why the window stayed open after a close.
+func closeRefusedText(job string) string {
+	return "ChairLift cannot close yet: " + job + " must finish first."
 }
 
 func configToastText(err error) string {

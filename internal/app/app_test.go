@@ -1,7 +1,11 @@
 package app
 
 import (
+	"context"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"log"
 	"os"
 	"strings"
@@ -9,15 +13,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
+
 	"github.com/frostyard/chairlift/internal/bootc"
 	"github.com/frostyard/chairlift/internal/cmdlog"
+	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/firstrun"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/homebrew"
 	"github.com/frostyard/chairlift/internal/sysupdate"
 	"github.com/frostyard/chairlift/internal/updex"
+	"github.com/frostyard/chairlift/internal/views"
+	"github.com/frostyard/chairlift/internal/window"
 	"github.com/frostyard/frostui"
+	"github.com/frostyard/frostui/frostuitest"
 )
 
 type fakeWindow struct {
@@ -62,6 +72,100 @@ func TestPosterIsSafeFromGoroutines(t *testing.T) {
 	if n != 50 {
 		t.Errorf("ran %d of 50 posts", n)
 	}
+}
+
+// closableWindow is a window that keeps the close listener it is given.
+type closableWindow struct {
+	fakeWindow
+	onClose func(*mygo.CloseEvent)
+}
+
+func (w *closableWindow) OnClose(fn func(*mygo.CloseEvent)) func() {
+	w.onClose = fn
+	return func() {}
+}
+
+func TestMainWindowCloseGuard(t *testing.T) {
+	held := func(release <-chan struct{}) func(context.Context, *frostui.Progress) error {
+		return func(ctx context.Context, _ *frostui.Progress) error {
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+			return nil
+		}
+	}
+	for _, tc := range []struct {
+		name    string
+		jobs    func(release <-chan struct{}) []*frostui.Job
+		refused bool
+	}{
+		{"no job", func(<-chan struct{}) []*frostui.Job { return nil }, false},
+		{"a stoppable job runs", func(r <-chan struct{}) []*frostui.Job {
+			return []*frostui.Job{{Title: "Cleaning", Run: held(r)}}
+		}, false},
+		{"an unstoppable job only waits", func(r <-chan struct{}) []*frostui.Job {
+			return []*frostui.Job{{Title: "Cleaning", Run: held(r)}, {Title: "Staging", Unstoppable: true, Run: held(r)}}
+		}, false},
+		{"an unstoppable job runs", func(r <-chan struct{}) []*frostui.Job {
+			return []*frostui.Job{{Title: "Staging", Unstoppable: true, Run: held(r)}}
+		}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			loop := frostuitest.NewLoop()
+			env := views.NewEnv(&config.Config{}, true, loop.Post)
+			m := window.NewMain(env, views.NewStore(env))
+			w := &closableWindow{}
+			attachMain(w, &poster{}, m)
+			if w.onClose == nil {
+				t.Fatal("attachMain installed no close listener")
+			}
+			release := make(chan struct{})
+			env.Jobs.Enqueue(tc.jobs(release)...)
+
+			e := &mygo.CloseEvent{}
+			w.onClose(e)
+			if e.DefaultPrevented() != tc.refused {
+				t.Errorf("close refused = %v, want %v", e.DefaultPrevented(), tc.refused)
+			}
+			close(release)
+			loop.RunUntil(t, func() bool { return !env.Jobs.Busy() })
+
+			after := &mygo.CloseEvent{}
+			w.onClose(after)
+			if after.DefaultPrevented() {
+				t.Error("the close is still refused after the queue ended")
+			}
+		})
+	}
+}
+
+// openMain needs a real window, so its source shows that it wires the guard.
+func TestOpenMainGuardsTheClose(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "app.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range f.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "openMain" {
+			continue
+		}
+		found := false
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			if call, ok := n.(*ast.CallExpr); ok {
+				if id, ok := call.Fun.(*ast.Ident); ok && id.Name == "attachMain" {
+					found = true
+				}
+			}
+			return true
+		})
+		if !found {
+			t.Error("openMain does not call attachMain: the main window has no close guard")
+		}
+		return
+	}
+	t.Fatal("app.go has no openMain")
 }
 
 func TestParseArgs(t *testing.T) {

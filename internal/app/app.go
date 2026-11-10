@@ -190,10 +190,29 @@ func openMain(o Options) *mygo.Window {
 		TitleBarStyle: mygo.TitleBarHidden,
 		Content:       ui.View(main.View),
 	})
-	p.attach(win)
+	attachMain(win, p, main)
 	log.Printf("window: built (%s)", main.Describe())
 	store.Start()
 	return win
+}
+
+// mainWindow is the part of *mygo.Window attachMain uses.
+type mainWindow interface {
+	updater
+	OnClose(fn func(e *mygo.CloseEvent)) (off func())
+}
+
+// attachMain gives the poster its window and guards the window's close.
+// MyGo fires OnClose for the close button, Window.Close and every window
+// App.Quit closes, which SIGINT and SIGTERM call, so this one guard covers
+// them all.
+func attachMain(w mainWindow, p *poster, m *window.Main) {
+	p.attach(w)
+	w.OnClose(func(e *mygo.CloseEvent) {
+		if !m.CanClose() {
+			e.PreventDefault()
+		}
+	})
 }
 
 func openFirstRun() *mygo.Window {

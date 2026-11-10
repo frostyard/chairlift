@@ -1,6 +1,7 @@
 package window
 
 import (
+	"context"
 	"errors"
 	"image/png"
 	"os"
@@ -131,6 +132,63 @@ func TestConfigurationErrorToastPersists(t *testing.T) {
 	tt.Advance(time.Minute)
 	if !tt.HasText("Configuration error") {
 		t.Fatalf("no configuration error toast after a minute: %q", tt.Texts())
+	}
+}
+
+// waitIdle draws frames, which run what the jobs post, until the queue ends.
+func waitIdle(t *testing.T, m *Main, tt *ui.Tester) {
+	t.Helper()
+	for end := time.Now().Add(frostuitest.Timeout); m.Env.Jobs.Busy(); time.Sleep(time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatal("the job queue did not end")
+		}
+		tt.Frame()
+	}
+}
+
+func TestCloseRefusedWhileAnUnstoppableJobRuns(t *testing.T) {
+	m, tt := newTestMain(t)
+	release := make(chan struct{})
+	m.Env.Jobs.Enqueue(&frostui.Job{Title: "Installing firmware for Dock", Unstoppable: true,
+		Run: func(context.Context, *frostui.Progress) error { <-release; return nil }})
+	want := closeRefusedText("Installing firmware for Dock")
+	if m.CanClose() {
+		t.Error("the window can close while an unstoppable job runs")
+	}
+	tt.Frame()
+	if !tt.HasText(want) {
+		t.Errorf("no toast says why the window stayed: %q", tt.Texts())
+	}
+	close(release)
+	waitIdle(t, m, tt)
+	if !m.CanClose() {
+		t.Error("the close is still refused after the job ended")
+	}
+}
+
+func TestCloseAllowedWithoutARunningUnstoppableJob(t *testing.T) {
+	held := func(ctx context.Context, _ *frostui.Progress) error { <-ctx.Done(); return nil }
+	for _, tc := range []struct {
+		name string
+		jobs []*frostui.Job
+	}{
+		{"no job", nil},
+		{"a stoppable job", []*frostui.Job{{Title: "Cleaning", Run: held}}},
+		{"an unstoppable job in the queue", []*frostui.Job{{Title: "Cleaning", Run: held}, {Title: "Staging", Unstoppable: true, Run: held}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, tt := newTestMain(t)
+			m.Env.Jobs.Enqueue(tc.jobs...)
+			if !m.CanClose() {
+				t.Error("the close is refused")
+			}
+			tt.Frame()
+			if tt.HasText("ChairLift cannot close yet") {
+				t.Errorf("a toast refuses a close that went through: %q", tt.Texts())
+			}
+			m.Env.Jobs.CancelAll()
+			waitIdle(t, m, tt)
+		})
 	}
 }
 
