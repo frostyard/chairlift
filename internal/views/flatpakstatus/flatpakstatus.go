@@ -1,17 +1,12 @@
 // Package flatpakstatus turns the outcome of the two Flatpak update queries —
 // how many updates are known, and which of the user/system installations could
-// not be checked — into the text of the Flatpak updates expander's subtitle and
-// whether that expander should be expandable.
+// not be checked — into the Flatpak update source's status line and whether
+// the load is authoritative (usable to replace the known rows).
 //
-// It is deliberately free of any GTK binding import — in fact it imports
-// nothing outside the standard library — so its logic can be unit-tested on a
-// headless host. internal/views cannot host this logic: the Go GTK bindings it
-// imports dlopen the GTK, Libadwaita, GLib and graphene shared libraries at
-// package-init time, so a test binary for any package that imports them panics
-// before a single test function runs. Decidable logic must therefore live in a
-// binding-free package to be testable, which is the same reason
-// internal/views/actionmsg, internal/views/trustmsg and internal/views/rowset
-// are separate. See docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
+// It imports nothing outside the standard library, so the decision is a
+// plain, table-tested function, like internal/views/actionmsg and
+// internal/views/trustmsg. See
+// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
 //
 // The package is pure and holds no state: it takes booleans rather than error
 // values (which would drag in internal/flatpak) and returns a value, so it is

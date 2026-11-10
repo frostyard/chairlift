@@ -47,17 +47,10 @@
 // its base subtitle back instead of leaving an earlier check's "update
 // available" in place after an update changed the state.
 //
-// The package is separate from internal/views because internal/views can never
-// host a _test.go: the Go GTK bindings it imports (puregotk) dlopen the GTK,
-// Libadwaita, GLib and graphene shared libraries at package-init time, so a
-// test binary for any package that imports them panics before a single test
-// function runs. Decidable logic must live in a binding-free package to be
-// testable at all, which is the same reason internal/views/actionmsg,
-// internal/views/trustmsg, internal/views/rowset and
-// internal/views/flatpakstatus are separate. See
-// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages. Importing internal/updex for the
-// CheckResult type is safe here because internal/updex is itself puregotk-free
-// (`go list -deps ./internal/updex | grep -c puregotk` prints 0).
+// The package is separate from internal/views so the decisions are plain,
+// table-tested functions, like internal/views/actionmsg, internal/views/trustmsg
+// and internal/views/flatpakstatus. See
+// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
 //
 // The package is pure and holds no state, so it is safe to call from a worker
 // goroutine or from inside an sgtk.RunOnMainThread closure.
