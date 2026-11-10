@@ -354,6 +354,9 @@ func TestMaintenanceCommandsPreservePrivilegeBoundary(t *testing.T) {
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("MaintenanceCommand() = %#v, want %#v", got, tt.want)
 			}
+			if got.Privileged() != tt.sudo {
+				t.Errorf("Privileged() = %v, want %v", got.Privileged(), tt.sudo)
+			}
 		})
 	}
 }

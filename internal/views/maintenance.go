@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/frostyard/chairlift/internal/cmdlog"
@@ -393,7 +394,9 @@ func (cl cleanup) paletteTitle() string {
 // thread: the row's outcome, a toast built by actionmsg as the old page
 // did, and an activity entry after a live success.
 func (m *Maintenance) job(cl cleanup) *frostui.Job {
-	j := &frostui.Job{Source: maintSource, Key: cl.Key}
+	// A sudo: true script runs as root through pkexec: a stop could signal
+	// only pkexec, so the job finishes first (frostui.Job.Unstoppable).
+	j := &frostui.Job{Source: maintSource, Key: cl.Key, Unstoppable: cl.Kind == cleanupByScript && cl.sudo}
 	switch cl.Kind {
 	case cleanupByBrew:
 		j.Title = "Cleaning up Homebrew"
@@ -486,6 +489,14 @@ func (m *Maintenance) setResult(key string, o cleanupOutcome, err string) {
 func runMaintenanceCommand(ctx context.Context, cmd pageview.Command) error {
 	c := exec.CommandContext(ctx, cmd.Name, cmd.Args...) //nolint:gosec // the configured action, as pageview.MaintenanceCommand builds it
 	c.WaitDelay = maintWaitDelay
+	if !cmd.Privileged() {
+		// An unprivileged script runs in its own process group, and a stop
+		// or the timeout kills the whole group, children included. A
+		// pkexec run cannot be signaled past pkexec: its job is
+		// Unstoppable.
+		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		c.Cancel = func() error { return syscall.Kill(-c.Process.Pid, syscall.SIGKILL) }
+	}
 	trace := cmdlog.Start(cmd.Name, cmd.Args...)
 	c.Stdout = trace.Stdout(nil)
 	c.Stderr = trace.Stderr(nil)

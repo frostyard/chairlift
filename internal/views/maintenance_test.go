@@ -3,6 +3,7 @@ package views
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -753,5 +755,66 @@ func TestSnapshotMaintenance(t *testing.T) {
 			}
 			snapshot(t, tt, name+"-confirm")
 		})
+	}
+}
+
+func TestMaintenanceCancelKillsTheScriptsChildren(t *testing.T) {
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "child.pid")
+	script := filepath.Join(dir, "parent.sh")
+	body := "#!/bin/sh\nsleep 30 &\necho $! > " + pidFile + "\nwait\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil { //nolint:gosec // a test script
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runMaintenanceCommand(ctx, pageview.Command{Name: script}) }()
+	var pid int
+	deadline := time.Now().Add(5 * time.Second)
+	for pid == 0 && time.Now().Before(deadline) {
+		if data, err := os.ReadFile(pidFile); err == nil {
+			_, _ = fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pid)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if pid == 0 {
+		t.Fatal("the script's child never started")
+	}
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Errorf("canceled run = %v, want context.Canceled", err)
+	}
+	gone := false
+	for range 200 {
+		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+			gone = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !gone {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+		t.Error("the script's child outlived the cancel: the process group was not killed")
+	}
+}
+
+func TestPrivilegedJobsCannotBeStopped(t *testing.T) {
+	env, _ := sysEnv(t, sysConfig(sysAllGroups...), false)
+	s := NewSystem(env)
+	if j := s.stageJob(); !j.Unstoppable {
+		t.Error("the stage job (pkexec stage script) is stoppable")
+	}
+	m := NewMaintenance(env, nil)
+	for _, tc := range []struct {
+		cl   cleanup
+		want bool
+	}{
+		{cleanup{Key: "script:0", Kind: cleanupByScript, script: "/usr/libexec/bls-gc", sudo: true}, true},
+		{cleanup{Key: "script:1", Kind: cleanupByScript, script: "/usr/bin/tidy"}, false},
+		{cleanup{Key: "brew", Kind: cleanupByBrew}, false},
+	} {
+		if got := m.job(tc.cl).Unstoppable; got != tc.want {
+			t.Errorf("%s: Unstoppable = %v, want %v", tc.cl.Key, got, tc.want)
+		}
 	}
 }

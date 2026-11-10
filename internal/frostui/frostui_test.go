@@ -3,6 +3,7 @@ package frostui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -385,11 +386,88 @@ func TestJobCardStopCancelsTheQueue(t *testing.T) {
 	}, Done: done}, &Job{Title: "Updating gh", Run: func(context.Context, *Progress) error { return nil }, Done: done})
 	<-started
 	tt := ui.NewTester(func(c *ui.Context) { JobCard(c, q) }, 400, 200)
-	if err := tt.Click("Stop: drop the queued jobs and cancel this one where it can stop"); err != nil {
+	if err := tt.Click("Stop: drop the queued jobs and cancel this one"); err != nil {
 		t.Fatal(err)
 	}
 	sp.RunUntil(t, func() bool { return !q.Busy() })
 	if len(got) != 2 || !errors.Is(got[0], context.Canceled) || !errors.Is(got[1], context.Canceled) {
 		t.Errorf("results = %v, want both canceled", got)
 	}
+}
+
+func TestStopLetsAnUnstoppableJobFinishFirst(t *testing.T) {
+	sp := frostuitest.NewLoop()
+	q := NewJobs(sp.Post, nil)
+	started, release := make(chan struct{}), make(chan struct{})
+	var mu sync.Mutex
+	ran := []string{}
+	var results []error
+	q.Enqueue(&Job{Title: "Staging the system update", Unstoppable: true, Run: func(ctx context.Context, _ *Progress) error {
+		close(started)
+		<-release // root work goes on whatever the context says
+		if ctx.Err() != nil {
+			t.Error("an Unstoppable job's context was canceled")
+		}
+		mu.Lock()
+		ran = append(ran, "stage")
+		mu.Unlock()
+		return nil
+	}, Done: func(err error) { results = append(results, err) }},
+		&Job{Title: "Updating Firefox", Run: func(context.Context, *Progress) error {
+			mu.Lock()
+			ran = append(ran, "firefox")
+			mu.Unlock()
+			return nil
+		}, Done: func(err error) { results = append(results, err) }})
+	<-started
+	if q.CanStop() {
+		t.Error("CanStop is true for an Unstoppable job")
+	}
+	tt := ui.NewTester(func(c *ui.Context) { JobCard(c, q) }, 500, 200)
+	if err := tt.Click("Stop: drop the queued jobs; this one cannot be stopped and finishes first"); err != nil {
+		t.Fatal(err)
+	}
+	sp.Flush()
+	if !q.Busy() || !q.Stopping() {
+		t.Errorf("busy %v stopping %v: the queue freed while root work runs", q.Busy(), q.Stopping())
+	}
+	tt.Frame()
+	if !tt.HasText("Finishing; the queued jobs were dropped") {
+		t.Errorf("the card does not say the job finishes first: %q", tt.Texts())
+	}
+	close(release)
+	sp.RunUntil(t, func() bool { return !q.Busy() })
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(ran, ",") != "stage" {
+		t.Errorf("ran %v, want only the stage: the queued job was dropped", ran)
+	}
+	if len(results) != 2 || !errors.Is(results[0], context.Canceled) || results[1] != nil {
+		t.Errorf("results = %v, want the dropped job canceled and the stage's own nil", results)
+	}
+	if q.Stopping() {
+		t.Error("Stopping outlived the job")
+	}
+}
+
+func TestProgressSetIsCoalesced(t *testing.T) {
+	sp := frostuitest.NewLoop()
+	q := NewJobs(sp.Post, nil)
+	done := make(chan struct{})
+	q.Enqueue(&Job{Title: "chatty", Run: func(_ context.Context, p *Progress) error {
+		for i := range 500 {
+			p.Set(float64(i)/500, fmt.Sprintf("line %d", i))
+		}
+		close(done)
+		return nil
+	}})
+	<-done
+	if n := sp.Pending(); n > 2 {
+		t.Errorf("500 Set calls queued %d posts, want at most one pending", n)
+	}
+	sp.Flush()
+	if cur := q.Current(); cur != nil && cur.Status != "line 499" {
+		t.Errorf("status = %q, want the latest", cur.Status)
+	}
+	sp.RunUntil(t, func() bool { return !q.Busy() })
 }

@@ -266,6 +266,8 @@ func (f *Firmware) installJob(u fwupd.Update, gated bool) *frostui.Job {
 		Title:  "Installing firmware for " + name,
 		Source: string(SourceFirmware),
 		Key:    u.DeviceID,
+		// A flash must not be interrupted, and fwupd runs it as root.
+		Unstoppable: true,
 		Run: func(_ context.Context, p *frostui.Progress) error {
 			p.Set(-1, "Installing firmware for "+name)
 			p.Log(frostui.LevelInfo, "Keep the computer on power until the firmware update ends.")

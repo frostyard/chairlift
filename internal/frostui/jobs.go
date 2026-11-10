@@ -50,6 +50,13 @@ type Job struct {
 	Run  func(ctx context.Context, p *Progress) error
 	Done func(err error)
 
+	// Unstoppable marks a job whose work a cancel cannot stop: one that
+	// runs as root through pkexec (only the unprivileged parent can be
+	// signaled) or flashes firmware. CancelAll drops the jobs queued after
+	// it but lets it run to its end and report what really happened, and
+	// the queue stays busy until then, so no other change overlaps it.
+	Unstoppable bool
+
 	// Set by the queue; read on the UI thread.
 	ID       int
 	State    JobState
@@ -62,26 +69,37 @@ type Job struct {
 
 // Progress is how a running job reports, from its goroutine.
 type Progress struct {
-	job   *Job
-	post  func(func())
-	log   func(Level, string)
-	mu    sync.Mutex
-	value float64
-	text  string
+	job     *Job
+	post    func(func())
+	log     func(Level, string)
+	mu      sync.Mutex
+	value   float64
+	text    string
+	pending bool // a post that applies the latest value waits to run
 }
 
 // Set reports the fraction done (0..1, or -1 when unknown) and a status
-// line.
+// line. Calls are coalesced: a post rebuilds the whole view, and a job may
+// report every output line, so at most one post waits at a time and it
+// applies the latest value.
 func (p *Progress) Set(fraction float64, status string) {
 	if p == nil {
 		return
 	}
 	p.mu.Lock()
 	p.value, p.text = fraction, status
+	if p.pending {
+		p.mu.Unlock()
+		return
+	}
+	p.pending = true
 	p.mu.Unlock()
 	job := p.job
 	p.post(func() {
-		job.Fraction, job.Status = fraction, status
+		p.mu.Lock()
+		job.Fraction, job.Status = p.value, p.text
+		p.pending = false
+		p.mu.Unlock()
 	})
 }
 
@@ -109,6 +127,8 @@ type Jobs struct {
 	// batchTotal and batchDone count the jobs since the queue was last
 	// empty, for "Job 3 of 10".
 	batchTotal, batchDone int
+	// stopping is set when CancelAll found an Unstoppable job running.
+	stopping bool
 	// OnIdle, when set, runs on the UI thread when the last queued job ends.
 	OnIdle func(batch []*Job)
 	batch  []*Job
@@ -196,16 +216,30 @@ func (q *Jobs) Pending(source, key string) bool {
 
 // CancelAll cancels the running job and drops the queued ones; each
 // dropped job's Done runs with context.Canceled.
+//
+// An Unstoppable running job is not canceled: it finishes and reports its
+// own result, and the queue stays busy until it does.
 func (q *Jobs) CancelAll() {
 	dropped := q.queue
 	q.queue = nil
 	for _, j := range dropped {
 		q.finish(j, context.Canceled)
 	}
-	if q.cancel != nil {
+	if q.cancel != nil && (q.current == nil || !q.current.Unstoppable) {
 		q.cancel()
 	}
+	if q.current != nil && q.current.Unstoppable {
+		q.stopping = true
+	}
 }
+
+// Stopping reports whether a stop was asked while an Unstoppable job runs:
+// it finishes first.
+func (q *Jobs) Stopping() bool { return q.stopping && q.current != nil }
+
+// CanStop reports whether CancelAll would stop the running job, false when
+// nothing runs or the running job is Unstoppable.
+func (q *Jobs) CanStop() bool { return q.current != nil && !q.current.Unstoppable }
 
 func (q *Jobs) next() {
 	if q.current != nil {
@@ -250,7 +284,7 @@ func (q *Jobs) next() {
 		// context) did its work: its own error, nil included, stands.
 		cancel()
 		q.post(func() {
-			q.current, q.cancel = nil, nil
+			q.current, q.cancel, q.stopping = nil, nil, false
 			q.finish(j, err)
 			q.next()
 		})

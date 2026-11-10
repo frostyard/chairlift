@@ -361,7 +361,9 @@ func TestFeaturesToggleShowsBusyWhileItRuns(t *testing.T) {
 
 func TestFeaturesCanceledJobs(t *testing.T) {
 	hold := make(chan struct{})
-	defer close(hold)
+	var once sync.Once
+	release := func() { once.Do(func() { close(hold) }) }
+	defer release()
 	h := newFeaturesHarness(t, enabledFeatures(), false, &fakeUpdex{features: snowFeatures(), checks: snowChecks(), hold: hold})
 	h.start(t)
 
@@ -375,13 +377,26 @@ func TestFeaturesCanceledJobs(t *testing.T) {
 	if h.fake.count("update") != 0 {
 		t.Error("the dropped update ran")
 	}
-	got := h.toasts()
-	if !slices.Contains(got, "info: Canceled: Updating features") || !slices.Contains(got, "info: Canceled: Turning on Incus") {
-		t.Errorf("toasts = %q", got)
+	// The toggle runs the root helper through pkexec: a stop cannot stop
+	// it, so it finishes first and the queue stays busy until it does.
+	if !h.f.busy("incus") || !h.env.Jobs.Busy() || !h.env.Jobs.Stopping() {
+		t.Fatalf("busy %v queue %v stopping %v: the queue freed while the helper runs",
+			h.f.busy("incus"), h.env.Jobs.Busy(), h.env.Jobs.Stopping())
 	}
-	// The canceled toggle reads back what the system has.
-	if h.fake.count("list") != 2 {
-		t.Errorf("calls = %v, want a second listing", h.fake.Calls())
+	release()
+	h.ui.settle(t)
+	got := h.toasts()
+	if !slices.Contains(got, "info: Canceled: Updating features") {
+		t.Errorf("toasts = %q, want the dropped update canceled", got)
+	}
+	if slices.Contains(got, "info: Canceled: Turning on Incus") {
+		t.Errorf("toasts = %q: the toggle that ran was reported canceled", got)
+	}
+	if !slices.Contains(h.fake.Calls(), "enable incus") {
+		t.Errorf("calls = %v, want the toggle's enable to have run", h.fake.Calls())
+	}
+	if h.env.Jobs.Busy() {
+		t.Error("the queue is still busy after the toggle ended")
 	}
 }
 

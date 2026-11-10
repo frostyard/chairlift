@@ -434,19 +434,25 @@ func (f *Features) toggle(name, title string, on bool) {
 		run = f.enable
 		jobTitle = "Turning on " + title
 	}
-	f.env.Run(string(SourceFeatures), name, jobTitle, func(ctx context.Context, _ *frostui.Progress) error {
-		ctx, cancel := context.WithTimeout(ctx, updex.DefaultTimeout)
-		defer cancel()
-		return run(ctx, name)
-	}, func(err error) {
-		if errors.Is(err, context.Canceled) {
-			// Canceled before or while the helper ran: read back what
-			// the system has now.
-			f.env.Toast("Canceled: " + jobTitle)
-			f.load()
-			return
-		}
-		f.toggled(name, title, on, err)
+	// The helper runs as root through pkexec: a stop could signal only
+	// pkexec, so the job is Unstoppable and finishes first.
+	f.env.Jobs.Enqueue(&frostui.Job{
+		Source: string(SourceFeatures), Key: name, Title: jobTitle, Unstoppable: true,
+		Run: func(ctx context.Context, _ *frostui.Progress) error {
+			ctx, cancel := context.WithTimeout(ctx, updex.DefaultTimeout)
+			defer cancel()
+			return run(ctx, name)
+		},
+		Done: func(err error) {
+			if errors.Is(err, context.Canceled) {
+				// Dropped from the queue before the helper ran: read back
+				// what the system has now.
+				f.env.Toast("Canceled: " + jobTitle)
+				f.load()
+				return
+			}
+			f.toggled(name, title, on, err)
+		},
 	})
 }
 
@@ -502,6 +508,8 @@ func (f *Features) updateJob() *frostui.Job {
 		Source: string(SourceFeatures),
 		Key:    featuresUpdateKey,
 		Title:  "Updating features",
+		// The helper runs as root through pkexec: the job finishes first.
+		Unstoppable: true,
 		Run: func(ctx context.Context, p *frostui.Progress) error {
 			ran = true
 			ctx, cancel := context.WithTimeout(ctx, updex.DefaultTimeout)

@@ -30,6 +30,10 @@ type Command struct {
 	Args []string
 }
 
+// Privileged reports whether the command runs as root through pkexec, so
+// nothing but pkexec itself can be signaled.
+func (c Command) Privileged() bool { return c.Name == "pkexec" }
+
 // OSReleaseEntry is one parsed field from an os-release file.
 type OSReleaseEntry struct {
 	Title string

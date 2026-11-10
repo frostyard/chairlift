@@ -180,13 +180,19 @@ func JobCard(c *ui.Context, q *Jobs) {
 		ui.Row(c).Gap(SpaceS).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Label("Working")
 			ui.Text(c, cur.Title).FontSize(12.5).Bold().SingleLine().Grow(1)
-			if IconButton(c, "process-stop", "Stop: drop the queued jobs and cancel this one where it can stop").Clicked() {
+			stop := "Stop: drop the queued jobs and cancel this one"
+			if cur.Unstoppable {
+				stop = "Stop: drop the queued jobs; this one cannot be stopped and finishes first"
+			}
+			if !q.Stopping() && IconButton(c, "process-stop", stop).Clicked() {
 				q.CancelAll()
 			}
 		})
 		ui.Progress(c, q.BatchFraction()).Label("Progress")
 		status := cur.Status
-		if status == "" {
+		if q.Stopping() {
+			status = "Finishing; the queued jobs were dropped"
+		} else if status == "" {
 			status = sprintf("Job %d of %d", done+1, total)
 		}
 		Caption(c, status).SingleLine()
