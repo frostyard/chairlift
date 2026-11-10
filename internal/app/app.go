@@ -221,20 +221,37 @@ func openFirstRun() *mygo.Window {
 func wireConsole(con *frostui.Console, post func(func())) {
 	waker := window.NewWaker(post, 60*time.Millisecond)
 	con.SetNotify(waker.Wake)
+	// Commands run side by side (status reads beside a job): each output
+	// and end line carries its command's tool as its source.
+	var mu sync.Mutex
+	sources := map[uint64]string{}
+	sourceFor := func(id uint64) string {
+		mu.Lock()
+		defer mu.Unlock()
+		return sources[id]
+	}
 	cmdlog.SetSink(func(e cmdlog.Event) {
 		switch e.Kind {
 		case cmdlog.KindStart:
-			con.Add(frostui.LevelCommand, sourceOf(e.Argv), strings.Join(e.Argv, " "))
+			src := sourceOf(e.Argv)
+			mu.Lock()
+			sources[e.ID] = src
+			mu.Unlock()
+			con.Add(frostui.LevelCommand, src, strings.Join(e.Argv, " "))
 		case cmdlog.KindLine:
 			// stdout and stderr are both the command's output
-			con.Add(frostui.LevelOutput, "", e.Text)
+			con.Add(frostui.LevelOutput, sourceFor(e.ID), e.Text)
 		case cmdlog.KindDryRun:
 			con.Add(frostui.LevelDryRun, sourceOf(e.Argv), "would run: "+strings.Join(e.Argv, " "))
 		case cmdlog.KindEnd:
+			src := sourceFor(e.ID)
+			mu.Lock()
+			delete(sources, e.ID)
+			mu.Unlock()
 			if e.Err != nil {
-				con.Addf(frostui.LevelWarn, "", "exited after %s: %v", e.Elapsed.Round(time.Millisecond), e.Err)
+				con.Addf(frostui.LevelWarn, src, "exited after %s: %v", e.Elapsed.Round(time.Millisecond), e.Err)
 			} else {
-				con.Addf(frostui.LevelDebug, "", "exited after %s", e.Elapsed.Round(time.Millisecond))
+				con.Addf(frostui.LevelDebug, src, "exited after %s", e.Elapsed.Round(time.Millisecond))
 			}
 		}
 	})

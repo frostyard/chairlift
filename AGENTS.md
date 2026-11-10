@@ -221,11 +221,14 @@ An agent must not break these:
   `poster`, which keeps posts made before the window exists). Console output
   wakes the window through `window.Waker` (at most every 60 ms), because
   `Window.Update` rebuilds the view on every call.
-- **Changes run in the serial job queue.** Every mutation a page starts
-  (install, update, stage, enable, clean, trust, flash) is a `frostui.Job` on
-  `Env.Jobs`: one runs at a time, `Run` on a goroutine, `Done` on the UI
-  thread. Only problem dismissals and report sends stay off the queue
-  (ADR-0015's own lock and pacing). Pages ask first through `Env.Dialogs`.
+- **Changes run in the serial job queue.** In the command center, every
+  mutation a page starts (install, update, stage, enable, clean, trust, flash)
+  is a `frostui.Job` on `Env.Jobs`: one runs at a time, `Run` on a goroutine,
+  `Done` on the UI thread. Only problem dismissals and report sends stay off
+  the queue (ADR-0015's own lock and pacing); the first-run wizard keeps
+  ADR-0014's own sequence of steps. Pages ask first through `Env.Dialogs`. A
+  job whose work a cancel cannot stop (pkexec, firmware, updex) is
+  `Unstoppable`: Stop drops the jobs queued after it and lets it finish.
 - **Every command shows in the console.** The backends announce each
   external command and its end through `internal/cmdlog`
   (`Start`/`End`, `DryRun` for previews) and tee its output when it is

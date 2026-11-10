@@ -43,9 +43,13 @@ program name. GTK 3 and GTK 4 cannot share a process.
 - **The console shows real output.** The backends report every command
   they start, its output lines and its end through `internal/cmdlog`; the
   window streams them, the log and dry-run previews into the console.
-- **Changes run through one serial job queue** (`frostui.Jobs`): one
-  mutation at a time, its output in the console, its progress in the rail
-  and the status bar. Reads run concurrently.
+- **The command center's changes run through one serial job queue**
+  (`frostui.Jobs`): one mutation at a time, its output in the console, its
+  progress in the rail and the status bar. Reads run concurrently. Problem
+  dismissals and report sends keep ADR-0015's own lock and pacing, and the
+  first-run wizard keeps ADR-0014's sequence. Stop drops the queued jobs and
+  cancels the running one, except a job a cancel cannot stop (pkexec,
+  firmware, updex), which finishes first.
 - **The UI kit is frostyard's, not ChairLift's.** `internal/frostui` holds
   the shell, cards, dialogs, palette, console, job queue, pipeline and
   gauges, imports only MyGo, purego and the standard library

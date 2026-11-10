@@ -50,6 +50,7 @@ func NewMain(env *views.Env, store *views.Store) *Main {
 	m.Shell.Brand = frostui.Brand{Name: "ChairLift", Tagline: "Snow Linux command center", Logo: ui.MustParseSVG(logoSVG)}
 	m.Shell.Selected = m.Items[0].Name
 	m.Shell.Dialogs = env.Dialogs
+	m.Shell.Console.Subtitle = "every command ChairLift runs, as it runs"
 	env.SetNavigate(m.Navigate)
 	if env.Enabled(navigation.HelpConfigPage, navigation.HelpGroup) {
 		if g := env.Group(navigation.HelpConfigPage, navigation.HelpGroup); g != nil {

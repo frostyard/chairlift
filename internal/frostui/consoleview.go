@@ -11,8 +11,11 @@ type ConsoleView struct {
 	Open   bool
 	Query  string
 	Levels LevelSet
-	list   ui.ListState
-	init   bool
+	// Subtitle follows the pane's title; empty shows "every command the
+	// app runs, as it runs".
+	Subtitle string
+	list     ui.ListState
+	init     bool
 }
 
 // View draws the pane for con.
@@ -30,7 +33,11 @@ func (v *ConsoleView) View(c *ui.Context, con *Console) {
 		ui.Row(c).Gap(SpaceS).Padding(SpaceS, SpaceL).AlignItems(ui.Center).Children(func() {
 			Icon(c, "utilities-terminal").TextColor(t.TextMuted)
 			ui.Text(c, "Console").Bold().FontSize(13)
-			Muted(c, "every command ChairLift runs, as it runs").SingleLine()
+			sub := v.Subtitle
+			if sub == "" {
+				sub = "every command the app runs, as it runs"
+			}
+			Muted(c, sub).SingleLine()
 			ui.Spacer(c)
 			ui.ToggleGroup(c, func() {
 				for l := Level(0); l < levelCount; l++ {

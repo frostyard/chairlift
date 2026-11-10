@@ -132,9 +132,9 @@ func TestWireConsoleShowsCommandsAndTheLog(t *testing.T) {
 	}
 	for _, w := range []want{
 		{frostui.LevelCommand, "chairlift-updex-helper", "/usr/bin/pkexec /usr/bin/chairlift-updex-helper update"},
-		{frostui.LevelOutput, "", "Merged docker into /usr"},
-		{frostui.LevelDebug, "", "exited after"},
-		{frostui.LevelWarn, "", "exit status 1"},
+		{frostui.LevelOutput, "chairlift-updex-helper", "Merged docker into /usr"},
+		{frostui.LevelDebug, "chairlift-updex-helper", "exited after"},
+		{frostui.LevelWarn, "brew", "exit status 1"},
 		{frostui.LevelDryRun, "flatpak", "would run: flatpak update org.mozilla.firefox"},
 		{frostui.LevelDryRun, "log", "[DRY-RUN] would dismiss problem p1"},
 		{frostui.LevelWarn, "log", "homebrew: list failed"},
