@@ -324,12 +324,12 @@ An agent must not break these:
   pin/unpin, and every row shares one gate across its mutation controls so
   actions cannot overlap. A live success completes the old controls and starts
   a generation-guarded inventory refresh; failure or dry-run restores them.
-- **Update badge counts have one state owner.** Bootc, sysupdate, firmware,
-  Flatpak, and Homebrew counts live in the pure `internal/views/badgestate`
-  package. Refreshes replace a provider's count, successful row removals
-  decrement without going negative, and the displayed total is always the sum
-  of all five providers. Do not restore independent integer fields in
-  `UserHome`.
+- **Update counts have one owner per source.** Each update source
+  (`views.UpdateSource`: system image, features, Flatpak, Homebrew, firmware)
+  owns its items; the Updates badge, the Overview figure and the status bar
+  read `Store.UpdateCount()`, the sum over the sources that apply, held items
+  included. A live success removes its item before any reload; a failed
+  reload keeps the last known items. Do not keep a separate counter.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget
