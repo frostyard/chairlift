@@ -10,8 +10,11 @@ project's license, GPL-3.0-or-later. It has since been rewritten. The window is 
 ([ADR-0017](0017-mygo-command-center-window.md)), the first-run mode is Go
 ([ADR-0014](0014-first-run-mode.md)), and none of First Setup's code or
 sentences remain (decision 5).
-Brian Ketelsen holds the copyright on all of ChairLift's code, so he can
-relicense it.
+Brian Ketelsen holds the copyright on ChairLift's code, so he can relicense
+it. The only other person's work that remains is build configuration: commit
+`7dd385b` (Jorge Castro) left the arm64 lines and the archive file list in
+`.goreleaser.yaml`. His other commit added a screenshot that has since been
+removed.
 
 One part of the repository was not his work. ADR-0014's decision 8 ported the
 first-run translations of SNOW First Setup (frostyard/first-setup commit
