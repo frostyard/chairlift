@@ -248,7 +248,7 @@ func TestFeaturesListThenCheck(t *testing.T) {
 	if got := h.f.subtitle("docker"); got != "docker — update available for docker (v28.5.1 → v28.5.2)" {
 		t.Errorf("docker subtitle = %q", got)
 	}
-	if got := h.f.subtitle("incus"); got != "Off" {
+	if got := h.f.subtitle("incus"); got != "" {
 		t.Errorf("incus subtitle = %q, want its base subtitle", got)
 	}
 	if badge, tone := h.page.Badge(); badge != "1" || tone != frostui.Accent {
@@ -274,7 +274,7 @@ func TestFeaturesToggleAsksBeforeItRuns(t *testing.T) {
 	h.start(t)
 	tt := ui.NewTester(h.view, 1360, 2000)
 
-	if err := tt.Click("Incus"); err != nil {
+	if err := tt.Click("Incus (incus)"); err != nil {
 		t.Fatal(err)
 	}
 	if !tt.HasText("Turn on Incus?") || !tt.HasText("Needs administrator authentication.") {
@@ -294,7 +294,7 @@ func TestFeaturesToggleAsksBeforeItRuns(t *testing.T) {
 		t.Fatal("enable ran after Cancel")
 	}
 
-	if err := tt.Click("Incus"); err != nil {
+	if err := tt.Click("Incus (incus)"); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.Click("Turn on"); err != nil {
@@ -353,6 +353,8 @@ func TestFeaturesToggleShowsBusyWhileItRuns(t *testing.T) {
 	if !h.f.busy("incus") {
 		t.Fatal("no job pending for incus")
 	}
+	// The off feature has a tile while its job runs ("Working…"), and its
+	// switch is a spinner.
 	if !tt.HasText("Working…") || !tt.HasText("Working on Incus") {
 		t.Errorf("no busy state: %q", tt.Texts())
 	}
@@ -391,6 +393,82 @@ func TestFeaturesCanceledJobs(t *testing.T) {
 	// The canceled toggle reads back what the system has.
 	if h.fake.count("list") != 2 {
 		t.Errorf("calls = %v, want a second listing", h.fake.Calls())
+	}
+}
+
+// manyFeatures are thirty features, the first three on, as an image that
+// ships dozens of them.
+func manyFeatures() []updex.Feature {
+	names := []string{
+		"docker", "dev", "tailscale", "1password-cli", "1password", "bitwarden", "chatgpt", "claude-desktop",
+		"coder", "code-server", "debdev", "edge", "gitdesktop", "github-copilot", "himmelblau", "incus",
+		"k3s", "lemonade", "localsend", "lodge", "maild", "moonlight", "nix", "notesd", "obsidian",
+		"paseo", "podman", "sunshine", "voxtype", "vscode",
+	}
+	out := make([]updex.Feature, 0, len(names))
+	for i, name := range names {
+		version := ""
+		if i < 3 {
+			version = "1.0"
+		}
+		out = append(out, fakeFeature(name, strings.ToUpper(name[:1])+name[1:]+" feature", i < 3, version))
+	}
+	return out
+}
+
+// countText is how many times s is drawn.
+func countText(tt *ui.Tester, s string) int {
+	n := 0
+	for _, text := range tt.Texts() {
+		if text == s {
+			n++
+		}
+	}
+	return n
+}
+
+func TestFeaturesTilesShowOnlyFeaturesThatAreOn(t *testing.T) {
+	h := newFeaturesHarness(t, enabledFeatures(), false, &fakeUpdex{features: manyFeatures()})
+	h.start(t)
+	tt := ui.NewTester(h.view, 1360, 2600)
+
+	// A feature that is on has a tile (a switch named by its title) and a
+	// row; one that is off only a row.
+	if _, ok := tt.AccessByRole(ui.RoleSwitch, "Docker feature"); !ok {
+		t.Error("docker has no tile")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleSwitch, "Incus feature"); ok {
+		t.Error("incus, which is off, has a tile")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleSwitch, "Incus feature (incus)"); !ok {
+		t.Error("incus has no row")
+	}
+	if n := countText(tt, "Incus feature"); n != 1 {
+		t.Errorf("incus is drawn %d times, want only its row", n)
+	}
+	if !tt.HasText("27 more in the list below") {
+		t.Errorf("no count of the others: %q", tt.Texts())
+	}
+	// Clicking a tile asks, as the switch does.
+	if err := tt.Click("Tailscale feature"); err != nil {
+		t.Fatal(err)
+	}
+	if !tt.HasText("Turn off Tailscale feature?") {
+		t.Errorf("the tile did not ask: %q", tt.Texts())
+	}
+	// An off feature's row says nothing more than its switch.
+	if tt.HasText("Off") {
+		t.Error("a row still reads Off")
+	}
+
+	none := newFeaturesHarness(t, enabledFeatures(), false, &fakeUpdex{features: snowFeatures()[2:]})
+	none.start(t)
+	tt = ui.NewTester(none.view, 1360, 1200)
+	if !tt.HasText("No features are on. Turn one on in the list below.") {
+		t.Errorf("page shows %q", tt.Texts())
+	}
+	if tt.HasText("more in the list below") {
+		t.Error("counted the others although no tile is shown")
 	}
 }
 
@@ -553,7 +631,7 @@ func TestFeaturesRecheckRestoresBaseSubtitles(t *testing.T) {
 	h.fake.set(func(u *fakeUpdex) { u.checks = snowChecks()[1:] })
 	h.f.Refresh()
 	h.ui.settle(t)
-	if got := h.f.subtitle("docker"); got != "On · 28.5.1" {
+	if got := h.f.subtitle("docker"); got != "" {
 		t.Errorf("docker subtitle = %q, want its base subtitle", got)
 	}
 	if got := h.f.groupDescription(); got != "6 features available — all up to date" {
@@ -754,4 +832,18 @@ func TestSnapshotFeatures(t *testing.T) {
 		t.Errorf("states page shows %q", tt.Texts())
 	}
 	snapshot(t, tt, "features-states")
+
+	// An image with thirty features, three of them on.
+	for _, dark := range []bool{false, true} {
+		many := newFeaturesHarness(t, enabledFeatures(), false, &fakeUpdex{features: manyFeatures(), checks: []updex.FeatureCheck{
+			{Feature: "docker", Results: []updex.CheckResult{{Component: "docker", CurrentVersion: "1.0", NewestVersion: "1.1", UpdateAvailable: true}}},
+			{Feature: "dev", Results: []updex.CheckResult{{Component: "dev", CurrentVersion: "1.0", NewestVersion: "1.0"}}},
+		}})
+		many.start(t)
+		name := "features-many-light"
+		if dark {
+			name = "features-many-dark"
+		}
+		snapshot(t, ui.NewTesterWith(many.view, 1128, 2100, ui.TesterOptions{Dark: dark}), name)
+	}
 }

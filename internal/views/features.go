@@ -218,17 +218,14 @@ func agreedVersion(versions []string) string {
 	return versions[0]
 }
 
-// baseSubtitle is a row's line while no check answered for it.
+// baseSubtitle is a row's line while no check answered for it: empty, as
+// the switch says on or off and the version has its own column, except
+// for a masked feature, whose switch cannot say why it is off.
 func baseSubtitle(row featureRow) string {
-	switch {
-	case row.Masked:
+	if row.Masked {
 		return "Masked by the administrator: it cannot be turned on here"
-	case row.On && row.Version != "":
-		return "On · " + row.Version
-	case row.On:
-		return "On"
 	}
-	return "Off"
+	return ""
 }
 
 // featureCheckResult is what a check goroutine hands back.

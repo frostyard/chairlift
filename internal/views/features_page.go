@@ -159,34 +159,46 @@ func (p *featuresView) actions(c *ui.Context) {
 		if f.updating() {
 			label = "Updating…"
 		}
-		if featuresPrimaryButton(c, "software-update-available", label).Disabled(f.updating()).Clicked() {
+		if frostui.LabeledButton(c, "software-update-available", label, true).Disabled(f.updating()).Clicked() {
 			f.UpdateAll()
 		}
 	}
 }
 
-// featuresPrimaryButton is frostui.LabeledButton(c, icon, label, true)
-// without the empty button that LabeledButton builds before its primary
-// one.
-func featuresPrimaryButton(c *ui.Context, icon, label string) ui.Element {
-	return ui.PrimaryButton(c, "").Label(label).Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			frostui.Icon(c, icon)
-			ui.Text(c, label).SingleLine()
-		})
-	})
+// tileRows are the features that get a tile: those that are on, and those
+// with a job waiting or running, so a feature being turned on does not
+// vanish from the grid until its job ended. An image ships dozens of
+// features; the list below has all of them.
+func (p *featuresView) tileRows() []featureRow {
+	var out []featureRow
+	for _, row := range p.f.features {
+		if row.On || p.f.busy(row.Name) {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
-// tiles draws a toggle tile per feature. A click asks first; the tile
-// shows the listing until the job ran.
+// tiles draws a toggle tile per feature that is on (see tileRows). A click
+// asks first; the tile shows the listing until the job ran.
 func (p *featuresView) tiles(c *ui.Context) {
 	f := p.f
-	ui.Row(c).Wrap().Gap(frostui.SpaceM).AlignItems(ui.Start).Children(func() {
-		for _, row := range f.features {
-			busy := f.busy(row.Name)
-			if frostui.ToggleTile(c.Key("tile:"+row.Name), featureIcon(row.Name), featureTitle(row), p.tileSub(row, busy), row.On, busy) {
-				f.AskToggle(row.Name, !row.On)
+	rows := p.tileRows()
+	if len(rows) == 0 {
+		frostui.Muted(c, "No features are on. Turn one on in the list below.")
+		return
+	}
+	ui.Column(c).Gap(frostui.SpaceS).AlignItems(ui.Stretch).Children(func() {
+		ui.Row(c).Wrap().Gap(frostui.SpaceM).AlignItems(ui.Start).Children(func() {
+			for _, row := range rows {
+				busy := f.busy(row.Name)
+				if frostui.ToggleTile(c.Key("tile:"+row.Name), featureIcon(row.Name), featureTitle(row), p.tileSub(row, busy), row.On, busy) {
+					f.AskToggle(row.Name, !row.On)
+				}
 			}
+		})
+		if more := len(f.features) - len(rows); more > 0 {
+			frostui.Muted(c, fmt.Sprintf("%d more in the list below", more))
 		}
 	})
 }
@@ -266,6 +278,10 @@ func (p *featuresView) listRow(c *ui.Context, t *ui.Theme, row featureRow) {
 				frostui.Strong(c, title).SingleLine().Shrink(1)
 				frostui.Mono(c, row.Name).FontSize(11.5).TextColor(t.TextMuted).SingleLine().Shrink(0)
 			})
+			if line == "" {
+				// Nothing to say beyond the switch and the version.
+				return
+			}
 			lineTone := frostui.Neutral
 			switch {
 			case checked && status.WaitingForImage:
