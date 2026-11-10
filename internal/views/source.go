@@ -145,3 +145,60 @@ type SystemInfo struct {
 	// Uptime is "up 3d 4h 12m", "" when unknown.
 	Uptime string
 }
+
+// AppKind is where an installed app or package comes from.
+type AppKind int
+
+// The kinds of the Apps table, in its filter's order.
+const (
+	AppFlatpakSystem AppKind = iota
+	AppFlatpakUser
+	AppFormula
+	AppCask
+)
+
+// AppAction is something the Apps inspector can do to one entry.
+type AppAction int
+
+// The inspector's actions.
+const (
+	// ActUpdate updates the entry to AppEntry.Update.
+	ActUpdate AppAction = iota
+	// ActOpen launches it (Flatpak apps).
+	ActOpen
+	// ActPin and ActUnpin hold a formula at its version or release it.
+	ActPin
+	ActUnpin
+	// ActUninstall removes it, after a confirmation.
+	ActUninstall
+)
+
+// AppEntry is one row of the Apps table: a Flatpak app or a Homebrew
+// formula or cask. Flatpak and Brew each give their own.
+type AppEntry struct {
+	// Key is unique across every kind, as "flatpak:user:org.mozilla.firefox"
+	// or "formula:gh"; the table and the actions use it.
+	Key     string
+	Kind    AppKind
+	Name    string
+	ID      string // the application ID or the package name
+	Version string
+	Origin  string // a remote or a tap, "" when unknown
+	Summary string // a description, "" when unknown
+	// Update is the version an update would bring, "" when current.
+	Update string
+	Pinned bool
+	// Busy is true while a job for the entry waits or runs.
+	Busy bool
+	// Actions are what the inspector offers for the entry now.
+	Actions []AppAction
+}
+
+// AppsStatus is the state of one kind's inventory load.
+type AppsStatus struct {
+	// Available is false when the kind's groups are disabled or its tool
+	// is missing: the Apps table leaves its rows and filter out.
+	Available bool
+	Loading   bool
+	Err       string
+}
