@@ -226,11 +226,8 @@ func wireConsole(con *frostui.Console, post func(func())) {
 		case cmdlog.KindStart:
 			con.Add(frostui.LevelCommand, sourceOf(e.Argv), strings.Join(e.Argv, " "))
 		case cmdlog.KindLine:
-			level := frostui.LevelOutput
-			if e.Stream == cmdlog.Stderr {
-				level = frostui.LevelOutput
-			}
-			con.Add(level, "", e.Text)
+			// stdout and stderr are both the command's output
+			con.Add(frostui.LevelOutput, "", e.Text)
 		case cmdlog.KindDryRun:
 			con.Add(frostui.LevelDryRun, sourceOf(e.Argv), "would run: "+strings.Join(e.Argv, " "))
 		case cmdlog.KindEnd:

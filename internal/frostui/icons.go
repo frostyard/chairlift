@@ -97,7 +97,8 @@ func (ic *Icons) Get(name string) *ui.SVG {
 		return svg
 	}
 	var svg *ui.SVG
-	for _, n := range []string{name, strings.TrimSuffix(name, "-symbolic")} {
+	base := strings.TrimSuffix(name, "-symbolic")
+	for _, n := range []string{base + "-symbolic", base} {
 		if data, ok := ic.embedded[n]; ok {
 			if s, err := ui.ParseSVG(data); err == nil {
 				svg = s
@@ -162,11 +163,15 @@ func SetIcons(ic *Icons) { icons = ic }
 func IconSVG(name string) *ui.SVG { return icons.Get(name) }
 
 // Icon draws the named icon at the text size, in the text color, which
-// TextColor changes. A missing icon is an empty box of the same size, so
-// layouts do not move.
+// TextColor changes. A missing icon is an empty box of the text size, as a
+// drawn icon is, so layouts do not move.
 func Icon(c *ui.Context, name string) ui.Element {
 	if svg := icons.Get(name); svg != nil {
 		return ui.Icon(c, svg)
 	}
-	return ui.Box(c).Size(16, 16)
+	size := c.Theme().FontSize
+	if size <= 0 {
+		size = 14
+	}
+	return ui.Box(c).Size(size, size)
 }

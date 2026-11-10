@@ -1,8 +1,23 @@
 package app
 
 import (
+	"errors"
+	"log"
+	"os"
+	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/frostyard/chairlift/internal/bootc"
+	"github.com/frostyard/chairlift/internal/cmdlog"
+	"github.com/frostyard/chairlift/internal/firstrun"
+	"github.com/frostyard/chairlift/internal/flatpak"
+	"github.com/frostyard/chairlift/internal/frostui"
+	"github.com/frostyard/chairlift/internal/fwupd"
+	"github.com/frostyard/chairlift/internal/homebrew"
+	"github.com/frostyard/chairlift/internal/sysupdate"
+	"github.com/frostyard/chairlift/internal/updex"
 )
 
 type fakeWindow struct {
@@ -88,3 +103,79 @@ func TestStripTimestamp(t *testing.T) {
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+func TestWireConsoleShowsCommandsAndTheLog(t *testing.T) {
+	con := frostui.NewConsole(64)
+	var mu sync.Mutex
+	posts := 0
+	wireConsole(con, func(func()) { mu.Lock(); posts++; mu.Unlock() })
+	t.Cleanup(func() {
+		cmdlog.SetSink(nil)
+		log.SetOutput(os.Stderr)
+	})
+
+	run := cmdlog.Start("/usr/bin/pkexec", "/usr/bin/chairlift-updex-helper", "update")
+	w := run.Stdout(nil)
+	_, _ = w.Write([]byte("Merged docker into /usr\n"))
+	run.End(nil)
+	failed := cmdlog.Start("brew", "upgrade", "gh")
+	failed.End(errors.New("exit status 1"))
+	cmdlog.DryRun("flatpak", "update", "org.mozilla.firefox")
+	log.Print("[DRY-RUN] would dismiss problem p1")
+	log.Print("homebrew: list failed")
+	log.Print("window: built")
+
+	type want struct {
+		level  frostui.Level
+		source string
+		text   string
+	}
+	for _, w := range []want{
+		{frostui.LevelCommand, "chairlift-updex-helper", "/usr/bin/pkexec /usr/bin/chairlift-updex-helper update"},
+		{frostui.LevelOutput, "", "Merged docker into /usr"},
+		{frostui.LevelDebug, "", "exited after"},
+		{frostui.LevelWarn, "", "exit status 1"},
+		{frostui.LevelDryRun, "flatpak", "would run: flatpak update org.mozilla.firefox"},
+		{frostui.LevelDryRun, "log", "[DRY-RUN] would dismiss problem p1"},
+		{frostui.LevelWarn, "log", "homebrew: list failed"},
+		{frostui.LevelDebug, "log", "window: built"},
+	} {
+		found := false
+		for _, l := range con.Lines(nil, "") {
+			if l.Level == w.level && l.Source == w.source && strings.Contains(l.Text, w.text) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no %s line from %q with %q in %+v", frostui.LevelNames[w.level], w.source, w.text, con.Lines(nil, ""))
+		}
+	}
+	for _, l := range con.Lines(nil, "log") {
+		if strings.HasPrefix(l.Text, "20") {
+			t.Errorf("a log line kept its timestamp: %q", l.Text)
+		}
+	}
+	time.Sleep(150 * time.Millisecond) // the waker coalesces
+	mu.Lock()
+	defer mu.Unlock()
+	if posts == 0 || posts > 3 {
+		t.Errorf("the console woke the window %d times for a burst, want a few", posts)
+	}
+}
+
+func TestSetDryRunReachesEveryBackend(t *testing.T) {
+	t.Cleanup(func() {
+		for _, set := range []func(bool){flatpak.SetDryRun, fwupd.SetDryRun, homebrew.SetDryRun, bootc.SetDryRun, sysupdate.SetDryRun, updex.SetDryRun, firstrun.SetDryRun} {
+			set(false)
+		}
+	})
+	SetDryRun()
+	for name, on := range map[string]bool{
+		"flatpak": flatpak.IsDryRun(), "fwupd": fwupd.IsDryRun(), "homebrew": homebrew.IsDryRun(),
+		"bootc": bootc.IsDryRun(), "sysupdate": sysupdate.IsDryRun(), "updex": updex.IsDryRun(), "firstrun": firstrun.IsDryRun(),
+	} {
+		if !on {
+			t.Errorf("%s is not in dry-run mode", name)
+		}
+	}
+}
