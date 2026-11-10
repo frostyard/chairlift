@@ -231,13 +231,17 @@ An agent must not break these:
   `internal/cmdlog` (`Start`/`Stdout`/`Stderr`/`End`, `DryRun` for previews);
   a new `exec.Command` in a backend or a view must do the same.
 - **frostui stays extractable.** `internal/frostui` imports only the standard
-  library, MyGo and purego (`TestFrostUIImportsNoChairLift`); put
-  ChairLift-specific UI in `internal/views` or `internal/window`. See
+  library, MyGo, purego and its own packages, and its test helpers
+  (`internal/frostui/frostuitest`) only the standard library
+  (`TestFrostUIImportsNoChairLift`); put ChairLift-specific UI in
+  `internal/views` or `internal/window`, and move a view helper that is not
+  ChairLift-specific into the kit. See
   [docs/design/frostui.md](docs/design/frostui.md).
 - **Views are tested headless.** `internal/views`, `internal/window`,
   `internal/frostui` and `internal/app` hold tests that render with
   `ui.NewTester`; backends are injected as function fields, so no test runs
-  brew, flatpak, bootc, fwupdmgr, updex or pkexec. Decisions still live in the
+  brew, flatpak, bootc, fwupdmgr, updex or pkexec. A test that stands in for
+  the UI thread posts to a `frostuitest.Loop`. Decisions still live in the
   pure leaf packages (`pageview`, `actionmsg`, `actionstate`, `bundleview`,
   `featurestatus`, `flatpakstatus`, `trustmsg`). No package may load a UI
   library at init (`TestNoGTK4Bindings` keeps puregotk out).

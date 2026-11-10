@@ -1332,12 +1332,13 @@ These hold today; none is a defect with an open issue. They were first
 recorded in the retired `.planning/codebase/CONCERNS.md` and checked again
 against the code for [ADR-0016](../adr/0016-adopt-the-repository-baseline.md).
 
-- **App launch:** `launchApp` (`internal/views/applications_page.go`) passes
-  the application ID to `gtk-launch` without a check of its form. Its 2
-  callers take the ID from the configuration (`app_id` of
-  `applications_installed_group`, default `io.github.kolunmi.Bazaar`, and of
-  `system_page`'s `health_group`, default `io.missioncenter.MissionCenter`),
-  never from typed input, and `exec.Command` uses no shell.
+- **App launch:** `frostui.LaunchDesktopApp` (`internal/frostui/launch.go`,
+  reached through `Flatpak.LaunchApp`) passes the application ID to
+  `gtk-launch` without a check of its form. The IDs come from the
+  configuration (`app_id` of `applications_installed_group`, default
+  `io.github.kolunmi.Bazaar`) or from flatpak's own list of installed apps
+  (the Apps inspector's Open), never from typed input, and `exec.Command`
+  uses no shell.
 - **Maintenance scripts with `sudo: true`:** `runMaintenanceAction` runs
   `pkexec <script>` with the script path from the configuration
   (`pageview.MaintenanceCommand`), outside the fixed helper set of

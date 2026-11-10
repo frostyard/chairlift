@@ -19,52 +19,10 @@ import (
 	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/frostui"
+	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/sysinfo"
 	"github.com/frostyard/chairlift/internal/views/pageview"
 )
-
-// maintLoop stands in for the UI thread: Post queues functions from any
-// goroutine, and runUntil runs them on the test's goroutine.
-type maintLoop struct {
-	mu   sync.Mutex
-	fns  []func()
-	wake chan struct{}
-}
-
-func newMaintLoop() *maintLoop { return &maintLoop{wake: make(chan struct{}, 1)} }
-
-func (l *maintLoop) post(fn func()) {
-	l.mu.Lock()
-	l.fns = append(l.fns, fn)
-	l.mu.Unlock()
-	select {
-	case l.wake <- struct{}{}:
-	default:
-	}
-}
-
-// runUntil runs posted functions until done reports true.
-func (l *maintLoop) runUntil(t *testing.T, done func() bool) {
-	t.Helper()
-	deadline := time.After(5 * time.Second)
-	for {
-		l.mu.Lock()
-		fns := l.fns
-		l.fns = nil
-		l.mu.Unlock()
-		for _, fn := range fns {
-			fn()
-		}
-		if done() {
-			return
-		}
-		select {
-		case <-l.wake:
-		case <-deadline:
-			t.Fatal("timed out waiting for the UI thread's work")
-		}
-	}
-}
 
 // maintFake records what the page asked the backends to do.
 type maintFake struct {
@@ -94,7 +52,7 @@ func (f *maintFake) ran() ([]pageview.Command, []string) {
 type maintFixture struct {
 	t     *testing.T
 	env   *Env
-	loop  *maintLoop
+	loop  *frostuitest.Loop
 	store *Store
 	m     *Maintenance
 	page  Page
@@ -127,8 +85,8 @@ func maintConfig() *config.Config {
 
 func newMaintFixture(t *testing.T, cfg *config.Config, dryRun bool) *maintFixture {
 	t.Helper()
-	f := &maintFixture{t: t, loop: newMaintLoop(), fake: &maintFake{dryRun: dryRun}, brewInstalled: true, flatpakInstalled: true}
-	f.env = NewEnv(cfg, dryRun, f.loop.post)
+	f := &maintFixture{t: t, loop: frostuitest.NewLoop(), fake: &maintFake{dryRun: dryRun}, brewInstalled: true, flatpakInstalled: true}
+	f.env = NewEnv(cfg, dryRun, f.loop.Post)
 	f.env.Now = func() time.Time { return time.Date(2026, 11, 10, 9, 41, 0, 0, time.UTC) }
 	f.store = &Store{Env: f.env}
 	f.m = NewMaintenance(f.env, f.store)
@@ -166,7 +124,7 @@ func newMaintFixture(t *testing.T, cfg *config.Config, dryRun bool) *maintFixtur
 func (f *maintFixture) start() {
 	f.t.Helper()
 	f.m.Start()
-	f.loop.runUntil(f.t, func() bool {
+	f.loop.RunUntil(f.t, func() bool {
 		return (!f.env.Enabled(maintPage, maintBrewGroup) || f.m.brew != maintToolUnknown) &&
 			(!f.env.Enabled(maintPage, maintFlatpakGroup) || f.m.flatpak != maintToolUnknown)
 	})
@@ -175,7 +133,7 @@ func (f *maintFixture) start() {
 // settle lets every queued job end.
 func (f *maintFixture) settle() {
 	f.t.Helper()
-	f.loop.runUntil(f.t, func() bool { return !f.env.Jobs.Busy() })
+	f.loop.RunUntil(f.t, func() bool { return !f.env.Jobs.Busy() })
 }
 
 // view draws the page as the shell's content area does, with the
@@ -268,7 +226,7 @@ func TestMaintenanceShowsToolsAsCheckedUntilTheirCheckEnds(t *testing.T) {
 		t.Error("a cleanup being checked offers its button")
 	}
 	close(release)
-	f.loop.runUntil(t, func() bool { return f.m.brew != maintToolUnknown && f.m.flatpak != maintToolUnknown })
+	f.loop.RunUntil(t, func() bool { return f.m.brew != maintToolUnknown && f.m.flatpak != maintToolUnknown })
 	tt.Frame()
 	if tt.HasText("Checking…") || tt.HasText("Unused Flatpak runtimes") {
 		t.Errorf("after the checks a missing tool's row stays: %q", tt.Texts())

@@ -6,48 +6,14 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/flatpak"
+	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/views/flatpakstatus"
 )
-
-// fpPost runs posted functions on the test goroutine, which plays the UI
-// thread: backends run on goroutines, their results wait here.
-type fpPost struct {
-	mu  sync.Mutex
-	fns []func()
-	ran int
-}
-
-func (p *fpPost) post(fn func()) {
-	p.mu.Lock()
-	p.fns = append(p.fns, fn)
-	p.mu.Unlock()
-}
-
-// drain runs posted functions until until reports true.
-func (p *fpPost) drain(t *testing.T, until func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !until() {
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for the UI thread")
-		}
-		p.mu.Lock()
-		fns := p.fns
-		p.fns = nil
-		p.mu.Unlock()
-		for _, fn := range fns {
-			fn()
-			p.ran++
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
 
 // fpConfig enables exactly the Flatpak groups asked for, and turns the
 // Homebrew groups off.
@@ -188,14 +154,14 @@ func fpSample() *fpFake {
 }
 
 // fpStarted returns a Flatpak on fake whose first loads have published.
-func fpStarted(t *testing.T, fake *fpFake, cfg *config.Config, dryRun bool) (*Flatpak, *Env, *fpPost) {
+func fpStarted(t *testing.T, fake *fpFake, cfg *config.Config, dryRun bool) (*Flatpak, *Env, *frostuitest.Loop) {
 	t.Helper()
-	p := &fpPost{}
-	env := NewEnv(cfg, dryRun, p.post)
+	p := frostuitest.NewLoop()
+	env := NewEnv(cfg, dryRun, p.Post)
 	f := NewFlatpak(env)
 	fake.wire(f, dryRun)
 	f.Start()
-	p.drain(t, func() bool { return !f.appsLoading && !f.updatesChecking })
+	p.RunUntil(t, func() bool { return !f.appsLoading && !f.updatesChecking })
 	return f, env, p
 }
 
@@ -325,7 +291,7 @@ func TestFlatpakNonAuthoritativeReloadKeepsKnownRows(t *testing.T) {
 	if !f.Source().Status().Checking {
 		t.Fatal("Refresh did not start a check")
 	}
-	p.drain(t, func() bool { return !f.updatesChecking })
+	p.RunUntil(t, func() bool { return !f.updatesChecking })
 
 	if got := fpItemKeys(f.Source().Items()); !slices.Equal(got, before) {
 		t.Errorf("a load that learned nothing replaced the rows: %v, want %v", got, before)
@@ -341,7 +307,7 @@ func TestFlatpakNonAuthoritativeReloadKeepsKnownRows(t *testing.T) {
 	// A check that works again replaces them.
 	fake.set(func(k *fpFake) { k.updUserErr, k.updSysErr = nil, nil })
 	f.Source().Refresh()
-	p.drain(t, func() bool { return !f.updatesChecking })
+	p.RunUntil(t, func() bool { return !f.updatesChecking })
 	if n := len(f.Source().Items()); n != 0 {
 		t.Errorf("authoritative empty load kept %d rows", n)
 	}
@@ -375,7 +341,7 @@ func TestFlatpakLiveUpdateRemovesRowBeforeTheReload(t *testing.T) {
 	if q := env.Jobs.Queued(); len(q) != 0 {
 		t.Errorf("a second update was queued: %v", q)
 	}
-	p.drain(t, func() bool { return !env.Jobs.Busy() })
+	p.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 
 	if got := fpItemKeys(f.Source().Items()); !slices.Equal(got, []string{"flatpak:system:io.github.kolunmi.Bazaar"}) {
 		t.Errorf("rows after the update = %v", got)
@@ -394,7 +360,7 @@ func TestFlatpakLiveUpdateRemovesRowBeforeTheReload(t *testing.T) {
 	// the update left them, without Firefox.
 	fake.set(func(k *fpFake) { k.updUserErr, k.updSysErr, k.systemUpd = errors.New("x"), errors.New("y"), nil })
 	close(gate)
-	p.drain(t, func() bool { return !f.updatesChecking && !f.appsLoading })
+	p.RunUntil(t, func() bool { return !f.updatesChecking && !f.appsLoading })
 	if got := fpItemKeys(f.Source().Items()); !slices.Equal(got, []string{"flatpak:system:io.github.kolunmi.Bazaar"}) {
 		t.Errorf("rows after a failed reload = %v", got)
 	}
@@ -426,7 +392,7 @@ func TestFlatpakFailedOrDryRunUpdateRestores(t *testing.T) {
 
 			const key = "flatpak:system:org.mozilla.firefox"
 			f.Act(key, ActUpdate)
-			p.drain(t, func() bool { return !env.Jobs.Busy() })
+			p.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 
 			if got := fpItemKeys(f.Source().Items()); !slices.Equal(got, before) {
 				t.Errorf("rows = %v, want %v", got, before)
@@ -485,16 +451,16 @@ func TestFlatpakOverlappingReloadsKeepTheNewest(t *testing.T) {
 	<-waiting
 	fake.set(func(k *fpFake) { k.gate, k.waiting = nil, nil; k.systemUpd = nil })
 	f.loadUpdates() // the newer one finds nothing to update
-	p.drain(t, func() bool { return !f.updatesChecking })
+	p.RunUntil(t, func() bool { return !f.updatesChecking })
 	if n := len(f.Source().Items()); n != 0 {
 		t.Fatalf("newest load left %d rows", n)
 	}
-	ran := p.ran
+	ran := p.Ran()
 	fake.set(func(k *fpFake) {
 		k.systemUpd = []flatpak.UpdateInfo{fpUpd("Firefox", "org.mozilla.firefox", "999", false)}
 	})
 	close(gate)
-	p.drain(t, func() bool { return p.ran > ran })
+	p.RunUntil(t, func() bool { return p.Ran() > ran })
 	if n := len(f.Source().Items()); n != 0 {
 		t.Errorf("the overtaken load brought back %d rows", n)
 	}
@@ -545,7 +511,7 @@ func TestFlatpakListFailureKeepsItsInstallationRows(t *testing.T) {
 	f, _, p := fpStarted(t, fake, fpConfig(true, true, false), false)
 	fake.set(func(k *fpFake) { k.systemErr = errors.New("system list broke"); k.system = nil })
 	f.RefreshApps()
-	p.drain(t, func() bool { return !f.appsLoading })
+	p.RunUntil(t, func() bool { return !f.appsLoading })
 	if n := len(f.Apps()); n != 4 {
 		t.Errorf("a failed list dropped rows: %d left", n)
 	}
@@ -584,7 +550,7 @@ func TestFlatpakUninstallAsksThenRemoves(t *testing.T) {
 
 	f.Act(key, ActUninstall)
 	fpConfirm(t, env, "Uninstall")
-	p.drain(t, func() bool { return !env.Jobs.Busy() && !f.appsLoading })
+	p.RunUntil(t, func() bool { return !env.Jobs.Busy() && !f.appsLoading })
 	if !slices.Equal(fake.removed, []string{"system:org.mozilla.firefox"}) {
 		t.Errorf("removed = %v", fake.removed)
 	}
@@ -616,7 +582,7 @@ func TestFlatpakUninstallDryRunAndFailureChangeNothing(t *testing.T) {
 			apps0, upd0 := fake.counts()
 			f.Act("flatpak:user:org.blender.Blender", ActUninstall)
 			fpConfirm(t, env, "Uninstall")
-			p.drain(t, func() bool { return !env.Jobs.Busy() })
+			p.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 			if !slices.Equal(fake.removed, []string{"user:org.blender.Blender"}) {
 				t.Errorf("removed = %v", fake.removed)
 			}

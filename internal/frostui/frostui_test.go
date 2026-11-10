@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 )
 
 func TestMatchIsAnOrderedSubsequence(t *testing.T) {
@@ -125,40 +127,10 @@ func TestConsoleWriterClassifies(t *testing.T) {
 	}
 }
 
-// syncPost runs posted functions on the test goroutine, as the UI thread.
-type syncPost struct {
-	mu sync.Mutex
-	fn []func()
-}
-
-func (s *syncPost) post(f func()) {
-	s.mu.Lock()
-	s.fn = append(s.fn, f)
-	s.mu.Unlock()
-}
-
-func (s *syncPost) drain(t *testing.T, until func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !until() {
-		if time.Now().After(deadline) {
-			t.Fatal("timed out")
-		}
-		s.mu.Lock()
-		fns := s.fn
-		s.fn = nil
-		s.mu.Unlock()
-		for _, f := range fns {
-			f()
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
 func TestJobsRunOneAtATimeInOrder(t *testing.T) {
-	sp := &syncPost{}
+	sp := frostuitest.NewLoop()
 	con := NewConsole(64)
-	q := NewJobs(sp.post, con)
+	q := NewJobs(sp.Post, con)
 	var order []string
 	var running, maxRunning int
 	var mu sync.Mutex
@@ -192,7 +164,7 @@ func TestJobsRunOneAtATimeInOrder(t *testing.T) {
 	if done, total := q.Batch(); done != 0 || total != 3 {
 		t.Errorf("Batch = %d of %d", done, total)
 	}
-	sp.drain(t, func() bool { return idle != nil })
+	sp.RunUntil(t, func() bool { return idle != nil })
 	if strings.Join(order, "") != "abc" {
 		t.Errorf("order = %v", order)
 	}
@@ -217,8 +189,8 @@ func TestJobsRunOneAtATimeInOrder(t *testing.T) {
 }
 
 func TestJobsCancelAll(t *testing.T) {
-	sp := &syncPost{}
-	q := NewJobs(sp.post, nil)
+	sp := frostuitest.NewLoop()
+	q := NewJobs(sp.Post, nil)
 	started := make(chan struct{})
 	var results []error
 	q.Enqueue(&Job{Title: "long", Run: func(ctx context.Context, _ *Progress) error {
@@ -230,18 +202,18 @@ func TestJobsCancelAll(t *testing.T) {
 			Done: func(err error) { results = append(results, err) }})
 	<-started
 	q.CancelAll()
-	sp.drain(t, func() bool { return !q.Busy() })
+	sp.RunUntil(t, func() bool { return !q.Busy() })
 	if len(results) != 2 || !errors.Is(results[0], context.Canceled) || !errors.Is(results[1], context.Canceled) {
 		t.Errorf("results = %v", results)
 	}
 }
 
 func TestJobsRecoverAPanic(t *testing.T) {
-	sp := &syncPost{}
-	q := NewJobs(sp.post, nil)
+	sp := frostuitest.NewLoop()
+	q := NewJobs(sp.Post, nil)
 	var got error
 	q.Enqueue(&Job{Title: "bad", Run: func(context.Context, *Progress) error { panic("oops") }, Done: func(err error) { got = err }})
-	sp.drain(t, func() bool { return got != nil })
+	sp.RunUntil(t, func() bool { return got != nil })
 	if !strings.Contains(got.Error(), "panic: oops") {
 		t.Errorf("err = %v", got)
 	}

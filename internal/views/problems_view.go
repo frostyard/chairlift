@@ -106,16 +106,8 @@ func (v *problemsView) View(c *ui.Context) {
 // section draws one problem list: its header with the status notes, then
 // "Loading…", the status row that stands for no items, or the cards.
 func (p *Problems) section(c *ui.Context, key, icon, title, note string, notes []string, status pageview.ProblemsStatus, items []problems.Item, now time.Time) {
-	t := c.Theme()
 	ui.Column(c).Key(key).Gap(10).AlignItems(ui.Stretch).Padding(0, 0, 6, 0).Children(func() {
-		ui.Row(c).Gap(frostui.SpaceS).AlignItems(ui.Center).Children(func() {
-			frostui.Icon(c, icon).TextColor(t.TextMuted)
-			ui.Text(c, title).FontSize(13.5).Bold().TextColor(t.TextMuted)
-			frostui.Muted(c, note).Grow(1).SingleLine()
-			if len(notes) > 0 {
-				frostui.Caption(c, strings.Join(notes, " · ")).SingleLine()
-			}
-		})
+		frostui.SectionHeader(c, frostui.SectionHead{Icon: icon, Title: title, Note: note, Aside: strings.Join(notes, " · "), Quiet: true})
 		switch {
 		case !p.loaded:
 			frostui.Loading(c, pageview.ProblemsLoading)
@@ -196,47 +188,20 @@ func severityTone(s pageview.Severity) frostui.Tone {
 // open, what it means, the recorded values, the local details and its
 // actions.
 func (p *Problems) problemCard(c *ui.Context, key problemKey, it problems.Item, now time.Time) {
-	t := c.Theme()
 	text := pageview.ProblemCardText(it, now, p.loc)
 	open := p.open[it.ID]
-	border := t.Border
-	if open {
-		border = t.Border.Mix(t.TextMuted, 0.35)
-	}
-	ui.Column(c).Key(key).Radius(frostui.RadiusCard).Background(frostui.Panel(t)).Border(1, border).AlignItems(ui.Stretch).Clip().Children(func() {
-		head := ui.ButtonBase(c).Padding(12, 16).Gap(frostui.SpaceM).AlignItems(ui.Center).
-			Label(text.Title).Description(text.Subtitle).Expanded(open).Cursor(ui.CursorPointer)
-		if head.Hovered() {
-			head.Background(t.SurfaceHover.Alpha(0.5))
-		}
-		if head.Clicked() {
-			open = !open
-			if open {
-				p.open[it.ID] = true
-			} else {
-				delete(p.open, it.ID)
-			}
-		}
-		head.Children(func() {
-			frostui.Icon(c, problemIcon(it)).FontSize(18).TextColor(t.TextMuted)
-			ui.Column(c).Grow(1).Gap(2).Children(func() {
-				frostui.Strong(c, text.Title).SingleLine()
-				frostui.Muted(c, text.Subtitle).SingleLine()
-			})
-			frostui.Pill(c, text.Count, severityTone(text.Severity))
-			chevron := "pan-down"
-			if open {
-				chevron = "pan-up"
-			}
-			frostui.Icon(c, chevron).TextColor(t.TextMuted)
-		})
-		if open {
-			frostui.RowDivider(c)
-			ui.Column(c).Padding(14, 16).Gap(frostui.SpaceM).AlignItems(ui.Stretch).Children(func() {
-				p.problemBody(c, it, text)
-			})
-		}
+	toggled := frostui.DisclosureCard(c.Key(key), &open, frostui.Disclosure{
+		Icon: problemIcon(it), Title: text.Title, Subtitle: text.Subtitle,
+		Trailing: func() { frostui.Pill(c, text.Count, severityTone(text.Severity)) },
+		Body:     func() { p.problemBody(c, it, text) },
 	})
+	if toggled {
+		if open {
+			p.open[it.ID] = true
+		} else {
+			delete(p.open, it.ID)
+		}
+	}
 }
 
 // problemBody is an open card's content: pageview.ProblemDetails (the
@@ -292,12 +257,9 @@ func (p *Problems) reportsCard(c *ui.Context, now time.Time) {
 		frostui.CardHeader(c, pageview.ReportingCardTitle, description, nil)
 
 		on := consent.Allows()
-		ui.Row(c).Gap(frostui.SpaceM).AlignItems(ui.Center).Children(func() {
-			frostui.Body(c, pageview.ReportingSwitchTitle).Grow(1)
-			if ui.Switch(c.Key("reporting-switch"), &on).Label(pageview.ReportingSwitchTitle).Disabled(!p.reportingLoaded).Changed() {
-				p.onReportingSwitched(on)
-			}
-		})
+		if frostui.SwitchRow(c.Key("reporting-switch"), pageview.ReportingSwitchTitle, "", &on).Disabled(!p.reportingLoaded).Changed() {
+			p.onReportingSwitched(on)
+		}
 
 		mode := modeIndex(consent.Mode)
 		ui.Column(c).Gap(6).AlignItems(ui.Stretch).Children(func() {
@@ -375,30 +337,12 @@ func (p *Problems) dialogView(c *ui.Context) {
 	if !p.dialog.open {
 		return
 	}
-	t := c.Theme()
 	d := p.dialog
-	open, send, cancel := true, false, false
-	ui.Modal(c, &open, func() {
-		ui.Column(c).Width(620).Gap(frostui.SpaceM).AlignItems(ui.Stretch).Role(ui.RoleAlertDialog).Label(d.title).Children(func() {
-			ui.Text(c, d.title).FontSize(18).Bold().Wrap()
-			frostui.Muted(c, pageview.ReportSummary(d.report.Kind)).Wrap()
-			ui.ScrollBoth(c).Height(300).Radius(frostui.RadiusChip).Background(t.Background).Border(1, t.Border).Children(func() {
-				ui.Text(c, d.report.Text()).Font("monospace").FontSize(12).NoWrap().PreserveSpaces().Selectable().Padding(10, 12)
-			})
-			ui.Row(c).Gap(frostui.SpaceS).Justify(ui.End).Padding(frostui.SpaceS, 0, 0, 0).Children(func() {
-				if ui.Button(c, "Cancel").AutoFocus().Clicked() {
-					cancel = true
-				}
-				if ui.PrimaryButton(c, "Send").Clicked() {
-					send = true
-				}
-			})
-		})
-	})
+	send, cancel := frostui.CodeDialog(c, d.title, pageview.ReportSummary(d.report.Kind), d.report.Text(), "Send")
 	switch {
 	case send:
 		p.sendDialogReport()
-	case cancel || !open:
+	case cancel:
 		p.cancelReport()
 	}
 }

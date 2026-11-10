@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/config"
+	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/fwupd"
 )
 
@@ -99,13 +100,13 @@ func (f *fwFake) setList(updates []fwupd.Update, err error) {
 
 // fwLoaded returns a Firmware over a fake fwupd that lists updates, after
 // its first load.
-func fwLoaded(t *testing.T, env *Env, q *updPost, updates ...fwupd.Update) (*Firmware, *fwFake) {
+func fwLoaded(t *testing.T, env *Env, q *frostuitest.Loop, updates ...fwupd.Update) (*Firmware, *fwFake) {
 	t.Helper()
 	ff := &fwFake{present: true, updates: updates}
 	fw := NewFirmware(env)
 	ff.wire(fw)
 	fw.Start()
-	q.until(t, func() bool { return fw.loads == 0 && fw.listed })
+	q.RunUntil(t, func() bool { return fw.loads == 0 && fw.listed })
 	return fw, ff
 }
 
@@ -158,7 +159,7 @@ func TestFirmwareNeedsItsGroupAndFwupdmgr(t *testing.T) {
 	ff := &fwFake{present: true}
 	ff.wire(fw)
 	fw.Start()
-	q.flush()
+	q.Flush()
 	if fw.Source() != nil || ff.listCount() != 0 {
 		t.Errorf("a disabled group gave a source or loaded (%d lists)", ff.listCount())
 	}
@@ -168,12 +169,12 @@ func TestFirmwareNeedsItsGroupAndFwupdmgr(t *testing.T) {
 	ff = &fwFake{present: false}
 	ff.wire(fw)
 	fw.Start()
-	q.until(t, func() bool { return fw.probed })
+	q.RunUntil(t, func() bool { return fw.probed })
 	if fw.Source().Status().Available || ff.listCount() != 0 {
 		t.Error("the source is available without fwupdmgr")
 	}
 	fw.Source().Refresh()
-	q.flush()
+	q.Flush()
 	if ff.listCount() != 0 || fw.loads != 0 {
 		t.Error("a refresh without fwupdmgr loads")
 	}
@@ -184,7 +185,7 @@ func TestFirmwareFailedCheckKeepsTheRows(t *testing.T) {
 	fw, ff := fwLoaded(t, env, q, fwDock)
 	ff.setList(nil, errors.New("daemon not running"))
 	fw.Source().Refresh()
-	q.until(t, func() bool { return fw.loads == 0 })
+	q.RunUntil(t, func() bool { return fw.loads == 0 })
 	st := fw.Source().Status()
 	if st.Err != "Error checking firmware updates: daemon not running" || st.Note != "" {
 		t.Errorf("status = %+v", st)
@@ -194,7 +195,7 @@ func TestFirmwareFailedCheckKeepsTheRows(t *testing.T) {
 	}
 	ff.setList(nil, nil)
 	fw.Source().Refresh()
-	q.until(t, func() bool { return fw.loads == 0 })
+	q.RunUntil(t, func() bool { return fw.loads == 0 })
 	if st := fw.Source().Status(); st.Err != "" || st.Note != "Firmware is up to date" || len(fw.Source().Items()) != 0 {
 		t.Errorf("after an empty list: %+v %+v", st, fw.Source().Items())
 	}
@@ -216,9 +217,9 @@ func TestFirmwareStaleCheckCannotReplaceAVerifiedList(t *testing.T) {
 	// ...while an install publishes the verified list without the dock.
 	ff.setReport(fwupd.InstallReport{Result: fwupd.InstallFlashed, Updates: []fwupd.Update{fwDbx}})
 	fwAsk(t, env, fw, fwDock.DeviceID, "Install")
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	close(gate)
-	q.until(t, func() bool { return fw.loads == 0 })
+	q.RunUntil(t, func() bool { return fw.loads == 0 })
 	if items := fw.Source().Items(); len(items) != 1 || items[0].Key != fwDbx.DeviceID {
 		t.Errorf("the stale check replaced the verified list: %+v", items)
 	}
@@ -249,7 +250,7 @@ func TestFirmwareInstallAsksThenInstalls(t *testing.T) {
 	if err := tt.Click("Install"); err != nil {
 		t.Fatal(err)
 	}
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	if got := ff.installs(); !slices.Equal(got, []string{fwDbx.DeviceID}) {
 		t.Errorf("installs = %v", got)
 	}
@@ -348,7 +349,7 @@ func TestFirmwareInstallOutcomes(t *testing.T) {
 			ff.report, ff.err = tc.report, tc.err
 			ff.mu.Unlock()
 			fwAsk(t, env, fw, fwDbx.DeviceID, "Install")
-			q.until(t, func() bool { return !env.Jobs.Busy() })
+			q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 			toasts := env.TakeToasts()
 			if len(toasts) != 1 || toasts[0].Title != tc.toast || toasts[0].Type != tc.typ {
 				t.Errorf("toasts = %+v\nwant %q (%s)", toasts, tc.toast, tc.typ)
@@ -398,7 +399,7 @@ func TestFirmwareDryRunChangesNothing(t *testing.T) {
 	ff.mu.Unlock()
 	before := fw.Source().Items()
 	fwAsk(t, env, fw, fwDock.DeviceID, "Install")
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	toasts := env.TakeToasts()
 	if len(toasts) != 1 || toasts[0].Title != "[DRY-RUN] Preview: firmware for Thunderbolt 4 Dock would be installed — no changes made" || toasts[0].Type != "info" {
 		t.Errorf("toasts = %+v", toasts)
@@ -444,7 +445,7 @@ func TestFirmwareCanceledInstallReleasesTheGate(t *testing.T) {
 	}
 	// ...and is dropped.
 	env.Jobs.CancelAll()
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	if len(ff.installs()) != 0 {
 		t.Error("a dropped install ran")
 	}

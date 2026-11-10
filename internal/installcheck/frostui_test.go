@@ -12,49 +12,61 @@ import (
 
 // frostuiAllowedImports are the only module paths internal/frostui may
 // import besides the standard library: it is written to leave ChairLift as
-// frostyard's shared desktop UI kit (docs/design/frostui.md).
+// frostyard's shared desktop UI kit (docs/design/frostui.md). Its own
+// packages move with it.
 var frostuiAllowedImports = []string{
 	"github.com/egoist/mygo",
 	"github.com/ebitengine/purego",
+	"github.com/frostyard/chairlift/internal/frostui",
 }
 
 // TestFrostUIImportsNoChairLift keeps internal/frostui extractable: none of
-// its files, tests included, may import a ChairLift package or any module
-// other than MyGo and purego.
+// its files, in any of its packages and tests included, may import a
+// ChairLift package outside the kit or any module other than MyGo and
+// purego. Its test helpers (frostuitest) import the standard library only,
+// so an app's tests can use them whatever UI they draw.
 func TestFrostUIImportsNoChairLift(t *testing.T) {
 	dir := filepath.Join(RepoRoot(), "internal", "frostui")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
 	fset := token.NewFileSet()
-	checked := 0
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
-			continue
+	checked, helpers := 0, 0
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return err
 		}
-		path := filepath.Join(dir, e.Name())
+		rel, _ := filepath.Rel(dir, path)
 		file, err := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
 		if err != nil {
 			t.Fatalf("parse %s: %v", path, err)
 		}
 		checked++
+		stdlibOnly := strings.HasPrefix(filepath.ToSlash(rel), "frostuitest/")
+		if stdlibOnly {
+			helpers++
+		}
 		for _, imp := range file.Imports {
 			p, _ := strconv.Unquote(imp.Path.Value)
 			if !strings.Contains(strings.SplitN(p, "/", 2)[0], ".") {
 				continue // standard library
+			}
+			if stdlibOnly {
+				t.Errorf("%s imports %s; frostuitest may import only the standard library", rel, p)
+				continue
 			}
 			ok := false
 			for _, allowed := range frostuiAllowedImports {
 				ok = ok || p == allowed || strings.HasPrefix(p, allowed+"/")
 			}
 			if !ok {
-				t.Errorf("%s imports %s; frostui may import only the standard library, MyGo and purego", e.Name(), p)
+				t.Errorf("%s imports %s; frostui may import only the standard library, MyGo and purego", rel, p)
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if checked < 5 {
-		t.Fatalf("saw %d files in internal/frostui, too few", checked)
+	if checked < 5 || helpers == 0 {
+		t.Fatalf("saw %d files in internal/frostui (%d in frostuitest), too few", checked, helpers)
 	}
 }
 
