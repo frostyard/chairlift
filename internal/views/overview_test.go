@@ -462,7 +462,12 @@ func TestOverviewDrawsBeforeAnythingLoads(t *testing.T) {
 	env := NewEnv(&config.Config{}, true, func(fn func()) { fn() })
 	s := NewStore(env)
 	tt := ui.NewTester(ovView(s.Page(navigation.Overview)), 1360, 1200)
-	ovHas(t, tt, "Overview", "This computer", "Not checked yet", "Recent activity")
+	ovHas(t, tt, "Overview", "This computer", "Recent activity")
+	// With every group on, Homebrew's source counts finding brew as a
+	// check, so the hero says it checks; it never claims "Up to date".
+	if !tt.HasText("Not checked yet") && !tt.HasText("Checking for updates") {
+		t.Errorf("the hero claims a state before anything loaded: %q", tt.Texts())
+	}
 	ovHasNot(t, tt, "Up to date")
 }
 

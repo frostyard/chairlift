@@ -141,6 +141,11 @@ func TestEveryConfiguredGroupHasOneHome(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, group := range groups {
+			if group == "maintenance_optimization_group" {
+				// Deprecated: it only ever showed a description, and no page
+				// draws it (internal/config/deprecated_group_test.go).
+				continue
+			}
 			switch page {
 			case HelpConfigPage, "first_run_page":
 				if homes[page+"/"+group] != 0 {
