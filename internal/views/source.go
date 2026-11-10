@@ -137,9 +137,12 @@ type SystemInfo struct {
 	Booted   Deployment
 	Staged   Deployment
 	Rollback Deployment
-	Hostname string
-	Kernel   string
-	Model    string
+	// RollbackUnknown is true when the source cannot tell the rollback
+	// (the /run/snosi state of a bootc host whose status needs root).
+	RollbackUnknown bool
+	Hostname        string
+	Kernel          string
+	Model           string
 	// SecureBoot is "on", "off" or "" when unknown.
 	SecureBoot string
 	// Uptime is "up 3d 4h 12m", "" when unknown.
@@ -201,4 +204,13 @@ type AppsStatus struct {
 	Available bool
 	Loading   bool
 	Err       string
+}
+
+// rollbackEmpty is what an empty rollback slot says: "none", or "unknown"
+// when the source cannot tell.
+func rollbackEmpty(info SystemInfo) string {
+	if info.RollbackUnknown {
+		return "unknown"
+	}
+	return "none"
 }

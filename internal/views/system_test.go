@@ -702,8 +702,8 @@ func TestSystemReadsBootcFromSnosiWhenStatusNeedsRoot(t *testing.T) {
 	if !info.Staged.Present || info.Staged.Version != "20261110150546" || info.Staged.Digest == "" {
 		t.Errorf("staged = %+v", info.Staged)
 	}
-	if info.Rollback.Present {
-		t.Errorf("rollback = %+v, want unknown", info.Rollback)
+	if info.Rollback.Present || !info.RollbackUnknown || rollbackEmpty(info) != "unknown" {
+		t.Errorf("rollback = %+v (unknown %v), want unknown", info.Rollback, info.RollbackUnknown)
 	}
 	src := s.Source()
 	if src == nil || !src.Status().Available || len(src.Items()) != 0 {

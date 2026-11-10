@@ -105,6 +105,8 @@ type deployments struct {
 	err       string // the status read failed (bootc)
 	imageRef  string
 	builtAt   string // the booted image's build time (bootc)
+	// rollbackUnknown: the source cannot tell the rollback.
+	rollbackUnknown bool
 
 	booted, staged, rollback Deployment
 	// stagedID identifies the staged image (its full digest or version
@@ -323,6 +325,7 @@ func (d *deployments) fromSnosiBootc(st sysupdate.Status) {
 		d.imageRef, d.runningVersion = st.Check.Image, st.Check.RunningVersion
 	}
 	d.booted = Deployment{Present: true, Version: d.runningVersion}
+	d.rollbackUnknown = true
 	if !st.IsStaged() {
 		return
 	}
@@ -421,9 +424,11 @@ func (s *System) compose() {
 		Booted:   d.booted,
 		Staged:   d.staged,
 		Rollback: d.rollback,
-		Hostname: f.hostname,
-		Kernel:   f.kernel,
-		Model:    f.model,
+		// the snosi state files say nothing of the rollback slot
+		RollbackUnknown: d.rollbackUnknown,
+		Hostname:        f.hostname,
+		Kernel:          f.kernel,
+		Model:           f.model,
 	}
 	imageVersion := osReleaseValue(f.osRelease, "Image Version")
 	info.OSVersion = imageVersion

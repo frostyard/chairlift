@@ -409,7 +409,7 @@ func (p *overviewPage) deploymentChain(c *ui.Context, info SystemInfo) {
 	}
 	t := c.Theme()
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Role(ui.RoleList).Label("Deployments").Children(func() {
-		deploymentChip(c.Key("rollback"), "Rollback", "document-revert", info.Rollback, false, "none")
+		deploymentChip(c.Key("rollback"), "Rollback", "document-revert", info.Rollback, false, rollbackEmpty(info))
 		frostui.Icon(c.Key("arrow1"), "go-next").TextColor(t.TextMuted)
 		deploymentChip(c.Key("booted"), "Booted", "object-select", info.Booted, true, "unknown")
 		frostui.Icon(c.Key("arrow2"), "go-next").TextColor(t.TextMuted)

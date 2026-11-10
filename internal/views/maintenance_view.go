@@ -186,7 +186,7 @@ func maintDeploymentsCard(c *ui.Context, info SystemInfo) {
 		ui.Column(c).Gap(6).AlignItems(ui.Stretch).Children(func() {
 			maintDeploymentRow(c, "Staged · next boot", "nothing yet", "folder-download", info.Staged, false)
 			maintDeploymentRow(c, "Booted · running now", "", "object-select", info.Booted, true)
-			maintDeploymentRow(c, "Rollback · in the boot menu", "none", "document-revert", info.Rollback, false)
+			maintDeploymentRow(c, "Rollback · in the boot menu", rollbackEmpty(info), "document-revert", info.Rollback, false)
 		})
 	})
 }
