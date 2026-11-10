@@ -6,8 +6,7 @@
 ## Context
 
 ChairLift began as an adaptation of Vanilla OS First Setup and carried that
-project's license: the Free Software Foundation's copyleft license, version 3
-or later. It has since been rewritten. The window is Go on MyGo
+project's license, GPL-3.0-or-later. It has since been rewritten. The window is Go on MyGo
 ([ADR-0017](0017-mygo-command-center-window.md)), the first-run mode is Go
 ([ADR-0014](0014-first-run-mode.md)), and none of First Setup's code remains.
 Brian Ketelsen holds the copyright on all of ChairLift's code, so he can
@@ -16,8 +15,8 @@ relicense it.
 One part of the repository was not his work. ADR-0014's decision 8 ported the
 first-run translations of SNOW First Setup (frostyard/first-setup commit
 `b5f7de3`) into `internal/i18n/po/*.po`: 51 languages, each written by First
-Setup's translators and licensed by them under First Setup's copyleft
-license. Those files cannot be relicensed by ChairLift's owner, and the
+Setup's translators and licensed by them under First Setup's license,
+GPL-3.0. Those files cannot be relicensed by ChairLift's owner, and the
 binary embeds them.
 
 The rest of the translation machinery is ChairLift's own: the `.po` parser
@@ -77,7 +76,7 @@ The rest of the translation machinery is ChairLift's own: the `.po` parser
   translation-platform name; each consent would have to be found and
   recorded, for a few dozen short strings that can be translated again.
 - **Keep the catalogs under their own license beside MIT code:** rejected —
-  the binary embeds them, so every release would combine copyleft and MIT
+  the binary embeds them, so every release would combine GPL-3.0 and MIT
   work, and the repository would carry two licenses.
 - **Remove `internal/i18n` too:** rejected — it is ChairLift's own small,
   tested code, and keeping it lets MIT translations be added without a new

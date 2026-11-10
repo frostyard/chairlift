@@ -201,7 +201,7 @@ An agent must not break these:
   No `.po` catalog ships
   ([ADR-0018](docs/adr/0018-relicense-mit-and-drop-inherited-translations.md)):
   ChairLift is MIT, so a catalog added later is contributed under MIT and
-  copies nothing from First Setup or another copyleft source.
+  copies nothing from First Setup or another GPL-licensed source.
 - **OS staging execution has one owner.** `internal/stageexec` is the pure-Go
   leaf package that owns the progress event contract, merged stdout/stderr
   streaming, direct-child cancellation, error classification, completion event,

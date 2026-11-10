@@ -9,7 +9,7 @@ there is no `msgfmt` step and no generated file.
 
 No translation is shipped. The first run shows its English strings in every
 locale. The catalogs ChairLift once carried were the work of SNOW First
-Setup's translators, under First Setup's copyleft license; ChairLift is
+Setup's translators, under First Setup's license, GPL-3.0; ChairLift is
 MIT-licensed, so they were removed ([ADR-0018](../../../docs/adr/0018-relicense-mit-and-drop-inherited-translations.md)).
 The parser, the locale choice and the tests stay, so a translation can be
 added at any time.
