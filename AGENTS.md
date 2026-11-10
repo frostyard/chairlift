@@ -118,8 +118,8 @@ control is hand-written Go, YAML, and data assets.
 
 ## Releases and dependencies
 
-- **Tags.** Release tags are `vMAJOR.MINOR.PATCH` (`git tag -l 'v*'`; latest
-  v0.11.2). `.svu.yml` sets `tag.prefix: "v"`, `v0: true` and `always: true`.
+- **Tags.** Release tags are `vMAJOR.MINOR.PATCH` (`git tag -l 'v*'` lists
+  them). `.svu.yml` sets `tag.prefix: "v"`, `v0: true` and `always: true`.
 - **Version rule.** `make bump` builds, tests, formats and lints, refuses a
   dirty tree, then tags `$(svu next)` with an annotated tag and pushes it to
   `origin`. [svu](https://github.com/caarlos0/svu) derives the next version
@@ -152,7 +152,11 @@ control is hand-written Go, YAML, and data assets.
   journalctl arguments, which `problems.JournalArgs` copies) and check that updex's `reporter` use still builds.
 - **Consumers.** Snow Linux images (`frostyard/snosi`) install the `.deb` from
   `https://repository.frostyard.org/debian/` (README.md); apt-publisher
-  dispatches the image rebuilds. Other consumers: not stated.
+  dispatches the image rebuilds. The Homebrew cask (`frostyard/homebrew-tap`,
+  `Casks/chairlift.rb`) installs from the release archive and names files in
+  it by path, so a change to the archive's contents needs a matching cask
+  change. It runs on the host's libraries, so its users need GTK 3, Pango and
+  libepoxy, which the deb declares and the cask cannot.
 
 ## Repository invariants
 
