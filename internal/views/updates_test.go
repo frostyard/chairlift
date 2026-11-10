@@ -603,3 +603,27 @@ func updAge(jobs []*frostui.Job) {
 		}
 	}
 }
+
+func TestUpdatesSubtitleNeverCallsAFailedCheckUpToDate(t *testing.T) {
+	_, _, p, _, fakes, _, _ := updSetup(t)
+	now := time.Date(2026, 11, 10, 15, 30, 0, 0, time.Local)
+	p.env.Now = func() time.Time { return now }
+	srcs := []UpdateSource{fakes[0], fakes[1], fakes[2], fakes[3]}
+	for _, f := range fakes {
+		f.items = nil
+		f.status.CheckedAt = now.Add(-time.Minute)
+		f.status.Err = "Error: network is unreachable"
+	}
+	if got := p.subtitle(srcs); strings.Contains(got, "up to date") || !strings.Contains(got, "Could not check for updates") {
+		t.Errorf("all failed (offline): subtitle = %q", got)
+	}
+	fakes[0].status.Err, fakes[1].status.Err = "", ""
+	got := p.subtitle(srcs)
+	if strings.Contains(got, "up to date") || !strings.Contains(got, "could not check "+fakes[2].Title()+", "+fakes[3].Title()) {
+		t.Errorf("some failed: subtitle = %q", got)
+	}
+	fakes[2].status.Err, fakes[3].status.Err = "", ""
+	if got := p.subtitle(srcs); !strings.HasPrefix(got, "Everything is up to date") {
+		t.Errorf("none failed: subtitle = %q", got)
+	}
+}

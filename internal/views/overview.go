@@ -66,12 +66,20 @@ type updateTally struct {
 	checking                bool
 	// checkedAt is the oldest last check of the sources that ended one.
 	checkedAt time.Time
+	// applicable counts the sources; failed names those whose last check
+	// failed. "Up to date" is claimed only when none failed.
+	applicable int
+	failed     []string
 }
 
 func tallyUpdates(sources []UpdateSource) updateTally {
 	var t updateTally
 	for _, src := range sources {
 		st := src.Status()
+		t.applicable++
+		if st.Err != "" && !st.Checking {
+			t.failed = append(t.failed, src.Title())
+		}
 		t.checking = t.checking || st.Checking
 		if !st.CheckedAt.IsZero() && (t.checkedAt.IsZero() || st.CheckedAt.Before(t.checkedAt)) {
 			t.checkedAt = st.CheckedAt
@@ -184,6 +192,11 @@ func heroText(state heroState, info SystemInfo, t updateTally, now time.Time) (t
 		switch {
 		case t.checking:
 			return "Checking for updates", ""
+		case len(t.failed) > 0 && len(t.failed) == t.applicable:
+			// Every check failed (offline, say): nothing is known.
+			return "Could not check for updates", "Check now tries again"
+		case len(t.failed) > 0:
+			return "Some checks failed", join("Could not check "+strings.Join(t.failed, ", "), checked)
 		case t.checkedAt.IsZero():
 			// Nothing answered yet: "Up to date" would be a guess.
 			return "Not checked yet", "Check now asks every source what is new"

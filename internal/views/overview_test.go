@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -222,8 +223,8 @@ func TestTallyCountsHeldAndConfirmApart(t *testing.T) {
 		ovFake(SourceFirmware, old, ovItems("dev", 1, func(it *UpdateItem) { it.Confirm = true })...),
 		ovFake(SourceFeatures, recent),
 	})
-	want := updateTally{items: 6, sources: 3, runnable: 3, confirm: 1, held: 2, checking: true, checkedAt: old}
-	if got != want {
+	want := updateTally{items: 6, sources: 3, runnable: 3, confirm: 1, held: 2, checking: true, checkedAt: old, applicable: 4}
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("tally = %+v, want %+v", got, want)
 	}
 }
@@ -614,5 +615,21 @@ func TestOverviewHeroShowsTheSnowflake(t *testing.T) {
 	tt := ui.NewTester(ovView(s.Page(navigation.Overview)), 1360, 1200)
 	if _, ok := tt.Find("Snowflake"); !ok {
 		t.Errorf("the hero does not draw the snowflake: %q", tt.Texts())
+	}
+}
+
+func TestOverviewHeroNeverCallsAFailedCheckUpToDate(t *testing.T) {
+	now := time.Date(2026, 11, 10, 15, 30, 0, 0, time.Local)
+	t1 := updateTally{applicable: 2, checkedAt: now.Add(-time.Minute), failed: []string{"Flatpak", "Homebrew"}}
+	if title, _ := heroText(heroUpToDate, SystemInfo{}, t1, now); title != "Could not check for updates" {
+		t.Errorf("all failed: title = %q", title)
+	}
+	t2 := updateTally{applicable: 3, checkedAt: now.Add(-time.Minute), failed: []string{"Homebrew"}}
+	if title, note := heroText(heroUpToDate, SystemInfo{}, t2, now); title != "Some checks failed" || !strings.Contains(note, "Could not check Homebrew") {
+		t.Errorf("some failed: %q / %q", title, note)
+	}
+	t3 := updateTally{applicable: 3, checkedAt: now.Add(-time.Minute)}
+	if title, _ := heroText(heroUpToDate, SystemInfo{}, t3, now); title != "Up to date" {
+		t.Errorf("none failed: title = %q", title)
 	}
 }

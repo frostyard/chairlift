@@ -168,8 +168,12 @@ func (p *updatesPage) subtitle(srcs []UpdateSource) string {
 	ready, held := 0, 0
 	checking, image := false, false
 	var newest time.Time
+	var failed []string
 	for _, src := range srcs {
 		st := src.Status()
+		if st.Err != "" && !st.Checking {
+			failed = append(failed, src.Title())
+		}
 		checking = checking || st.Checking
 		if st.CheckedAt.After(newest) {
 			newest = st.CheckedAt
@@ -189,12 +193,20 @@ func (p *updatesPage) subtitle(srcs []UpdateSource) string {
 		return "No update source applies to this computer"
 	case ready+held == 0 && checking && newest.IsZero():
 		return "Checking for updates…"
+	case ready+held == 0 && !checking && len(failed) == len(srcs):
+		// Every check failed (offline, say): nothing is known.
+		return "Could not check for updates · Check now tries again"
+	case ready+held == 0 && len(failed) > 0:
+		parts = append(parts, "Nothing found")
 	case ready+held == 0:
 		parts = append(parts, "Everything is up to date")
 	case held > 0:
 		parts = append(parts, fmt.Sprintf("%d ready, %d held", ready, held))
 	default:
 		parts = append(parts, fmt.Sprintf("%d ready", ready))
+	}
+	if len(failed) > 0 {
+		parts = append(parts, "could not check "+strings.Join(failed, ", "))
 	}
 	if checking {
 		parts = append(parts, "checking now")
