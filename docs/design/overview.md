@@ -2336,7 +2336,11 @@ the configuration page, not always the page of the window that shows it (see
   `App.Run` only, so no development headers or CGO are needed to build. MyGo
   draws with OpenGL on the GPU and falls back to its CPU renderer when OpenGL
   would not run on a GPU or its GPU renderer fails (`MYGO_GPU=0` forces the CPU
-  renderer).
+  renderer). The `frostyard-chairlift` `.deb` declares them
+  (`.goreleaser.yaml` `overrides.deb.dependencies`: `libgtk-3-0t64 |
+  libgtk-3-0`, `libpangocairo-1.0-0`, `libepoxy0`); the `.rpm` and `.apk`
+  and the system-integration package declare none, and
+  `internal/installcheck.TestGoreleaserDebDeclaresUIDependencies` pins that.
 - Homebrew (optional)
 - Flatpak (optional)
 - fwupd / `fwupdmgr` (optional; the firmware-updates group is enabled by default and its source stays out of the Updates page unless `fwupdmgr` is present)
