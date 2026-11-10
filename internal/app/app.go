@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -127,17 +128,48 @@ func Run(o Options) error {
 	return mygo.App.Run()
 }
 
+// poster hands functions to a window's UI thread. It is safe from any
+// goroutine, and keeps what is posted before the window exists until
+// attach, so an early result is never lost.
+type poster struct {
+	mu      sync.Mutex
+	win     updater
+	pending []func()
+}
+
+// updater is the part of *mygo.Window a poster uses.
+type updater interface{ Update(fn func()) }
+
+func (p *poster) post(fn func()) {
+	p.mu.Lock()
+	if p.win == nil {
+		p.pending = append(p.pending, fn)
+		p.mu.Unlock()
+		return
+	}
+	w := p.win
+	p.mu.Unlock()
+	w.Update(fn)
+}
+
+func (p *poster) attach(w updater) {
+	p.mu.Lock()
+	p.win = w
+	pending := p.pending
+	p.pending = nil
+	p.mu.Unlock()
+	for _, fn := range pending {
+		w.Update(fn)
+	}
+}
+
 func openMain(o Options) *mygo.Window {
 	cfg, cfgErr := config.Load()
 	if cfgErr != nil {
 		selfreport.Error(selfreport.CodeConfigLoadFailed, cfgErr)
 	}
-	var win *mygo.Window
-	post := func(fn func()) {
-		if win != nil {
-			win.Update(fn)
-		}
-	}
+	p := &poster{}
+	post := p.post
 	env := views.NewEnv(cfg, o.DryRun, post)
 	if cfgErr != nil {
 		env.ConfigErr = cfgErr
@@ -153,28 +185,25 @@ func openMain(o Options) *mygo.Window {
 	store := views.NewStore(env)
 	main := window.NewMain(env, store)
 	main.Quit = mygo.App.Quit
-	win = mygo.NewWindow(mygo.WindowOptions{
+	win := mygo.NewWindow(mygo.WindowOptions{
 		Title: "ChairLift", Width: 1360, Height: 880, MinWidth: 1040, MinHeight: 640,
 		TitleBarStyle: mygo.TitleBarHidden,
 		Content:       ui.View(main.View),
 	})
+	p.attach(win)
 	log.Printf("window: built (%s)", main.Describe())
 	store.Start()
 	return win
 }
 
 func openFirstRun() *mygo.Window {
-	var win *mygo.Window
-	post := func(fn func()) {
-		if win != nil {
-			win.Update(fn)
-		}
-	}
-	fr := window.NewFirstRun(post)
-	win = mygo.NewWindow(mygo.WindowOptions{
+	p := &poster{}
+	fr := window.NewFirstRun(p.post)
+	win := mygo.NewWindow(mygo.WindowOptions{
 		Title: "ChairLift", Width: 760, Height: 680, MinWidth: 640, MinHeight: 560,
 		Content: ui.View(fr.View),
 	})
+	p.attach(win)
 	win.OnClose(func(e *mygo.CloseEvent) {
 		// While the first run's actions run, a close would end the app and
 		// lose the completion markers: keep the window.
