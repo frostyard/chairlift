@@ -475,3 +475,20 @@ func TestSnapshotApps(t *testing.T) {
 		snapshot(t, tt, name+"-states")
 	}
 }
+
+func TestAppsSearchCommandOpensFindMore(t *testing.T) {
+	fx := newAppsFixture(t, appsConfig(false, ""), true)
+	fx.page.search = func() bool { return true }
+	fx.page.drawSearch = func(c *ui.Context) { ui.Text(c, "the search") }
+	requested := false
+	fx.page.searchRequest = func() bool { r := requested; requested = false; return r }
+	tt := appsTester(fx.page, false)
+	if appsShows(tt, "the search") {
+		t.Fatal("Find more shows before the command ran")
+	}
+	requested = true
+	tt.Frame()
+	if !appsShows(tt, "the search") {
+		t.Errorf("the search command did not open Find more: %q", tt.Texts())
+	}
+}

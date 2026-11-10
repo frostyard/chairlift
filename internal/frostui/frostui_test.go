@@ -471,3 +471,22 @@ func TestProgressSetIsCoalesced(t *testing.T) {
 	}
 	sp.RunUntil(t, func() bool { return !q.Busy() })
 }
+
+func TestPaletteCommandShowsInTheNextFrame(t *testing.T) {
+	var s Shell
+	page := "overview"
+	cmds := []Command{{ID: "go", Title: "Go to Updates", Group: "Go to", Run: func() { page = "updates" }}}
+	tt := ui.NewTester(func(c *ui.Context) {
+		s.View(c, Frame{Content: func() { Title(c, "Page "+page) }, Commands: cmds})
+	}, 1280, 800)
+	if err := tt.Click("Search or run a command"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Go to Updates"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("Page updates") {
+		t.Errorf("the chosen command's page waits a frame: %q", tt.Texts())
+	}
+}

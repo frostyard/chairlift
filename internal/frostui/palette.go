@@ -119,13 +119,20 @@ func (p *Palette) Show() {
 	p.Open, p.Query, p.Selected = true, "", 0
 }
 
-// View draws the palette while it is open, and runs a chosen command
-// after it closes.
-func (p *Palette) View(c *ui.Context, cmds []Command) {
+// RunPending runs the command chosen in the last frame, once the palette
+// closed. The shell calls it before it builds the page, so a command that
+// changes the page or asks a question shows in the same frame.
+func (p *Palette) RunPending() {
 	if run := p.pending; run != nil && !p.Open {
 		p.pending = nil
 		run()
 	}
+}
+
+// View draws the palette while it is open, and runs a chosen command
+// after it closes (RunPending, when the shell has not already).
+func (p *Palette) View(c *ui.Context, cmds []Command) {
+	p.RunPending()
 	if !p.Open {
 		return
 	}

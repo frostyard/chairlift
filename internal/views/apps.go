@@ -54,6 +54,9 @@ type appsPage struct {
 	actFlatpak, actBrew       func(key string, action AppAction)
 	bundles, search           func() bool
 	drawBundles, drawSearch   func(c *ui.Context)
+	// searchRequest reports, once, that the palette's "Search Homebrew…"
+	// ran: the page opens its Find more tab.
+	searchRequest func() bool
 
 	tab    string
 	filter string
@@ -82,6 +85,7 @@ func newAppsPage(s *Store) *appsPage {
 		search:        func() bool { return s.Brew.SearchAvailable() },
 		drawBundles:   func(c *ui.Context) { s.Brew.DrawBundles(c) },
 		drawSearch:    func(c *ui.Context) { s.Brew.DrawSearch(c) },
+		searchRequest: func() bool { return s.Brew.TakeSearchRequest() },
 		tab:           appsTabInstalled,
 		filter:        appsShowAll,
 		sort:          ui.SortOrder{Column: appsColApp},
@@ -145,6 +149,9 @@ func (p *appsPage) View(c *ui.Context) {
 	fp, br := p.flatpakStatus(), p.brewStatus()
 	entries := p.entries(fp, br)
 	tabs := p.tabs(fp, br)
+	if p.searchRequest != nil && p.searchRequest() {
+		p.tab = appsTabSearch
+	}
 	if len(tabs) > 0 && !slices.ContainsFunc(tabs, func(t appsTab) bool { return t.id == p.tab }) {
 		p.tab = tabs[0].id
 	}

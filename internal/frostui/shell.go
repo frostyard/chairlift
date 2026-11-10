@@ -82,6 +82,7 @@ type Frame struct {
 // View draws the shell.
 func (s *Shell) View(c *ui.Context, f Frame) {
 	t := Adapt(c)
+	s.Palette.RunPending()
 	if s.splitPercent == 0 {
 		s.splitPercent = 64
 	}
