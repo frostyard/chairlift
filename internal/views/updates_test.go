@@ -441,12 +441,15 @@ func TestUpdatesBadge(t *testing.T) {
 }
 
 func TestUpdatesSubtitle(t *testing.T) {
-	_, _, p, srcs, fakes, _, _ := updSetup(t)
+	_, _, p, srcs, fakes, fw, _ := updSetup(t)
 	now := time.Date(2026, 11, 10, 15, 30, 0, 0, time.Local)
 	p.env.Now = func() time.Time { return now }
 	for _, f := range fakes {
 		f.status.CheckedAt = now.Add(-10 * time.Minute)
 	}
+	// The firmware source loaded with the real clock: pin its check too, or
+	// the subtitle follows the wall clock once it passes 15:20.
+	fw.checkedAt = now.Add(-30 * time.Minute)
 	want := "12 ready, 2 held · checked today at 15:20 · staged system updates apply on restart"
 	if got := p.subtitle(srcs); got != want {
 		t.Errorf("subtitle = %q\nwant       %q", got, want)

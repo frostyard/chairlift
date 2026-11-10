@@ -19,6 +19,10 @@ type Store struct {
 	Problems *Problems    // problems.go: problem records and reporting
 	Maint    *Maintenance // maintenance.go: cleanups
 
+	// SourcesOverride, when set, replaces the domains' update sources:
+	// tests of the window give it fakes, so no check reaches a backend.
+	SourcesOverride func() []UpdateSource
+
 	pages map[string]Page
 }
 
@@ -63,6 +67,9 @@ func (s *Store) Page(id string) Page { return s.pages[id] }
 // Sources are the update sources that apply here, in run order: the
 // system image, features, Flatpak, Homebrew, firmware.
 func (s *Store) Sources() []UpdateSource {
+	if s.SourcesOverride != nil {
+		return s.SourcesOverride()
+	}
 	all := []UpdateSource{s.System.Source(), s.Features.Source(), s.Flatpak.Source(), s.Brew.Source(), s.Firmware.Source()}
 	out := all[:0]
 	for _, src := range all {

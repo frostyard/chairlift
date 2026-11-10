@@ -5,25 +5,54 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 
+	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/frostui"
+	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/navigation"
 	"github.com/frostyard/chairlift/internal/views"
 )
 
+// newTestMain builds the main window over a Store whose update sources
+// are empty, posting through a frostuitest.Loop the test drains, as the UI
+// thread would. It fails the test if anything starts an external command:
+// window tests never reach brew, flatpak, bootc, fwupdmgr or updex.
 func newTestMain(t *testing.T) (*Main, *ui.Tester) {
 	t.Helper()
 	frostui.SetIcons(frostui.NewIcons(map[string][]byte{"org.frostyard.ChairLift-symbolic": LogoSVG()}))
-	var tt *ui.Tester
-	env := views.NewEnv(&config.Config{}, true, func(fn func()) { fn() })
-	m := NewMain(env, views.NewStore(env))
-	tt = ui.NewTester(m.View, 1360, 880)
+	var mu sync.Mutex
+	var started []string
+	cmdlog.SetSink(func(e cmdlog.Event) {
+		if e.Kind == cmdlog.KindStart {
+			mu.Lock()
+			started = append(started, strings.Join(e.Argv, " "))
+			mu.Unlock()
+		}
+	})
+	t.Cleanup(func() {
+		cmdlog.SetSink(nil)
+		mu.Lock()
+		defer mu.Unlock()
+		if len(started) > 0 {
+			t.Errorf("the window test started commands: %q", started)
+		}
+	})
+	loop := frostuitest.NewLoop()
+	env := views.NewEnv(&config.Config{}, true, loop.Post)
+	store := views.NewStore(env)
+	store.SourcesOverride = func() []views.UpdateSource { return nil }
+	m := NewMain(env, store)
+	tt := ui.NewTester(func(c *ui.Context) {
+		loop.Flush()
+		m.View(c)
+	}, 1360, 880)
 	return m, tt
 }
 
@@ -96,11 +125,9 @@ func TestEveryAdvertisedShortcutWorks(t *testing.T) {
 }
 
 func TestConfigurationErrorToastPersists(t *testing.T) {
-	frostui.SetIcons(frostui.NewIcons(nil))
-	env := views.NewEnv(&config.Config{}, false, func(fn func()) { fn() })
-	env.ConfigErr = errors.New("config parse/type error: /etc/chairlift/config.yml: yaml: line 1")
-	m := NewMain(env, views.NewStore(env))
-	tt := ui.NewTester(m.View, 1360, 880)
+	m, tt := newTestMain(t)
+	m.Env.ConfigErr = errors.New("config parse/type error: /etc/chairlift/config.yml: yaml: line 1")
+	tt.Frame()
 	tt.Advance(time.Minute)
 	if !tt.HasText("Configuration error") {
 		t.Fatalf("no configuration error toast after a minute: %q", tt.Texts())
