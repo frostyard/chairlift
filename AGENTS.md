@@ -1,18 +1,30 @@
 # AGENTS
 
-ChairLift is a GTK4/Libadwaita system-management GUI for
-[Snow Linux](https://github.com/frostyard/snosi), written in idiomatic Go using
-[puregotk](https://codeberg.org/puregotk/puregotk) bindings — **no CGO**. GTK,
-Libadwaita, and GLib shared libraries are loaded at runtime via `dlopen`. The UI
-is YAML-configuration-driven; feature groups toggle on and off per host.
+ChairLift is the command center of
+[Snow Linux](https://github.com/frostyard/snosi): a system-management GUI
+written in idiomatic Go on [MyGo](https://mygo.egoist.dev)
+(`github.com/egoist/mygo`), which draws its own widgets on GTK 3 and OpenGL
+loaded at run time with purego — **no CGO**
+([ADR-0017](docs/adr/0017-mygo-command-center-window.md)). The window is a
+command center: a top bar with a command palette, a left rail of six pages
+(Overview, Updates, Apps, Features, Problems, Maintenance), a console that
+streams every command ChairLift runs, and a status bar. The UI is
+YAML-configuration-driven; every card sits behind its configuration group.
 
 ## Build, test, lint
 
 The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
 
 - `make build` — builds `build/chairlift`, `build/chairlift-updex-helper`
-  and `build/chairlift-first-run` (all `CGO_ENABLED=0`).
-- `make test` — `go test ./...`.
+  and `build/chairlift-first-run` (all `CGO_ENABLED=0`). The window is a MyGo
+  production build (`-tags mygo_noinspector`, `-X
+  github.com/egoist/mygo.production=1`): no inspector, no automation plugin.
+  `make build-automation` builds `build/chairlift-automation`, which
+  `mygo-automation` can drive and capture (`MYGO_AUTOMATION=<socket>`).
+- `make test` — `go test ./...`. Views are tested headless with MyGo's
+  `ui.NewTester`, which needs Pango and cairo (no GTK, no display); set
+  `CHAIRLIFT_SNAPSHOT_DIR` to write PNGs of the pages from the snapshot
+  tests.
 - `make fmt` — `gofmt -s -w .`.
 - `make lint` — `golangci-lint run`, after `make lint-version-check` proves
   the installed golangci-lint is the `mise.toml` pin.
@@ -43,7 +55,7 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   additionally rejects coverage regressions greater than one percentage point;
   it has no fixed coverage target and cannot be mirrored locally.
 - `make e2e` — builds the three executables, checks the application's real
-  `--help` surface (including `--first-run`), starts the dry-run GTK window
+  `--help` surface (including `--first-run`), starts the dry-run window
   under a private D-Bus/Xvfb session, stages `make install` (which must hold
   `usr/bin/chairlift-first-run` and no autostart path), and executes the
   installed privileged helper's rejection paths. It also checks
@@ -55,9 +67,10 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   polls the four readiness log markers (the fourth is `problems: page built
   system=16 apps=7 source=ok`) for up to 30 seconds, requires one additional second of process stability, and
   terminates the private process group as soon as the smoke check passes. It
-  requires GTK4, Libadwaita, `dbus-run-session`, and `xvfb-run`; the hosted E2E job
-  installs those runtime dependencies explicitly because ordinary unit-test
-  hosts intentionally do not carry them.
+  requires GTK 3, libepoxy and Mesa (MyGo draws with llvmpipe under Xvfb),
+  Pango, `dbus-run-session`, and `xvfb-run`; the hosted E2E job installs those
+  runtime dependencies explicitly because ordinary unit-test hosts carry only
+  Pango and cairo for the Tester.
 - `make install`'s default `PREFIX` is `/usr` — the only prefix under which
   the installed PolicyKit policy files land where `polkitd` reads them
   (`/usr/share/polkit-1/actions`) and the updex helper's installed
@@ -118,8 +131,12 @@ control is hand-written Go, YAML, and data assets.
   GoReleaser Pro (`release --clean`), build-provenance attestation, then a
   `publish-deb` dispatch to `frostyard/apt-publisher`. See the APT-publishing
   invariant above. `snapshot.yml` only refreshes the rolling `dev` prerelease.
-- **Internal dependencies** (`go.mod`): `github.com/frostyard/snowkit`
-  (direct, GObject/main-thread helpers), `github.com/frostyard/updex/v2`
+- **External UI dependency:** `github.com/egoist/mygo` (direct, the window;
+  pinned in go.mod). It is young and has one main author: keep its calls
+  behind `internal/frostui` and the views, and read its source in `GOMODCACHE`
+  after a bump (the theme reset per frame, `Window.Update` semantics, the
+  Tester).
+- **Internal dependencies** (`go.mod`): `github.com/frostyard/updex/v2`
   (direct, feature SDK and the helper's engine) and `github.com/frostyard/std`
   (direct since ADR-0015: its `problems` package writes ChairLift's own
   problem records and reads the user journal's records; updex also uses its
@@ -167,13 +184,14 @@ An agent must not break these:
   `docs/design/overview.md`). Do not widen it.
 - **First-run mode stays user-level, pure at its gate, and opt-in per image**
   ([ADR-0014](docs/adr/0014-first-run-mode.md)). `cmd/chairlift-first-run`
-  imports no GTK binding (no puregotk, no snowkit; guarded by
-  `internal/installcheck.TestFirstRunGateImportsNoGTK`) and only calls
-  `internal/firstrun.Gate`; it ships in `frostyard-chairlift` only.
+  imports no UI toolkit (no MyGo, no `internal/frostui`, no GTK binding;
+  guarded by `internal/installcheck.TestFirstRunGateImportsNoGTK`) and only
+  calls `internal/firstrun.Gate`; it ships in `frostyard-chairlift` only.
   `chairlift --first-run` uses the application ID
-  `org.frostyard.ChairLift.FirstRun` and the window in
-  `internal/window/firstrun.go`; the seven pages and `internal/navigation` do
-  not know it. `firstrun.MarkDone` is the only writer of the markers
+  `org.frostyard.ChairLift.FirstRun` (set with `frostui.SetAppID` and its own
+  single-instance lock) and the wizard in `internal/window/firstrun*.go`; the
+  six pages and `internal/navigation` do not know it. While its actions run,
+  the app vetoes the window's close (`FirstRun.CanClose`). `firstrun.MarkDone` is the only writer of the markers
   (`chairlift/first-run.done` and, until ADR-0014's dated end rule, the legacy
   `snow-first-setup.done`), reached only through `firstrun.Complete`; reading
   the legacy marker never ends. The first run uses no pkexec and no sudo, and
@@ -196,21 +214,38 @@ An agent must not break these:
   `/usr/lib/snosi/native-ab` marker) with the OS image, which
   `sysupdate_updates_group` requires. Do not make the privileged path
   configurable from ChairLift's user-writable configuration.
-- **GTK main-thread safety.** All external tool calls run in goroutines; every
-  UI update marshals back to the GTK main thread via
-  `snowkit`'s `sgtk.RunOnMainThread(...)`. Never touch a widget directly from a
-  worker goroutine.
-- **Headless view coverage stays puregotk-free.** `internal/views` cannot host
-  a test binary on ordinary CI hosts. Shared row text, page status, os-release
-  parsing, help-link ordering, and maintenance-command selection live in the
-  pure `internal/views/pageview` package; its wiring test must continue to
-  cover all seven page builders (it fails when a `*_page.go` file is missing
-  from its table).
+- **UI-thread safety.** Views and every state struct in `internal/views`
+  and `internal/window` belong to the UI thread. All external tool calls run
+  in goroutines that copy their inputs first, never read state, and hand
+  results back with `Env.Post` (MyGo's `Window.Update`, through the app's
+  `poster`, which keeps posts made before the window exists). Console output
+  wakes the window through `window.Waker` (at most every 60 ms), because
+  `Window.Update` rebuilds the view on every call.
+- **Changes run in the serial job queue.** Every mutation a page starts
+  (install, update, stage, enable, clean, trust, flash) is a `frostui.Job` on
+  `Env.Jobs`: one runs at a time, `Run` on a goroutine, `Done` on the UI
+  thread. Only problem dismissals and report sends stay off the queue
+  (ADR-0015's own lock and pacing). Pages ask first through `Env.Dialogs`.
+- **Every command shows in the console.** The backends announce each
+  external command, tee its output and report its end through
+  `internal/cmdlog` (`Start`/`Stdout`/`Stderr`/`End`, `DryRun` for previews);
+  a new `exec.Command` in a backend or a view must do the same.
+- **frostui stays extractable.** `internal/frostui` imports only the standard
+  library, MyGo and purego (`TestFrostUIImportsNoChairLift`); put
+  ChairLift-specific UI in `internal/views` or `internal/window`. See
+  [docs/design/frostui.md](docs/design/frostui.md).
+- **Views are tested headless.** `internal/views`, `internal/window`,
+  `internal/frostui` and `internal/app` hold tests that render with
+  `ui.NewTester`; backends are injected as function fields, so no test runs
+  brew, flatpak, bootc, fwupdmgr, updex or pkexec. Decisions still live in the
+  pure leaf packages (`pageview`, `actionmsg`, `actionstate`, `bundleview`,
+  `featurestatus`, `flatpakstatus`, `trustmsg`). No package may load a UI
+  library at init (`TestNoGTK4Bindings` keeps puregotk out).
 - **The Problems page is local until the user opts in, and checks every
   value** ([ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md),
   [page spec](docs/specs/problems-page.md),
   [reporting spec](docs/specs/problem-reporting.md)). Its data lives in the pure
-  `internal/problems` package, which imports no puregotk and no network
+  `internal/problems` package, which imports no UI package and no network
   package (`net`, `net/...`, `crypto/tls`; guarded by
   `TestNoNetworkImports` and `TestNoNetworkDependencies`). The snosi-health
   paths (`/var/lib/snosi-health/problems.json`, `details.json`) are fixed
@@ -246,20 +281,21 @@ An agent must not break these:
   endpoint comes from `problems_reporting_group.endpoint` only in an
   administrator-owned file (`config.Config.ReportEndpoint`); the
   user-writable development fallback must never choose where a report goes.
-  `--send-pending-reports` runs before `app.New()` and builds no GTK. The
+  `--send-pending-reports` runs before `app.Run` and loads no GTK (MyGo loads
+  it only in `App.Run`). The
   first-run Reporting step is optional, keeps ADR-0014's `Steps` and markers
   unchanged, and is guarded by `internal/firstrun` tests in new files.
 - **Navigation behavior has one authority.** Page order, titles, icons, and
-  advertised/registered accelerators live in the pure
-  `internal/navigation` package. It also decides page visibility from static
-  group configuration: omit a functional page when all of its builder-backed
-  groups are disabled, always retain Help, and compact Alt+number over visible
-  pages. Mouse activation and window navigation actions must both call
-  `Window.navigateToPage`, which applies the complete `navigation.Resolve`
-  transition (visible-row index, visible child, title, and collapsed-layout
-  content reveal). The app and shortcuts dialog must use the window's same
-  visible inventory. Do not reintroduce a second page or shortcut inventory in
-  `internal/window` or `internal/app`.
+  the advertised and bound shortcuts live in the pure `internal/navigation`
+  package. It also decides page visibility from static group configuration:
+  omit a page when all of its groups are disabled, always keep the Overview,
+  and compact Alt+number over visible pages. Help is a dialog (F1), not a
+  page, and `help_page` configures its links. The rail, the palette's "Go
+  to" commands, the pages' links (`Env.Navigate`) and the shortcuts all go
+  through `Main.Navigate`, which applies `navigation.Resolve`; the shortcuts
+  dialog lists `navigation.Shortcuts` of the same visible inventory, and
+  `TestEveryAdvertisedShortcutWorks` presses every one. Do not reintroduce a
+  second page or shortcut inventory in `internal/window` or `internal/app`.
 - **Homebrew update actions preserve known state.** Per-package upgrades and
   the top-level metadata update use `internal/views/actionstate` gates before
   spawning work. Failures and dry-run previews restore their controls without
@@ -267,7 +303,7 @@ An agent must not break these:
   the count/badge, and refreshes; a failed refresh preserves that last known
   row/count state instead of replacing it with an invented zero.
 - **Flatpak update reloads are generation-guarded and preserve known
-  state.** `loadFlatpakUpdates` takes an `actionstate.RefreshGate` generation
+  state.** `Flatpak.loadUpdates` (`internal/views/flatpak.go`) takes an `actionstate.RefreshGate` generation
   on the main thread and every publication checks it, so a stale reload
   never replaces newer rows or counts. A load is usable when at least one
   installation succeeds or returns one or more updates with an error. A load
