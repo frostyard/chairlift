@@ -679,3 +679,50 @@ func TestSystemUpdateQueuesOneStageAtATime(t *testing.T) {
 	}
 	q.until(t, "the stage to end", func() bool { return !env.Jobs.Busy() })
 }
+
+func TestSystemReadsBootcFromSnosiWhenStatusNeedsRoot(t *testing.T) {
+	f := newSysFake()
+	f.bootcHost = false // `bootc status` refused: it needs root
+	f.bootcScript = true
+	f.suStatus = sysupdate.Status{
+		Check: &sysupdate.UpdateCheck{Outcome: sysupdate.OutcomeStaged, CheckedAt: "2026-11-10T11:00:57-05:00",
+			Image: "ghcr.io/frostyard/snow:latest", RunningVersion: "20261110101952", RemoteVersion: "20261110150546"},
+		Staged: &sysupdate.StagedUpdate{Image: "ghcr.io/frostyard/snow:latest",
+			Digest: "sha256:fd9d0a3d966db12fe9f66c6e6f6c4e88075d858a81d1771a1c4edaddde7bb0a9", StagedAt: "2026-11-10T11:00:57-05:00"},
+	}
+	env, q := sysEnv(t, sysConfig(sysAllGroups...), false)
+	s := sysStart(t, env, q, f)
+	info := s.Info()
+	if info.Kind != KindBootc || info.ImageRef != "ghcr.io/frostyard/snow:latest" || info.Channel != "latest" {
+		t.Errorf("info = %+v", info)
+	}
+	if !info.Booted.Present || info.Booted.Version != "20261110101952" {
+		t.Errorf("booted = %+v", info.Booted)
+	}
+	if !info.Staged.Present || info.Staged.Version != "20261110150546" || info.Staged.Digest == "" {
+		t.Errorf("staged = %+v", info.Staged)
+	}
+	if info.Rollback.Present {
+		t.Errorf("rollback = %+v, want unknown", info.Rollback)
+	}
+	src := s.Source()
+	if src == nil || !src.Status().Available || len(src.Items()) != 0 {
+		t.Fatalf("source with a staged image: available %v items %+v", src != nil && src.Status().Available, src.Items())
+	}
+
+	// The stager found the host current: nothing to offer.
+	f.suStatus = sysupdate.Status{Check: &sysupdate.UpdateCheck{Outcome: sysupdate.OutcomeCurrent, RunningVersion: "20261110101952"}}
+	env2, q2 := sysEnv(t, sysConfig(sysAllGroups...), false)
+	s2 := sysStart(t, env2, q2, f)
+	if s2.Info().Kind != KindBootc || len(s2.Source().Items()) != 0 {
+		t.Errorf("a current host: kind %q items %+v", s2.Info().Kind, s2.Source().Items())
+	}
+
+	// No state files: nothing says what runs.
+	f.suStatus = sysupdate.Status{}
+	env3, q3 := sysEnv(t, sysConfig(sysAllGroups...), false)
+	s3 := sysStart(t, env3, q3, f)
+	if s3.Info().Kind != "" || s3.Source().Status().Available {
+		t.Errorf("no snosi state still read a bootc host: %+v", s3.Info())
+	}
+}

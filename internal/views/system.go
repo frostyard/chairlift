@@ -298,8 +298,48 @@ func (s *System) readDeployments(ctx context.Context, wantBootc, wantNative bool
 		d.stageable = s.sysupdateStageAvailable()
 		d.rollbackVersion, _ = s.sysupdateRollback(ctx)
 		d.fromSysupdate(s.sysupdateStatus())
+	case wantBootc && !s.nativeAB() && s.bootcStageAvailable():
+		// Newer bootc answers `bootc status` only as root, so the
+		// unprivileged boot gate reads false on a bootc host. The snosi
+		// stager records what it checked and staged in /run/snosi on bootc
+		// hosts too: read the deployments from there, or nothing.
+		st := s.sysupdateStatus()
+		if st.Check == nil && st.Staged == nil {
+			return d
+		}
+		d.kind = KindBootc
+		d.stageable = true
+		d.fromSnosiBootc(st)
 	}
 	return d
+}
+
+// fromSnosiBootc reads a bootc host from the snosi stager's state files,
+// for when `bootc status` is root-only: the image, the running version, and
+// what is staged. The rollback is unknown there.
+func (d *deployments) fromSnosiBootc(st sysupdate.Status) {
+	d.outcome, d.stagedVersion, d.checkedAt = st.Presentation()
+	if st.Check != nil {
+		d.imageRef, d.runningVersion = st.Check.Image, st.Check.RunningVersion
+	}
+	d.booted = Deployment{Present: true, Version: d.runningVersion}
+	if !st.IsStaged() {
+		return
+	}
+	version := d.stagedVersion
+	if c := st.Check; c != nil && c.Outcome == sysupdate.OutcomeStaged && c.RemoteVersion != "" {
+		version = c.RemoteVersion
+	}
+	d.staged = Deployment{Present: true, Version: version}
+	if staged := st.Staged; staged != nil {
+		if d.imageRef == "" {
+			d.imageRef = staged.Image
+		}
+		d.staged.Digest = pageview.ShortDigest(staged.Digest)
+		d.stagedID = staged.Version + staged.Digest + staged.StagedAt
+	} else {
+		d.stagedID = version
+	}
 }
 
 func (d *deployments) fromBootc(status *bootc.Status) {
@@ -390,7 +430,7 @@ func (s *System) compose() {
 	if info.OSVersion == "" {
 		info.OSVersion = osReleaseValue(f.osRelease, "Version", "Version Id")
 	}
-	if d.kind == KindNativeAB && info.Booted.Present && info.Booted.Version == "" {
+	if info.Booted.Present && info.Booted.Version == "" {
 		info.Booted.Version = imageVersion
 		if info.Booted.Version == "" {
 			info.Booted.Version = d.runningVersion
@@ -431,7 +471,9 @@ func (s *System) imageOffered() bool {
 	}
 	switch d.kind {
 	case KindBootc:
-		return !s.runCurrent
+		// The snosi state (when bootc status is root-only) may say the
+		// host is current; bootc's own status never does.
+		return d.outcome != string(sysupdate.OutcomeCurrent) && !s.runCurrent
 	case KindNativeAB:
 		switch d.outcome {
 		case string(sysupdate.OutcomeCurrent):
