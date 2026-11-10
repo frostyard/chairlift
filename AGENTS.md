@@ -234,7 +234,8 @@ An agent must not break these:
   (`Start`/`End`, `DryRun` for previews) and tee its output when it is
   human-readable (`Stdout`/`Stderr`); machine output such as journal records
   and lsblk's JSON is not teed. A new `exec.Command` under `internal/` must do
-  the same (`internal/installcheck.TestEveryCommandIsTraced`); only
+  the same (`internal/installcheck.TestEveryCommandIsTraced` parses each
+  file and counts `cmdlog.Start` calls per function, closures included); only
   `internal/frostui` is exempt, and the views trace what they launch through
   it (`launchDesktopApp`). The rail's job card and the palette stop the queue
   (`Jobs.CancelAll`); a job that finished despite the cancel keeps its result.
@@ -325,7 +326,9 @@ An agent must not break these:
   reports that the check failed. Because such a load keeps the old rows, the
   per-app update button never waits for a reload to replace it: a failure or
   dry-run restores it, and a live success removes its row and decrements the
-  Flatpak count before the reload.
+  Flatpak count before the reload. A live uninstall removes the app's update
+  row too and, when an update check is in flight, starts a newer one, so the
+  older check (begun before the uninstall) cannot list the app again.
 - **Homebrew application actions are typed and refresh-safe.** Search queries
   both formula and cask namespaces and carries the result kind into
   `brew install [--cask]`. Search and installed-package refreshes use separate
@@ -336,6 +339,8 @@ An agent must not break these:
   pin/unpin, and every row shares one gate across its mutation controls so
   actions cannot overlap. A live success completes the old controls and starts
   a generation-guarded inventory refresh; failure or dry-run restores them.
+  A refresh whose list of that kind failed keeps the completed controls
+  (`brewKeepRows`); only a list that loaded resets them.
 - **Update counts have one owner per source.** Each update source
   (`views.UpdateSource`: system image, features, Flatpak, Homebrew, firmware)
   owns its items; the Updates badge, the Overview figure and the status bar

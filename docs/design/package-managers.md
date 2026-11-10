@@ -142,8 +142,11 @@ preview toast; a live success completes the old controls, records an activity
 entry and starts both the generation-guarded `RefreshApps` and
 `loadOutdated`, because a pin or an uninstall changes the outdated list. The
 reload, rather than the action, owns row replacement, so overlapping loads
-cannot publish stale installed state; `brewKeepRunning` carries an action that
-is still asked or running over a reload, so the reloaded row shares its gate.
+cannot publish stale installed state; `brewKeepRows` carries an action that
+is still asked or running over a reload (`brewKeepRunning`), so the reloaded
+row shares its gate, and keeps a completed control while the list of its kind
+failed, so the last known row of a package uninstalled or pinned live never
+offers the same action again (`TestBrewFailedRefreshKeepsCompletedControls`).
 
 ### Homebrew update source (`internal/views/brew_source.go`)
 
@@ -1408,7 +1411,11 @@ every domain; each is described with its caller above:
   update removes its item before it reloads, because a reload in which both
   installation queries fail and neither returns updates keeps the old items
   (`flatpak_test.go`'s `TestFlatpakLiveUpdateRemovesRowBeforeTheReload` and
-  `TestFlatpakFailedOrDryRunUpdateRestores` pin this).
+  `TestFlatpakFailedOrDryRunUpdateRestores` pin this). A live uninstall drops
+  the app's update item and, when an update check is in flight, starts a
+  newer check whose generation retires the older one, which began before the
+  uninstall and may list the app again
+  (`TestFlatpakUninstallRetiresAnUpdateCheckInFlight`).
 - **Features** — `Features.toggled` computes
   `decision := actionmsg.FeatureToggle(f.env.DryRun, on, name)` once after a
   successful `updex.EnableFeature`/`DisableFeature` job and changes the
@@ -1585,3 +1592,22 @@ test shells out or renders anything. As with the license guard,
 somewhere to put those values, exactly as `MetadataConfig.License` does;
 without the struct fields yaml.v3 drops them and both tests would pass
 vacuously regardless of what the YAML says.
+
+The window's own release build and runtime libraries are pinned the same way:
+
+- **`TestGoreleaserBuildsMyGoProduction`** and
+  **`TestMakefileBuildsMyGoProduction`** (`release_flags_test.go`) require
+  every release build of `./cmd/chairlift`, in `.goreleaser.yaml` and in the
+  Makefile's `build-app` and cross-arch targets (checked through `make -n`),
+  to pass `-tags mygo_noinspector` and `-X github.com/egoist/mygo.production=1`,
+  never the `automation` tag and no other MyGo `-X`.
+  **`TestAutomationPluginNeedsItsTag`** keeps MyGo's automation plugin behind
+  `//go:build automation`; **`TestMyGoProductionSwitchExists`** reads MyGo's
+  source in the module cache, so a bump that renames the switch, the
+  `mygo_noinspector` files or the updater API fails the gate; and
+  **`TestNoMyGoUpdater`** keeps MyGo's self-updater out of ChairLift, which
+  updates through the APT repository only.
+- **`TestGoreleaserDebDeclaresUIDependencies`** pins the GUI package's deb
+  dependencies (`libgtk-3-0t64 | libgtk-3-0`, `libpangocairo-1.0-0`,
+  `libepoxy0`, which MyGo loads at run time with purego) and keeps them off
+  every other format and off the system-integration package.

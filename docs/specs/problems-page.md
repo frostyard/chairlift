@@ -150,7 +150,11 @@ source=disabled`.
     mode 0700, at most 1000 ids (the oldest dismissals go first). An item is
     hidden while its last time is not after its dismiss time. The dismiss
     time is the later of now and the item's last time. A failed write keeps
-    the card and shows an error toast.
+    the card and shows an error toast. A load begun before a live dismissal
+    succeeded may still hold the problem: its publication leaves it out of
+    the page and out of the items an automatic send considers (counted as
+    hidden). The first load begun after the dismissal read the dismiss
+    store, which decides from then on.
 11. Under `--dry-run` Dismiss writes nothing and hides nothing; the toast is
     `[DRY-RUN] Preview: dismiss <title> — no changes made` and the log line
     `[DRY-RUN] would dismiss problem <id>`.
