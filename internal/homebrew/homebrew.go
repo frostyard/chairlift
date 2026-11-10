@@ -79,6 +79,9 @@ type Package struct {
 	Pinned             bool     `json:"pinned"`
 	Outdated           bool     `json:"outdated"`
 	Dependencies       []string `json:"dependencies,omitempty"`
+	// Latest is the version an upgrade brings; ListOutdated sets it from
+	// brew's current_version, and it is empty elsewhere.
+	Latest string `json:"latest,omitempty"`
 }
 
 // SearchResult represents a search result
@@ -360,6 +363,7 @@ func ListOutdated() ([]Package, error) {
 		packages = append(packages, Package{
 			Name:     f.Name,
 			Version:  strings.Join(f.InstalledVersions, ", "),
+			Latest:   f.CurrentVersion,
 			Outdated: true,
 			Pinned:   f.Pinned,
 		})
@@ -368,6 +372,7 @@ func ListOutdated() ([]Package, error) {
 		packages = append(packages, Package{
 			Name:     c.Name,
 			Version:  strings.Join(c.InstalledVersions, ", "),
+			Latest:   c.CurrentVersion,
 			Outdated: true,
 		})
 	}

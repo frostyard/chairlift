@@ -23,17 +23,17 @@ func TestUpgradeMessage(t *testing.T) {
 		forbidContains      []string
 	}{
 		{
-			name:                "trust group available points to section",
+			name:                "trust group available points to the trust banner",
 			pkgName:             "example-pkg",
 			trustGroupAvailable: true,
-			wantContains:        []string{"example-pkg", "untrusted tap", "Untrusted Homebrew Taps", "below"},
+			wantContains:        []string{"example-pkg", "untrusted tap", "trust the tap", "Homebrew card of Updates"},
 		},
 		{
 			name:                "trust group unavailable is self-contained",
 			pkgName:             "example-pkg",
 			trustGroupAvailable: false,
 			wantContains:        []string{"example-pkg", "untrusted tap", "trusted"},
-			forbidContains:      []string{"below", "Untrusted Homebrew Taps"},
+			forbidContains:      []string{"below", "Untrusted Homebrew Taps", "Homebrew card"},
 		},
 	}
 

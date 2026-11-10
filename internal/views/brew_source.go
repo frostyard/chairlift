@@ -430,7 +430,7 @@ func (s *brewSource) Items() []UpdateItem {
 	kinds := b.inv.kinds()
 	items := make([]UpdateItem, 0, len(b.updates.outdated))
 	for _, p := range b.updates.outdated {
-		it := UpdateItem{Key: p.Name, Title: p.Name, From: p.Version, Action: "Upgrade"}
+		it := UpdateItem{Key: p.Name, Title: p.Name, From: p.Version, To: p.Latest, Action: "Upgrade"}
 		var detail []string
 		if kind, ok := kinds[p.Name]; ok {
 			detail = append(detail, strings.ToLower(kind.DisplayName()))

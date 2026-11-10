@@ -101,10 +101,13 @@ func (b *Brew) Apps() []AppEntry {
 		return nil
 	}
 	taps := b.updates.untrustedPackages()
-	outdated := map[string]bool{}
+	outdated := map[string]string{} // name → the version an upgrade brings
 	if b.enabled(brewUpdatesPage, groupBrewUpdates) {
 		for _, p := range b.updates.outdated {
-			outdated[p.Name] = true
+			outdated[p.Name] = p.Latest
+			if outdated[p.Name] == "" {
+				outdated[p.Name] = "newer" // brew did not name it
+			}
 		}
 	}
 	out := make([]AppEntry, 0, len(b.inv.formulae)+len(b.inv.casks))
@@ -118,9 +121,8 @@ func (b *Brew) Apps() []AppEntry {
 		row := b.inv.rows[key]
 		upgrading := b.upgradeInUse(p.Name)
 		e.Busy = b.pending(key) || upgrading || (row != nil && row.inUse())
-		if outdated[p.Name] {
-			// brew outdated names the installed version only.
-			e.Update = "latest"
+		if latest, ok := outdated[p.Name]; ok {
+			e.Update = latest
 		}
 		if row != nil && row.completed != "" {
 			out = append(out, e)
