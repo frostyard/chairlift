@@ -29,8 +29,9 @@ const (
 	maintFlatpakGroup = "maintenance_flatpak_group"
 	maintSource       = "maintenance"
 
-	// maintScriptTimeout bounds one configured maintenance script, as
-	// runMaintenanceAction did.
+	// maintScriptTimeout bounds one unprivileged configured maintenance
+	// script, as runMaintenanceAction did. A privileged script has no
+	// deadline (Maintenance.job).
 	maintScriptTimeout = 5 * time.Minute
 	// maintWaitDelay is how long a script's run waits, after the script
 	// ended or was killed, for children that still hold its output open.
@@ -446,8 +447,13 @@ func (m *Maintenance) job(cl cleanup) *frostui.Job {
 				cmdlog.DryRun(cmd.Name, cmd.Args...)
 				return nil
 			}
-			ctx, cancel := context.WithTimeout(ctx, maintScriptTimeout)
-			defer cancel()
+			if !cmd.Privileged() {
+				// No deadline for a pkexec run: it would kill only pkexec
+				// and free the queue while the root script goes on.
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, maintScriptTimeout)
+				defer cancel()
+			}
 			return run(ctx, cmd)
 		}
 		j.Done = func(err error) {
@@ -503,7 +509,7 @@ func runMaintenanceCommand(ctx context.Context, cmd pageview.Command) error {
 		// An unprivileged script runs in its own process group, and a stop
 		// or the timeout kills the whole group, children included. A
 		// pkexec run cannot be signaled past pkexec: its job is
-		// Unstoppable.
+		// Unstoppable and has no timeout.
 		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		c.Cancel = func() error { return syscall.Kill(-c.Process.Pid, syscall.SIGKILL) }
 	}

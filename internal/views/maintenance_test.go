@@ -819,6 +819,43 @@ func TestPrivilegedJobsCannotBeStopped(t *testing.T) {
 	}
 }
 
+// A deadline on a pkexec run would kill only pkexec and free the queue while
+// the root script goes on, so only an unprivileged script has one.
+func TestMaintenanceOnlyUnprivilegedScriptsHaveADeadline(t *testing.T) {
+	f := newMaintFixture(t, maintConfig(), false)
+	for _, tc := range []struct {
+		name string
+		cl   cleanup
+		want bool
+	}{
+		{"privileged", cleanup{Key: "script:0", Kind: cleanupByScript, Title: "Boot", script: "/usr/libexec/bls-gc", sudo: true}, false},
+		{"unprivileged", cleanup{Key: "script:1", Kind: cleanupByScript, Title: "Trim", script: "/usr/bin/tidy"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ran, hasDeadline := false, false
+			var deadline time.Time
+			f.m.runCommand = func(ctx context.Context, _ pageview.Command) error {
+				ran = true
+				deadline, hasDeadline = ctx.Deadline()
+				return nil
+			}
+			start := time.Now()
+			if err := f.m.job(tc.cl).Run(context.Background(), nil); err != nil {
+				t.Fatal(err)
+			}
+			if !ran {
+				t.Fatal("the job ran nothing")
+			}
+			if hasDeadline != tc.want {
+				t.Fatalf("has a deadline = %v, want %v", hasDeadline, tc.want)
+			}
+			if hasDeadline && deadline.Sub(start) > maintScriptTimeout+time.Minute {
+				t.Errorf("deadline in %s, want about %s", deadline.Sub(start), maintScriptTimeout)
+			}
+		})
+	}
+}
+
 func TestMaintenanceCleanEverythingRunsOnlyWhatItListed(t *testing.T) {
 	f := newMaintFixture(t, maintConfig(), false)
 	f.start()

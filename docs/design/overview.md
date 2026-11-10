@@ -1678,11 +1678,14 @@ and queues them all. `Maintenance.job` builds the job:
    `decision.Execute` is false (dry run) it constructs no `exec.Cmd` at all:
    it logs `[DRY-RUN] Would execute: ...` and reports `cmdlog.DryRun`.
    Otherwise `runMaintenanceCommand` runs the command with
-   `exec.CommandContext` under a 5-minute timeout (`maintScriptTimeout`, and
-   `WaitDelay` 5 seconds for children that hold its output open), announced
-   with `cmdlog.Start`, its stdout and stderr streamed to the console
-   through the trace's tees, and ended with `End`. A timeout is the error
-   `timed out after 5m0s`; a cancel is `context.Canceled`.
+   `exec.CommandContext` (`WaitDelay` 5 seconds for children that hold its
+   output open), announced with `cmdlog.Start`, its stdout and stderr
+   streamed to the console through the trace's tees, and ended with `End`.
+   An unprivileged script runs under a 5-minute timeout
+   (`maintScriptTimeout`). A `sudo: true` script has no deadline: a timeout
+   would kill only pkexec and free the queue while the root script goes on.
+   A timeout is the error `timed out after 5m0s`; a cancel is
+   `context.Canceled`.
 3. The job's `Done`, on the UI thread, sets the row's outcome (done,
    previewed, failed with its error, canceled), shows `decision.Toast`
    (dry run), a success toast, or the error toast `<title> failed: <err>`,
@@ -2317,7 +2320,7 @@ the configuration page, not always the page of the window that shows it (see
 | `applications_page` | `brew_search_group`              | The Apps page's Find more tab: typed Homebrew formula/cask search and confirmed install                                                                                                                |
 | `applications_page` | `brew_bundles_group`             | The Apps page's Bundles tab: curated `*.Brewfile` bundles discovered from every configured `bundles_paths` directory, with guarded install actions                                                     |
 | `applications_page` | `applications_installed_group`   | The Apps page's button that opens the external software center for discovery/install (configurable `app_id`, default: Bazaar); ChairLift has no direct Flatpak-install UI                              |
-| `maintenance_page`  | `maintenance_cleanup_group`      | The configured cleanup scripts (5min timeout, pkexec for sudo); **disabled by default**                                                                                                                 |
+| `maintenance_page`  | `maintenance_cleanup_group`      | The configured cleanup scripts (5min timeout unless sudo, pkexec for sudo); **disabled by default**                                                                                                                 |
 | `maintenance_page`  | `maintenance_brew_group`         | The Homebrew cleanup row (shown once Homebrew is found)                                                                                                                                                 |
 | `maintenance_page`  | `maintenance_flatpak_group`      | The unused Flatpak runtimes row (shown once Flatpak is found)                                                                                                                                           |
 | `maintenance_page`  | `maintenance_optimization_group` | Deprecated: renders nothing and is in no navigation item; kept in the schema so files that name it still load                                                                                           |
