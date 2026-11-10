@@ -66,7 +66,7 @@ The Problems page reads problem records on this computer and sends nothing until
 
 ## Credits
 
-ChairLift is adapted from [Vanilla OS First Setup](https://github.com/Vanilla-OS/first-setup).
+ChairLift began as an adaptation of [Vanilla OS First Setup](https://github.com/Vanilla-OS/first-setup). It has since been rewritten: none of First Setup's code or translations remain.
 
 ## Develop
 
@@ -85,4 +85,4 @@ Views are tested headless with MyGo's `ui.NewTester`, which needs Pango and cair
 - [AGENTS.md](AGENTS.md): the rules for agents and contributors.
 - [docs/README.md](docs/README.md): the decisions, designs, specs and plans.
 - [SECURITY.md](SECURITY.md): report a vulnerability privately.
-- [LICENSE](LICENSE): GPL-3.0-or-later.
+- [LICENSE](LICENSE): MIT.

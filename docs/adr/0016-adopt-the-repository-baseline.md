@@ -1,6 +1,6 @@
 # 0016 — Adopt the frostyard repository baseline
 
-- **Status:** Accepted
+- **Status:** Accepted; the project license, which its context named when it was accepted, is MIT since [0018](0018-relicense-mit-and-drop-inherited-translations.md)
 - **Date:** 2026-11-05
 
 ## Context
@@ -9,7 +9,7 @@ frostyard/core holds every code repository to one baseline
 ([core ADR-0071](https://github.com/frostyard/core/blob/main/docs/adr/0071-hold-every-code-repository-to-one-baseline.md),
 rows B1 to B16 of `docs/specs/repository-baseline.md`). ChairLift already met
 many rows (the instruction-file aliases, `.memory/`, the docs shape, pinned
-actions, `.svu.yml`, the GPL-3.0 license, Dependabot). It did not have the
+actions, `.svu.yml`, a license, Dependabot). It did not have the
 `verify` and `check` make targets, `mise.toml` and `mise.lock`, a risk-path
 list, a `SECURITY.md`, a risk-tier heading in the PR template, or a CI
 workflow named `ci.yml`. Its CI linted with whatever golangci-lint release was

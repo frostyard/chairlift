@@ -125,4 +125,7 @@ canonical description of every signal.
   [pull request review rubric](docs/review-rubric.md).
 
 By contributing, you agree that your contributions are licensed under the
-project's [GPL-3.0-or-later license](LICENSE).
+project's [MIT license](LICENSE). Do not copy code, text or translations
+from a project under a copyleft or otherwise incompatible license, including
+SNOW First Setup and Vanilla OS First Setup
+([ADR-0018](docs/adr/0018-relicense-mit-and-drop-inherited-translations.md)).

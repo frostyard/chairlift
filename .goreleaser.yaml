@@ -14,7 +14,7 @@ project_name: chairlift
 metadata:
   description: chairlift - the Snow Linux command center
   homepage: "https://github.com/frostyard/chairlift"
-  license: GPL-3.0-or-later
+  license: MIT
   maintainers:
     - "Brian Ketelsen <bketelsen@gmail.com>"
 
@@ -148,7 +148,7 @@ nfpms:
     description: |-
       System management tool for bootc-based installations.
       Manage flatpaks, homebrew and system updates from one command center (MyGo, GTK 3).
-    license: GPL-3.0-or-later
+    license: MIT
     conflicts:
       - frostyard-chairlift-system-integration
     # The libraries MyGo loads at run time with purego: GTK 3 (t64 since
@@ -214,7 +214,7 @@ nfpms:
     description: |-
       System integration for a user-scoped ChairLift installation.
       Installs the privileged updex helper, PolicyKit policies, and maintainer configuration defaults.
-    license: GPL-3.0-or-later
+    license: MIT
     conflicts:
       - frostyard-chairlift
     contents:

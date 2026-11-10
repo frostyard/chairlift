@@ -293,7 +293,7 @@ func (m *Main) showAbout() {
 	m.Shell.Info.Show("About ChairLift", frostui.AboutBody(frostui.About{
 		Name: "ChairLift", Version: version.Version, Summary: "The system manager of Snow Linux.",
 		Logo: "org.frostyard.ChairLift-symbolic", Website: "https://github.com/frostyard/chairlift",
-		Issues: "https://github.com/frostyard/chairlift/issues", License: "GNU GPL 3.0",
+		Issues: "https://github.com/frostyard/chairlift/issues", License: "MIT",
 		Copyright: "© 2024-2026 Frostyard", Developers: []string{"Brian Ketelsen", "ChairLift contributors"},
 	}))
 }

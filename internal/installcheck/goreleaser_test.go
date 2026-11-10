@@ -12,14 +12,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// wantSPDXLicense is the SPDX identifier the project's actual license (GPLv3
-// text in LICENSE, "GNU GPL 3.0" in internal/window/main.go's About dialog)
-// resolves to.
+// wantSPDXLicense is the SPDX identifier the project's actual license (the
+// MIT text in LICENSE, "MIT" in internal/window/main.go's About dialog)
+// resolves to (ADR-0018).
 // .goreleaser.yaml's top-level metadata.license and every nfpms[] entry's
 // license must agree with this constant; see
 // docs/design/package-managers.md's "Install-path consistency" section for the
-// MIT/GPL drift bug this guards against.
-const wantSPDXLicense = "GPL-3.0-or-later"
+// license drift bug this guards against.
+const wantSPDXLicense = "MIT"
 
 // wantHomepage is the repository URL .goreleaser.yaml's metadata.homepage must
 // declare. It is the single source of truth for the repository URL in that
@@ -266,18 +266,19 @@ func TestGoreleaserDebDeclaresUIDependencies(t *testing.T) {
 	}
 }
 
-// TestGoreleaserLicenseIsGPL parses the real .goreleaser.yaml and asserts
+// TestGoreleaserLicenseIsMIT parses the real .goreleaser.yaml and asserts
 // both the top-level metadata.license and every nfpms[] entry's license
-// equal wantSPDXLicense, so a future edit reverting either field back to
-// MIT (or any other value) — as happened before this test was added — fails
-// this test instead of silently shipping mislabeled deb/rpm/apk packages.
+// equal wantSPDXLicense, so an edit that sets either field to another value
+// than the license in LICENSE (package metadata and LICENSE once disagreed,
+// which is why this test exists) fails this test instead of silently
+// shipping mislabeled deb/rpm/apk packages.
 //
 // It iterates every nfpms[] entry rather than only nfpms[0]: per
 // docs/design/engineering-lessons.md#check-every-collection-entry,
 // a consistency check that only special-cases the first entry stops
 // protecting anything the moment a second nfpms[] entry is added or
 // reordered with the wrong license.
-func TestGoreleaserLicenseIsGPL(t *testing.T) {
+func TestGoreleaserLicenseIsMIT(t *testing.T) {
 	cfg := loadGoreleaserConfig(t)
 
 	if cfg.Metadata.License != wantSPDXLicense {

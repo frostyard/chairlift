@@ -77,7 +77,8 @@ are listed in [org-adrs.md](org-adrs.md).
   — `chairlift --first-run` replaces SNOW First Setup: a pure-Go
   `chairlift-first-run` gate, its own application ID, one marker writer that
   also writes first-setup's marker until the dated end rule, no autostart in
-  the deb, the `first_run_page` config, and embedded `.po` translations
+  the deb, the `first_run_page` config, and embedded `.po` translations (the
+  translations are amended by ADR-0018: the ported catalogs are deleted)
 - [adr/0015-problems-page-and-opt-in-reporting.md](adr/0015-problems-page-and-opt-in-reporting.md)
   — a 7th page, Problems, shows snosi-health's system problems, the user's
   crashes and frostyard app records; every value is checked against
@@ -97,6 +98,12 @@ are listed in [org-adrs.md](org-adrs.md).
   real command output through `internal/cmdlog`, changes run in one serial
   job queue, and the `frostui` kit stays free of ChairLift imports
   (supersedes ADR-0007)
+- [adr/0018-relicense-mit-and-drop-inherited-translations.md](adr/0018-relicense-mit-and-drop-inherited-translations.md)
+  — ChairLift is MIT-licensed (`LICENSE`, the package metadata, the About
+  dialog); the first-run translations ported from SNOW First Setup are
+  deleted because their translators' license cannot be changed; the `.po`
+  machinery stays, reads an injectable `fs.FS`, and new catalogs must be
+  contributed under MIT (amends ADR-0014's translations)
 
 ### Design
 

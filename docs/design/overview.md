@@ -52,7 +52,7 @@ internal/views/                 The six pages and the state they share, drawn th
         ├── internal/updex/     Updex feature manager (Go library reads, helper binary writes)
         ├── internal/updexhelper/ UI-free argv parsing and Options building for cmd/chairlift-updex-helper
         ├── internal/firstrun/  UI-free first-run logic: gate, markers, steps, apps list, actions
-        ├── internal/i18n/      UI-free .po reader and the embedded first-run translations
+        ├── internal/i18n/      UI-free .po reader and catalog lookup for the first run (no translation shipped)
         ├── internal/problems/  UI-free, network-free Problems page data: sources, v1 validation, hints, dismiss store
         ├── internal/reporting/ The only sender: consent, sent log, HTTPS request, run rules
         ├── internal/selfreport/ ChairLift's own problem recorder (std problems) and its error codes
@@ -259,8 +259,10 @@ Features figures appear only while those pages are visible, and Maintenance show
 `help_resources_group` as links, or says that no help links are configured
 when the group is off or names no URL. `Main.showAbout` shows
 `frostui.AboutBody` with the version, the website, the issue tracker and the
-license (GNU GPL 3.0). `Main.showShortcuts` lists `navigation.Shortcuts` of
-the visible pages through `frostui.ShortcutsBody`.
+license (MIT,
+[ADR-0018](../adr/0018-relicense-mit-and-drop-inherited-translations.md)).
+`Main.showShortcuts` lists `navigation.Shortcuts` of the visible pages
+through `frostui.ShortcutsBody`.
 
 ## Key Patterns
 
@@ -2024,8 +2026,10 @@ The records stay in the user's journal and show in the Apps group.
 
 ## First-run mode
 
-Decision record: [ADR-0014](../adr/0014-first-run-mode.md). The first-run
-mode replaces SNOW First Setup (frostyard/first-setup) on images that ship its
+Decision records: [ADR-0014](../adr/0014-first-run-mode.md), whose
+translation decision
+[ADR-0018](../adr/0018-relicense-mit-and-drop-inherited-translations.md)
+amends (no translation is shipped). The first-run mode replaces SNOW First Setup (frostyard/first-setup) on images that ship its
 trigger. ChairLift itself ships no autostart entry, so on any other
 distribution nothing starts on its own.
 
@@ -2220,10 +2224,18 @@ date is not set yet.
 
 ### Translations
 
-`internal/i18n` embeds `internal/i18n/po/*.po` (ported from first-setup commit
-`b5f7de3`; see `internal/i18n/po/README.md`) and reads them with its own
-parser (`ParsePO`: msgid/msgstr, multi-line strings, C escapes; fuzzy and
-empty entries skipped; msgctxt and plurals are errors). `Candidates` applies
+No translation is shipped: the first run shows English in every locale.
+The catalogs inherited from first-setup were removed with the MIT relicense
+([ADR-0018](../adr/0018-relicense-mit-and-drop-inherited-translations.md));
+`internal/i18n/po/README.md` says how to add an MIT-licensed one. The
+machinery stays. `internal/i18n` embeds the `internal/i18n/po` directory
+(`//go:embed po`, which builds with no `.po` file in it) and reads each
+`<name>.po` catalog at its root with its own parser (`ParsePO`:
+msgid/msgstr, multi-line strings, C escapes; fuzzy and empty entries
+skipped; msgctxt and plurals are errors). `NewTranslator` takes the catalog
+filesystem (`fs.FS`): the process translator behind `T` reads the embedded
+catalogs, and the unit tests pass `fstest.MapFS` catalogs that they write
+themselves. `Candidates` applies
 gettext's locale choice: the first non-empty of `LC_ALL`, `LC_MESSAGES`,
 `LANG`; English for an empty, `C` or `POSIX` locale (then `LANGUAGE` is
 ignored); else each `LANGUAGE` entry, then the locale, each as `ll_CC` then

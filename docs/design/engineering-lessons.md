@@ -69,7 +69,7 @@ A test that checks a property of a list in a real file (for example every
 `t.Run` per entry, and fails when the list is empty. A check of index 0 only
 stops protecting anything when a second entry is added or the entries are
 reordered. Example: `TestGoreleaserNfpmLayoutMatchesUsrPrefix` and
-`TestGoreleaserLicenseIsGPL` in `internal/installcheck/goreleaser_test.go`.
+`TestGoreleaserLicenseIsMIT` in `internal/installcheck/goreleaser_test.go`.
 
 <a id="consistency-needs-a-gated-check"></a>
 #### A consistency requirement needs a gated check, not an inspection

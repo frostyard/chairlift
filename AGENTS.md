@@ -198,6 +198,10 @@ An agent must not break these:
   ChairLift ships no autostart entry: the image owns the trigger. The
   `first-run: window presented` log line is a contract. First-run text goes
   through `internal/i18n`; a new msgid goes into `internal/i18n/msgids.go`.
+  No `.po` catalog ships
+  ([ADR-0018](docs/adr/0018-relicense-mit-and-drop-inherited-translations.md)):
+  ChairLift is MIT, so a catalog added later is contributed under MIT and
+  copies nothing from First Setup or another copyleft source.
 - **OS staging execution has one owner.** `internal/stageexec` is the pure-Go
   leaf package that owns the progress event contract, merged stdout/stderr
   streaming, direct-child cancellation, error classification, completion event,

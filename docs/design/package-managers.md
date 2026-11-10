@@ -1527,25 +1527,26 @@ and it lives under `internal/...` so `make verify`, `make ci`, and CI's identica
 exercise it on every run, per
 `docs/design/engineering-lessons.md#gates-run-only-internal-tests`.
 
-A third regression test, **`TestGoreleaserLicenseIsGPL`**, guards a related
-but distinct drift: `.goreleaser.yaml` briefly declared `license: MIT` in
-both its top-level `metadata:` block and its `nfpms[]` entry's `license`
-field, while the project's actual license is GPLv3-or-later (`LICENSE`, and
-the About dialog of `internal/window/main.go`, `Main.showAbout`, which names
-"GNU GPL 3.0"). Like the layout test above, it parses the
+A third regression test, **`TestGoreleaserLicenseIsMIT`**, guards a related
+but distinct drift: the package metadata naming a different license than the
+project's. That once happened (`.goreleaser.yaml` declared one license in its
+top-level `metadata:` block and its `nfpms[]` entry while `LICENSE` held
+another), and it motivated the test. The project's license is MIT (`LICENSE`,
+and the About dialog of `internal/window/main.go`, `Main.showAbout`, which
+names "MIT"; [ADR-0018](../adr/0018-relicense-mit-and-drop-inherited-translations.md)).
+Like the layout test above, it parses the
 real, repo-root `.goreleaser.yaml` via the shared `loadGoreleaserConfig`
 helper (no fixture) and asserts `cfg.Metadata.License` and, iterating
 **every** `nfpms[]` entry with a per-index `t.Run` (not just `nfpms[0]`, per
 `docs/design/engineering-lessons.md#check-every-collection-entry`),
 each entry's `License` field equal the fixed SPDX identifier
-`GPL-3.0-or-later`. `GoreleaserConfig.Metadata` (`MetadataConfig.License`)
+`MIT` (`wantSPDXLicense`). `GoreleaserConfig.Metadata` (`MetadataConfig.License`)
 and `NfpmConfig.License` (`internal/installcheck/installcheck.go`) exist
 specifically to give `yaml.Unmarshal` somewhere to put these two values;
 without those struct fields yaml.v3 silently drops them and the test would
-pass vacuously regardless of what the YAML says. This test exists so a
-future edit reintroducing MIT (or any other license) in either location —
-the exact regression that motivated it — fails the gate instead of shipping
-mislabeled deb/rpm/apk package metadata again.
+pass vacuously regardless of what the YAML says. This test exists so an
+edit that sets any other license in either location fails the gate instead
+of shipping mislabeled deb/rpm/apk package metadata again.
 
 A fourth and fifth regression test guard the same class of drift for the
 **repository URL**. `.goreleaser.yaml`'s `metadata.homepage`

@@ -150,12 +150,12 @@ func TestDialogsShowShortcutsAndAbout(t *testing.T) {
 	}
 	info.Show("About ChairLift", AboutBody(About{
 		Name: "ChairLift", Version: "v0.12.0", Summary: "The system manager of Snow Linux.", Logo: "computer",
-		Website: "https://example.org/site", Issues: "https://example.org/issues", License: "GNU GPL 3.0",
+		Website: "https://example.org/site", Issues: "https://example.org/issues", License: "MIT",
 		Copyright: "© Frostyard", Developers: []string{"Brian", "Contributors"},
 	}))
 	tt.Frame()
 	hasAll(t, tt, "ChairLift", "v0.12.0", "The system manager of Snow Linux.", "Developers", "Brian", "Contributors",
-		"GNU GPL 3.0", "© Frostyard", "Website", "Report an issue")
+		"MIT", "© Frostyard", "Website", "Report an issue")
 }
 
 // writeIcon writes an SVG icon at root/rel.
