@@ -115,9 +115,10 @@ that ends before the window is created never loses its result.
 `frostui.Shell` and the visible `navigation.Items`. `NewMain` takes the
 visible pages from `navigation.VisibleItems(env.Enabled)`, sets
 `Env.Navigate` to `Main.Navigate`, and reads the Help links. `Main.View` runs
-every frame: it shows the toasts queued since the last frame
-(`Env.TakeToasts`), shows the configuration error once as a toast that stays
-(`ID: "config-error"`, `Timeout: -1`, `LoadError.ToastMessage`; ADR-0003),
+every frame: it runs the command the palette's last frame chose, shows the
+toasts queued since the last frame (`Env.TakeToasts`), shows the configuration
+error once as a toast that stays (`ID: "config-error"`, `Timeout: -1`,
+`LoadError.ToastMessage`; ADR-0003), shows why a close was refused,
 binds the shortcuts, and draws `Shell.View` with a `frostui.Frame`:
 
 - the rail: each visible page's title, icon, Alt+number hint and
@@ -320,8 +321,24 @@ job waits or runs, and the domains check `Pending` before they queue, so an
 item never has two jobs. A job dropped before it ran gets `Done` with
 `context.Canceled` and no result, which each domain treats as "nothing
 happened" (`stageResult.ran`, a nil `firmwareOutcome`, the features update's
-`ran`). The kit has `Jobs.CancelAll`; ChairLift offers no control that calls
-it.
+`ran`). The rail's job card and the palette's "Stop the running jobs" call
+`Jobs.CancelAll`: it drops the queued jobs and cancels the running one,
+unless that job is `Unstoppable`.
+
+An `Unstoppable` job's work goes on whatever happens to ChairLift: the OS
+stage, the updex helper and a `sudo: true` maintenance script run as root
+through `pkexec`, and fwupd's daemon does a firmware flash. Such a job has no
+deadline, finishes first and keeps the queue busy until it ends. For the same
+reason the main window refuses to close while one runs. `attachMain`
+(`internal/app/app.go`, called by `openMain`) registers `OnClose` and calls
+`PreventDefault` while `Main.CanClose()` is false, and the next frame shows a
+toast naming the job (`ID: "close-refused"`, so closing again replaces it
+rather than stacking). MyGo fires `OnClose` for the window's close button and
+for each window `App.Quit` closes, which the main menu's Quit, Ctrl Q, SIGINT
+and SIGTERM all reach, so one guard covers them; a second signal still exits
+at once, in MyGo's own handler. The window does not close by itself when the
+job ends. A stoppable job, or an `Unstoppable` one that only waits in the
+queue, does not hold the window.
 
 Confirmations come first, through `Env.Dialogs.Ask(frostui.Confirm{Title,
 Body, Details, Note, Action, Destructive, OnConfirm, OnCancel})`, shown one
@@ -1255,7 +1272,7 @@ Each wrapper in `internal/` follows a consistent shape:
 - `IsInstalled()` to check tool availability, plus `IsInstalledCached()` (`sync.Once`), which the domains call on a goroutine during their first load (see [Tool availability on a goroutine](#tool-availability-on-a-goroutine))
 - Homebrew, Flatpak, fwupd, and Updex implement both `IsInstalled()` and `IsInstalledCached()`
 - List/Search/Install/Uninstall/Update functions
-- Context-based timeouts. Homebrew and Flatpak both use a two-class model selected per invocation by an unexported `commandTimeout(args)` helper: 30s for read-only commands, 30m for state-changing ones (the keys of each package's `stateChangingCommands` map). fwupd selects its timeout per call instead, because it has exactly one read command and one state-changing command: 60s for the update query and 30m for an install. updex uses 5min and bootc 30min.
+- Context-based timeouts. Homebrew and Flatpak both use a two-class model selected per invocation by an unexported `commandTimeout(args)` helper: 30s for read-only commands, 30m for state-changing ones (the keys of each package's `stateChangingCommands` map). fwupd passes its timeout per call instead: 60s for each read. updex's reads use 5min and bootc's 30min. A change a cancel cannot stop has no deadline, because a deadline would kill only the client and free the job queue while the work goes on: a firmware install, the updex helper's commands and the OS stage.
 - Custom error types where needed
 - Every external command is reported to `internal/cmdlog` (`Start`, the `Stdout`/`Stderr` tees, `End`; `DryRun` for a skipped command), so the console shows it with its output (see [The console](#the-console-internalcmdlog))
 
@@ -1333,10 +1350,10 @@ ChairLift never restarts the computer itself.
 
 `System.stageJob` is a job on the serial queue. It runs the fixed stage
 script of the host's kind through pkexec (`bootc.StageUpdate` or
-`sysupdate.StageUpdate`; never another path) with `bootc.DefaultTimeout`,
-shows each `EventMessage` as the job's status, and then re-reads the
-deployments in both modes, so the source and the hero show what is really
-staged. `System.finishStage` applies the run on the UI thread: it takes a new
+`sysupdate.StageUpdate`; never another path) with no deadline (the job is
+`Unstoppable`), shows each `EventMessage` as the job's status, and then
+re-reads the deployments in both modes under `bootc.DefaultTimeout`, so the
+source and the hero show what is really staged. `System.finishStage` applies the run on the UI thread: it takes a new
 generation (the run's read is newer than any load in flight), shows the
 error (a cancel is a plain toast), or the dry-run-aware toast
 (`actionmsg.BootcStage`, `actionmsg.SysupdateStage`); after a live run that
@@ -1439,7 +1456,8 @@ runnable is left). While jobs run or any source has items, the run card draws
 the update run as a `frostui.Pipeline`: one stage per source, one step per
 item, each step's state from its job (`frostui.StateOf`: queued, running with
 its time, done, failed), else held for a held item or one that waits for a
-confirmation, else ready. Then one card per available source: its title, blurb,
+confirmation, else ready. A stage's time adds each of its jobs once, so the
+features that share one helper run count that run's time once. Then one card per available source: its title, blurb,
 status (checking, its error, its note, when it was last checked), its
 `Extra`, "Update all" for its default jobs, and a row per item with the
 versions and its button or what its job did. The page keeps the last batch
@@ -1497,9 +1515,11 @@ a dialog with a field that filters the commands, ranked by
 the start count more), chosen with Up, Down and Enter. `Main.Commands`
 builds the list every frame: each visible page's `Commands()`, then "Go to"
 each visible page (with its Alt+number), then the window's own: Check for
-updates (Ctrl R), Show or hide the console (Ctrl J), Keyboard shortcuts
-(Ctrl ?), Help (F1) and About ChairLift. A command may be `Disabled` with a
-`Reason`. The palette keys its rows by `Command.ID`, so IDs must be unique;
+updates (Ctrl R), Stop the running jobs, Show or hide the console (Ctrl J),
+Keyboard shortcuts (Ctrl ?), Help (F1) and About ChairLift. A command may be
+`Disabled` with a `Reason`. A chosen command runs at the start of the next
+frame, first thing in `Main.View` (`Palette.RunPending`), so the page it opens
+and the toast it makes show in that frame. The palette keys its rows by `Command.ID`, so IDs must be unique;
 `uniqueCommands` keeps the first of each ID, because two pages may list the
 same shared command (Homebrew's on Apps and Updates). The palette lists only
 actions the pages offer, through the same domain methods, confirmations and
@@ -1789,9 +1809,11 @@ and again after the MyGo port.
   page's `coredumpctl` and `journalctl` reads, `launchFlatpakApp` and the
   first run's `gsettings` and settings launcher do not report through
   `cmdlog` (see [The console](#the-console-internalcmdlog)).
-- **No cancel control:** the job queue can cancel (`Jobs.CancelAll`, a
-  job's context), but ChairLift has no control that cancels a running or
-  queued job.
+- **A job that cannot stop:** Stop (the rail's job card, the palette) drops
+  the queued jobs and cancels a stoppable running job, but an `Unstoppable`
+  job has no deadline and no way to be stopped. If one hangs, it holds the
+  queue, and with it the window's close, until it ends or ChairLift is killed
+  (a second SIGTERM exits).
 - **Homebrew inventory:** `Brew.RefreshApps` lists formulae and then casks,
   one after the other, under one generation.
 - **Large inventories:** no limit caps the size of an inventory, and every

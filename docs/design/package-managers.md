@@ -3,7 +3,7 @@
 Living design document (formerly `yeti/package-managers.md`; folded into
 `docs/` per [frostyard/core ADR-0025](https://github.com/frostyard/core/blob/main/docs/adr/0025-consolidate-repository-docs-into-docs.md)).
 
-Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts in two classes — 30s for read-only commands, 30m for state-changing ones, selected per invocation by each package's `commandTimeout(args)` helper from its `stateChangingCommands` map. `internal/fwupd` keeps the same two classes but passes a constant per call, because it has exactly one read command and one state-changing command and therefore needs no selector (see its section below). All are called from the domain structs of `internal/views` (`Brew`, `Flatpak`, `Firmware`, `System`, `Features`, `Maintenance`), always on a worker goroutine — a loader started with `views.Go`, or a `frostui.Job`'s `Run` on the serial job queue — never on the UI thread. Every command a wrapper starts is reported through `internal/cmdlog`: `cmdlog.Start` announces it, its stdout and stderr are teed line by line through the returned trace, `End` reports its error and run time, and `cmdlog.DryRun` reports a command that dry-run mode skipped; the window streams these events into its console. Each runner's subsection below says where. The cached availability check matters because the domains look for their tool on a goroutine at startup and gate their cards and update sources on the answer: several goroutines may ask about the same tool, and the result should only be computed once.
+Each wrapper lives in its own package under `internal/` and follows a consistent pattern: module-level dry-run flag, availability check with cached variant (`IsInstalledCached()` using `sync.Once`), and context-based timeouts in two classes — 30s for read-only commands, 30m for state-changing ones, selected per invocation by each package's `commandTimeout(args)` helper from its `stateChangingCommands` map. `internal/fwupd` needs no selector: each of its two read commands passes a 60s constant, and its one state-changing command, a firmware install, has no deadline (see its section below). The other jobs a cancel cannot stop have none either: the OS stage and the updex helper run as root through `pkexec`, so a deadline would kill only the client and free the job queue while the work goes on. All are called from the domain structs of `internal/views` (`Brew`, `Flatpak`, `Firmware`, `System`, `Features`, `Maintenance`), always on a worker goroutine — a loader started with `views.Go`, or a `frostui.Job`'s `Run` on the serial job queue — never on the UI thread. Every command a wrapper starts is reported through `internal/cmdlog`: `cmdlog.Start` announces it, its stdout and stderr are teed line by line through the returned trace, `End` reports its error and run time, and `cmdlog.DryRun` reports a command that dry-run mode skipped; the window streams these events into its console. Each runner's subsection below says where. The cached availability check matters because the domains look for their tool on a goroutine at startup and gate their cards and update sources on the answer: several goroutines may ask about the same tool, and the result should only be computed once.
 
 ## Homebrew (`internal/homebrew/homebrew.go`)
 
@@ -721,9 +721,9 @@ path uses `pkexec` — decision record
 | Function | CLI command | Timeout | Notes |
 |----------|------------|---------|-------|
 | `ListUpdates()` | `fwupdmgr get-updates --json` | 60s | Read-only; parses `{"Devices":[…]}` |
-| `Install(deviceID)` | `fwupdmgr update --no-reboot-check <deviceID>` | 30m | State-changing, dry-run aware; validates the id first |
+| `Install(deviceID)` | `fwupdmgr update --no-reboot-check <deviceID>` | none | State-changing, dry-run aware; validates the id first |
 | `GetDeviceState(deviceID)` | `fwupdmgr get-devices --json` | 60s | Read-only; validates the id first; exit 2 means the device is not listed |
-| `InstallAndVerify(update)` | that install, then `get-devices --json` and `get-updates --json` | 30m + 2 × 60s | Install error returned as the error; dry-run returns a zero report and makes no query |
+| `InstallAndVerify(update)` | that install, then `get-devices --json` and `get-updates --json` | none for the install, 60s for each read | Install error returned as the error; dry-run returns a zero report and makes no query |
 | `VerifyInstall(before, state, found, stateErr)` | none | — | Pure: classifies the device's own state |
 | `ParseDeviceState(data, deviceID)` | none | — | Pure: JSON plus an id in, `DeviceState` and found out |
 | `IsInstalled()` / `IsInstalledCached()` | `exec.LookPath("fwupdmgr")` | — | Cached with `sync.Once`; the firmware source is unavailable until it answers true |
@@ -732,9 +732,13 @@ path uses `pkexec` — decision record
 
 Unlike Homebrew and Flatpak, fwupd has no `stateChangingCommands` map and no
 `commandTimeout(args)`: there are two read commands (`get-updates --json` and
-`get-devices --json`, 60s each) and one state-changing command (`update`, 30m),
-so each caller passes its own timeout constant. `InstallAndVerify` runs the
-install and then both reads in sequence, each read with its own 60s budget.
+`get-devices --json`, 60s each), which pass their own timeout constant, and one
+state-changing command (`update`), which has no deadline: fwupd's daemon does
+the flash, so a deadline would kill only this client and free the job queue
+while the device is written. `Install` runs it through the `runInstall`
+variable, so `TestFwupdInstallPassesNoDeadline` can see its context.
+`InstallAndVerify` runs the install and then both reads in sequence, each read
+with its own 60s budget.
 
 ### Parsing rules
 
@@ -1001,7 +1005,7 @@ That part is tested in `internal/bootc/stage_test.go`. The view keeps its toast 
 |----------|---------|-----------|---------|-------|
 | `GetStatus(ctx)` | `bootc status --format json` | none | 30min (`DefaultContext`); the system domain uses `bootc.DefaultTimeout` too | JSON parsed into `Status` |
 | `IsBootcBooted(ctx)` / `IsBootcBootedCached()` | (calls `GetStatus`) | none | 5s (cached variant) | Boot gate; cached variant memoizes via `sync.Once` |
-| `StageUpdate(ctx, progressCh)` | `pkexec /usr/libexec/bootc-update-stage` | pkexec (`org.frostyard.ChairLift.bootc.stage`) | 30min (`DefaultContext`) | Streaming; idempotent; dry-run aware |
+| `StageUpdate(ctx, progressCh)` | `pkexec /usr/libexec/bootc-update-stage` | pkexec (`org.frostyard.ChairLift.bootc.stage`) | caller's ctx; `System.stageJob` gives it no deadline | Streaming; idempotent; dry-run aware |
 | `StageScriptAvailable()` | `os.Stat(StageScriptPath)` | none | — | Without the script the system image source is unavailable (`System.sourceAvailable`) |
 
 ### Streaming pattern
@@ -1186,7 +1190,7 @@ not show in the console.
 | `GetStatus()` | reads `/run/snosi/update-check` + `/run/snosi/update-staged` | none | — (local file reads) | Absent files are normal states, not errors |
 | `IsNativeAB()` / `IsNativeABCached()` | `os.Stat(MarkerPath)` | none | — | Host-type gate; cached variant memoizes via `sync.Once` |
 | `RollbackVersion(ctx)` | `lsblk -J -o PATH,PARTLABEL` + `/usr/lib/os-release` | none | caller's ctx | Older-only candidate rule |
-| `StageUpdate(ctx, progressCh)` | `pkexec /usr/libexec/snosi-sysupdate-stage` | pkexec (`org.frostyard.ChairLift.sysupdate.stage`) | 30min (`DefaultContext`) | Streaming; idempotent; dry-run aware |
+| `StageUpdate(ctx, progressCh)` | `pkexec /usr/libexec/snosi-sysupdate-stage` | pkexec (`org.frostyard.ChairLift.sysupdate.stage`) | caller's ctx; `System.stageJob` gives it no deadline | Streaming; idempotent; dry-run aware |
 | `StageScriptAvailable()` | `os.Stat(StageScriptPath)` | none | — | Without the script the system image source is unavailable |
 
 ### Progress UI (`internal/views/system.go`)
@@ -1222,9 +1226,9 @@ Type aliases to `github.com/frostyard/updex/v2/updex`:
 | `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
 | `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
 | `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Preserves successful components when v2 reports structured partial failures, logs failed-component metadata, and returns `[]FeatureCheck`; true request failures still return an error |
-| `EnableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper enable-feature <name>` | pkexec | 5min | State-changing |
-| `DisableFeature(name)` | `pkexec /usr/bin/chairlift-updex-helper disable-feature <name>` | pkexec | 5min | State-changing |
-| `UpdateFeatures()` | `pkexec /usr/bin/chairlift-updex-helper update` | pkexec | 5min | Downloads enabled features; returns `([]FeatureUpdate, error)` (see "Update results") |
+| `EnableFeature(ctx, name)` | `pkexec /usr/bin/chairlift-updex-helper enable-feature <name>` | pkexec | caller's ctx; the job gives it no deadline | State-changing |
+| `DisableFeature(ctx, name)` | `pkexec /usr/bin/chairlift-updex-helper disable-feature <name>` | pkexec | caller's ctx; the job gives it no deadline | State-changing |
+| `UpdateFeatures(ctx)` | `pkexec /usr/bin/chairlift-updex-helper update` | pkexec | caller's ctx; the job gives it no deadline | Downloads enabled features; returns `([]FeatureUpdate, error)` (see "Update results") |
 
 ### Update results
 

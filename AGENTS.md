@@ -242,7 +242,12 @@ An agent must not break these:
   job whose work a cancel cannot stop (pkexec, firmware, updex) is
   `Unstoppable` and has no deadline: Stop drops the jobs queued after it and
   lets it finish, and a timeout would kill only the client and free the
-  queue while the work goes on.
+  queue while the work goes on. For the same reason the main window refuses
+  to close while such a job runs (`Main.CanClose`, wired in `openMain`
+  through `attachMain`) and a toast says why: MyGo fires `OnClose` for the
+  close button and for `App.Quit`, which SIGINT and SIGTERM call, so one
+  guard covers them. A stoppable job, or an `Unstoppable` one that only
+  waits in the queue, does not hold the window.
 - **Every command shows in the console.** The backends announce each
   external command and its end through `internal/cmdlog`
   (`Start`/`End`, `DryRun` for previews) and tee its output when it is
