@@ -13,7 +13,7 @@ import (
 // When the group is available, the existing pointer-to-the-section wording must
 // be preserved so current behavior is unchanged. This is the group-combination
 // regression for issue #57 (brew_trust_group enabled while brew_updates_group
-// disabled). The function is pure and puregotk-free, so this runs headlessly.
+// disabled). The function is pure, so this runs on any host.
 func TestUpgradeMessage(t *testing.T) {
 	tests := []struct {
 		name                string

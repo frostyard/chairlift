@@ -1,7 +1,7 @@
 // Package actionstate owns the pure state transitions used by asynchronous
-// Applications- and Updates-page actions. It has no GTK or puregotk
-// dependency, so command completion, refresh ordering, and repeated-click
-// behavior can be tested headlessly.
+// Apps- and Updates-page actions. It imports no UI package, so command
+// completion, refresh ordering, and repeated-click behavior are tested as
+// plain functions.
 package actionstate
 
 import (

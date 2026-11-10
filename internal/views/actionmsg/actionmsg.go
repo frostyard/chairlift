@@ -8,12 +8,10 @@
 // system feature toggles/updates, Problems page dismissals, problem report
 // sends, and the problem-reporting consent switch.
 //
-// It is deliberately free of any puregotk/GTK import, following the
-// internal/views/trustmsg pattern, so its logic can be unit-tested on a
-// headless host. A test binary for a package that imports puregotk panics
-// while resolving GTK/graphene shared libraries at package init — before any
-// test function runs — so logic that must be tested cannot live in the view
-// packages. See docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
+// It imports no UI package, following the internal/views/trustmsg pattern:
+// each decision is one tested function that gates the toast and the UI
+// change together (ADR-0009). See
+// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
 //
 // Functions whose result only selects display text (BundleDump, Cleanup,
 // Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage) return a
