@@ -599,3 +599,20 @@ func TestSnapshotOverview(t *testing.T) {
 		snapshot(t, tt, "overview-narrow-dark")
 	})
 }
+
+func TestOverviewHeroShowsTheSnowflake(t *testing.T) {
+	bmp := overviewSnowflake()
+	if bmp == nil {
+		t.Fatal("the embedded snowflake does not decode")
+	}
+	if w, h := ui.ImageSize(bmp); w != 256 || h != 256 {
+		t.Errorf("snowflake is %vx%v, want 256x256", w, h)
+	}
+	ovIcons(t)
+	env := NewEnv(&config.Config{}, true, func(fn func()) { fn() })
+	s := NewStore(env)
+	tt := ui.NewTester(ovView(s.Page(navigation.Overview)), 1360, 1200)
+	if _, ok := tt.Find("Snowflake"); !ok {
+		t.Errorf("the hero does not draw the snowflake: %q", tt.Texts())
+	}
+}

@@ -1,12 +1,14 @@
 package views
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -349,8 +351,12 @@ func (p *overviewPage) heroCard(c *ui.Context, info SystemInfo, tally updateTall
 	t := c.Theme()
 	frostui.Card(c).Padding(22).Gap(18).Children(func() {
 		ui.Row(c).Gap(18).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(64, 64).Radius(16).Background(t.Accent).Center().Children(func() {
-				frostui.Icon(c, overviewLogo()).Size(40, 40).TextColor(t.AccentText)
+			ui.Box(c).Size(64, 64).Radius(16).Background(t.Accent.Alpha(0.14)).Border(1, t.Accent.Alpha(0.3)).Center().Children(func() {
+				if bmp := overviewSnowflake(); bmp != nil {
+					ui.Image(c, bmp).Size(62, 62).Label("Snowflake")
+				} else {
+					frostui.Icon(c, "weather-snow").FontSize(36).TextColor(t.Accent)
+				}
 			})
 			ui.Column(c).Grow(1).Gap(8).AlignItems(ui.Start).Children(func() {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -385,13 +391,29 @@ func (p *overviewPage) heroCard(c *ui.Context, info SystemInfo, tally updateTall
 	})
 }
 
-// overviewLogo is the hero's icon: ChairLift's own, which the app embeds,
-// or a computer.
-func overviewLogo() string {
-	if frostui.IconSVG("org.frostyard.ChairLift-symbolic") != nil {
-		return "org.frostyard.ChairLift-symbolic"
-	}
-	return "computer"
+// overviewSnowflake is ChairLift's snowflake, its application icon
+// (data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg) drawn
+// once into a PNG: the hero shows it for the operating system.
+//
+//go:embed assets/chairlift-snowflake.png
+var overviewSnowflakePNG []byte
+
+var (
+	overviewSnowflakeOnce sync.Once
+	overviewSnowflakeBmp  *ui.Bitmap
+)
+
+// overviewSnowflake decodes the snowflake once; nil if it cannot.
+func overviewSnowflake() *ui.Bitmap {
+	overviewSnowflakeOnce.Do(func() {
+		bmp, err := ui.DecodeBitmap(overviewSnowflakePNG)
+		if err != nil {
+			log.Printf("overview: the snowflake does not decode: %v", err)
+			return
+		}
+		overviewSnowflakeBmp = bmp
+	})
+	return overviewSnowflakeBmp
 }
 
 // deploymentChain draws Rollback → Booted → Staged on an image-based host.
