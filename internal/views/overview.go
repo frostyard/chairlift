@@ -351,7 +351,9 @@ func (p *overviewPage) heroCard(c *ui.Context, info SystemInfo, tally updateTall
 	t := c.Theme()
 	frostui.Card(c).Padding(22).Gap(18).Children(func() {
 		ui.Row(c).Gap(18).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(64, 64).Radius(16).Background(t.Accent.Alpha(0.14)).Border(1, t.Accent.Alpha(0.3)).Center().Children(func() {
+			// frostyard's deep-blue panel (design-system --panel): the pale
+			// snowflake reads on it in light and dark themes alike.
+			ui.Box(c).Size(64, 64).Radius(16).Background(ui.RGB(0x0f, 0x30, 0x48)).Border(1, t.Accent.Alpha(0.35)).Center().Children(func() {
 				if bmp := overviewSnowflake(); bmp != nil {
 					ui.Image(c, bmp).Size(62, 62).Label("Snowflake")
 				} else {

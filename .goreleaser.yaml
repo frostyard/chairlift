@@ -168,8 +168,6 @@ nfpms:
       # Icons
       - src: ./data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg
         dst: /usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg
-      - src: ./data/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
-        dst: /usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
       - src: ./data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
         dst: /usr/share/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
       # PolicyKit policy for bootc
