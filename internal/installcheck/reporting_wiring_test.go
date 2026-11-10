@@ -68,7 +68,8 @@ func TestReportingControlsWaitForTheFirstLoad(t *testing.T) {
 
 	view := mustFunc(t, funcs, "reportsCard")
 	for _, fragment := range []string{
-		"Label(pageview.ReportingSwitchTitle).Disabled(!p.reportingLoaded)",
+		// frostui.SwitchRow labels its switch with the title it returns.
+		"SwitchRow(c.Key(\"reporting-switch\"), pageview.ReportingSwitchTitle, \"\", &on).Disabled(!p.reportingLoaded)",
 		"Label(pageview.ReportingModeTitle).Disabled(!p.reportingLoaded ||",
 	} {
 		if !strings.Contains(view, fragment) {

@@ -18,5 +18,6 @@
 // Views run on the UI thread. Every model here (Console, Jobs, Palette,
 // Dialogs) is changed on the UI thread, except Console.Add, which any
 // goroutine may call. Workers hand results back with the post function
-// the app gives NewJobs (MyGo's Window.Update).
+// the app gives NewJobs (MyGo's Window.Update); in tests, a
+// frostuitest.Loop stands in for it.
 package frostui

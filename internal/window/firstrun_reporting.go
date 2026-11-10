@@ -24,16 +24,13 @@ import (
 // opens the privacy page.
 func (w *FirstRun) reportingStep(c *ui.Context) {
 	t := c.Theme()
-	ui.Row(c).Gap(frostui.SpaceM).Padding(14, 16).Radius(frostui.RadiusCard).Background(t.Background).Border(1, t.Border).
-		AlignItems(ui.Center).Children(func() {
-		ui.Column(c).Grow(1).Gap(2).Children(func() {
-			frostui.Strong(c, i18n.T(i18n.MsgReportingSwitch))
-			frostui.Muted(c, i18n.T(firstrun.ReportingStatusMsgid(w.reportingRecord)))
-		})
+	ui.Column(c).Padding(14, 16).Radius(frostui.RadiusCard).Background(t.Background).Border(1, t.Border).
+		AlignItems(ui.Stretch).Children(func() {
 		// The switch shows the record in memory; it changes only through
 		// onReportingSwitched, so a redraw cannot start a second save.
 		on := w.reportingRecord.Allows()
-		if ui.Switch(c, &on).Label(i18n.T(i18n.MsgReportingSwitch)).Changed() {
+		status := i18n.T(firstrun.ReportingStatusMsgid(w.reportingRecord))
+		if frostui.SwitchRow(c, i18n.T(i18n.MsgReportingSwitch), status, &on).Changed() {
 			w.onReportingSwitched(on)
 		}
 	})

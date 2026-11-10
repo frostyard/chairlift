@@ -78,25 +78,12 @@ func (p *updatesPage) noteBatch() {
 		return
 	}
 	p.run = p.run[:0:0]
-	for _, j := range updatesBatch(p.env.Jobs) {
+	for _, j := range p.env.Jobs.BatchJobs() {
 		switch SourceID(j.Source) {
 		case SourceImage, SourceFeatures, SourceFlatpak, SourceBrew, SourceFirmware:
 			p.run = append(p.run, j)
 		}
 	}
-}
-
-// updatesBatch returns the jobs of the batch the queue runs: those that
-// ended since it was last idle, the running one and the queued ones.
-func updatesBatch(q *frostui.Jobs) []*frostui.Job {
-	done, _ := q.Batch()
-	hist := q.History()
-	done = min(done, len(hist))
-	batch := append([]*frostui.Job(nil), hist[len(hist)-done:]...)
-	if cur := q.Current(); cur != nil {
-		batch = append(batch, cur)
-	}
-	return append(batch, q.Queued()...)
 }
 
 // updatesMerge returns the items a card lists: prev's order, each item
@@ -230,24 +217,13 @@ func (p *updatesPage) actions(c *ui.Context, srcs []UpdateSource) {
 		p.checkNow()
 	}
 	reason := p.everythingReason(srcs)
-	all := updatesPrimaryButton(c, "software-update-available", "Update everything").Disabled(reason != "")
+	all := frostui.LabeledButton(c, "software-update-available", "Update everything", true).Disabled(reason != "")
 	if reason != "" {
 		all.Tooltip(reason)
 	}
 	if all.Clicked() {
 		p.updateEverything()
 	}
-}
-
-// updatesPrimaryButton is the accent button with an icon before its label.
-// frostui.LabeledButton(…, true) also builds a stray empty button before it.
-func updatesPrimaryButton(c *ui.Context, icon, label string) ui.Element {
-	return ui.PrimaryButton(c, "").Label(label).Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			frostui.Icon(c, icon)
-			ui.Text(c, label).SingleLine()
-		})
-	})
 }
 
 func updatesChecking(srcs []UpdateSource) bool {
@@ -350,8 +326,8 @@ func (p *updatesPage) runCard(c *ui.Context, srcs []UpdateSource) {
 					})
 					ui.Progress(c, frac).Width(160).Label("Update run progress")
 				})
-			} else if summary := updatesRunSummary(p.run); summary != "" {
-				frostui.Caption(c, summary).SingleLine()
+			} else if summary := frostui.RunSummary(p.run); summary != "" {
+				frostui.Caption(c, "Last run: "+summary).SingleLine()
 			}
 		})
 		frostui.Pipeline(c, stages)
@@ -375,7 +351,7 @@ func (p *updatesPage) stage(src UpdateSource, now time.Time) (st frostui.Stage, 
 		job := p.jobOf(src.ID(), it.Key)
 		step := frostui.Step{Title: it.Title, State: updatesStepState(it, job)}
 		if d, ok := updatesJobTime(job, now); ok {
-			step.Note = updatesDuration(d)
+			step.Note = frostui.Duration(d)
 			spent += d
 			running = running || job.State == frostui.JobRunning
 		}
@@ -383,7 +359,7 @@ func (p *updatesPage) stage(src UpdateSource, now time.Time) (st frostui.Stage, 
 		st.Steps = append(st.Steps, step)
 	}
 	if spent > 0 {
-		st.Note = updatesDuration(spent)
+		st.Note = frostui.Duration(spent)
 	}
 	return st, asks, running
 }
@@ -410,47 +386,6 @@ func updatesJobTime(j *frostui.Job, now time.Time) (time.Duration, bool) {
 		end = now
 	}
 	return max(end.Sub(j.Started), 0), true
-}
-
-// updatesDuration formats a job's time as "8s" or "1m 03s".
-func updatesDuration(d time.Duration) string {
-	s := int(d.Round(time.Second) / time.Second)
-	if s < 60 {
-		return fmt.Sprintf("%ds", s)
-	}
-	if s < 3600 {
-		return fmt.Sprintf("%dm %02ds", s/60, s%60)
-	}
-	return fmt.Sprintf("%dh %02dm", s/3600, s%3600/60)
-}
-
-// updatesRunSummary says how the kept batch ended, "" without one.
-func updatesRunSummary(run []*frostui.Job) string {
-	done, failed, skipped := 0, 0, 0
-	for _, j := range run {
-		switch j.State {
-		case frostui.JobDone:
-			done++
-		case frostui.JobFailed:
-			failed++
-		case frostui.JobCanceled:
-			skipped++
-		}
-	}
-	var parts []string
-	if done > 0 {
-		parts = append(parts, fmt.Sprintf("%d done", done))
-	}
-	if failed > 0 {
-		parts = append(parts, fmt.Sprintf("%d failed", failed))
-	}
-	if skipped > 0 {
-		parts = append(parts, fmt.Sprintf("%d canceled", skipped))
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return "Last run: " + strings.Join(parts, " · ")
 }
 
 // sourceCard draws one source: its header, what only it shows, its status
@@ -509,7 +444,6 @@ func (p *updatesPage) sourceCard(c *ui.Context, src UpdateSource) {
 // itemRow is one item: its name and detail, the versions, and its button
 // or what its job did.
 func (p *updatesPage) itemRow(c *ui.Context, src UpdateSource, it UpdateItem) {
-	t := c.Theme()
 	job := p.jobOf(src.ID(), it.Key)
 	ui.Row(c).Key([2]any{"row", it.Key}).Gap(frostui.SpaceM).Padding(frostui.SpaceS, 0).AlignItems(ui.Center).Children(func() {
 		ui.Avatar(c, it.Title, nil).Size(32, 32)
@@ -520,17 +454,7 @@ func (p *updatesPage) itemRow(c *ui.Context, src UpdateSource, it UpdateItem) {
 			}
 		})
 		if it.From != "" || it.To != "" {
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Justify(ui.End).Children(func() {
-				if it.From != "" {
-					frostui.Mono(c, it.From).TextColor(t.TextMuted).SingleLine()
-				}
-				if it.From != "" && it.To != "" {
-					ui.Text(c, "→").FontSize(12.5).TextColor(t.TextMuted)
-				}
-				if it.To != "" {
-					frostui.Mono(c, it.To).SingleLine()
-				}
-			})
+			frostui.VersionChange(c, it.From, it.To)
 		}
 		ui.Row(c).Width(170).Gap(frostui.SpaceS).Justify(ui.End).AlignItems(ui.Center).Children(func() {
 			p.itemAction(c, src, it, job)
@@ -542,22 +466,21 @@ func (p *updatesPage) itemAction(c *ui.Context, src UpdateSource, it UpdateItem,
 	t := c.Theme()
 	switch {
 	case job != nil && job.State == frostui.JobQueued:
-		ui.Spinner(c).Label("Queued: " + it.Title)
-		frostui.Caption(c, "Queued").SingleLine()
+		frostui.JobStatus(c, frostui.RowStatus{State: frostui.StepQueued, Text: "Queued", Label: "Queued: " + it.Title, Compact: true})
 		return
 	case job != nil && job.State == frostui.JobRunning:
-		ui.Spinner(c).Label(updatesDoing(it.Action) + " " + it.Title)
-		frostui.Caption(c, updatesDoing(it.Action)).SingleLine()
+		doing := updatesDoing(it.Action)
+		frostui.JobStatus(c, frostui.RowStatus{State: frostui.StepRunning, Text: doing, Label: doing + " " + it.Title, Compact: true})
 		return
 	case job != nil && job.State == frostui.JobDone:
-		frostui.IconPill(c, "object-select", updatesDone(it.Action), frostui.Success)
+		frostui.JobStatus(c, frostui.RowStatus{State: frostui.StepDone, Text: updatesDone(it.Action), Compact: true})
 		return
 	case job != nil && job.State == frostui.JobFailed:
 		msg := "Failed"
 		if job.Err != nil {
 			msg = job.Err.Error()
 		}
-		frostui.Icon(c, "dialog-error").TextColor(t.Danger).Label("Failed").Tooltip(msg)
+		frostui.JobStatus(c, frostui.RowStatus{State: frostui.StepFailed, Text: "Failed", Tooltip: msg, Compact: true})
 	}
 	label := strings.TrimSuffix(it.Action, "…") + " " + it.Title
 	if it.Held {

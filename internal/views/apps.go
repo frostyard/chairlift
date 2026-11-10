@@ -3,7 +3,6 @@ package views
 import (
 	"cmp"
 	"fmt"
-	"hash/fnv"
 	"slices"
 	"strings"
 	"unicode"
@@ -191,23 +190,11 @@ func (p *appsPage) tabBar(c *ui.Context, tabs []appsTab) {
 	}
 	idx := slices.IndexFunc(tabs, func(t appsTab) bool { return t.id == p.tab })
 	idx = max(idx, 0)
-	t := c.Theme()
-	parts := ui.TabsBase(c, &idx, len(tabs))
-	parts.List.Gap(frostui.SpaceXS).Children(func() {
-		for i, tab := range tabs {
-			el := parts.Tab(i).Row().Gap(6).Padding(6, 12).Radius(frostui.RadiusChip).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-			switch {
-			case i == idx:
-				el.Background(t.Surface)
-			case el.Hovered():
-				el.Background(t.SurfaceHover)
-			}
-			el.Children(func() {
-				frostui.Icon(c, tab.icon)
-				ui.Text(c, tab.title).FontSize(13.5).SingleLine()
-			})
-		}
-	})
+	pills := make([]frostui.Tab, len(tabs))
+	for i, tab := range tabs {
+		pills[i] = frostui.Tab{Title: tab.title, Icon: tab.icon}
+	}
+	frostui.PillTabs(c, &idx, pills)
 	p.tab = tabs[idx].id
 }
 
@@ -324,20 +311,20 @@ func (p *appsPage) drawTable(c *ui.Context, rows []AppEntry) {
 	// The table chooses rows in the accent; under this theme the chosen
 	// row is a soft tint of it instead, so the pills on it still show.
 	// The cells take their colors from t, the page's own theme.
-	ui.Themed(c, appsTableTheme(t)).Background(ui.Transparent).Height(height).Children(func() {
+	ui.Themed(c, frostui.SoftSelection(t)).Background(ui.Transparent).Height(height).Children(func() {
 		ui.Table(c, &p.table, p.cols, len(rows), func(row, col int) {
 			e := rows[row]
 			switch col {
 			case 0:
 				ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-					appsAvatar(c, t, e.Name, 28)
+					frostui.SquareAvatar(c, e.Name, 28)
 					ui.Column(c).Gap(1).Grow(1).MinWidth(0).Children(func() {
 						ui.Text(c, e.Name).FontSize(13.5).FontWeight(600).TextColor(t.Text).SingleLine()
 						ui.Text(c, e.ID).FontSize(11.5).TextColor(t.TextMuted).SingleLine()
 					})
 				})
 			case 1:
-				ui.Row(c).Children(func() { appsKindPill(c, t, e.Kind) })
+				ui.Row(c).Children(func() { frostui.ColorPill(c, appsKindLabel(e.Kind), appsKindColor(t, e.Kind)) })
 			case 2:
 				if e.Version == "" {
 					ui.Text(c, "—").TextColor(t.TextMuted)
@@ -354,18 +341,6 @@ func (p *appsPage) drawTable(c *ui.Context, rows []AppEntry) {
 	}
 }
 
-// appsTableTheme is t with the accent of chosen rows softened to a tint
-// of it on the card, and the text on them left as it is.
-func appsTableTheme(t *ui.Theme) *ui.Theme {
-	tt := *t
-	tint := frostui.Panel(t).Mix(t.Accent, 0.2)
-	if !t.Dark {
-		tint = frostui.Panel(t).Mix(t.Accent, 0.14)
-	}
-	tt.Accent, tt.InactiveAccent, tt.AccentText = tint, tint, t.Text
-	return &tt
-}
-
 // inspector is the card at the right: the chosen entry's facts and its
 // actions.
 func (p *appsPage) inspector(c *ui.Context, e *AppEntry) {
@@ -376,10 +351,10 @@ func (p *appsPage) inspector(c *ui.Context, e *AppEntry) {
 			return
 		}
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-			appsAvatar(c, t, e.Name, 52)
+			frostui.SquareAvatar(c, e.Name, 52)
 			ui.Column(c).Gap(5).Grow(1).MinWidth(0).AlignItems(ui.Start).Children(func() {
 				ui.Text(c, e.Name).FontSize(17).Bold().MaxLines(2)
-				appsKindPill(c, t, e.Kind)
+				frostui.ColorPill(c, appsKindLabel(e.Kind), appsKindColor(t, e.Kind))
 			})
 		})
 		if e.Summary != "" {
@@ -399,7 +374,7 @@ func (p *appsPage) inspector(c *ui.Context, e *AppEntry) {
 		if e.Pinned {
 			facts = append(facts, frostui.KeyValue{Key: "Pinned", Value: "Upgrades leave it at this version"})
 		}
-		appsFacts(c, facts)
+		frostui.KeyValues(c, facts, frostui.KeyValuesStyle{KeyWidth: 72, Gap: 10, FontSize: 12.5})
 		if len(e.Actions) == 0 {
 			return
 		}
@@ -419,7 +394,7 @@ func (p *appsPage) actionButton(c *ui.Context, t *ui.Theme, e AppEntry, a AppAct
 	var b ui.Element
 	switch a {
 	case ActUpdate:
-		b = appsPrimaryButton(c, "software-update-available", "Update to "+e.Update)
+		b = frostui.LabeledButton(c, "software-update-available", "Update to "+e.Update, true)
 	case ActOpen:
 		b = frostui.LabeledButton(c, "window-new", "Open", false)
 	case ActPin:
@@ -695,16 +670,9 @@ func appsKindColor(t *ui.Theme, k AppKind) ui.Color {
 	return ui.Oklch(0.5, 0.2, 300)
 }
 
-// appsKindPill is the Source pill of an entry.
-func appsKindPill(c *ui.Context, t *ui.Theme, k AppKind) ui.Element {
-	color := appsKindColor(t, k)
-	return ui.Row(c).Padding(2, 8).Radius(frostui.RadiusChip).Background(color.Alpha(0.16)).Children(func() {
-		ui.Text(c, appsKindLabel(k)).FontSize(11.5).TextColor(color).SingleLine()
-	})
-}
-
 // appsStatusPill is the last column: a spinner while a job works on the
-// entry, else Update or Pinned.
+// entry, else Update or Pinned. The table draws it under SoftSelection, so
+// the Update pill takes the page theme's accent from t.
 func appsStatusPill(c *ui.Context, t *ui.Theme, e AppEntry) {
 	switch {
 	case e.Busy:
@@ -713,75 +681,8 @@ func appsStatusPill(c *ui.Context, t *ui.Theme, e AppEntry) {
 			ui.Text(c, "Working").FontSize(11.5).TextColor(t.TextMuted)
 		})
 	case e.Update != "":
-		ui.Row(c).Gap(5).Padding(2, 8).Radius(frostui.RadiusChip).Background(frostui.ToneFill(t, frostui.Accent)).AlignItems(ui.Center).
-			Tooltip("Update to " + e.Update).Children(func() {
-			ui.Box(c).Size(6, 6).Radius(3).Background(t.Accent)
-			ui.Text(c, "Update").FontSize(11.5).TextColor(t.Accent).SingleLine()
-		})
+		frostui.DotPill(c, "Update", t.Accent).Tooltip("Update to " + e.Update)
 	case e.Pinned:
-		ui.Row(c).Gap(5).Padding(2, 8).Radius(frostui.RadiusChip).Background(frostui.ToneFill(t, frostui.Neutral)).AlignItems(ui.Center).Children(func() {
-			frostui.Icon(c, "changes-prevent").TextColor(t.TextMuted).FontSize(12)
-			ui.Text(c, "Pinned").FontSize(11.5).TextColor(t.TextMuted).SingleLine()
-		})
+		frostui.IconPill(c, "changes-prevent", "Pinned", frostui.Neutral)
 	}
-}
-
-// appsPrimaryButton is frostui.LabeledButton's primary form, which builds
-// a plain button before the primary one and so leaves an empty button.
-func appsPrimaryButton(c *ui.Context, icon, label string) ui.Element {
-	return ui.PrimaryButton(c, "").Label(label).Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			frostui.Icon(c, icon)
-			ui.Text(c, label).SingleLine()
-		})
-	})
-}
-
-// appsFacts is the inspector's list of names and values, narrower than
-// frostui.KeyValues.
-func appsFacts(c *ui.Context, rows []frostui.KeyValue) {
-	ui.Column(c).Gap(10).AlignItems(ui.Stretch).Children(func() {
-		for _, kv := range rows {
-			ui.Row(c.Key(kv.Key)).Gap(frostui.SpaceM).AlignItems(ui.Start).Children(func() {
-				frostui.Muted(c, kv.Key).Width(72).Shrink(0)
-				v := ui.Text(c, kv.Value).FontSize(12.5).Grow(1).MinWidth(0).Wrap().Selectable()
-				if kv.Mono {
-					v.Font("monospace").FontSize(12)
-				}
-			})
-		}
-	})
-}
-
-// appsAvatar is a rounded square with the initials of name on a color the
-// name picks, as the table and the inspector lead with.
-func appsAvatar(c *ui.Context, t *ui.Theme, name string, size float32) ui.Element {
-	h := fnv.New32a()
-	_, _ = h.Write([]byte(strings.ToLower(name)))
-	hue := float32(h.Sum32() % 360)
-	bg, fg := ui.Oklch(0.92, 0.05, hue), ui.Oklch(0.42, 0.12, hue)
-	if t.Dark {
-		bg, fg = ui.Oklch(0.36, 0.07, hue), ui.Oklch(0.88, 0.09, hue)
-	}
-	return ui.Box(c).Size(size, size).Radius(size / 4).Background(bg).Center().Shrink(0).Children(func() {
-		ui.Text(c, appsInitials(name)).FontSize(size * 0.36).Bold().TextColor(fg).SingleLine()
-	})
-}
-
-// appsInitials are the first letters of name's first two words, upper
-// case: "Mission Center" is "MC", "fzf" is "F".
-func appsInitials(name string) string {
-	words := strings.FieldsFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
-	var initials []rune
-	for _, w := range words {
-		if len(initials) == 2 {
-			break
-		}
-		r, _ := utf8.DecodeRuneInString(w)
-		initials = append(initials, unicode.ToUpper(r))
-	}
-	if len(initials) == 0 {
-		return "?"
-	}
-	return string(initials)
 }

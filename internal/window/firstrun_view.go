@@ -1,8 +1,6 @@
 package window
 
 import (
-	"fmt"
-
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/firstrun"
@@ -10,11 +8,11 @@ import (
 	"github.com/frostyard/chairlift/internal/i18n"
 )
 
-// The first-run wizard's metrics, in DIPs.
+// The first-run wizard's metrics, in DIPs. Its toasts (frostui.TopToasts)
+// grow as wide as the card, frostui.ToastWidth.
 const (
-	wizardWidth     = 640
+	wizardWidth     = frostui.ToastWidth
 	wizardMaxHeight = 640
-	wizardHeroIcon  = 64
 )
 
 // View draws the window: one card centered on the window's background,
@@ -27,7 +25,9 @@ func (w *FirstRun) View(c *ui.Context) {
 		c.AddToast(toast)
 	}
 	w.toasts = nil
-	topToasts(c)
+	// At the top, with a close button: MyGo's own toasts would cover Back
+	// and Next, and the persistent configuration error would block Next.
+	frostui.TopToasts(c, i18n.T(i18n.MsgClose))
 
 	step := w.flow.Current()
 	ui.Column(c).Fill().Background(t.Background).Padding(frostui.SpaceXL).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
@@ -45,37 +45,6 @@ func (w *FirstRun) View(c *ui.Context) {
 	})
 }
 
-// topToasts gives the window's toasts their look: at the top of the
-// window, over the step indicator, each with a close button. MyGo's own
-// toasts sit at the bottom, where they would cover Back and Next, and have
-// no close button, so the persistent configuration error would keep the
-// user from Next for good; resting the pointer on a toast also stops its
-// time. Plain text only.
-func topToasts(c *ui.Context) {
-	t := c.Theme()
-	fill, text := t.Inverse, t.InverseText
-	if fill.A == 0 {
-		fill, text = t.Text, t.Background
-	}
-	ui.ToastViewportBase(c, func(viewport ui.Element, toasts []ui.Toast) {
-		viewport.Justify(ui.Start).AlignItems(ui.Center).Padding(frostui.SpaceM, frostui.SpaceXL).Gap(frostui.SpaceS)
-		for _, toast := range toasts {
-			p := ui.ToastBase(c, toast)
-			p.Root.Row().Gap(frostui.SpaceM).Padding(8, 8, 8, 16).Radius(10).MaxWidth(wizardWidth).AlignItems(ui.Center).
-				Background(fill).TextColor(text).Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.25))
-			p.Root.Children(func() {
-				if toast.Type == "error" {
-					frostui.Icon(c, "dialog-warning").TextColor(t.Warning)
-				}
-				ui.Text(c, toast.Title).FontSize(13).Grow(1).Shrink(1)
-				p.CloseButton().Label(i18n.T(i18n.MsgClose)).Tooltip(i18n.T(i18n.MsgClose)).Padding(6).Radius(6).Children(func() {
-					frostui.Icon(c, "window-close").TextColor(text)
-				})
-			})
-		}
-	})
-}
-
 // stepView draws the current step.
 func (w *FirstRun) stepView(c *ui.Context, step firstrun.Step) {
 	switch step {
@@ -84,16 +53,16 @@ func (w *FirstRun) stepView(c *ui.Context, step firstrun.Step) {
 	case firstrun.StepConnectivity:
 		w.connectivityStep(c)
 	case firstrun.StepStyle:
-		hero(c, heroIcon{name: "applications-graphics"}, i18n.T(i18n.MsgColorScheme), i18n.T(i18n.MsgColorSchemeDesc))
+		frostui.Hero(c, frostui.HeroIcon{Name: "applications-graphics"}, i18n.T(i18n.MsgColorScheme), i18n.T(i18n.MsgColorSchemeDesc))
 		w.styleStep(c)
 	case firstrun.StepReporting:
-		hero(c, heroIcon{name: "send-to"}, i18n.T(i18n.MsgReportingTitle), i18n.T(i18n.MsgReportingDesc))
+		frostui.Hero(c, frostui.HeroIcon{Name: "send-to"}, i18n.T(i18n.MsgReportingTitle), i18n.T(i18n.MsgReportingDesc))
 		w.reportingStep(c)
 	case firstrun.StepApps:
-		hero(c, heroIcon{name: "system-software-install"}, i18n.T(i18n.MsgApplications), i18n.T(i18n.MsgApplicationsDesc))
+		frostui.Hero(c, frostui.HeroIcon{Name: "system-software-install"}, i18n.T(i18n.MsgApplications), i18n.T(i18n.MsgApplicationsDesc))
 		w.appsStep(c)
 	case firstrun.StepProgress:
-		hero(c, heroIcon{name: "folder-download", busy: !w.flow.ProgressFinished()}, i18n.T(i18n.MsgProgress), i18n.T(i18n.MsgProgressDesc))
+		frostui.Hero(c, frostui.HeroIcon{Name: "folder-download", Busy: !w.flow.ProgressFinished()}, i18n.T(i18n.MsgProgress), i18n.T(i18n.MsgProgressDesc))
 		w.progressStep(c)
 	case firstrun.StepDone:
 		w.doneStep(c)
@@ -104,7 +73,6 @@ func (w *FirstRun) stepView(c *ui.Context, step firstrun.Step) {
 // one drawn long in the accent. Apps joins or leaves the row as the
 // connectivity check decides.
 func (w *FirstRun) stepDots(c *ui.Context) {
-	t := c.Theme()
 	steps := w.flow.VisibleSteps()
 	current := 0
 	for i, s := range steps {
@@ -112,21 +80,7 @@ func (w *FirstRun) stepDots(c *ui.Context) {
 			current = i
 		}
 	}
-	ui.Row(c).Gap(6).Justify(ui.Center).AlignItems(ui.Center).Role(ui.RoleProgress).
-		Range(1, float64(len(steps)), float64(current+1)).Label(fmt.Sprintf("%d / %d", current+1, len(steps))).
-		Children(func() {
-			for i, s := range steps {
-				dot := ui.Box(c.Key(s.String())).Height(6).Radius(3)
-				switch {
-				case i == current:
-					dot.Width(22).Background(t.Accent)
-				case i < current:
-					dot.Width(6).Background(t.Accent.Alpha(0.45))
-				default:
-					dot.Width(6).Background(t.Border)
-				}
-			}
-		})
+	frostui.StepDots(c, len(steps), current)
 }
 
 // footer holds Back and Next. Welcome and Done have their own buttons in
@@ -147,47 +101,11 @@ func (w *FirstRun) footer(c *ui.Context, step firstrun.Step) {
 	})
 }
 
-// heroIcon is the icon at the top of a step: a named icon on a tile in a
-// tone, the ChairLift logo on the accent, or a spinner while busy.
-type heroIcon struct {
-	name string
-	tone frostui.Tone
-	logo *ui.SVG
-	busy bool
-}
-
-// hero draws a step's icon, its title and its description, centered.
-func hero(c *ui.Context, icon heroIcon, title, description string) {
-	t := c.Theme()
-	ui.Column(c).Gap(10).AlignItems(ui.Center).Children(func() {
-		switch {
-		case icon.logo != nil:
-			ui.Box(c).Size(wizardHeroIcon, wizardHeroIcon).Radius(18).Background(t.Accent).Center().Children(func() {
-				ui.Icon(c, icon.logo).FontSize(38).TextColor(t.AccentText)
-			})
-		case icon.busy:
-			ui.Box(c).Size(wizardHeroIcon, wizardHeroIcon).Radius(18).Background(frostui.ToneFill(t, frostui.Accent)).Center().Children(func() {
-				ui.Spinner(c).Size(30, 30).Label(title)
-			})
-		default:
-			tone := icon.tone
-			if tone == frostui.Neutral {
-				tone = frostui.Accent
-			}
-			frostui.IconTile(c, icon.name, tone, wizardHeroIcon)
-		}
-		ui.Text(c, title).FontSize(24).Bold().TextAlign(ui.Center).Role(ui.RoleHeading)
-		if description != "" {
-			ui.Text(c, description).FontSize(13.5).TextColor(t.TextMuted).TextAlign(ui.Center).MaxWidth(500)
-		}
-	})
-}
-
 // welcomeStep greets the user by name, with Start and, when GNOME Settings
 // is installed, Accessibility.
 func (w *FirstRun) welcomeStep(c *ui.Context) {
 	ui.Column(c).Grow(1).Gap(28).Justify(ui.Center).AlignItems(ui.Stretch).Children(func() {
-		hero(c, heroIcon{logo: w.logo}, i18n.Format(i18n.T(i18n.MsgHello), w.name), i18n.T(i18n.MsgWelcomeDesc))
+		frostui.Hero(c, frostui.HeroIcon{Logo: w.logo}, i18n.Format(i18n.T(i18n.MsgHello), w.name), i18n.T(i18n.MsgWelcomeDesc))
 		ui.Column(c).Gap(frostui.SpaceM).AlignItems(ui.Center).Children(func() {
 			ui.PrimaryButton(c, i18n.T(i18n.MsgStart)).MinWidth(200).AutoFocus().OnClick(w.goNext)
 			if w.settings {
@@ -205,12 +123,12 @@ func (w *FirstRun) connectivityStep(c *ui.Context) {
 		offline := false
 		switch w.flow.Connectivity() {
 		case firstrun.ConnChecking:
-			hero(c, heroIcon{busy: true}, i18n.T(i18n.MsgCheckingConnection), i18n.T(i18n.MsgCheckingDesc))
+			frostui.Hero(c, frostui.HeroIcon{Busy: true}, i18n.T(i18n.MsgCheckingConnection), i18n.T(i18n.MsgCheckingDesc))
 		case firstrun.ConnOnline:
-			hero(c, heroIcon{name: "network-transmit-receive", tone: frostui.Success}, i18n.T(i18n.MsgConnectionAvailable), i18n.T(i18n.MsgConnectionDesc))
+			frostui.Hero(c, frostui.HeroIcon{Name: "network-transmit-receive", Tone: frostui.Success}, i18n.T(i18n.MsgConnectionAvailable), i18n.T(i18n.MsgConnectionDesc))
 		case firstrun.ConnOffline:
 			offline = true
-			hero(c, heroIcon{name: "network-offline", tone: frostui.Warning}, i18n.T(i18n.MsgNoInternet), i18n.T(i18n.MsgOfflineDesc))
+			frostui.Hero(c, frostui.HeroIcon{Name: "network-offline", Tone: frostui.Warning}, i18n.T(i18n.MsgNoInternet), i18n.T(i18n.MsgOfflineDesc))
 		}
 		if !offline {
 			return
@@ -420,12 +338,12 @@ func (w *FirstRun) progressStep(c *ui.Context) {
 // the completion failed, the warning icon and the error log.
 func (w *FirstRun) doneStep(c *ui.Context) {
 	done := w.done
-	icon := heroIcon{name: "object-select", tone: frostui.Success}
+	icon := frostui.HeroIcon{Name: "object-select", Tone: frostui.Success}
 	if done.Warning {
-		icon = heroIcon{name: "dialog-warning", tone: frostui.Warning}
+		icon = frostui.HeroIcon{Name: "dialog-warning", Tone: frostui.Warning}
 	}
 	ui.Column(c).Grow(1).Gap(24).Justify(ui.Center).AlignItems(ui.Stretch).Children(func() {
-		hero(c, icon, i18n.T(i18n.MsgFinished), i18n.T(done.Description))
+		frostui.Hero(c, icon, i18n.T(i18n.MsgFinished), i18n.T(done.Description))
 		ui.Row(c).Justify(ui.Center).Children(func() {
 			ui.PrimaryButton(c, i18n.T(i18n.MsgExit)).MinWidth(200).AutoFocus().OnClick(w.exit)
 		})

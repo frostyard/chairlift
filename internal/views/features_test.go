@@ -14,31 +14,20 @@ import (
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/frostui"
+	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/updex"
 	updexapi "github.com/frostyard/updex/v2/updex"
 )
 
 // featuresUIThread stands in for the UI thread: Env.Post queues functions, and
 // the test runs them with settle.
-type featuresUIThread struct{ queue chan func() }
+type featuresUIThread struct{ frostuitest.Loop }
 
-func newFeaturesUIThread() *featuresUIThread { return &featuresUIThread{queue: make(chan func(), 256)} }
-
-func (u *featuresUIThread) post(fn func()) { u.queue <- fn }
+func newFeaturesUIThread() *featuresUIThread { return &featuresUIThread{} }
 
 // settle runs posted functions until none arrives for a while: the
 // backends' goroutines have ended and their results are applied.
-func (u *featuresUIThread) settle(t *testing.T) {
-	t.Helper()
-	for {
-		select {
-		case fn := <-u.queue:
-			fn()
-		case <-time.After(60 * time.Millisecond):
-			return
-		}
-	}
-}
+func (u *featuresUIThread) settle(*testing.T) { u.Settle(60 * time.Millisecond) }
 
 // fakeUpdex records what the Features domain asks of updex. It never runs
 // pkexec, the helper or updex itself.
@@ -181,7 +170,7 @@ func newFeaturesHarness(t *testing.T, cfg *config.Config, dryRun bool, fake *fak
 	t.Helper()
 	frostui.SetIcons(frostui.NewIcons(nil))
 	u := newFeaturesUIThread()
-	env := NewEnv(cfg, dryRun, u.post)
+	env := NewEnv(cfg, dryRun, u.Post)
 	env.Now = func() time.Time { return time.Date(2026, 11, 10, 9, 30, 0, 0, time.UTC) }
 	f := NewFeatures(env)
 	fake.install(f)

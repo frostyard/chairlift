@@ -5,7 +5,6 @@ import (
 	"errors"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,66 +13,24 @@ import (
 	"github.com/frostyard/chairlift/internal/activity"
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/frostui"
+	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/fwupd"
 )
 
 // The helpers of updates_test.go and firmware_test.go start with "upd" and
 // "fw" so that they cannot clash with other test files of the package.
-
-// updPost runs posted functions on the test goroutine, as the UI thread.
-type updPost struct {
-	mu  sync.Mutex
-	fns []func()
-}
-
-func (q *updPost) post(fn func()) {
-	q.mu.Lock()
-	q.fns = append(q.fns, fn)
-	q.mu.Unlock()
-}
-
-// flush runs what was posted, and what that posts, until nothing is left.
-func (q *updPost) flush() {
-	for {
-		q.mu.Lock()
-		fns := q.fns
-		q.fns = nil
-		q.mu.Unlock()
-		if len(fns) == 0 {
-			return
-		}
-		for _, f := range fns {
-			f()
-		}
-	}
-}
-
-// until runs posted functions until cond holds.
-func (q *updPost) until(t *testing.T, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		q.flush()
-		if cond() {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("timed out")
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
+// Their posts run on a frostuitest.Loop, the test's UI thread.
 
 // updEnv returns an Env whose updates_page enables groups, with an
 // in-memory activity log, and the queue its posts go to.
-func updEnv(t *testing.T, dryRun bool, groups ...string) (*Env, *updPost) {
+func updEnv(t *testing.T, dryRun bool, groups ...string) (*Env, *frostuitest.Loop) {
 	t.Helper()
 	pc := config.PageConfig{}
 	for _, g := range groups {
 		pc[g] = config.GroupConfig{Enabled: true}
 	}
-	q := &updPost{}
-	env := NewEnv(&config.Config{UpdatesPage: pc}, dryRun, q.post)
+	q := frostuitest.NewLoop()
+	env := NewEnv(&config.Config{UpdatesPage: pc}, dryRun, q.Post)
 	env.Activity, _ = activity.Open("", dryRun)
 	return env, q
 }
@@ -193,7 +150,7 @@ func updFakes(env *Env) (image, features, flat, brew *updFake) {
 
 // updSetup returns a page over the four fakes and a real firmware source
 // over fake fwupd functions, loaded.
-func updSetup(t *testing.T) (env *Env, q *updPost, p *updatesPage, srcs []UpdateSource, fakes []*updFake, fw *Firmware, ff *fwFake) {
+func updSetup(t *testing.T) (env *Env, q *frostuitest.Loop, p *updatesPage, srcs []UpdateSource, fakes []*updFake, fw *Firmware, ff *fwFake) {
 	t.Helper()
 	env, q = updEnv(t, false, "firmware_updates_group")
 	image, features, flat, brew := updFakes(env)
@@ -249,7 +206,7 @@ func TestUpdateEverythingQueuesDefaultJobsInSourceOrder(t *testing.T) {
 	p.updateEverything()
 	want := []string{"image/snow", "features/docker", "features/devtools", "flatpak/firefox", "flatpak/bazaar",
 		"flatpak/platform", "brew/neovim", "brew/gh", "brew/ripgrep", "brew/starship"}
-	if got := updKeys(updatesBatch(env.Jobs)); !slices.Equal(got, want) {
+	if got := updKeys(env.Jobs.BatchJobs()); !slices.Equal(got, want) {
 		t.Errorf("queued %v\nwant  %v", got, want)
 	}
 	// While it runs, a second click queues nothing.
@@ -261,7 +218,7 @@ func TestUpdateEverythingQueuesDefaultJobsInSourceOrder(t *testing.T) {
 		t.Errorf("toasts = %+v", toasts)
 	}
 	close(release)
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	if len(ff.installs()) != 0 {
 		t.Errorf("Update everything installed firmware: %v", ff.installs())
 	}
@@ -282,7 +239,7 @@ func TestUpdatesPipelineFollowsTheJobs(t *testing.T) {
 	flat.hold = map[string]chan struct{}{"firefox": release}
 	p.track(srcs) // the view tracks every frame from the start
 	p.updateEverything()
-	q.until(t, func() bool { cur := env.Jobs.Current(); return cur != nil && cur.Key == "firefox" })
+	q.RunUntil(t, func() bool { cur := env.Jobs.Current(); return cur != nil && cur.Key == "firefox" })
 	p.track(srcs)
 	want := map[string]frostui.StepState{
 		"Snow Linux": frostui.StepDone, "docker": frostui.StepDone, "devtools": frostui.StepDone,
@@ -297,7 +254,7 @@ func TestUpdatesPipelineFollowsTheJobs(t *testing.T) {
 		}
 	}
 	close(release)
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	p.track(srcs)
 	// The sources dropped what they updated; the run still shows it.
 	got = updSteps(p, srcs)
@@ -309,7 +266,7 @@ func TestUpdatesPipelineFollowsTheJobs(t *testing.T) {
 	if got["bluefin-cli"] != frostui.StepHeld {
 		t.Errorf("held step = %v", got["bluefin-cli"])
 	}
-	if s := updatesRunSummary(p.run); s != "Last run: 10 done" {
+	if s := frostui.RunSummary(p.run); s != "10 done" {
 		t.Errorf("summary = %q", s)
 	}
 	// Check now forgets the run.
@@ -330,13 +287,13 @@ func TestUpdatesPipelineShowsAFailure(t *testing.T) {
 	fakes[1].fail = map[string]error{"docker": errors.New("signature mismatch")}
 	p.track(srcs)
 	p.updateEverything()
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	p.track(srcs)
 	steps := updSteps(p, srcs)
 	if steps["docker"] != frostui.StepFailed || steps["devtools"] != frostui.StepDone {
 		t.Errorf("docker = %v, devtools = %v", steps["docker"], steps["devtools"])
 	}
-	if s := updatesRunSummary(p.run); s != "Last run: 9 done · 1 failed" {
+	if s := frostui.RunSummary(p.run); s != "9 done · 1 failed" {
 		t.Errorf("summary = %q", s)
 	}
 	// Another page's job is not part of the Updates page's run.
@@ -348,7 +305,7 @@ func TestUpdatesPipelineShowsAFailure(t *testing.T) {
 		t.Errorf("the run kept another page's job: %v", updKeys(p.run))
 	}
 	close(release)
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 }
 
 func TestUpdatesWords(t *testing.T) {
@@ -358,11 +315,6 @@ func TestUpdatesWords(t *testing.T) {
 	} {
 		if got := [2]string{updatesDoing(action), updatesDone(action)}; got != want {
 			t.Errorf("%q: %v, want %v", action, got, want)
-		}
-	}
-	for d, want := range map[time.Duration]string{8 * time.Second: "8s", 63 * time.Second: "1m 03s", 3723 * time.Second: "1h 02m"} {
-		if got := updatesDuration(d); got != want {
-			t.Errorf("updatesDuration(%v) = %q, want %q", d, got, want)
 		}
 	}
 }
@@ -406,7 +358,7 @@ func TestUpdatesRowsAndButtons(t *testing.T) {
 	if !slices.Equal(brew.asked, []string{"gh"}) {
 		t.Errorf("asked = %v", brew.asked)
 	}
-	q.flush()
+	q.Flush()
 	tt.Frame()
 	if !tt.HasText("Updating") {
 		t.Errorf("the running row shows no progress: %q", tt.Texts())
@@ -415,7 +367,7 @@ func TestUpdatesRowsAndButtons(t *testing.T) {
 		t.Errorf("Update everything while busy = %+v, %v; want disabled", b, ok)
 	}
 	close(release)
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	tt.Frame()
 	if !tt.HasText("Updated") {
 		t.Errorf("the updated row shows no Updated pill: %q", tt.Texts())
@@ -439,7 +391,7 @@ func TestUpdatesFirmwareRowAsksFirst(t *testing.T) {
 	if err := tt.Click("Install"); err != nil {
 		t.Fatal(err)
 	}
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 	tt.Frame()
 	if got := ff.installs(); !slices.Equal(got, []string{fwDock.DeviceID}) {
 		t.Errorf("installs = %v", got)
@@ -462,8 +414,8 @@ func TestUpdatesCheckNow(t *testing.T) {
 			t.Errorf("%s refreshed %d times", f.id, f.refreshed)
 		}
 	}
-	q.until(t, func() bool { return ff.listCount() == calls+1 })
-	q.until(t, func() bool { return !p.sources()[4].Status().Checking })
+	q.RunUntil(t, func() bool { return ff.listCount() == calls+1 })
+	q.RunUntil(t, func() bool { return !p.sources()[4].Status().Checking })
 	// While a source checks, Check now is off.
 	fakes[2].status.Checking = true
 	tt.Frame()
@@ -566,7 +518,7 @@ func TestUpdatesCommands(t *testing.T) {
 	release := make(chan struct{})
 	fakes[3].hold = map[string]chan struct{}{"neovim": release}
 	byTitle["Update Homebrew packages"].Run()
-	if got := updKeys(updatesBatch(env.Jobs)); !slices.Equal(got, []string{"brew/neovim", "brew/gh", "brew/ripgrep", "brew/starship"}) {
+	if got := updKeys(env.Jobs.BatchJobs()); !slices.Equal(got, []string{"brew/neovim", "brew/gh", "brew/ripgrep", "brew/starship"}) {
 		t.Errorf("Homebrew command queued %v", got)
 	}
 	for _, c := range p.Commands() {
@@ -578,7 +530,7 @@ func TestUpdatesCommands(t *testing.T) {
 		}
 	}
 	close(release)
-	q.until(t, func() bool { return !env.Jobs.Busy() })
+	q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 }
 
 // TestSnapshotUpdates draws the page idle, running and done, light and
@@ -607,8 +559,8 @@ func TestSnapshotUpdates(t *testing.T) {
 		if err := tt.Click("Update everything"); err != nil {
 			t.Fatal(err)
 		}
-		q.until(t, func() bool { cur := env.Jobs.Current(); return cur != nil && cur.Key == "bazaar" })
-		updAge(updatesBatch(env.Jobs))
+		q.RunUntil(t, func() bool { cur := env.Jobs.Current(); return cur != nil && cur.Key == "bazaar" })
+		updAge(env.Jobs.BatchJobs())
 		tt.Frame()
 		if !tt.HasText("Job 5 of 10") {
 			t.Errorf("no batch progress: %q", tt.Texts())
@@ -616,7 +568,7 @@ func TestSnapshotUpdates(t *testing.T) {
 		snapshot(t, tt, "updates-running-"+theme)
 
 		close(release)
-		q.until(t, func() bool { return !env.Jobs.Busy() })
+		q.RunUntil(t, func() bool { return !env.Jobs.Busy() })
 		tt.Frame() // the page keeps the finished batch
 		updAge(p.run)
 		tt.Frame()

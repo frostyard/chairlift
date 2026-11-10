@@ -31,7 +31,7 @@ func (p *maintenancePage) View(c *ui.Context) {
 		if len(m.ready()) == 0 {
 			return
 		}
-		b := maintPrimaryButton(c, "user-trash", "Clean everything").Disabled(len(idle) == 0)
+		b := frostui.LabeledButton(c, "user-trash", "Clean everything", true).Disabled(len(idle) == 0)
 		if len(idle) == 0 {
 			b.Tooltip("Every cleanup is running or waiting")
 		}
@@ -62,18 +62,6 @@ func (p *maintenancePage) View(c *ui.Context) {
 // maintCardGap is the gap between the page's cards.
 const maintCardGap = 16
 
-// maintPrimaryButton is an accent button with an icon before its label.
-// frostui.LabeledButton(c, icon, label, true) would do, but it builds a
-// stray empty button before the primary one.
-func maintPrimaryButton(c *ui.Context, icon, label string) ui.Element {
-	return ui.PrimaryButton(c, "").Label(label).Children(func() {
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-			frostui.Icon(c, icon)
-			ui.Text(c, label).SingleLine()
-		})
-	})
-}
-
 func (p *maintenancePage) cleanupCard(c *ui.Context, cleanups []cleanup) {
 	frostui.CardHeader(c, "Clean up", "Each cleanup asks first, then runs as a job; its output goes to the console", nil)
 	if len(cleanups) == 0 {
@@ -89,24 +77,11 @@ func (p *maintenancePage) cleanupCard(c *ui.Context, cleanups []cleanup) {
 }
 
 func (p *maintenancePage) cleanupRow(c *ui.Context, cl cleanup) {
-	t := c.Theme()
 	m := p.s.Maint
-	ui.Row(c).Gap(frostui.SpaceM).Padding(2, 0).AlignItems(ui.Center).Children(func() {
-		frostui.IconTile(c, cl.Icon, frostui.Neutral, 32)
-		ui.Column(c).Grow(1).Basis(0).Gap(3).Children(func() {
-			ui.Row(c).Gap(frostui.SpaceS).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, cl.Title).FontSize(13.5).FontWeight(600).SingleLine().Shrink(1)
-				if cl.Admin {
-					frostui.IconPill(c, "changes-prevent", "admin", frostui.Neutral).
-						Tooltip("Asks for administrator authentication")
-				}
-			})
-			frostui.Mono(c, strings.Join(cl.Argv, " ")).FontSize(11.5).TextColor(t.TextMuted).SingleLine().Selectable()
-		})
-		ui.Row(c).Width(132).Gap(6).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-			p.cleanupStatus(c, cl)
-		})
-		ui.Row(c).Width(72).Justify(ui.End).Children(func() {
+	frostui.CommandRow(c, frostui.CommandItem{
+		Icon: cl.Icon, Title: cl.Title, Command: strings.Join(cl.Argv, " "), Admin: cl.Admin,
+		Status: func() { frostui.JobStatus(c, p.cleanupStatus(cl)) },
+		Action: func() {
 			if cl.Checking {
 				return
 			}
@@ -114,27 +89,23 @@ func (p *maintenancePage) cleanupRow(c *ui.Context, cl cleanup) {
 			if b.Clicked() {
 				m.Ask(cl.Key)
 			}
-		})
+		},
 	})
 }
 
 // cleanupStatus is the state at the end of a cleanup's row: being
-// checked, waiting or running, or how the last run ended.
-func (p *maintenancePage) cleanupStatus(c *ui.Context, cl cleanup) {
+// checked, waiting or running, or how the last run ended; nothing before
+// a first run.
+func (p *maintenancePage) cleanupStatus(cl cleanup) frostui.RowStatus {
 	m := p.s.Maint
 	if cl.Checking {
-		ui.Spinner(c).Label("Checking")
-		frostui.Muted(c, "Checking…").SingleLine()
-		return
+		return frostui.RowStatus{State: frostui.StepRunning, Text: "Checking…", Label: "Checking"}
 	}
 	if j := m.env.Jobs.Find(maintSource, cl.Key); j != nil && !j.State.Ended() {
-		text := "Waiting"
 		if j.State == frostui.JobRunning {
-			text = "Cleaning…"
+			return frostui.RowStatus{State: frostui.StepRunning, Text: "Cleaning…"}
 		}
-		ui.Spinner(c).Label(text)
-		frostui.Muted(c, text).SingleLine()
-		return
+		return frostui.RowStatus{State: frostui.StepQueued, Text: "Waiting"}
 	}
 	r := m.Result(cl.Key)
 	when := ""
@@ -143,16 +114,15 @@ func (p *maintenancePage) cleanupStatus(c *ui.Context, cl cleanup) {
 	}
 	switch r.Outcome {
 	case cleanupDone:
-		frostui.Icon(c, "object-select").TextColor(c.Theme().Success)
-		frostui.Toned(c, "Cleaned", frostui.Success).SingleLine().Tooltip("Cleaned at " + when)
+		return frostui.RowStatus{State: frostui.StepDone, Text: "Cleaned", Tooltip: "Cleaned at " + when}
 	case cleanupPreviewed:
-		frostui.Muted(c, "Previewed").SingleLine().Tooltip("Dry run at " + when + ": nothing changed")
+		return frostui.RowStatus{State: frostui.StepSkipped, Text: "Previewed", Tooltip: "Dry run at " + when + ": nothing changed"}
 	case cleanupFailed:
-		frostui.Icon(c, "dialog-error").TextColor(c.Theme().Danger)
-		frostui.Toned(c, "Failed", frostui.Danger).SingleLine().Tooltip(r.Err)
+		return frostui.RowStatus{State: frostui.StepFailed, Text: "Failed", Tooltip: r.Err}
 	case cleanupCanceled:
-		frostui.Muted(c, "Canceled").SingleLine()
+		return frostui.RowStatus{State: frostui.StepSkipped, Text: "Canceled"}
 	}
+	return frostui.RowStatus{}
 }
 
 // maintFreeSpaceCard draws the free space of the disk Live samples as a gauge.
@@ -194,36 +164,20 @@ func maintDeploymentsCard(c *ui.Context, info SystemInfo) {
 // maintDeploymentRow is one deployment of the chain; empty is what an empty
 // slot says. The booted one is highlighted.
 func maintDeploymentRow(c *ui.Context, role, empty, icon string, d Deployment, booted bool) {
-	t := c.Theme()
-	bg, border, iconColor := t.Background, t.Border, t.TextMuted
-	if booted {
-		bg, border, iconColor = t.Accent.Alpha(0.14), t.Accent, t.Accent
-	}
-	row := ui.Row(c).Gap(frostui.SpaceM).Padding(9, 14).Radius(10).Background(bg).Border(1, border).AlignItems(ui.Center)
-	if !d.Present {
-		row.Opacity(0.6)
-	}
-	row.Children(func() {
-		frostui.Icon(c, icon).TextColor(iconColor)
-		ui.Column(c).Grow(1).Basis(0).Gap(2).Children(func() {
-			frostui.Caption(c, role).SingleLine()
-			version := empty
-			if d.Present {
-				version = d.Version
-				if version == "" {
-					version = "unknown version"
-				}
-			}
-			frostui.Mono(c, version).FontSize(13).SingleLine().Selectable()
-			if d.Present && d.Digest != "" {
-				frostui.Mono(c, pageview.ShortDigest(d.Digest)).FontSize(11).TextColor(t.TextMuted).SingleLine().
-					Selectable().Tooltip(d.Digest)
-			}
-		})
-		if d.Present && d.Pinned {
-			frostui.IconPill(c, "changes-prevent", "pinned", frostui.Neutral)
+	tile := frostui.Tile{Icon: icon, Caption: role, Value: empty, Current: booted, Dim: !d.Present}
+	if d.Present {
+		tile.Value = d.Version
+		if tile.Value == "" {
+			tile.Value = "unknown version"
 		}
-	})
+		if d.Digest != "" {
+			tile.Detail, tile.DetailTooltip = pageview.ShortDigest(d.Digest), d.Digest
+		}
+		if d.Pinned {
+			tile.Pill, tile.PillIcon = "pinned", "changes-prevent"
+		}
+	}
+	frostui.StepTile(c, tile)
 }
 
 // Commands are one "Clean up …" per cleanup that can run now, then "Clean

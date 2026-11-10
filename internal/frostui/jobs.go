@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -149,6 +150,12 @@ func (q *Jobs) History() []*Job { return append([]*Job(nil), q.history...) }
 // has: a batch is every job queued since the queue was last idle.
 func (q *Jobs) Batch() (done, total int) { return q.batchDone, q.batchTotal }
 
+// BatchJobs returns the jobs of the current batch in the order they were
+// queued: those that ended, the running one and those that wait. It is
+// empty while the queue is idle, so a view that shows a run after it ended
+// keeps its own copy.
+func (q *Jobs) BatchJobs() []*Job { return append([]*Job(nil), q.batch...) }
+
 // BatchFraction is the share of the batch done, counting the running job's
 // own fraction.
 func (q *Jobs) BatchFraction() float64 {
@@ -278,4 +285,45 @@ func (q *Jobs) logf(level Level, source, format string, args ...any) {
 	if q.console != nil {
 		q.console.Addf(level, source, format, args...)
 	}
+}
+
+// Duration formats how long a job ran as a step's note: "8s", "1m 03s",
+// "2h 05m".
+func Duration(d time.Duration) string {
+	s := int(d.Round(time.Second) / time.Second)
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	if s < 3600 {
+		return fmt.Sprintf("%dm %02ds", s/60, s%60)
+	}
+	return fmt.Sprintf("%dh %02dm", s/3600, s%3600/60)
+}
+
+// RunSummary says how a batch of jobs ended, as "9 done · 1 failed · 2
+// canceled"; jobs that did not end count for nothing, and it is "" when
+// none ended.
+func RunSummary(jobs []*Job) string {
+	done, failed, canceled := 0, 0, 0
+	for _, j := range jobs {
+		switch j.State {
+		case JobDone:
+			done++
+		case JobFailed:
+			failed++
+		case JobCanceled:
+			canceled++
+		}
+	}
+	var parts []string
+	if done > 0 {
+		parts = append(parts, fmt.Sprintf("%d done", done))
+	}
+	if failed > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", failed))
+	}
+	if canceled > 0 {
+		parts = append(parts, fmt.Sprintf("%d canceled", canceled))
+	}
+	return strings.Join(parts, " · ")
 }

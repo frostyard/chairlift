@@ -189,7 +189,7 @@ func (p *featuresView) tiles(c *ui.Context) {
 		return
 	}
 	ui.Column(c).Gap(frostui.SpaceS).AlignItems(ui.Stretch).Children(func() {
-		ui.Row(c).Wrap().Gap(frostui.SpaceM).AlignItems(ui.Start).Children(func() {
+		frostui.TileGrid(c).Children(func() {
 			for _, row := range rows {
 				busy := f.busy(row.Name)
 				if frostui.ToggleTile(c.Key("tile:"+row.Name), featureIcon(row.Name), featureTitle(row), p.tileSub(row, busy), row.On, busy) {

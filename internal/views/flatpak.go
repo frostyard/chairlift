@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -94,7 +92,7 @@ func NewFlatpak(env *Env) *Flatpak {
 		listUpdates: flatpak.ListUpdates,
 		update:      flatpak.Update,
 		uninstall:   flatpak.Uninstall,
-		launch:      launchFlatpakApp,
+		launch:      frostui.LaunchDesktopApp,
 		dryRun:      flatpak.IsDryRun,
 	}
 }
@@ -295,21 +293,6 @@ func (f *Flatpak) LaunchApp(appID string) {
 		log.Printf("Failed to launch app %s: %v", appID, err)
 		f.env.ToastError(fmt.Sprintf("Failed to launch %s", appID))
 	}
-}
-
-// launchFlatpakApp starts appID with gtk-launch, which finds its desktop
-// file (Flatpak exports one per app) and launches it as the desktop would.
-// It does not wait: the app is a GUI app. The IDs come from the
-// configuration or from flatpak's own list, never from typed input, and
-// exec.Command uses no shell.
-func launchFlatpakApp(appID string) error {
-	cmd := exec.Command("gtk-launch", appID) //nolint:gosec // see the comment above
-	cmd.Env = os.Environ()
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	go func() { _ = cmd.Wait() }()
-	return nil
 }
 
 func (f *Flatpak) confirmUninstall(e AppEntry) {

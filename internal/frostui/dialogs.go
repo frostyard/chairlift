@@ -95,6 +95,37 @@ func (d *Dialogs) View(c *ui.Context) {
 	}
 }
 
+// CodeDialog asks about text the user should read exactly as it is, as a
+// report before it is sent: a title, a summary, the text in a scrollable
+// monospaced box with its spaces and lines kept, then Cancel and the
+// action. It holds no state: draw it while the app's own state says it is
+// open. It reports, in the frame they happen, a click on the action
+// (acted) and a cancel: Cancel, Escape or a click outside (canceled).
+func CodeDialog(c *ui.Context, title, summary, text, action string) (acted, canceled bool) {
+	t := c.Theme()
+	open := true
+	ui.Modal(c, &open, func() {
+		ui.Column(c).Width(620).Gap(SpaceM).AlignItems(ui.Stretch).Role(ui.RoleAlertDialog).Label(title).Children(func() {
+			ui.Text(c, title).FontSize(18).Bold().Wrap()
+			if summary != "" {
+				Muted(c, summary).Wrap()
+			}
+			ui.ScrollBoth(c).Height(300).Radius(RadiusChip).Background(t.Background).Border(1, t.Border).Children(func() {
+				ui.Text(c, text).Font("monospace").FontSize(12).NoWrap().PreserveSpaces().Selectable().Padding(10, 12)
+			})
+			ui.Row(c).Gap(SpaceS).Justify(ui.End).Padding(SpaceS, 0, 0, 0).Children(func() {
+				if ui.Button(c, "Cancel").AutoFocus().Clicked() {
+					canceled = true
+				}
+				if ui.PrimaryButton(c, action).Clicked() {
+					acted = true
+				}
+			})
+		})
+	})
+	return acted, canceled || !open
+}
+
 // Info is a dialog that only shows content and closes: About, keyboard
 // shortcuts, help.
 type Info struct {

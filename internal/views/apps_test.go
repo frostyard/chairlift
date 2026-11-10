@@ -8,6 +8,7 @@ import (
 
 	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/frostui"
+	"github.com/frostyard/chairlift/internal/frostui/frostuitest"
 	"github.com/frostyard/chairlift/internal/navigation"
 )
 
@@ -58,12 +59,12 @@ func newAppsFixture(t *testing.T, cfg *config.Config, withBrew bool) *appsFixtur
 		fpApp("Extension Manager", "com.mattjakeman.ExtensionManager", "0.6.3", "flathub", false),
 		fpApp("Mission Center", "io.missioncenter.MissionCenter", "1.1.0", "flathub", false),
 	)
-	p := &fpPost{}
-	env := NewEnv(cfg, false, p.post)
+	p := frostuitest.NewLoop()
+	env := NewEnv(cfg, false, p.Post)
 	s := NewStore(env)
 	fake.wire(s.Flatpak, false)
 	s.Flatpak.Start()
-	p.drain(t, func() bool { return !s.Flatpak.appsLoading && !s.Flatpak.updatesChecking })
+	p.RunUntil(t, func() bool { return !s.Flatpak.appsLoading && !s.Flatpak.updatesChecking })
 	fx := &appsFixture{env: env, fake: fake}
 	if withBrew {
 		fx.brew, fx.brewSt = appsBrew(), AppsStatus{Available: true}
@@ -161,11 +162,6 @@ func TestAppsNaturalCompare(t *testing.T) {
 }
 
 func TestAppsHelpers(t *testing.T) {
-	for in, want := range map[string]string{"Mission Center": "MC", "fzf": "F", "JetBrains Mono Nerd Font": "JM", "": "?", "élan vital": "ÉV"} {
-		if got := appsInitials(in); got != want {
-			t.Errorf("appsInitials(%q) = %q, want %q", in, got, want)
-		}
-	}
 	for in, want := range map[string]string{"io.github.kolunmi.Bazaar": "Bazaar", "org.gnome.Software": "Software", "org.kde.discover": "Discover", "plain": "plain"} {
 		if got := appsCenterName(in); got != want {
 			t.Errorf("appsCenterName(%q) = %q, want %q", in, got, want)
