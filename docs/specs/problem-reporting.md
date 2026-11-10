@@ -4,7 +4,10 @@ This contract governs what ChairLift sends to frostyard's problem intake
 service, when it sends it, and what it records. It applies to phase 2 of plan
 T857 ([ADR-0015](../adr/0015-problems-page-and-opt-in-reporting.md)).
 Consumers: the package `internal/reporting` (the only sender), the Problems
-page builder `internal/views/problems_page.go`, the first-run Reporting step
+page of the command center (`internal/views/problems_reporting.go`: the
+consent, the sends and the Report dialog; `internal/views/problems.go`: the
+first load of the consent and the sent log; `internal/views/problems_view.go`:
+the reporting card), the first-run Reporting step
 (`internal/window/firstrun_reporting.go`), the windowless mode
 `chairlift --send-pending-reports`, and `internal/views/actionmsg`'s
 `Report`/`ReportingConsent` decisions.
@@ -43,14 +46,16 @@ read, is larger than 64 KiB, or fails a rule above reads off plus an error.
 renames it; the folder is made with 0700.
 
 **The write is synchronous.** The consent file is about 200 bytes, so the page
-and the first-run step write it on the GTK main thread with
+(`Problems.applyReportingConsent`) and the first-run step
+(`FirstRun.onReportingSwitched`) write it on the UI thread with
 `reporting.SaveConsent`: a small local file write, not an external tool call,
-so the main-thread rule allows it. An asynchronous writer is rejected: it
+so the UI-thread rule allows it. An asynchronous writer is rejected: it
 brought a stale callback that could restore an older choice, a queued Off that
 an exit lost, and 2 consent values that could disagree. 1 value in memory is
 the only authority. Because the write is synchronous, an exit cannot lose an
-Off, and no callback can restore an older value. The widgets a handler
-redraws are guarded, so they cannot start a second save.
+Off, and no callback can restore an older value. While the page applies a
+consent it sets a guard (`reportingApplying`), so nothing it redraws can start
+a second save.
 
 **Withdrawal before the save, grant after it.** A change that withdraws (Off,
 or leaving automatic while automatic was in effect) sets the in-memory value
@@ -58,7 +63,7 @@ BEFORE `SaveConsent` runs, so a send stops at once even while the save is in
 flight. A change that grants (On, or automatic) sets it only after a
 successful save. A failed save of a withdrawal keeps the withdrawal in memory
 (fail safe) and shows an error toast; a failed save of a grant keeps the old
-value and redraws the widgets to it.
+value, which the controls go on showing.
 
 **Reading it again.** `reporting.FileConsent(path)` returns a function that
 reads the file on every call, and a read error is off. A live send uses it
@@ -71,10 +76,10 @@ both allow, and sends automatically only when both do, so a
 local Off stops a send at once and another process can only make it stricter.
 A dry run uses the in-memory value alone.
 
-**The switch waits for the load.** The switch and the mode row are built
-insensitive and become sensitive when the first consent load published its
-value; the handlers ignore a change before that, so a slow load cannot
-overwrite a newer choice.
+**The switch waits for the load.** The switch and the mode control are drawn
+disabled until the first consent load published its value
+(`reportingLoaded`, set only by that load); the handlers ignore a change
+before that, so a slow load cannot overwrite a newer choice.
 
 **An automatic run starts on a new automatic choice.** `reporting.StartsAutoRun(before, after)`
 is true when `after` allows and sends automatically and that was not already
@@ -150,8 +155,9 @@ absolute `http` or `https` URL with a host, no user information and no
 fragment; an empty value is `DefaultEndpoint`. Only `ParseEndpoint` chooses
 the default: a sender with an empty endpoint sends nothing, so a value that
 fails to parse can never fall back to the public service. The page then
-disables every send path (no automatic run, no Report… button, and
-`pageview.ReportingEndpointInvalid` as the group's description), and `Run`
+disables every send path (no automatic run, no Report… button, "Send
+pending reports" disabled, and `pageview.ReportingEndpointInvalid` as the reporting
+card's description), and `Run`
 with a nil `Sender` returns `Skipped` "no endpoint".
 
 ### Reports
@@ -221,8 +227,9 @@ read, never its content.
    them in `RunResult.Previews`, calls no sender, reads and writes no state and
    takes no lock. `actionmsg.Report(true, kind)` has `Send=false` and
    `MarkSent=false`; `actionmsg.ReportingConsent(true, …)` has `Persist=false`.
-8. **The windowless mode.** `chairlift --send-pending-reports` runs before the
-   GTK application object exists. A configuration error prints 1 line and
+8. **The windowless mode.** `chairlift --send-pending-reports` runs before
+   `app.Run`, so no window exists and no GTK library is loaded (MyGo loads
+   GTK only in `App.Run`). A configuration error prints 1 line and
    exits 1. The group off, a consent that does not `Allows` (including a stale
    schema), ask mode, or a version that is not a release prints 1 line and
    exits 0: nothing is sent. It loads the user's dismiss store

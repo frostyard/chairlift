@@ -19,8 +19,9 @@ ChairLift requires Git, Make, the Go version declared in
 (golangci-lint and Node.js; run `mise install`) for the complete local
 quality gate.
 The application builds without CGO, but the race-detector gate requires a
-working CGO toolchain. GTK4 and Libadwaita are runtime dependencies and are
-needed for E2E testing, not ordinary builds.
+working CGO toolchain. GTK 3, libepoxy with Mesa, and Pango are runtime
+dependencies (MyGo loads them when the window opens) and are needed for E2E
+testing, not ordinary builds; the unit tests need only Pango and cairo.
 
 Fork the repository, clone your fork, and register the upstream repository:
 
@@ -34,7 +35,7 @@ make build
 ```
 
 Installation details and optional runtime dependencies are listed in the
-[README](README.md).
+[README](README.md) and [docs/index.md](docs/index.md).
 
 ## Development workflow
 
@@ -68,19 +69,25 @@ line-ending, indentation, final-newline, and whitespace conventions.
 
 ## Testing constraints
 
-Tests for packages that import puregotk cannot run on headless systems because
-GTK libraries are loaded during package initialization. Extract testable logic
-into a pure-Go package under `internal/` rather than adding tests to those
-packages. Name ordinary unit tests so they do not begin with `TestI` or contain
+Views are tested headless with MyGo's `ui.NewTester`, which renders on the
+CPU and needs Pango and cairo but no GTK and no display. Inject backends as
+function fields, so no test runs brew, flatpak, bootc, fwupdmgr, updex or
+pkexec, and keep decisions in the pure leaf packages under `internal/views/`.
+Set `CHAIRLIFT_SNAPSHOT_DIR` to make the snapshot tests write PNGs of the
+pages (`CHAIRLIFT_SNAPSHOT_DIR=/tmp/shots go test ./internal/views -run
+Snapshot`). To drive the real window, `make build-automation` builds
+`build/chairlift-automation`, which `mygo-automation` can control and capture
+(`MYGO_AUTOMATION=<socket>`); release builds carry no automation plugin. Name ordinary unit tests so they do not begin with `TestI` or contain
 `Integration`; CI reserves those names for tests requiring a real environment.
 
 The enforced unit and race gates run tests under `internal/...`. Logic moved
 outside that tree needs a separately enforced test path; do not rely on an
 ad-hoc local test that CI never executes.
 
-Run `make e2e` when a change affects application startup, GTK integration,
+Run `make e2e` when a change affects application startup, the window,
 installation staging, command-line behavior, or the privileged helper. This
-target requires GTK4, Libadwaita, `dbus-run-session`, GNU `timeout`, and Xvfb.
+target requires GTK 3, libepoxy and Mesa, Pango, `dbus-run-session`, GNU
+`timeout`, and Xvfb.
 
 ## Quality gates
 

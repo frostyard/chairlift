@@ -101,9 +101,11 @@ are listed in [org-adrs.md](org-adrs.md).
 ### Design
 
 - [design/overview.md](design/overview.md) — architecture entry point:
-  purpose, dependency flow, key patterns, the Problems page, the first-run
-  mode, configuration,
-  build and release (formerly `yeti/OVERVIEW.md`)
+  purpose, the command-center window and its six pages, dependency flow, key
+  patterns (the UI thread, the serial job queue, dry run, the console, the
+  palette, the status bar, live figures, recent activity), the Problems page,
+  the first-run mode, configuration, build and release (formerly
+  `yeti/OVERVIEW.md`)
 - [design/package-managers.md](design/package-managers.md) — the Homebrew,
   Flatpak, fwupd, bootc, sysupdate, and updex wrappers and their view-layer
   leaf packages (formerly `yeti/package-managers.md`)
@@ -119,7 +121,7 @@ are listed in [org-adrs.md](org-adrs.md).
 
 - [specs/problems-page.md](specs/problems-page.md) — the Problems page's
   sources and limits, the problems.json outcomes, the validation and
-  reportable rules, the merge rule, the dismiss store, the reporting group
+  reportable rules, the merge rule, the dismiss store, the reporting card
   and its Report dialog, the dry-run fixture hook, and the
   `problems: page built` log marker
 - [specs/problem-reporting.md](specs/problem-reporting.md) — the opt-in
