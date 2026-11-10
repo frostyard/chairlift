@@ -219,7 +219,7 @@ func openFirstRun() *mygo.Window {
 // to the console. Redraws are coalesced: Window.Update rebuilds the view
 // on every call.
 func wireConsole(con *frostui.Console, post func(func())) {
-	waker := window.NewWaker(post, 60*time.Millisecond)
+	waker := frostui.NewWaker(post, 60*time.Millisecond)
 	con.SetNotify(waker.Wake)
 	// Commands run side by side (status reads beside a job): each output
 	// and end line carries its command's tool as its source.

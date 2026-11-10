@@ -152,21 +152,6 @@ func TestPaletteListsEveryVisiblePage(t *testing.T) {
 	}
 }
 
-func TestWakerCoalescesRedraws(t *testing.T) {
-	var mu sync.Mutex
-	posts := 0
-	w := NewWaker(func(func()) { mu.Lock(); posts++; mu.Unlock() }, 20*time.Millisecond)
-	for i := 0; i < 500; i++ {
-		w.Wake()
-	}
-	time.Sleep(80 * time.Millisecond)
-	mu.Lock()
-	defer mu.Unlock()
-	if posts != 1 {
-		t.Errorf("500 wakes posted %d redraws, want 1", posts)
-	}
-}
-
 func TestLogoMatchesTheInstalledIcon(t *testing.T) {
 	installed, err := os.ReadFile(filepath.Join("..", "..", "data", "icons", "hicolor", "symbolic", "apps", "org.frostyard.ChairLift-symbolic.svg"))
 	if err != nil {

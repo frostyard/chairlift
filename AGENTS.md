@@ -231,7 +231,7 @@ An agent must not break these:
   in goroutines that copy their inputs first, never read state, and hand
   results back with `Env.Post` (MyGo's `Window.Update`, through the app's
   `poster`, which keeps posts made before the window exists). Console output
-  wakes the window through `window.Waker` (at most every 60 ms), because
+  wakes the window through `frostui.Waker` (at most every 60 ms), because
   `Window.Update` rebuilds the view on every call.
 - **Changes run in the serial job queue.** In the command center, every
   mutation a page starts (install, update, stage, enable, clean, trust, flash)

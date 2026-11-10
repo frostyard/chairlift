@@ -9,7 +9,6 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -378,40 +377,6 @@ func plural(n int, one, many string) string {
 		return "1 " + one
 	}
 	return strconv.Itoa(n) + " " + many
-}
-
-// Waker coalesces redraw requests from many goroutines into at most one
-// per interval: Window.Update rebuilds the view on every call, and a
-// command printing thousands of lines must not rebuild it thousands of
-// times.
-type Waker struct {
-	mu      sync.Mutex
-	pending bool
-	every   time.Duration
-	post    func(func())
-}
-
-// NewWaker returns a Waker that redraws through post at most once every
-// interval.
-func NewWaker(post func(func()), every time.Duration) *Waker {
-	return &Waker{post: post, every: every}
-}
-
-// Wake asks for a redraw.
-func (w *Waker) Wake() {
-	w.mu.Lock()
-	if w.pending {
-		w.mu.Unlock()
-		return
-	}
-	w.pending = true
-	w.mu.Unlock()
-	time.AfterFunc(w.every, func() {
-		w.mu.Lock()
-		w.pending = false
-		w.mu.Unlock()
-		w.post(func() {})
-	})
 }
 
 // Ready logs the startup marker the end-to-end test waits for (ADR-0008).

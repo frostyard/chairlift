@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/egoist/mygo v0.8.3
-	github.com/frostyard/frostui v0.1.0
+	github.com/frostyard/frostui v0.2.0
 	github.com/frostyard/std v0.5.0
 	github.com/frostyard/updex/v2 v2.2.0
 	golang.org/x/text v0.43.0
@@ -14,7 +14,7 @@ require (
 require (
 	github.com/ProtonMail/go-crypto v1.5.2 // indirect
 	github.com/cloudflare/circl v1.6.5 // indirect
-	github.com/ebitengine/purego v0.11.1 // indirect
+	github.com/ebitengine/purego v0.11.3 // indirect
 	github.com/erofs/go-erofs v0.3.2 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect

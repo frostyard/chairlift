@@ -17,7 +17,7 @@ cmd/chairlift-first-run/main.go       Pure-Go first-run gate: exits or execs `ch
 internal/app/app.go             MyGo bootstrap: app ID, single-instance lock, dry run, console wiring, poster
         │
 internal/window/main.go         Command-center window: frostui shell, rail, palette, shortcuts,
-        │                       Help/About/Shortcuts dialogs, status bar, Waker
+        │                       Help/About/Shortcuts dialogs, status bar
 internal/window/firstrun*.go    First-run wizard: state and flow (firstrun.go), drawing
         │                       (firstrun_view.go), the optional Reporting step (firstrun_reporting.go)
         │
@@ -131,7 +131,7 @@ binds the shortcuts, and draws `Shell.View` with a `frostui.Frame`:
 - the selected page's `View`, the palette's `Main.Commands`, the status bar
   (`statusStart`, `statusEnd`) and the console.
 
-**`window.Waker`** coalesces redraw requests from many goroutines into at most
+**`frostui.Waker`** coalesces redraw requests from many goroutines into at most
 one empty post per interval (60 ms in `wireConsole`): `Window.Update`
 rebuilds the view on every call, and a command that prints thousands of lines
 must not rebuild it thousands of times. The console's notify calls
@@ -298,7 +298,7 @@ exceptions to "UI thread only" are the kit's `Console.Add`/`Addf`/`Writer`
 and a job's `Progress.Set`/`Log`, which any goroutine may call, and the
 Problems page's consent under its mutex, which the send goroutine reads
 before every request. Because `Window.Update` rebuilds the view on every
-call, console output wakes the window through `window.Waker` (at most every
+call, console output wakes the window through `frostui.Waker` (at most every
 60 ms).
 
 ### The serial job queue (`frostui.Jobs`)
@@ -1484,7 +1484,7 @@ or "failed" a `Warn` line, anything else `Debug`. The job queue adds `Info`,
 
 The console (`frostui.Console`, `frostui.ConsoleView`) keeps the newest 5000
 lines in a ring buffer and is safe from any goroutine; its notify wakes the
-window through `window.Waker`. The pane opens under the page (Ctrl J, the
+window through `frostui.Waker`. The pane opens under the page (Ctrl J, the
 status bar's Console item, the palette, a click on the running job in the
 status bar), filters by level (Debug is hidden by default) and by text,
 follows the newest line, copies the lines shown, and clears.

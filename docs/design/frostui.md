@@ -16,7 +16,7 @@ The kit's parts, rules, tests and API changes are documented in the module:
   launches through it traces the command itself (`launchDesktopApp`).
 - **The waker.** MyGo's `Window.Update` rebuilds the view on every call, so
   ChairLift wakes the window from a burst of console lines through
-  `window.Waker`.
+  `frostui.Waker`.
 - **What stays here.** `internal/cmdlog` (the backends' command tracer),
   `internal/sysinfo` (host facts), `internal/activity` (ChairLift's own
   record), everything under `internal/views`, and the first run's frame and
