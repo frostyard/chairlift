@@ -36,6 +36,9 @@ import (
 // A per-app update does not wait for a reload either: a failure or a dry
 // run leaves its row (and the row's button comes back as the job ends), a
 // live success removes the row, which lowers the count, before the reload.
+// A live uninstall removes the app's update row too, and retires an update
+// check in flight with a newer one: the older check began before the
+// uninstall and could list the app again.
 type Flatpak struct {
 	env *Env
 
@@ -343,6 +346,11 @@ func (f *Flatpak) uninstallJob(e AppEntry) *frostui.Job {
 // finishUninstall applies an uninstall's result: a failure or a dry run
 // leaves everything as it was; a live success drops the app's update row,
 // records it and reloads the installed apps.
+//
+// An update check in flight began before the uninstall, so it may still
+// list the app: a live success starts a newer check, whose generation
+// retires the one in flight, so its result cannot bring the row back. The
+// newer check, which began after the uninstall, publishes the truth.
 func (f *Flatpak) finishUninstall(key, appID, name string, err error) {
 	dryRun := f.dryRun()
 	decision := actionstate.PackageUninstall(err == nil, dryRun)
@@ -360,6 +368,9 @@ func (f *Flatpak) finishUninstall(key, appID, name string, err error) {
 	f.env.Record(string(SourceFlatpak), "Uninstalled "+name, appID)
 	// An app that is gone has nothing to update.
 	f.removeUpdate(key)
+	if f.updatesChecking {
+		f.loadUpdates()
+	}
 	f.loadApps()
 }
 

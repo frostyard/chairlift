@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -54,8 +55,8 @@ type fpFake struct {
 	appLists, updateLists int
 	updated, removed      []string
 	launched              []string
-	gate                  chan struct{} // when set, ListUpdates waits on it
-	waiting               chan struct{} // ListUpdates says here that it waits
+	gate                  chan struct{} // when set, an update check waits on it
+	waiting               chan struct{} // the check says here that it waits
 }
 
 func (k *fpFake) wire(f *Flatpak, dryRun bool) {
@@ -70,14 +71,19 @@ func (k *fpFake) wire(f *Flatpak, dryRun bool) {
 		return slices.Clone(k.system), k.systemErr
 	}
 	f.listUpdates = func(user bool) ([]flatpak.UpdateInfo, error) {
-		k.mu.Lock()
-		gate, waiting := k.gate, k.waiting
-		k.mu.Unlock()
-		if gate != nil {
-			if waiting != nil {
-				waiting <- struct{}{}
+		// An update check lists the user installation first: only that
+		// list waits, so each check waits once, at the gate set when it
+		// began, and two checks can wait at different gates.
+		if user {
+			k.mu.Lock()
+			gate, waiting := k.gate, k.waiting
+			k.mu.Unlock()
+			if gate != nil {
+				if waiting != nil {
+					waiting <- struct{}{}
+				}
+				<-gate
 			}
-			<-gate
 		}
 		k.mu.Lock()
 		defer k.mu.Unlock()
@@ -562,6 +568,76 @@ func TestFlatpakUninstallAsksThenRemoves(t *testing.T) {
 	}
 	if got := fpItemKeys(f.Source().Items()); slices.Contains(got, key) {
 		t.Error("the uninstalled app still offers an update")
+	}
+}
+
+// TestFlatpakUninstallRetiresAnUpdateCheckInFlight: an update check that
+// began before a live uninstall still lists the app; it must not bring the
+// removed row back. The check the uninstall starts decides.
+func TestFlatpakUninstallRetiresAnUpdateCheckInFlight(t *testing.T) {
+	fake := fpSample()
+	f, env, p := fpStarted(t, fake, fpConfig(true, true, true), false)
+	const key = "flatpak:system:org.mozilla.firefox"
+
+	// The older check waits at its gate; it reads the lists, Firefox's
+	// update included, once the gate opens.
+	older, olderWaiting := make(chan struct{}), make(chan struct{}, 1)
+	fake.set(func(k *fpFake) { k.gate, k.waiting = older, olderWaiting })
+	f.Source().Refresh()
+	<-olderWaiting
+	// Any later check waits at its own gate.
+	newer, newerWaiting := make(chan struct{}), make(chan struct{}, 1)
+	fake.set(func(k *fpFake) { k.gate, k.waiting = newer, newerWaiting })
+
+	f.Act(key, ActUninstall)
+	fpConfirm(t, env, "Uninstall")
+	p.RunUntil(t, func() bool { return !env.Jobs.Busy() })
+	if got := fpItemKeys(f.Source().Items()); slices.Contains(got, key) {
+		t.Fatalf("the uninstalled app still offers an update: %v", got)
+	}
+	p.RunUntil(t, func() bool { return !f.appsLoading })
+
+	// The older check answers with Firefox's update. It is the only worker
+	// left that can post (a newer check waits at its own gate), so the next
+	// post is its result: it publishes nothing.
+	ran := p.Ran()
+	close(older)
+	p.RunUntil(t, func() bool { return p.Ran() > ran })
+	if got := fpItemKeys(f.Source().Items()); slices.Contains(got, key) {
+		t.Fatalf("the check that began before the uninstall brought its row back: %v", got)
+	}
+	select {
+	case <-newerWaiting:
+	case <-time.After(frostuitest.Timeout):
+		t.Fatal("the live uninstall did not start a newer update check")
+	}
+	if !f.updatesChecking {
+		t.Error("the overtaken check ended the newer one's check")
+	}
+
+	// The newer check began after the uninstall: it decides.
+	fake.set(func(k *fpFake) { k.systemUpd = k.systemUpd[1:] })
+	close(newer)
+	p.RunUntil(t, func() bool { return !f.updatesChecking })
+	if got := fpItemKeys(f.Source().Items()); !slices.Equal(got, []string{"flatpak:system:io.github.kolunmi.Bazaar"}) {
+		t.Errorf("rows after the newer check = %v", got)
+	}
+	if ss := f.Source().Status(); ss.Note != "1 update available" {
+		t.Errorf("status = %+v", ss)
+	}
+}
+
+// TestFlatpakUninstallWithoutACheckInFlightDoesNotCheck: with no update
+// check running, a live uninstall only drops the row; it starts no check.
+func TestFlatpakUninstallWithoutACheckInFlightDoesNotCheck(t *testing.T) {
+	fake := fpSample()
+	f, env, p := fpStarted(t, fake, fpConfig(true, true, true), false)
+	_, upd0 := fake.counts()
+	f.Act("flatpak:system:org.mozilla.firefox", ActUninstall)
+	fpConfirm(t, env, "Uninstall")
+	p.RunUntil(t, func() bool { return !env.Jobs.Busy() && !f.appsLoading })
+	if _, upd1 := fake.counts(); upd1 != upd0 || f.updatesChecking {
+		t.Errorf("a live uninstall checked for updates: %d→%d, checking %t", upd0, upd1, f.updatesChecking)
 	}
 }
 

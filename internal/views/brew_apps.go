@@ -174,7 +174,8 @@ func (b *Brew) StateLabel(key string) string {
 
 // RefreshApps reloads the installed formulae and then the casks, under one
 // generation: a reload that a newer one overtook publishes nothing. A list
-// that fails keeps the rows it had and reports its error.
+// that fails keeps the rows it had, and their completed controls
+// (brewKeepRows), and reports its error.
 func (b *Brew) RefreshApps() {
 	if !b.enabled(brewAppsPage, groupBrew) {
 		return
@@ -216,8 +217,29 @@ func (b *Brew) RefreshApps() {
 			b.inv.casks, b.inv.casksErr = r.casks, ""
 		}
 		b.inv.loaded = true
-		b.inv.rows = brewKeepRunning(b.inv.rows)
+		b.inv.rows = brewKeepRows(b.inv.rows, r.formulaeErr == nil, r.casksErrs == nil)
 	})
+}
+
+// brewKeepRows carries the installed rows' controls over an inventory
+// reload. One asked or in flight always stays (brewKeepRunning). One that
+// completed stays while the list of its kind failed: that list kept its
+// last known rows, and the row of a package uninstalled or pinned since
+// must not offer the same action again. Only a list that loaded resets the
+// completed controls of its kind.
+func brewKeepRows(old map[string]*brewAction, formulaeLoaded, casksLoaded bool) map[string]*brewAction {
+	next := brewKeepRunning(old)
+	for key, a := range old {
+		if a.completed == "" {
+			continue
+		}
+		kind, _, ok := parseBrewKey(key)
+		loaded := ok && ((kind == homebrew.Formula && formulaeLoaded) || (kind == homebrew.Cask && casksLoaded))
+		if !loaded {
+			next[key] = a
+		}
+	}
+	return next
 }
 
 // Act does action to the installed package with key, asking first as the

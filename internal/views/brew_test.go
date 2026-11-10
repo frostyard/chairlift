@@ -26,11 +26,11 @@ type fakeBrew struct {
 	installed bool
 	dry       bool
 
-	formulae, casks, outdated []homebrew.Package
-	formulaeErr, outdatedErr  error
-	taps                      []homebrew.UntrustedTap
-	tapsErr                   error
-	search                    map[string][]homebrew.SearchResult
+	formulae, casks, outdated          []homebrew.Package
+	formulaeErr, casksErr, outdatedErr error
+	taps                               []homebrew.UntrustedTap
+	tapsErr                            error
+	search                             map[string][]homebrew.SearchResult
 
 	// hooks replace a list call when set, to block it or count it.
 	outdatedHook func() ([]homebrew.Package, error)
@@ -102,13 +102,12 @@ func (f *fakeBrew) backend() brewBackend {
 			return slices.Clone(*pkgs), *err
 		}
 	}
-	var noErr error
 	var noHook func() ([]homebrew.Package, error)
 	return brewBackend{
 		installed: func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.installed },
 		dryRun:    func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.dry },
 		formulae:  list("formulae", &f.formulae, &f.formulaeErr, &f.formulaeHook),
-		casks:     list("casks", &f.casks, &noErr, &noHook),
+		casks:     list("casks", &f.casks, &f.casksErr, &noHook),
 		outdated:  list("outdated", &f.outdated, &f.outdatedErr, &f.outdatedHook),
 		untrusted: func() ([]homebrew.UntrustedTap, error) {
 			_ = f.call("taps")
@@ -514,6 +513,121 @@ func TestBrewFailedRefreshKeepsLastKnownRows(t *testing.T) {
 	h.idle()
 	if got := h.b.Source().Items(); len(got) != 0 || h.b.Source().Status().Err != "" {
 		t.Errorf("a check that worked did not replace the rows: %v", got)
+	}
+}
+
+// TestBrewFailedRefreshKeepsCompletedControls: after a live uninstall or
+// pin, a reload whose list of that kind fails keeps the stale row, and
+// keeps its control completed, so it does not offer the action again. A
+// list that loads resets the controls of its kind, and only of its kind.
+func TestBrewFailedRefreshKeepsCompletedControls(t *testing.T) {
+	for _, tc := range []struct {
+		name, key, verb, label string
+		act                    AppAction
+		apply                  func(f *fakeBrew) // what the action changed in Homebrew
+	}{
+		{"uninstall", "formula:gh", "Uninstall", "Uninstalled", ActUninstall, func(f *fakeBrew) {
+			f.formulae = slices.DeleteFunc(f.formulae, func(p homebrew.Package) bool { return p.Name == "gh" })
+		}},
+		{"pin", "formula:gh", "Pin", "Pinned", ActPin, func(f *fakeBrew) {
+			for i := range f.formulae {
+				if f.formulae[i].Name == "gh" {
+					f.formulae[i].Pinned = true
+				}
+			}
+		}},
+		{"cask uninstall", "cask:font-inter", "Uninstall", "Uninstalled", ActUninstall, func(f *fakeBrew) {
+			f.casks = nil
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakeBrew()
+			h := startBrew(t, f, allBrewGroups...)
+			b := h.b
+			cask := strings.HasPrefix(tc.key, "cask:")
+			fail := func(f *fakeBrew) {
+				if cask {
+					f.casksErr = errors.New("brew info broke")
+				} else {
+					f.formulaeErr = errors.New("brew info broke")
+				}
+			}
+
+			// The action succeeds, but the reload after it cannot list
+			// its kind.
+			b.Act(tc.key, tc.act)
+			h.confirm(tc.verb)
+			f.set(func(f *fakeBrew) { tc.apply(f); fail(f) })
+			h.jobsDone()
+			h.idle()
+			if st := b.AppsStatus(); !strings.Contains(st.Err, "brew info broke") {
+				t.Fatalf("AppsStatus.Err = %q, want the failed list", st.Err)
+			}
+			e := h.entry(tc.key)
+			if len(e.Actions) != 0 || !e.Busy || b.StateLabel(tc.key) != tc.label {
+				t.Errorf("after a failed reload the stale row reopened: %+v, %q", e, b.StateLabel(tc.key))
+			}
+			for _, act := range []AppAction{ActPin, ActUnpin, ActUninstall, ActUpdate} {
+				b.Act(tc.key, act)
+				if h.env.Dialogs.Showing() || h.env.Jobs.Busy() {
+					t.Fatalf("the completed row took %v again: %q", act, h.dialogTexts())
+				}
+			}
+
+			// A reload whose list of this kind fails again keeps the row
+			// closed, though its other list loads.
+			b.RefreshApps()
+			h.idle()
+			if e := h.entry(tc.key); len(e.Actions) != 0 {
+				t.Errorf("a reload that failed again reopened the row: %+v", e)
+			}
+
+			// A list of its kind that loads replaces the row and its
+			// control.
+			f.set(func(f *fakeBrew) { f.formulaeErr, f.casksErr = nil, nil })
+			b.RefreshApps()
+			h.idle()
+			if b.inv.rows[tc.key] != nil {
+				t.Errorf("a list that loaded kept the completed control: %+v", b.inv.rows[tc.key])
+			}
+			var listed *AppEntry
+			for _, e := range b.Apps() {
+				if e.Key == tc.key {
+					listed = &e
+				}
+			}
+			switch tc.act {
+			case ActUninstall:
+				if listed != nil {
+					t.Errorf("the uninstalled package is still listed: %+v", *listed)
+				}
+			case ActPin:
+				if listed == nil || !listed.Pinned || !slices.Contains(listed.Actions, ActUnpin) {
+					t.Errorf("the pinned formula = %+v, want it pinned and offering Unpin", listed)
+				}
+			}
+		})
+	}
+
+	// A formula's completed control is reset by a formulae list that
+	// loads, even while the casks list fails.
+	f := newFakeBrew()
+	h := startBrew(t, f, allBrewGroups...)
+	h.b.Act("formula:gh", ActUninstall)
+	h.confirm("Uninstall")
+	f.set(func(f *fakeBrew) {
+		f.formulae = f.formulae[:1]
+		f.casksErr = errors.New("cask list broke")
+	})
+	h.jobsDone()
+	h.idle()
+	if h.b.inv.rows["formula:gh"] != nil {
+		t.Error("a formulae list that loaded kept the completed control because the casks failed")
+	}
+	for _, e := range h.b.Apps() {
+		if e.Key == "formula:gh" {
+			t.Errorf("gh is still listed: %+v", e)
+		}
 	}
 }
 

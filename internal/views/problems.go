@@ -62,6 +62,16 @@ type Problems struct {
 	loaded  bool
 	loading bool
 	refresh actionstate.RefreshGate
+	// loadGen is the generation of the newest load begun.
+	loadGen uint64
+	// dismissed holds the problems dismissed live in this run, each with
+	// the newest load generation begun when its dismissal was written. A
+	// load that began by then may have read the problem before the dismiss
+	// store hid it, so its publication leaves the problem out, of the page
+	// and of what an automatic send may report. A load that began after it
+	// read the store, which decides from then on, so its publication
+	// forgets the entry.
+	dismissed map[string]uint64
 
 	seen         *problems.Seen
 	outcome      problems.SourceOutcome
@@ -131,6 +141,7 @@ func NewProblems(env *Env) *Problems {
 		reportingOn: env.Enabled(problemsPage, "problems_reporting_group"),
 		open:        map[string]bool{},
 		dismissing:  map[string]bool{},
+		dismissed:   map[string]uint64{},
 		reportBusy:  map[string]bool{},
 		reported:    map[string]bool{},
 	}
@@ -210,6 +221,7 @@ func (p *Problems) loadProblems(first bool) {
 	consentAt, stateAt := p.reportingConsentAt, p.reportingStateAt
 	load, loadSeen, loadConsent, loadState := p.loadSnap, p.loadSeen, p.loadConsent, p.loadState
 	gen := p.refresh.Begin()
+	p.loadGen = gen
 	p.loading = true
 
 	Go(p.env, func() problemsLoad {
@@ -284,10 +296,15 @@ func (p *Problems) loadProblems(first bool) {
 		p.seen = res.seen
 		snap := res.snap
 		p.outcome, p.generated = snap.System.Outcome, snap.System.Generated
-		p.system, p.systemHidden = snap.SystemItems, snap.SystemHidden
-		p.apps, p.appsHidden = snap.AppItems, snap.AppsHidden
+		// A problem dismissed after this load began may still be in it:
+		// it stays hidden, and out of what an automatic send may report.
+		system, systemDismissed := p.withoutLiveDismissals(snap.SystemItems, gen)
+		apps, appsDismissed := p.withoutLiveDismissals(snap.AppItems, gen)
+		p.forgetLiveDismissals(gen)
+		p.system, p.systemHidden = system, snap.SystemHidden+systemDismissed
+		p.apps, p.appsHidden = apps, snap.AppsHidden+appsDismissed
 
-		items := append(append([]problems.Item(nil), snap.SystemItems...), snap.AppItems...)
+		items := append(append([]problems.Item(nil), system...), apps...)
 		p.reportingMu.Lock()
 		p.reportingItems = items
 		p.reportingEnvelope = snap.System.Envelope
@@ -295,10 +312,10 @@ func (p *Problems) loadProblems(first bool) {
 
 		systemCount, appsCount, source := 0, 0, "disabled"
 		if systemOn {
-			systemCount, source = len(snap.SystemItems), snap.System.Outcome.String()
+			systemCount, source = len(system), snap.System.Outcome.String()
 		}
 		if appsOn {
-			appsCount = len(snap.AppItems)
+			appsCount = len(apps)
 		}
 		log.Println(problems.BuiltMarker(systemCount, appsCount, source))
 
@@ -328,7 +345,9 @@ func (p *Problems) copyDetails(write func(string), item problems.Item, title str
 // dismiss hides a problem until it happens again (ADR-0015 decision 6).
 // actionmsg.ProblemDismiss decides it: a dry run writes and hides nothing;
 // a live dismissal writes the dismiss store on a worker goroutine and
-// hides the card after the write succeeded. A failed write keeps it.
+// hides the card after the write succeeded. A failed write keeps it. A
+// load already begun then may still hold the problem: the dismissal is
+// remembered (Problems.dismissed) so that load cannot show it again.
 func (p *Problems) dismiss(item problems.Item, title string) {
 	decision := actionmsg.ProblemDismiss(p.env.DryRun, item.ID, title)
 	if decision.Log != "" {
@@ -354,6 +373,7 @@ func (p *Problems) dismiss(item problems.Item, title string) {
 			return
 		}
 		if decision.Hide {
+			p.dismissed[id] = p.loadGen
 			p.hide(id)
 		}
 		p.env.ToastSuccess(decision.Toast)
@@ -375,6 +395,34 @@ func (p *Problems) hide(id string) {
 	p.reportingMu.Lock()
 	p.reportingItems, _ = withoutID(p.reportingItems, id)
 	p.reportingMu.Unlock()
+}
+
+// withoutLiveDismissals returns items without the problems dismissed in
+// this run since the load with generation gen began, and how many it
+// dropped.
+func (p *Problems) withoutLiveDismissals(items []problems.Item, gen uint64) ([]problems.Item, int) {
+	if len(p.dismissed) == 0 {
+		return items, 0
+	}
+	out := make([]problems.Item, 0, len(items))
+	for _, it := range items {
+		if at, ok := p.dismissed[it.ID]; ok && gen <= at {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out, len(items) - len(out)
+}
+
+// forgetLiveDismissals drops the dismissals written before the load with
+// generation gen began: that load read the dismiss store, which hides them
+// until they happen again.
+func (p *Problems) forgetLiveDismissals(gen uint64) {
+	for id, at := range p.dismissed {
+		if at < gen {
+			delete(p.dismissed, id)
+		}
+	}
 }
 
 // withoutID returns a new slice of items without those with id, and how

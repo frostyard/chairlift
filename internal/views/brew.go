@@ -124,7 +124,8 @@ type brewAction struct {
 	// none runs.
 	running string
 	// completed labels an action that succeeded live, as "Uninstalled":
-	// the control stays closed until a reload replaces the row.
+	// the control stays closed until a reload that loaded the row's list
+	// replaces the row (brewKeepRows keeps it over a failed one).
 	completed string
 }
 

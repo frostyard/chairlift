@@ -380,6 +380,141 @@ func TestProblemsDismissInADryRunChangesNothing(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(h.home, "state", "chairlift", "problems-seen.json")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("a dry run wrote the dismiss store: %v", err)
 	}
+	if len(h.p.dismissed) != 0 {
+		t.Errorf("a dry run remembered a dismissal: %v", h.p.dismissed)
+	}
+	// A reload still shows it.
+	h.p.Reload()
+	h.waitFor("the reload", func() bool { return !h.p.loading })
+	if len(h.p.system) != fixtureSystem || h.p.systemHidden != 0 || h.p.system[0].ID != it.ID {
+		t.Errorf("after a reload a dry-run dismissal hid a problem: %d shown, %d hidden", len(h.p.system), h.p.systemHidden)
+	}
+}
+
+// TestProblemsLoadBegunBeforeADismissalKeepsItHidden: a reload that read
+// the problems before a live dismissal publishes after it. The dismissed
+// problem stays hidden, and the automatic send that the reload starts does
+// not consider it. A reload begun after the dismissal read the dismiss
+// store, which decides from then on.
+func TestProblemsLoadBegunBeforeADismissalKeepsItHidden(t *testing.T) {
+	h := newProblemsHarness(t, false, allProblemGroups...)
+	h.saveConsent(true, reporting.ModeAuto)
+	var mu sync.Mutex
+	var runs []reporting.RunInput
+	h.p.runReports = func(_ context.Context, in reporting.RunInput) reporting.RunResult {
+		mu.Lock()
+		defer mu.Unlock()
+		runs = append(runs, in)
+		return reporting.RunResult{}
+	}
+	runCount := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(runs)
+	}
+	h.start()
+	h.waitFor("the automatic run after the first load", func() bool { return runCount() == 1 && !h.p.reportingRunning })
+
+	var it problems.Item
+	for _, s := range h.p.system {
+		if reportableNotCrash(s) {
+			it = s
+			break
+		}
+	}
+	if it.ID == "" {
+		t.Fatal("the fixtures hold no reportable system problem")
+	}
+
+	// The reload reads the problems, the dismissed one among them, then
+	// waits before it hands them back.
+	read, release := make(chan struct{}, 1), make(chan struct{})
+	load := h.p.loadSnap
+	h.p.loadSnap = func(ctx context.Context, opts problems.Options) problems.Snapshot {
+		snap := load(ctx, opts)
+		read <- struct{}{}
+		<-release
+		return snap
+	}
+	h.p.Reload()
+	select {
+	case <-read:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the reload did not read the problems")
+	}
+
+	h.openOnly(it)
+	h.click("Dismiss")
+	h.waitFor("the dismissal", func() bool { return !h.p.dismissing[it.ID] })
+	if h.p.systemHidden != 1 {
+		t.Fatalf("the dismissal did not hide the problem: %d hidden", h.p.systemHidden)
+	}
+
+	close(release)
+	h.waitFor("the reload", func() bool { return !h.p.loading })
+	h.waitFor("the automatic run after the reload", func() bool { return runCount() == 2 && !h.p.reportingRunning })
+	for _, shown := range append(append([]problems.Item(nil), h.p.system...), h.p.apps...) {
+		if shown.ID == it.ID {
+			t.Fatal("a load begun before the dismissal showed the problem again")
+		}
+	}
+	if h.p.systemHidden != 1 || !h.tt.HasText("1 dismissed problem is hidden") {
+		t.Errorf("hidden = %d, want the 1 dismissal", h.p.systemHidden)
+	}
+	if got := h.p.Summary().Count; got != fixtureSystem+fixtureApps-1 {
+		t.Errorf("Count = %d", got)
+	}
+	mu.Lock()
+	auto := runs[1]
+	mu.Unlock()
+	if len(auto.Items) != fixtureSystem+fixtureApps-1 {
+		t.Errorf("the automatic run considered %d problems", len(auto.Items))
+	}
+	for _, considered := range append(append([]problems.Item(nil), auto.Items...), h.p.reportingInput().Items...) {
+		if considered.ID == it.ID {
+			t.Fatal("an automatic send considers the dismissed problem")
+		}
+	}
+	if _, ok := h.p.dismissed[it.ID]; !ok {
+		t.Error("the dismissal was forgotten by a load that began before it")
+	}
+
+	// A reload begun after the dismissal read the dismiss store: it decides,
+	// and the dismissal held in memory is forgotten.
+	h.p.loadSnap = load
+	h.p.Reload()
+	h.waitFor("the later reload", func() bool { return !h.p.loading })
+	for _, shown := range h.p.system {
+		if shown.ID == it.ID {
+			t.Fatal("the later reload showed the dismissed problem")
+		}
+	}
+	if h.p.systemHidden != 1 || len(h.p.dismissed) != 0 {
+		t.Errorf("after the later reload: %d hidden, remembered %v", h.p.systemHidden, h.p.dismissed)
+	}
+}
+
+// TestProblemsLiveDismissalsBindOnlyLoadsBegunBefore: a remembered
+// dismissal hides its problem from a load begun before it, never from one
+// begun after it, which read the dismiss store (a problem that happened
+// again shows again); that load's publication forgets it.
+func TestProblemsLiveDismissalsBindOnlyLoadsBegunBefore(t *testing.T) {
+	p := &Problems{dismissed: map[string]uint64{"0000000000000001": 2}}
+	items := []problems.Item{{ID: "0000000000000001"}, {ID: "0000000000000002"}}
+	if got, n := p.withoutLiveDismissals(items, 2); n != 1 || len(got) != 1 || got[0].ID != "0000000000000002" {
+		t.Errorf("a load begun before the dismissal: %d dropped, %+v", n, got)
+	}
+	if got, n := p.withoutLiveDismissals(items, 3); n != 0 || len(got) != 2 {
+		t.Errorf("a load begun after the dismissal: %d dropped, %+v", n, got)
+	}
+	p.forgetLiveDismissals(2)
+	if len(p.dismissed) != 1 {
+		t.Error("a load begun before the dismissal forgot it")
+	}
+	p.forgetLiveDismissals(3)
+	if len(p.dismissed) != 0 {
+		t.Error("a load begun after the dismissal did not forget it")
+	}
 }
 
 func TestProblemsDismissHidesAfterTheWrite(t *testing.T) {
