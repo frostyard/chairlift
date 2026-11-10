@@ -91,6 +91,9 @@ func (m *Main) CanClose() bool {
 
 // View draws the window.
 func (m *Main) View(c *ui.Context) {
+	// First: the shell would run it after this frame took its toasts and
+	// its page, so a command's page and toast would wait for the next one.
+	m.Shell.Palette.RunPending()
 	for _, t := range m.Env.TakeToasts() {
 		c.AddToast(t)
 	}

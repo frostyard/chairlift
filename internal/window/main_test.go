@@ -27,6 +27,17 @@ import (
 // window tests never reach brew, flatpak, bootc, fwupdmgr or updex.
 func newTestMain(t *testing.T) (*Main, *ui.Tester) {
 	t.Helper()
+	m, loop := newTestMainLoop(t)
+	tt := ui.NewTester(func(c *ui.Context) {
+		loop.Flush()
+		m.View(c)
+	}, 1360, 880)
+	return m, tt
+}
+
+// newTestMainLoop is newTestMain for a test that draws the window itself.
+func newTestMainLoop(t *testing.T) (*Main, *frostuitest.Loop) {
+	t.Helper()
 	frostui.SetIcons(frostui.NewIcons(map[string][]byte{"org.frostyard.ChairLift-symbolic": LogoSVG()}))
 	var mu sync.Mutex
 	var started []string
@@ -49,12 +60,7 @@ func newTestMain(t *testing.T) (*Main, *ui.Tester) {
 	env := views.NewEnv(&config.Config{}, true, loop.Post)
 	store := views.NewStore(env)
 	store.SourcesOverride = func() []views.UpdateSource { return nil }
-	m := NewMain(env, store)
-	tt := ui.NewTester(func(c *ui.Context) {
-		loop.Flush()
-		m.View(c)
-	}, 1360, 880)
-	return m, tt
+	return NewMain(env, store), loop
 }
 
 func TestMainWindowShowsTheShell(t *testing.T) {
@@ -190,6 +196,89 @@ func TestCloseAllowedWithoutARunningUnstoppableJob(t *testing.T) {
 			waitIdle(t, m, tt)
 		})
 	}
+}
+
+// paletteChoose opens the palette and chooses title. The Tester draws on
+// until the view settles, so the command has run when it returns: a test
+// of which frame did what notes it from the view.
+func paletteChoose(t *testing.T, tt *ui.Tester, title string) {
+	t.Helper()
+	if err := tt.Click("Search or run a command"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type(title)
+	if err := tt.Click(title); err != nil {
+		t.Fatalf("%v in %q", err, tt.Texts())
+	}
+}
+
+// pageProbe is an update source that notes the frames the Updates page
+// draws it: only that page calls Extra.
+type pageProbe struct {
+	views.UpdateSource
+	frame int
+	drawn []int
+}
+
+func (p *pageProbe) ID() views.SourceID         { return views.SourceFeatures }
+func (p *pageProbe) Title() string              { return "Probe" }
+func (p *pageProbe) Icon() string               { return "application-x-addon" }
+func (p *pageProbe) Blurb() string              { return "" }
+func (p *pageProbe) Status() views.SourceStatus { return views.SourceStatus{Available: true} }
+func (p *pageProbe) Items() []views.UpdateItem  { return nil }
+func (p *pageProbe) Extra(*ui.Context)          { p.drawn = append(p.drawn, p.frame) }
+
+func TestPaletteCommandDrawsItsPageInTheFrameThatRunsIt(t *testing.T) {
+	m, loop := newTestMainLoop(t)
+	probe := &pageProbe{}
+	m.Store.SourcesOverride = func() []views.UpdateSource { return []views.UpdateSource{probe} }
+	frame, selectedAt := 0, 0
+	tt := ui.NewTester(func(c *ui.Context) {
+		loop.Flush()
+		frame++
+		probe.frame = frame
+		before := m.Shell.Selected
+		m.View(c)
+		if m.Shell.Selected != before {
+			selectedAt = frame
+		}
+	}, 1360, 880)
+	paletteChoose(t, tt, "Go to Updates")
+	tt.Frame()
+	if m.Shell.Selected != navigation.Updates || selectedAt == 0 {
+		t.Fatalf("selected = %q at frame %d, want the Updates page", m.Shell.Selected, selectedAt)
+	}
+	if len(probe.drawn) == 0 || probe.drawn[0] != selectedAt {
+		t.Errorf("the command ran in frame %d, the Updates page was drawn in frames %v", selectedAt, probe.drawn)
+	}
+}
+
+func TestPaletteCommandToastShowsInTheFrameThatRunsIt(t *testing.T) {
+	m, loop := newTestMainLoop(t)
+	late := 0
+	tt := ui.NewTester(func(c *ui.Context) {
+		loop.Flush()
+		m.View(c)
+		// What the frame left behind waits for the next one.
+		for _, toast := range m.Env.TakeToasts() {
+			late++
+			c.AddToast(toast)
+		}
+	}, 1360, 880)
+	m.Env.Jobs.Enqueue(
+		&frostui.Job{Title: "Cleaning", Run: func(ctx context.Context, _ *frostui.Progress) error { <-ctx.Done(); return nil }},
+		&frostui.Job{Title: "Queued", Done: func(error) { m.Env.Toast("The queued job was dropped") }},
+	)
+	tt.Frame()
+	paletteChoose(t, tt, "Stop the running jobs")
+	tt.Frame()
+	if !tt.HasText("The queued job was dropped") {
+		t.Errorf("the command's toast does not show: %q", tt.Texts())
+	}
+	if late != 0 {
+		t.Errorf("%d toasts waited a frame after the frame that ran the command", late)
+	}
+	waitIdle(t, m, tt)
 }
 
 func TestPaletteListsEveryVisiblePage(t *testing.T) {
