@@ -90,6 +90,9 @@ type Features struct {
 	// checks are the last completed check's results by feature, for the
 	// versions an update brings.
 	checks map[string][]updex.CheckResult
+	// completed holds features updated live since the last successful check.
+	// A failed recheck must not offer their completed update again.
+	completed map[string]bool
 
 	// asking holds the features whose confirmation is up, so a second
 	// click does not queue a second question.
@@ -109,6 +112,7 @@ func NewFeatures(env *Env) *Features {
 		disable:   updex.DisableFeature,
 		update:    updex.UpdateFeatures,
 		asking:    map[string]bool{},
+		completed: map[string]bool{},
 	}
 	f.source = &featureSource{f: f}
 	return f
@@ -280,6 +284,7 @@ func (f *Features) checkFeatureUpdates(generation uint64, checks []updex.Feature
 	// subtitle (subtitle reads f.baseSubtitles[name]), because the summary
 	// replaces the last one whole.
 	f.summary = featurestatus.Summarize(names, checks)
+	clear(f.completed)
 	f.checks = make(map[string][]updex.CheckResult, len(checks))
 	for _, c := range checks {
 		f.checks[c.Feature] = c.Results
@@ -329,11 +334,11 @@ func (f *Features) row(name string) (featureRow, bool) {
 }
 
 // updatable are the features the last check found an update for, in
-// listing order.
+// listing order, excluding successful live updates since that check.
 func (f *Features) updatable() []featureRow {
 	var out []featureRow
 	for _, row := range f.features {
-		if status, ok := f.summary.Rows[row.Name]; ok && status.HasUpdate {
+		if status, ok := f.summary.Rows[row.Name]; ok && status.HasUpdate && !f.completed[row.Name] {
 			out = append(out, row)
 		}
 	}
@@ -538,6 +543,11 @@ func (f *Features) updated(results []updex.FeatureUpdate, err error) {
 	}
 	if changed(results, err) {
 		f.env.Record(string(SourceFeatures), "Updated features", decision.Toast)
+	}
+	if !f.env.DryRun && err == nil {
+		for _, outcome := range updex.SummarizeUpdate(results).Of(updex.ClassUpdated) {
+			f.completed[outcome.Feature] = true
+		}
 	}
 	// The rows still show the state of the last check, which read "update
 	// available" because nothing was staged yet. Check again so they show

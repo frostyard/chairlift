@@ -967,3 +967,88 @@ func TestFeatureHelperJobsHaveNoDeadline(t *testing.T) {
 		t.Error("the update has a deadline")
 	}
 }
+
+func TestFeaturesCompletedItemsSurviveFailedRecheck(t *testing.T) {
+	updated := updex.FeatureUpdate{Feature: "docker", Results: []updex.TransferUpdate{{Downloaded: true, Linked: true}}}
+	mixed := []updex.FeatureUpdate{
+		updated,
+		{Feature: "dev", Results: []updex.TransferUpdate{{Held: true}}},
+		{Feature: "incus", Results: []updex.TransferUpdate{{NeedsImage: "newer image", Downloaded: true}}},
+		{Feature: "tailscale", Results: []updex.TransferUpdate{{Error: "download failed", Downloaded: true}}},
+		{Feature: "podman", Results: []updex.TransferUpdate{{}}},
+	}
+	for _, tc := range []struct {
+		name    string
+		results []updex.FeatureUpdate
+		err     error
+		dryRun  bool
+		want    []string
+	}{
+		{name: "mixed outcomes", results: mixed, want: []string{"dev", "incus", "tailscale", "podman", "nix"}},
+		{name: "failed run", results: mixed, err: errors.New("helper failed"), want: []string{"docker", "dev", "incus", "tailscale", "podman", "nix"}},
+		{name: "dry run", results: mixed, dryRun: true, want: []string{"docker", "dev", "incus", "tailscale", "podman", "nix"}},
+		{name: "unknown outcome", want: []string{"docker", "dev", "incus", "tailscale", "podman", "nix"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			features := snowFeatures()
+			checks := make([]updex.FeatureCheck, 0, len(features))
+			for i := range features {
+				features[i].Enabled = true
+				checks = append(checks, updex.FeatureCheck{
+					Feature: features[i].Name, Results: []updex.CheckResult{{UpdateAvailable: true}},
+				})
+			}
+			h := newFeaturesHarness(t, enabledFeatures(), tc.dryRun, &fakeUpdex{features: features, checks: checks})
+			h.start(t)
+			old := h.f.featureCheck.Begin()
+			h.fake.set(func(u *fakeUpdex) { u.checkErr = errors.New("offline") })
+			store := &Store{SourcesOverride: func() []UpdateSource { return []UpdateSource{h.f.Source()} }}
+			assertItems := func(want []string) {
+				t.Helper()
+				got := []string{}
+				for _, item := range h.f.Source().Items() {
+					got = append(got, item.Key)
+				}
+				if !slices.Equal(got, want) {
+					t.Fatalf("items = %v, want %v", got, want)
+				}
+				if n, _ := store.UpdateCount(); n != len(want) {
+					t.Errorf("update count = %d, want %d", n, len(want))
+				}
+			}
+			h.f.updated(tc.results, tc.err)
+			assertItems(tc.want) // before the recheck can publish
+			h.ui.settle(t)
+			assertItems(tc.want) // the failed recheck keeps the remaining items
+			if !tc.dryRun {
+				h.f.checkFeatureUpdates(old, checks, nil)
+				assertItems(tc.want) // an older check cannot restore retired items
+			}
+			h.fake.set(func(u *fakeUpdex) { u.checkErr = nil })
+			h.f.Refresh()
+			h.ui.settle(t)
+			assertItems([]string{"docker", "dev", "incus", "tailscale", "podman", "nix"})
+		})
+	}
+}
+
+func TestFeaturesUpdatedSourceOffersNoRepeatJob(t *testing.T) {
+	h := newFeaturesHarness(t, enabledFeatures(), false, &fakeUpdex{
+		features: snowFeatures(), checks: snowChecks(),
+		results: []updex.FeatureUpdate{{Feature: "docker", Results: []updex.TransferUpdate{{Linked: true}}}},
+	})
+	h.start(t)
+	h.fake.set(func(u *fakeUpdex) { u.checkErr = errors.New("offline") })
+	h.f.UpdateAll()
+	h.ui.settle(t)
+	if items := h.f.Source().Items(); len(items) != 0 {
+		t.Fatalf("completed update still listed: %v", items)
+	}
+	store := &Store{SourcesOverride: func() []UpdateSource { return []UpdateSource{h.f.Source()} }}
+	if n, sources := store.UpdateCount(); n != 0 || sources != 0 {
+		t.Errorf("count = %d from %d sources, want none", n, sources)
+	}
+	if jobs := store.EverythingJobs(); len(jobs) != 0 {
+		t.Error("Update everything offers the completed feature again")
+	}
+}
