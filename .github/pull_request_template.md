@@ -16,6 +16,9 @@ Closes #
 
 - Risk tier:
 - Rationale:
+- Rollback:
+  <!-- Per docs/risk-tiers.md: Tier 3 needs rollback notes when applicable;
+       Tier 4 needs a rollback plan. Say why rollback does not apply otherwise. -->
 
 ## Validation
 
@@ -37,4 +40,5 @@ Closes #
 - [ ] Changed behavior has CI-enforced regression coverage, or this change does
       not alter behavior.
 - [ ] Relevant repository invariants in `AGENTS.md` remain intact.
-- [ ] I reviewed the change against `docs/review-rubric.md`.
+- [ ] I reviewed the change against `docs/review-rubric.md`; if unticked,
+      explain why:
