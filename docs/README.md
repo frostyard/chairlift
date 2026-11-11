@@ -49,6 +49,7 @@ are listed in [org-adrs.md](org-adrs.md).
 - [adr/0007-pure-leaf-packages-route-around-untestable-gtk.md](adr/0007-pure-leaf-packages-route-around-untestable-gtk.md)
   — puregotk-importing packages stay test-free; all decidable logic lives in
   headless leaf packages with wiring tests proving the page builders use them
+  (superseded by ADR-0017)
 - [adr/0008-e2e-readiness-is-a-log-marker-contract.md](adr/0008-e2e-readiness-is-a-log-marker-contract.md)
   — E2E startup readiness is three exact stdout markers polled under
   dbus-run-session + xvfb-run; the log lines are a public API
@@ -76,7 +77,8 @@ are listed in [org-adrs.md](org-adrs.md).
   — `chairlift --first-run` replaces SNOW First Setup: a pure-Go
   `chairlift-first-run` gate, its own application ID, one marker writer that
   also writes first-setup's marker until the dated end rule, no autostart in
-  the deb, the `first_run_page` config, and embedded `.po` translations
+  the deb, the `first_run_page` config, and embedded `.po` translations (the
+  translations are amended by ADR-0018: the ported catalogs are deleted)
 - [adr/0015-problems-page-and-opt-in-reporting.md](adr/0015-problems-page-and-opt-in-reporting.md)
   — a 7th page, Problems, shows snosi-health's system problems, the user's
   crashes and frostyard app records; every value is checked against
@@ -89,16 +91,35 @@ are listed in [org-adrs.md](org-adrs.md).
   with `mise.toml` pins, `ci.yml`, risk paths, core skills in
   `.agents/skills/`, the mill lessons folded into one design doc, and the
   framework trees deleted (amends ADR-0010's historical-docs list)
+- [adr/0017-mygo-command-center-window.md](adr/0017-mygo-command-center-window.md)
+  — the window is a MyGo command center (Overview, Updates, Apps, Features,
+  Problems, Maintenance, a palette, a console and a status bar) on GTK 3;
+  puregotk is gone, views are tested with MyGo's Tester, the console streams
+  real command output through `internal/cmdlog`, changes run in one serial
+  job queue, and the UI kit is the `github.com/frostyard/frostui` module
+  (supersedes ADR-0007)
+- [adr/0018-relicense-mit-and-drop-inherited-translations.md](adr/0018-relicense-mit-and-drop-inherited-translations.md)
+  — ChairLift is MIT-licensed (`LICENSE`, the package metadata, the About
+  dialog); the first-run translations ported from SNOW First Setup are
+  deleted because their translators' license cannot be changed, and the
+  first run's sentences are written again; the `.po`
+  machinery stays, reads an injectable `fs.FS`, and new catalogs must be
+  contributed under MIT (amends ADR-0014's translations)
 
 ### Design
 
 - [design/overview.md](design/overview.md) — architecture entry point:
-  purpose, dependency flow, key patterns, the Problems page, the first-run
-  mode, configuration,
-  build and release (formerly `yeti/OVERVIEW.md`)
+  purpose, the command-center window and its six pages, dependency flow, key
+  patterns (the UI thread, the serial job queue, dry run, the console, the
+  palette, the status bar, live figures, recent activity), the Problems page,
+  the first-run mode, configuration, build and release (formerly
+  `yeti/OVERVIEW.md`)
 - [design/package-managers.md](design/package-managers.md) — the Homebrew,
   Flatpak, fwupd, bootc, sysupdate, and updex wrappers and their view-layer
   leaf packages (formerly `yeti/package-managers.md`)
+- [design/frostui.md](design/frostui.md) — where the frostyard desktop UI
+  kit on MyGo lives now (the `github.com/frostyard/frostui` module), and what
+  ChairLift draws itself
 - [design/engineering-lessons.md](design/engineering-lessons.md) — the
   durable test, configuration-code and documentation rules learned from past
   defects and reviews (formerly the lesson files in `docs/agents/skills/`);
@@ -108,7 +129,7 @@ are listed in [org-adrs.md](org-adrs.md).
 
 - [specs/problems-page.md](specs/problems-page.md) — the Problems page's
   sources and limits, the problems.json outcomes, the validation and
-  reportable rules, the merge rule, the dismiss store, the reporting group
+  reportable rules, the merge rule, the dismiss store, the reporting card
   and its Report dialog, the dry-run fixture hook, and the
   `problems: page built` log marker
 - [specs/problem-reporting.md](specs/problem-reporting.md) — the opt-in

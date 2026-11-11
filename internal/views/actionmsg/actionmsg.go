@@ -8,12 +8,10 @@
 // system feature toggles/updates, Problems page dismissals, problem report
 // sends, and the problem-reporting consent switch.
 //
-// It is deliberately free of any puregotk/GTK import, following the
-// internal/views/trustmsg pattern, so its logic can be unit-tested on a
-// headless host. A test binary for a package that imports puregotk panics
-// while resolving GTK/graphene shared libraries at package init — before any
-// test function runs — so logic that must be tested cannot live in the view
-// packages. See docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
+// It imports no UI package, following the internal/views/trustmsg pattern:
+// each decision is one tested function that gates the toast and the UI
+// change together (ADR-0009). See
+// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
 //
 // Functions whose result only selects display text (BundleDump, Cleanup,
 // Install, Uninstall, Pin, Upgrade, Update, SelfUpdate, BootcStage) return a
@@ -368,9 +366,10 @@ type TapTrustDecision struct {
 	Toast string
 }
 
-// TapTrust decides whether trusting a Homebrew tap (trustTap in
-// internal/views/updates_page.go, following a successful
-// homebrew.TrustPackages call) should mutate the Untrusted Homebrew Taps UI,
+// TapTrust decides whether trusting a Homebrew tap (Brew.runTrust in
+// internal/views/brew_source.go, following a successful
+// homebrew.TrustPackages call) should mutate the tap's trust banner and the
+// held items,
 // and what toast to show. MutateUI is exactly !dryRun; the caller must not
 // independently recompute that condition. Under dry-run, TrustPackages's
 // `brew trust` call is skipped entirely by homebrew's stateChangingCommands
@@ -407,8 +406,8 @@ type ScriptDecision struct {
 }
 
 // MaintenanceScript decides whether a configured custom maintenance script
-// (config.yml's `actions` entries, run by runMaintenanceAction in
-// internal/views/maintenance_page.go) should execute. Custom scripts have no
+// (config.yml's `actions` entries, run by Maintenance.job in
+// internal/views/maintenance.go) should execute. Custom scripts have no
 // wrapper package of their own to gate their execution the way homebrew,
 // flatpak, bootc, and updex do, so this is the one place that decision is
 // made and tested. Execute is exactly !dryRun; the caller must not
@@ -427,9 +426,9 @@ func MaintenanceScript(dryRun bool, title string) ScriptDecision {
 }
 
 // FeatureToggleDecision is the result of deciding whether toggling a system
-// feature's switch (onFeatureToggled in internal/views/features_page.go,
+// feature's switch (Features.toggled in internal/views/features.go,
 // following a successful updex.EnableFeature/DisableFeature call) should
-// confirm the switch's new visual state, and what toast to show for that
+// confirm the switch's new state, and what toast to show for that
 // decision.
 type FeatureToggleDecision struct {
 	// Confirm is true when the feature was actually enabled/disabled
@@ -511,8 +510,9 @@ const (
 	featureActivationText = "Extensions merged, but activation did not finish. Reboot to finish."
 )
 
-// FeatureUpdate decides the toast for the Features page's "Update" button
-// (onUpdateFeaturesClicked) from updex.UpdateFeatures's results and error.
+// FeatureUpdate decides the toast for the features update job
+// (Features.updated, after Features.UpdateAll) from updex.UpdateFeatures's
+// results and error.
 // updex returns a nil error when the next-boot image gate or a rollback
 // record holds a feature, so the results, not the error alone, say what
 // happened. The dry-run preview comes first: updex.runHelper never invokes

@@ -132,32 +132,33 @@ func TestProblemsStaysFreeOfTheSender(t *testing.T) {
 }
 
 // TestSendPendingReportsModeIsWindowless proves the windowless mode runs
-// before the application object exists, and that the option is listed, so
+// before the window starts (MyGo loads GTK only in App.Run, which app.Run
+// calls), that main itself draws nothing, and that the option is listed, so
 // `chairlift --help` shows it.
 func TestSendPendingReportsModeIsWindowless(t *testing.T) {
 	source := readRepoFile(t, filepath.Join("cmd", "chairlift", "main.go"))
 	call := strings.Index(source, "os.Exit(sendPendingReports())")
-	application := strings.Index(source, "application := app.New()")
-	if call < 0 || application < 0 {
-		t.Fatalf("cmd/chairlift/main.go does not hold the mode and the application (call %d, application %d)", call, application)
+	window := strings.Index(source, "app.Run(opts)")
+	if call < 0 || window < 0 {
+		t.Fatalf("cmd/chairlift/main.go does not hold the mode and the window (call %d, window %d)", call, window)
 	}
-	if call > application {
-		t.Error("cmd/chairlift/main.go creates the application before the windowless mode runs")
+	if call > window {
+		t.Error("cmd/chairlift/main.go starts the window before the windowless mode runs")
 	}
 	if !strings.Contains(source, "reporting.SendPending(") {
 		t.Error("cmd/chairlift/main.go does not call reporting.SendPending")
 	}
-	if strings.Contains(source, "gtk.") || strings.Contains(source, "adw.") {
-		t.Error("cmd/chairlift/main.go builds GTK widgets itself")
+	for _, ui := range []string{`"github.com/egoist/mygo"`, `"github.com/egoist/mygo/ui"`, `"codeberg.org/puregotk/`} {
+		if strings.Contains(source, ui) {
+			t.Errorf("cmd/chairlift/main.go imports %s; it must leave the window to internal/app", ui)
+		}
 	}
-
-	app := readRepoFile(t, filepath.Join("internal", "app", "app.go"))
 	for _, fragment := range []string{
-		`"send-pending-reports",`,
-		`"Send the problem reports that your consent allows, then exit; no window."`,
+		"--send-pending-reports",
+		"Send the problem reports that your consent allows, then exit; no window.",
 	} {
-		if !strings.Contains(app, fragment) {
-			t.Errorf("internal/app/app.go does not contain %q", fragment)
+		if !strings.Contains(source, fragment) {
+			t.Errorf("cmd/chairlift/main.go's usage does not contain %q", fragment)
 		}
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/frostyard/chairlift/internal/cmdlog"
 	"github.com/frostyard/chairlift/internal/selfreport"
 	"github.com/frostyard/chairlift/internal/updexhelper"
 	updexapi "github.com/frostyard/updex/v2/updex"
@@ -323,6 +324,7 @@ func runHelper(ctx context.Context, pkexecPath string, args ...string) (string, 
 	if dryRun {
 		args = append(args, "--dry-run")
 		log.Printf("[DRY-RUN] would execute: %s %s %v", pkexecPath, HelperPath, args)
+		cmdlog.DryRun(pkexecPath, append([]string{HelperPath}, args...)...)
 		return "", "", nil
 	}
 
@@ -330,10 +332,12 @@ func runHelper(ctx context.Context, pkexecPath string, args ...string) (string, 
 	cmd := exec.CommandContext(ctx, pkexecPath, fullArgs...)
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	trace := cmdlog.Start(pkexecPath, fullArgs...)
+	cmd.Stdout = trace.Stdout(&stdout)
+	cmd.Stderr = trace.Stderr(&stderr)
 
 	err := cmd.Run()
+	trace.End(err)
 
 	if stderr.Len() > 0 {
 		log.Printf("updex helper stderr: %s", stderr.String())

@@ -15,6 +15,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 const (
@@ -169,7 +171,9 @@ func GetStatus(ctx context.Context) (*Status, error) {
 // sentinel).
 func getStatusFrom(ctx context.Context, name string) (*Status, error) {
 	cmd := exec.CommandContext(ctx, name, "status", "--format", "json")
+	trace := cmdlog.Start(name, "status", "--format", "json")
 	output, err := cmd.Output()
+	trace.End(err)
 	if err != nil {
 		// Classify the context outcome first: exec kills the child when the
 		// context ends, so the raw error would otherwise read

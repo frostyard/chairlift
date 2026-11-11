@@ -37,6 +37,8 @@ func TestUpdexDependencyUsesCorrectedV2Module(t *testing.T) {
 		filepath.Join("internal", "updex", "bootcrunner_test.go"):       updexImageCompatPath,
 		filepath.Join("internal", "updexhelper", "updexhelper.go"):      updexSDKPath,
 		filepath.Join("internal", "updexhelper", "updexhelper_test.go"): updexSDKPath,
+		// The Features page's tests build updex results for their fakes.
+		filepath.Join("internal", "views", "features_test.go"): updexSDKPath,
 	}
 	if len(imports) != len(wantImports) {
 		t.Fatalf("active Updex import count = %d, want %d: %+v", len(imports), len(wantImports), imports)

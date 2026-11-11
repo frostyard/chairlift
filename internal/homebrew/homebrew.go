@@ -15,6 +15,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 const (
@@ -77,6 +79,9 @@ type Package struct {
 	Pinned             bool     `json:"pinned"`
 	Outdated           bool     `json:"outdated"`
 	Dependencies       []string `json:"dependencies,omitempty"`
+	// Latest is the version an upgrade brings; ListOutdated sets it from
+	// brew's current_version, and it is empty elsewhere.
+	Latest string `json:"latest,omitempty"`
 }
 
 // SearchResult represents a search result
@@ -130,6 +135,7 @@ func runBrewCommand(args ...string) (string, error) {
 	if len(args) > 0 && stateChangingCommands[args[0]] && dryRun {
 		msg := fmt.Sprintf("[DRY-RUN] Would execute: brew %s", strings.Join(args, " "))
 		log.Println(msg)
+		cmdlog.DryRun("brew", args...)
 		return msg, nil
 	}
 
@@ -164,10 +170,12 @@ func runBrewCommandAt(ctx context.Context, exe string, args ...string) (string, 
 	cmd.WaitDelay = waitDelay
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	trace := cmdlog.Start(exe, args...)
+	cmd.Stdout = trace.Stdout(&stdout)
+	cmd.Stderr = trace.Stderr(&stderr)
 
 	err := cmd.Run()
+	trace.End(err)
 	if err != nil {
 		display := exe
 		if len(args) > 0 {
@@ -233,7 +241,9 @@ func IsInstalled() bool {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "brew", "--version")
+	trace := cmdlog.Start("brew", "--version")
 	err := cmd.Run()
+	trace.End(err)
 	return err == nil
 }
 
@@ -331,7 +341,11 @@ func ListOutdated() ([]Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	return parseOutdated(output)
+}
 
+// parseOutdated reads `brew outdated --json=v2`.
+func parseOutdated(output string) ([]Package, error) {
 	var data struct {
 		Formulae []struct {
 			Name              string   `json:"name"`
@@ -355,6 +369,7 @@ func ListOutdated() ([]Package, error) {
 		packages = append(packages, Package{
 			Name:     f.Name,
 			Version:  strings.Join(f.InstalledVersions, ", "),
+			Latest:   f.CurrentVersion,
 			Outdated: true,
 			Pinned:   f.Pinned,
 		})
@@ -363,6 +378,7 @@ func ListOutdated() ([]Package, error) {
 		packages = append(packages, Package{
 			Name:     c.Name,
 			Version:  strings.Join(c.InstalledVersions, ", "),
+			Latest:   c.CurrentVersion,
 			Outdated: true,
 		})
 	}

@@ -13,7 +13,7 @@ import (
 // When the group is available, the existing pointer-to-the-section wording must
 // be preserved so current behavior is unchanged. This is the group-combination
 // regression for issue #57 (brew_trust_group enabled while brew_updates_group
-// disabled). The function is pure and puregotk-free, so this runs headlessly.
+// disabled). The function is pure, so this runs on any host.
 func TestUpgradeMessage(t *testing.T) {
 	tests := []struct {
 		name                string
@@ -23,17 +23,17 @@ func TestUpgradeMessage(t *testing.T) {
 		forbidContains      []string
 	}{
 		{
-			name:                "trust group available points to section",
+			name:                "trust group available points to the trust banner",
 			pkgName:             "example-pkg",
 			trustGroupAvailable: true,
-			wantContains:        []string{"example-pkg", "untrusted tap", "Untrusted Homebrew Taps", "below"},
+			wantContains:        []string{"example-pkg", "untrusted tap", "trust the tap", "Homebrew card of Updates"},
 		},
 		{
 			name:                "trust group unavailable is self-contained",
 			pkgName:             "example-pkg",
 			trustGroupAvailable: false,
 			wantContains:        []string{"example-pkg", "untrusted tap", "trusted"},
-			forbidContains:      []string{"below", "Untrusted Homebrew Taps"},
+			forbidContains:      []string{"below", "Untrusted Homebrew Taps", "Homebrew card"},
 		},
 	}
 

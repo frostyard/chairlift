@@ -37,15 +37,6 @@ func TestReportingDescription(t *testing.T) {
 	}
 }
 
-func TestReportingModeRow(t *testing.T) {
-	if got := ReportingMode(reportingConsent(t, true, reporting.ModeAuto)); got != (Row{Title: ReportingModeTitle, Subtitle: ReportingModeAuto}) {
-		t.Errorf("ReportingMode(auto) = %+v", got)
-	}
-	if got := ReportingMode(reportingConsent(t, true, reporting.ModeAsk)); got.Subtitle != ReportingModeAsk {
-		t.Errorf("ReportingMode(ask).Subtitle = %q, want %q", got.Subtitle, ReportingModeAsk)
-	}
-}
-
 // TestReportingWhat pins the privacy link.
 func TestReportingWhat(t *testing.T) {
 	got := ReportingWhat()

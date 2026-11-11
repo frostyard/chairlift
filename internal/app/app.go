@@ -1,218 +1,321 @@
-// Package app provides the main ChairLift application
+// Package app starts ChairLift's MyGo application: the main command-center
+// window, or the first-run window with `--first-run` (ADR-0014). It sets
+// the app ID the desktop matches to the .desktop file, keeps one instance
+// per ID, sets every backend's dry-run flag, and wires the console to the
+// commands the backends run and to the log.
 package app
 
 import (
+	"errors"
+	"io"
 	"log"
 	"os"
+	"strings"
+	"sync"
 	"time"
-	"unsafe"
 
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+
+	"github.com/frostyard/chairlift/internal/activity"
 	"github.com/frostyard/chairlift/internal/bootc"
+	"github.com/frostyard/chairlift/internal/cmdlog"
+	"github.com/frostyard/chairlift/internal/config"
 	"github.com/frostyard/chairlift/internal/firstrun"
 	"github.com/frostyard/chairlift/internal/flatpak"
 	"github.com/frostyard/chairlift/internal/fwupd"
 	"github.com/frostyard/chairlift/internal/homebrew"
-	"github.com/frostyard/chairlift/internal/navigation"
+	"github.com/frostyard/chairlift/internal/selfreport"
 	"github.com/frostyard/chairlift/internal/sysupdate"
 	"github.com/frostyard/chairlift/internal/updex"
 	"github.com/frostyard/chairlift/internal/views"
 	"github.com/frostyard/chairlift/internal/window"
-
-	"github.com/frostyard/snowkit/gobj"
-
-	"codeberg.org/puregotk/puregotk/v4/adw"
-	"codeberg.org/puregotk/puregotk/v4/gio"
-	"codeberg.org/puregotk/puregotk/v4/glib"
-	"codeberg.org/puregotk/puregotk/v4/gobject"
-	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/frostyard/frostui"
 )
 
-const appID = "org.frostyard.ChairLift"
+// AppID is the main window's application ID: the Wayland app ID and the
+// name of the .desktop file.
+const AppID = "org.frostyard.ChairLift"
 
-// firstRunAppID is the application ID of `chairlift --first-run`
-// (ADR-0014). With the main ID, a running ChairLift would receive the
+// FirstRunAppID is the application ID of `chairlift --first-run`
+// (ADR-0014). With the main ID, a running ChairLift would take the
 // activation and the first-run window would never show.
-const firstRunAppID = "org.frostyard.ChairLift.FirstRun"
+const FirstRunAppID = "org.frostyard.ChairLift.FirstRun"
 
-var (
-	gTypeApplication gobject.Type
-	appRegistry      *gobj.InstanceRegistry
+// Flags are the command-line switches the window understands.
+const (
+	FlagDryRun      = "--dry-run"
+	FlagDryRunShort = "-d"
+	FlagFirstRun    = "--first-run"
 )
 
-// Application wraps the Adwaita Application as a proper GObject subtype
-type Application struct {
-	adw.Application
-	window *window.Window
-	dryRun bool
-	// firstRun is true for `chairlift --first-run`: activation builds the
-	// first-run window instead of the main window.
-	firstRun       bool
-	firstRunWindow *window.FirstRunWindow
+// Options are the parsed command line.
+type Options struct {
+	DryRun   bool
+	FirstRun bool
 }
 
-func init() {
-	gTypeApplication, appRegistry = gobj.RegisterType(gobj.TypeDef{
-		ParentGLibType: adw.ApplicationGLibType,
-		ClassName:      "ChairLiftApplication",
-		ClassInit: func(tc *gobject.TypeClass, reg *gobj.InstanceRegistry) {
-			objClass := (*gobject.ObjectClass)(unsafe.Pointer(tc))
-			objClass.OverrideConstructed(func(o *gobject.Object) {
-				parentObjClass := (*gobject.ObjectClass)(unsafe.Pointer(tc.PeekParent()))
-				parentObjClass.GetConstructed()(o)
+// ParseArgs reads the window's switches from args (os.Args[1:]).
+func ParseArgs(args []string) Options {
+	var o Options
+	for _, a := range args {
+		switch a {
+		case FlagDryRun, FlagDryRunShort:
+			o.DryRun = true
+		case FlagFirstRun:
+			o.FirstRun = true
+		}
+	}
+	return o
+}
 
-				var parent adw.Application
-				o.Cast(&parent)
+// ID is the application ID for o.
+func (o Options) ID() string {
+	if o.FirstRun {
+		return FirstRunAppID
+	}
+	return AppID
+}
 
-				app := &Application{Application: parent}
-				reg.Pin(o, unsafe.Pointer(app))
-			})
+// SetDryRun puts every backend in dry-run mode (ADR-0009).
+func SetDryRun() {
+	log.Println("Running in dry-run mode")
+	flatpak.SetDryRun(true)
+	fwupd.SetDryRun(true)
+	homebrew.SetDryRun(true)
+	bootc.SetDryRun(true)
+	sysupdate.SetDryRun(true)
+	updex.SetDryRun(true)
+	firstrun.SetDryRun(true)
+}
 
-			appClass := (*gio.ApplicationClass)(unsafe.Pointer(tc))
-			appClass.OverrideActivate(func(a *gio.Application) {
-				ptr := reg.Get(a.GoPointer())
-				if ptr == nil {
-					log.Fatal("Application instance not found")
-				}
-				(*Application)(ptr).onActivate()
-			})
-		},
+// Run runs the application until its last window closes.
+func Run(o Options) error {
+	if o.DryRun {
+		SetDryRun()
+	}
+	if o.FirstRun {
+		log.Println("Running in first-run mode")
+	}
+	if err := frostui.SetAppID(o.ID(), "ChairLift"); err != nil {
+		log.Printf("app: cannot set the app ID: %v", err)
+	}
+	mygo.App.SetName(o.ID())
+	if !mygo.App.RequestSingleInstanceLock() {
+		log.Printf("app: %s already runs; it was asked to show its window", o.ID())
+		return nil
+	}
+	frostui.SetIcons(frostui.NewIcons(map[string][]byte{"org.frostyard.ChairLift-symbolic": window.LogoSVG()}))
+
+	var win *mygo.Window
+	mygo.App.OnSecondInstance(func([]string, string) {
+		if win != nil {
+			win.Show()
+			win.Focus()
+		}
+	})
+	mygo.App.WhenReady(func() {
+		start := time.Now()
+		if o.FirstRun {
+			log.Println("ChairLift first run activated")
+			win = openFirstRun()
+			return
+		}
+		log.Println("ChairLift activated")
+		win = openMain(o)
+		window.Ready(start)
+	})
+	return mygo.App.Run()
+}
+
+// poster hands functions to a window's UI thread. It is safe from any
+// goroutine, and keeps what is posted before the window exists until
+// attach, so an early result is never lost.
+type poster struct {
+	mu      sync.Mutex
+	win     updater
+	pending []func()
+}
+
+// updater is the part of *mygo.Window a poster uses.
+type updater interface{ Update(fn func()) }
+
+func (p *poster) post(fn func()) {
+	p.mu.Lock()
+	if p.win == nil {
+		p.pending = append(p.pending, fn)
+		p.mu.Unlock()
+		return
+	}
+	w := p.win
+	p.mu.Unlock()
+	w.Update(fn)
+}
+
+func (p *poster) attach(w updater) {
+	p.mu.Lock()
+	p.win = w
+	pending := p.pending
+	p.pending = nil
+	p.mu.Unlock()
+	for _, fn := range pending {
+		w.Update(fn)
+	}
+}
+
+func openMain(o Options) *mygo.Window {
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		selfreport.Error(selfreport.CodeConfigLoadFailed, cfgErr)
+	}
+	p := &poster{}
+	post := p.post
+	env := views.NewEnv(cfg, o.DryRun, post)
+	if cfgErr != nil {
+		env.ConfigErr = cfgErr
+	}
+	wireConsole(env.Console, post)
+	if path, err := activity.DefaultPath(os.Getenv); err == nil {
+		l, err := activity.Open(path, o.DryRun)
+		if err != nil {
+			log.Printf("activity: %v", err)
+		}
+		env.Activity = l
+	}
+	store := views.NewStore(env)
+	main := window.NewMain(env, store)
+	main.Quit = mygo.App.Quit
+	win := mygo.NewWindow(mygo.WindowOptions{
+		Title: "ChairLift", Width: 1360, Height: 880, MinWidth: 1040, MinHeight: 640,
+		TitleBarStyle: mygo.TitleBarHidden,
+		Content:       ui.View(main.View),
+	})
+	attachMain(win, p, main)
+	log.Printf("window: built (%s)", main.Describe())
+	store.Start()
+	return win
+}
+
+// mainWindow is the part of *mygo.Window attachMain uses.
+type mainWindow interface {
+	updater
+	OnClose(fn func(e *mygo.CloseEvent)) (off func())
+}
+
+// attachMain gives the poster its window and guards the window's close.
+// MyGo fires OnClose for the close button, Window.Close and every window
+// App.Quit closes, which SIGINT and SIGTERM call, so this one guard covers
+// them all.
+func attachMain(w mainWindow, p *poster, m *window.Main) {
+	p.attach(w)
+	w.OnClose(func(e *mygo.CloseEvent) {
+		if !m.CanClose() {
+			e.PreventDefault()
+		}
 	})
 }
 
-// New creates a new ChairLift application
-func New() *Application {
-	// Check for --first-run before the GObject exists: it selects the
-	// application ID.
-	firstRun := false
-	id := appID
-	for _, arg := range os.Args[1:] {
-		if arg == "--first-run" {
-			firstRun = true
-			id = firstRunAppID
-			break
+func openFirstRun() *mygo.Window {
+	p := &poster{}
+	fr := window.NewFirstRun(p.post)
+	win := mygo.NewWindow(mygo.WindowOptions{
+		Title: "ChairLift", Width: 760, Height: 680, MinWidth: 640, MinHeight: 560,
+		Content: ui.View(fr.View),
+	})
+	p.attach(win)
+	win.OnClose(func(e *mygo.CloseEvent) {
+		// While the first run's actions run, a close would end the app and
+		// lose the completion markers: keep the window.
+		if !fr.CanClose() {
+			e.PreventDefault()
 		}
-	}
+	})
+	fr.Presented()
+	return win
+}
 
-	obj := gobject.NewObject(gTypeApplication, "application_id", id, "flags", gio.GApplicationFlagsNoneValue)
-	if obj == nil {
-		log.Fatal("Failed to create application")
+// wireConsole sends every command the backends run, and every log line,
+// to the console. Redraws are coalesced: Window.Update rebuilds the view
+// on every call.
+func wireConsole(con *frostui.Console, post func(func())) {
+	waker := frostui.NewWaker(post, 60*time.Millisecond)
+	con.SetNotify(waker.Wake)
+	// Commands run side by side (status reads beside a job): each output
+	// and end line carries its command's tool as its source.
+	var mu sync.Mutex
+	sources := map[uint64]string{}
+	sourceFor := func(id uint64) string {
+		mu.Lock()
+		defer mu.Unlock()
+		return sources[id]
 	}
-
-	app := (*Application)(appRegistry.Get(obj.GoPointer()))
-	app.firstRun = firstRun
-	if firstRun {
-		log.Println("Running in first-run mode")
-	}
-
-	// Check for --dry-run flag before GTK processes args
-	for _, arg := range os.Args[1:] {
-		if arg == "--dry-run" || arg == "-d" {
-			log.Println("Running in dry-run mode")
-			app.dryRun = true
-			flatpak.SetDryRun(true)
-			fwupd.SetDryRun(true)
-			homebrew.SetDryRun(true)
-			bootc.SetDryRun(true)
-			sysupdate.SetDryRun(true)
-			updex.SetDryRun(true)
-			views.SetDryRun(true)
-			firstrun.SetDryRun(true)
-			break
+	cmdlog.SetSink(func(e cmdlog.Event) {
+		switch e.Kind {
+		case cmdlog.KindStart:
+			src := sourceOf(e.Argv)
+			mu.Lock()
+			sources[e.ID] = src
+			mu.Unlock()
+			con.Add(frostui.LevelCommand, src, strings.Join(e.Argv, " "))
+		case cmdlog.KindLine:
+			// stdout and stderr are both the command's output
+			con.Add(frostui.LevelOutput, sourceFor(e.ID), e.Text)
+		case cmdlog.KindDryRun:
+			con.Add(frostui.LevelDryRun, sourceOf(e.Argv), "would run: "+strings.Join(e.Argv, " "))
+		case cmdlog.KindEnd:
+			src := sourceFor(e.ID)
+			mu.Lock()
+			delete(sources, e.ID)
+			mu.Unlock()
+			if e.Err != nil {
+				con.Addf(frostui.LevelWarn, src, "exited after %s: %v", e.Elapsed.Round(time.Millisecond), e.Err)
+			} else {
+				con.Addf(frostui.LevelDebug, src, "exited after %s", e.Elapsed.Round(time.Millisecond))
+			}
 		}
+	})
+	w := con.Writer(frostui.LevelDebug, "log")
+	w.Classify = func(text string) frostui.Level {
+		switch {
+		case strings.Contains(text, "[DRY-RUN]"):
+			return frostui.LevelDryRun
+		case strings.Contains(strings.ToLower(text), "error"), strings.Contains(strings.ToLower(text), "failed"):
+			return frostui.LevelWarn
+		}
+		return frostui.LevelDebug
 	}
-
-	// Register command line options
-	app.registerOptions()
-
-	return app
+	log.SetOutput(io.MultiWriter(os.Stderr, stripTimestamp{w}))
 }
 
-// onActivate is called when the application is activated
-func (a *Application) onActivate() {
-	if a.firstRun {
-		a.activateFirstRun()
-		return
+func sourceOf(argv []string) string {
+	if len(argv) == 0 {
+		return ""
 	}
-
-	activateStart := time.Now()
-	log.Println("ChairLift activated")
-
-	// Guard: reuse existing window if already created
-	if a.window != nil {
-		a.window.Present()
-		return
+	name := argv[0]
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		name = name[i+1:]
 	}
-
-	// Create and present the main window
-	win := window.New(a.Application)
-	a.window = win
-	a.AddWindow(&win.Window)
-	a.registerQuitAction()
-	a.setupKeyboardShortcuts(win.NavigationItems())
-	win.Present()
-	log.Printf("app: window presented in %s (since activate)", time.Since(activateStart))
-}
-
-// activateFirstRun builds and presents the first-run window, or presents
-// the existing one when the first run is activated again.
-func (a *Application) activateFirstRun() {
-	log.Println("ChairLift first run activated")
-	if a.firstRunWindow == nil {
-		a.firstRunWindow = window.NewFirstRun(a.Application)
+	if name == "pkexec" && len(argv) > 1 {
+		return sourceOf(argv[1:])
 	}
-	a.firstRunWindow.Present()
+	return name
 }
 
-// registerQuitAction registers the app.quit action that navigation's
-// <Primary>q shortcut targets. GTK registers no quit action for an
-// application by default, so without this the accelerator
-// setupKeyboardShortcuts installs resolves to nothing and Ctrl+Q is
-// advertised in the shortcuts dialog while doing nothing.
-func (a *Application) registerQuitAction() {
-	quitAction := gio.NewSimpleAction("quit", nil)
-	quitActivateCb := func(action gio.SimpleAction, param uintptr) {
-		a.Quit()
+// stripTimestamp drops the standard logger's date and time, which the
+// console shows itself.
+type stripTimestamp struct{ w io.Writer }
+
+func (s stripTimestamp) Write(p []byte) (int, error) {
+	text := string(p)
+	// "2026/11/10 10:50:19 file.go:12: message"
+	if len(text) > 20 && text[4] == '/' && text[7] == '/' && text[13] == ':' {
+		text = text[20:]
 	}
-	quitAction.ConnectActivate(&quitActivateCb)
-	a.AddAction(quitAction)
-}
-
-// setupKeyboardShortcuts sets up application-wide keyboard shortcuts
-func (a *Application) setupKeyboardShortcuts(items []navigation.Item) {
-	for _, binding := range navigation.Bindings(items) {
-		a.SetAccelsForAction(binding.Action, binding.Accelerators)
+	if _, err := s.w.Write([]byte(text)); err != nil {
+		return 0, err
 	}
+	return len(p), nil
 }
 
-// registerOptions registers command line options
-func (a *Application) registerOptions() {
-	a.AddMainOption(
-		"dry-run",
-		'd',
-		glib.GOptionFlagNoneValue,
-		glib.GOptionArgNoneValue,
-		"Don't make any changes to the system.",
-		"",
-	)
-	a.AddMainOption(
-		"first-run",
-		0,
-		glib.GOptionFlagNoneValue,
-		glib.GOptionArgNoneValue,
-		"Show the first-run setup window (started by chairlift-first-run).",
-		"",
-	)
-	a.AddMainOption(
-		"send-pending-reports",
-		0,
-		glib.GOptionFlagNoneValue,
-		glib.GOptionArgNoneValue,
-		"Send the problem reports that your consent allows, then exit; no window.",
-		"",
-	)
-}
-
-// GetGtkApplication returns the underlying GTK Application
-func (a *Application) GetGtkApplication() *gtk.Application {
-	return &a.Application.Application
-}
+// ErrNoDisplay is returned when no display is open.
+var ErrNoDisplay = errors.New("cannot open a display")

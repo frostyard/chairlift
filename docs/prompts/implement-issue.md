@@ -11,9 +11,9 @@ Before editing:
 3. State the intended change and identify affected repository invariants.
 
 While implementing:
-- Keep the GTK main thread free of external tool calls and marshal UI updates through sgtk.RunOnMainThread.
+- Keep the UI thread free of external tool calls: run backends on goroutines that copy their inputs, hand results back with Env.Post (views.Go), put every change in the serial job queue (Env.Jobs), and report every new command through internal/cmdlog.
 - Preserve the fixed PolicyKit/helper privilege boundary; do not introduce arbitrary privileged execution.
-- Respect config-driven group visibility and nil-guard cross-group widgets.
+- Respect config-driven group visibility (Env.Enabled) and never assume another group's state exists.
 - Put non-UI logic in a pure package where it can be tested headlessly.
 - Add regression tests that exercise the actual failure mode and all affected collection entries.
 - Update current-state documentation when behavior, configuration, dependencies, or install layout changes.

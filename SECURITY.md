@@ -1,6 +1,6 @@
 # Security policy
 
-ChairLift is a GTK4/Libadwaita system-management application. It runs with
+ChairLift is a system-management application (a MyGo window on GTK 3). It runs with
 the rights of the user who started it. It reaches root only through `pkexec`
 and the PolicyKit policies in `data/`, with administrator authentication:
 

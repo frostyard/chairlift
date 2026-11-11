@@ -8,6 +8,22 @@ import (
 	"testing"
 )
 
+// viewDomains maps each domain of internal/views to its files. Every
+// non-test Go file of the package must belong to one domain, so a new file
+// cannot escape the checks below.
+var viewDomains = map[string][]string{
+	"shared":      {"env.go", "source.go", "store.go"},
+	"apps":        {"apps.go", "flatpak.go", "brew.go", "brew_apps.go", "brew_bundles.go", "brew_search.go", "brew_source.go"},
+	"updates":     {"updates.go", "firmware.go"},
+	"overview":    {"overview.go", "system.go", "live.go"},
+	"features":    {"features.go", "features_page.go"},
+	"problems":    {"problems.go", "problems_reporting.go", "problems_view.go"},
+	"maintenance": {"maintenance.go", "maintenance_view.go"},
+}
+
+// TestPageBuildersUsePurePresentations checks that the views draw their
+// text and decisions from the pure helpers (ADR-0009), and that retired
+// presentation logic does not come back inline.
 func TestPageBuildersUsePurePresentations(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -15,108 +31,114 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 	}
 	viewsDir := filepath.Clean(filepath.Join(filepath.Dir(filename), ".."))
 
+	owned := map[string]bool{}
+	for _, files := range viewDomains {
+		for _, f := range files {
+			owned[f] = true
+		}
+	}
+	entries, err := os.ReadDir(viewsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		if !owned[name] {
+			t.Errorf("internal/views/%s belongs to no domain of the wiring test", name)
+		}
+	}
+
+	read := func(domain string) string {
+		var b strings.Builder
+		for _, f := range viewDomains[domain] {
+			data, err := os.ReadFile(filepath.Join(viewsDir, f))
+			if err != nil {
+				t.Fatalf("read %s: %v", f, err)
+			}
+			b.Write(data)
+		}
+		return b.String()
+	}
+
 	tests := []struct {
-		file     string
+		domain   string
 		required []string
 		retired  []string
 	}{
 		{
-			file: "applications_page.go",
+			domain: "apps",
 			required: []string{
 				"pageview.BrewBundle(",
-				"pageview.HomebrewPackage(",
-				"pageview.FlatpakApplication(",
 				"pageview.SearchResult(",
+				"pageview.UntrustedTap(",
+				"pageview.FlatpakUpdate(",
+				"flatpakstatus.Subtitle(",
+				"bundleview.Present(",
+				"trustmsg.UpgradeMessage(",
+				"actionmsg.TapTrust(",
+				"actionmsg.BundleInstall(",
+				"actionmsg.Install(",
 			},
 			retired: []string{
 				`fmt.Sprintf("%s — %s", bundle.Description, bundle.Path)`,
-				`fmt.Sprintf("%s (%s)", app.ApplicationID, app.Version)`,
-				`row.SetSubtitle(result.Kind.DisplayName())`,
+				`fmt.Sprintf("%s → %s", update.ApplicationID, update.NewVersion)`,
+				`"pkexec"`,
 			},
 		},
 		{
-			file: "updates_page.go",
+			domain: "updates",
 			required: []string{
-				"pageview.UntrustedTap(",
-				"pageview.FlatpakUpdate(",
-				"pageview.BootcUpdateSubtitle(",
-				"pageview.BootcStageResultSubtitle(",
-				"pageview.SysupdateUpdateSubtitle(",
-				"pageview.SysupdateStageResultSubtitle(",
-				"pageview.SysupdateRollbackSubtitle(",
 				"pageview.FirmwareUpdate(",
 				"pageview.FirmwareBlockedUpdate(",
 				"pageview.FirmwareUpdatesSubtitle(",
 				"pageview.FirmwareInstallConfirmation(",
+				"pageview.LastChecked(",
+				"actionmsg.FirmwareInstall(",
 			},
-			retired: []string{
-				"strings.LastIndex(",
-				`fmt.Sprintf("%s → %s", update.ApplicationID, update.NewVersion)`,
-				`fmt.Sprintf("Update %s staged — restart to apply", version)`,
-			},
+			retired: []string{`"pkexec"`},
 		},
 		{
-			file:     "maintenance_page.go",
-			required: []string{"pageview.MaintenanceCommand("},
+			domain:   "maintenance",
+			required: []string{"pageview.MaintenanceCommand(", "actionmsg.MaintenanceScript(", "actionmsg.Cleanup("},
 			retired: []string{
 				`exec.CommandContext(ctx, "pkexec", script)`,
 				"exec.CommandContext(ctx, script)",
 			},
 		},
 		{
-			file: "features_page.go",
+			domain: "features",
 			required: []string{
 				"pageview.Feature(",
 				"pageview.FeatureGroupDescription(",
+				"featurestatus.Summarize(",
+				"actionmsg.FeatureToggle(",
+				"actionmsg.FeatureUpdate(",
 			},
-			retired: []string{
-				"row.SetTitle(feat.Description)",
-				`fmt.Sprintf("%d features available", len(features))`,
-			},
+			retired: []string{`fmt.Sprintf("%d features available", len(features))`},
 		},
 		{
-			file:     "help_page.go",
-			required: []string{"pageview.HelpResources("},
-			retired:  []string{`row.SetTitle("Website")`, `row.SetTitle("Report Issues")`},
-		},
-		{
-			file: "system_page.go",
+			domain: "problems",
 			required: []string{
-				"pageview.ParseOSRelease(",
-				"pageview.ShortDigest(",
-			},
-			retired: []string{"bufio.NewScanner(", "cases.Title(", "digest[:19]"},
-		},
-		{
-			file: "problems_page.go",
-			required: []string{
-				"pageview.Problem(",
 				"pageview.ProblemDetails(",
 				"pageview.ProblemsSystemStatus(",
 				"pageview.ProblemsAppsStatus(",
 				"pageview.ReportingDescription(",
-				"pageview.ReportingMode(",
 				"pageview.ReportingWhat(",
 				"pageview.ReportingCountRow(",
 				"pageview.SentRows(",
 				"pageview.ReportOffered(",
 				"pageview.ReportSummary(",
-				"glib.MarkupEscapeText(text.Title, -1)",
-				"glib.MarkupEscapeText(text.Subtitle, -1)",
-				"actionmsg.ProblemDismiss(IsDryRun(), item.ID, text.Title)",
-				"actionmsg.Report(IsDryRun(), report.Kind)",
-				"actionmsg.ReportingConsent(IsDryRun(), enabled, string(mode))",
-				"reporting.SendReport(",
-				"reporting.Run(",
-				"reporting.LoadConsent(",
-				"reporting.ForItem(",
-				"problems.DetailsText(item)",
+				"actionmsg.ProblemDismiss(",
+				"actionmsg.Report(",
+				"actionmsg.ReportingConsent(",
+				"problems.DetailsText(",
 				"problems.BuiltMarker(",
-				"sgtk.RunOnMainThread(",
 			},
 			retired: []string{
 				`"System checks are not available on this system"`,
-				`"No problems found"`,
 				"problems.Title(",
 				"problems.Hint(",
 				"exec.Command",
@@ -126,42 +148,27 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 				"ChairLift does not send anything",
 			},
 		},
-	}
-
-	// Every page builder file must be in the table above.
-	pageFiles, err := filepath.Glob(filepath.Join(viewsDir, "*_page.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pageFiles) != 7 || len(pageFiles) != len(tests) {
-		t.Fatalf("found %d page builders, the table covers %d; want 7 each", len(pageFiles), len(tests))
-	}
-	covered := map[string]bool{}
-	for _, tt := range tests {
-		covered[tt.file] = true
-	}
-	for _, path := range pageFiles {
-		if !covered[filepath.Base(path)] {
-			t.Errorf("page builder %s is not covered by the wiring test", filepath.Base(path))
-		}
+		{
+			domain: "overview",
+			required: []string{
+				"pageview.ParseOSRelease(",
+				"pageview.ShortDigest(",
+			},
+			retired: []string{"cases.Title(", "digest[:19]"},
+		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.file, func(t *testing.T) {
-			path := filepath.Join(viewsDir, tt.file)
-			source, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("read %s: %v", path, err)
-			}
-			text := string(source)
+		t.Run(tt.domain, func(t *testing.T) {
+			text := read(tt.domain)
 			for _, fragment := range tt.required {
 				if !strings.Contains(text, fragment) {
-					t.Errorf("%s does not use %q", tt.file, fragment)
+					t.Errorf("%s does not use %q", tt.domain, fragment)
 				}
 			}
 			for _, fragment := range tt.retired {
 				if strings.Contains(text, fragment) {
-					t.Errorf("%s still owns presentation logic %q", tt.file, fragment)
+					t.Errorf("%s still owns presentation logic %q", tt.domain, fragment)
 				}
 			}
 		})

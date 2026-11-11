@@ -64,12 +64,6 @@ func ReportingDescription(c reporting.Consent) string {
 	return ReportingOff
 }
 
-// ReportingMode returns the mode row's text: the consent's mode. The view
-// makes the row sensitive only while reporting allows sending.
-func ReportingMode(c reporting.Consent) Row {
-	return Row{Title: ReportingModeTitle, Subtitle: reportingModeText(c.Mode)}
-}
-
 // reportingModeText returns the display text of a consent mode.
 func reportingModeText(mode reporting.Mode) string {
 	if mode == reporting.ModeAuto {

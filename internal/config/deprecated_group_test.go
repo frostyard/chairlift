@@ -48,7 +48,7 @@ func TestDeprecatedOptimizationGroupDoesNotKeepMaintenanceVisible(t *testing.T) 
 			t.Fatalf("Maintenance page visible with only %s enabled; it renders nothing", deprecatedOptimizationGroup)
 		}
 	}
-	if len(visible) == 0 || visible[len(visible)-1].Name != "help" {
-		t.Fatalf("visible pages = %+v, want the other pages ending with Help", visible)
+	if len(visible) == 0 || visible[0].Name != "overview" {
+		t.Fatalf("visible pages = %+v, want the other pages starting with the Overview", visible)
 	}
 }

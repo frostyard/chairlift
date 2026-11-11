@@ -1,415 +1,88 @@
-<div align="center">
-    <img src="data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg">
-    <h1>ChairLift</h1>
-    <p>A modern system management tool for <a href="https://github.com/frostyard/snosi">Snow Linux</a></p>
-    <p>Manage your Homebrew packages, monitor system health, and maintain your system with ease.</p>
-</div>
+<!-- readme-kind: app -->
+<img src="data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg" alt="ChairLift icon" width="112" align="right">
 
----
+# ChairLift
 
-## Screenshots
+**The command center of Snow Linux.**
 
-![ChairLift Home Page](data/screenshots/home-page.png)
+ChairLift is a desktop app for people who run [Snow Linux](https://github.com/frostyard/snosi) that keeps the system image, features, apps, packages and firmware up to date and the computer tidy, from one window. It shows the commands it runs, with their output, and makes one change at a time.
 
----
+**Status:** in production. Snow Linux images install it from Frostyard's APT repository.
 
-## Features
+**Documentation:** [docs/index.md](docs/index.md)
 
-### 📦 Homebrew Package Management
+![The Overview page: the system image, the updates waiting, live processor and memory use, the disk and recent activity](data/screenshots/overview.png)
 
-- **Manage Installed Packages**: Browse installed formulae and casks, uninstall
-  either type, and pin or unpin formulae with confirmed, refresh-safe actions
-- **Search & Install**: Search formulae and casks, confirm the selected package
-  type, and install with loading, error, refresh, and dry-run states
-- **Update & Upgrade**: Keep Homebrew up-to-date and upgrade outdated packages individually
-- **Curated Bundles**: Install pre-configured package bundles for common use cases
-- **Tap Trust Management**: Homebrew 6's per-tap trust model hides packages installed from untrusted taps; ChairLift detects them and lets you trust a tap (and resume its updates) with one click, without requiring root
+## What it does
 
-### 🏥 System Health Monitoring
+- **Overview.** The running image and its deployment chain, the updates waiting, live processor and memory use, free space, and what ChairLift changed recently.
+- **Updates.** One run across the system image (bootc or native A/B), features, Flatpak, Homebrew and firmware, with each step's state. Firmware asks first, device by device.
+- **Apps.** Every installed Flatpak app and Homebrew package in one table, curated Brewfile bundles, and Homebrew search.
+- **Features, Problems and Maintenance.** System extensions through updex, the problems recorded on this computer, and cleanups.
+- **Command palette, console and status bar.** Ctrl K finds and runs an action, Ctrl J shows the console, and the status bar shows the running job.
 
-- **System Performance**: Quick access to Mission Center for detailed system monitoring
-- **Health Overview**: Check system diagnostics and health status
+Every card sits behind a configuration group, so other distributions can turn off what they do not ship: [CONFIG.md](CONFIG.md).
 
-### 🔧 Updates & Maintenance
+![The Updates page during an update run](data/screenshots/updates.png)
 
-- **System Updates**: On bootc-based systems, download and stage the next OS image update (applied on restart) and view booted/staged/rollback deployment status; on native A/B (systemd-sysupdate) installs, stage the next image the same way and see the previous version available for boot-menu rollback
-- **Homebrew Updates**: Check for and install package updates; actions show
-  progress, reject repeated clicks, and refresh the outdated rows and sidebar
-  badge after successful live operations
-- **Outdated Packages**: View and upgrade packages that have newer versions available
-- **Firmware Updates**: Install device firmware from the Linux Vendor Firmware
-  Service with fwupd, one device at a time, after a confirmation that warns
-  about power and the restart or shutdown the device needs. No root path of
-  ChairLift's own is involved: the fwupd daemon authorizes the install with its
-  own PolicyKit actions. Shown when fwupd is installed
-- **System Maintenance**: Keep your system running smoothly
+## Install
 
-### ⚠️ Problems
+Each [release](https://github.com/frostyard/chairlift/releases) has packages for amd64 and arm64. Download `frostyard-chairlift` for your distribution and `checksums.txt`, check the package, and install it:
 
-- **Problems page**: See the problems recorded on this computer in plain
-  words, with a hint for each: system problems from Snow's `snosi-health`
-  checks (a failed system service, an update that could not be prepared, a
-  disk that needed extra steps to unlock, an integrity error, ...), crashes of
-  your own programs, and problems that frostyard apps recorded. Expand a row
-  to copy its details or dismiss it; a dismissed problem shows again when it
-  happens again. Reporting is opt-in and off by default: nothing leaves the
-  computer until you turn "Send problem reports" on. Then ChairLift either
-  shows each report before it sends it ("Ask each time") or sends it without
-  asking ("Send automatically"), at most 20 reports in 24 hours and one
-  weekly count of the image age and update channel. Every report is listed
-  with its report ID. `chairlift --send-pending-reports` does the same without
-  a window. On a system without `snosi-health` the system group says "System
-  checks are not available on this system". See
-  [ADR-0015](docs/adr/0015-problems-page-and-opt-in-reporting.md) and
-  [specs/problem-reporting.md](docs/specs/problem-reporting.md).
-
----
-
-## Installation
-
-### Installing a Release
-
-Each [ChairLift release](https://github.com/frostyard/chairlift/releases)
-provides ready-to-install packages for 64-bit Intel/AMD and Arm systems.
-Choose the package format for your distribution:
-
-| Distribution family | Full-package filename | Install command |
-|---|---|---|
-| Debian/Ubuntu | `frostyard-chairlift_<version>_<arch>.deb` (`amd64` or `arm64`) | `sudo apt install ./<downloaded-filename>` |
-| Fedora/RHEL | `frostyard-chairlift-<version>-1.<arch>.rpm` (`x86_64` or `aarch64`) | `sudo dnf install ./<downloaded-filename>` |
-| Alpine | `frostyard-chairlift_<version>_<arch>.apk` (`x86_64` or `aarch64`) | `sudo apk add --allow-untrusted ./<downloaded-filename>` |
-
-Tag releases also publish the `.deb` packages to Frostyard's APT repository,
-`https://repository.frostyard.org/debian/`, from which Snow Linux images
-install ChairLift.
-
-For a normal system installation, download the full `frostyard-chairlift`
-package. It includes the GUI, privileged helper, desktop assets, PolicyKit
-policies, and package-maintainer configuration.
-
-Use the similarly named `frostyard-chairlift-system-integration` package
-**only** when the ChairLift GUI is already delivered through a user-scoped
-mechanism such as the Homebrew cask. That package supplies only the root-owned
-helper, policies, and configuration needed by such an installation; it does
-not include the GUI. Never install both packages: they intentionally conflict
-because they own the same system-integration files.
-
-Download `checksums.txt` from the same release and verify the selected package
-before installing it:
-
-```bash
-package='<downloaded-package-filename>'
-grep -F "  $package" checksums.txt | sha256sum --check -
+```sh
+grep -F "  frostyard-chairlift_<version>_amd64.deb" checksums.txt | sha256sum --check -
+sudo apt install ./frostyard-chairlift_<version>_amd64.deb   # or: sudo dnf install ./….rpm, sudo apk add --allow-untrusted ./….apk
 ```
 
-### Building from Source
+Install `frostyard-chairlift-system-integration` instead only when the GUI comes from a user-scoped install such as the Homebrew cask: it holds the privileged helper, the PolicyKit policies and the default configuration. The two packages conflict. [docs/index.md](docs/index.md#installation) covers both packages and installing from source.
 
-ChairLift is written in Go using [puregotk](https://codeberg.org/puregotk/puregotk) bindings (no CGO required):
+## Remove
 
-```bash
-# Clone the repository
-git clone https://github.com/frostyard/chairlift.git
-cd chairlift
-
-# Build
-make build
-
-# Binaries are written to build/:
-#   build/chairlift                 the main application
-#   build/chairlift-updex-helper    privileged helper for updex feature writes
-#   build/chairlift-first-run       pure-Go first-run gate (no GTK)
-
-# Install (binaries, polkit policies, icons, desktop file; no autostart entry)
-sudo make install
+```sh
+sudo apt remove frostyard-chairlift   # a source install: sudo make uninstall
 ```
 
-`/usr` is the **only** supported `PREFIX` for an installation that
-participates in PolicyKit authentication (`sudo make install` uses it by
-default — no need to pass `PREFIX` explicitly). PolicyKit's `polkitd` reads
-`.policy` files from the fixed system directory
-`/usr/share/polkit-1/actions`, and `pkexec` matches the updex helper it's
-asked to run against the absolute path
-`/usr/bin/chairlift-updex-helper` recorded in
-`data/org.frostyard.ChairLift.updex.policy`'s
-`org.freedesktop.policykit.exec.path` annotation and its first argument
-against an `org.freedesktop.policykit.exec.argv1` annotation. Installing under
-any other prefix places those files where polkit never looks, so the privileged
-updex, bootc-staging, and sysupdate-staging features silently stop working (or fall back to a
-more restrictive, always-reprompting authentication rule). This also matches
-the layout used by ChairLift's full `frostyard-chairlift` nFPM package, so a
-source install and a full packaged install end up identical.
+## Requirements
 
-ChairLift does not install passwordless PolicyKit rules. Bootc staging,
-sysupdate staging, and updex writes use the policies' normal
-administrator-authentication defaults;
-an active session may retain a successful authorization briefly. The updex
-helper accepts only `enable-feature <name> [--dry-run]`, `disable-feature
-<name> [--dry-run]`, and `update [--dry-run]`, rejecting every other argument
-shape inside the privileged process.
+- At run time: GTK 3, libepoxy with an OpenGL driver (Mesa), and Pango. ChairLift loads them when its window opens; without a GPU it draws on the CPU.
+- Optional, each enabling its part: `bootc` with `/usr/libexec/bootc-update-stage`, or a native A/B image with `/usr/libexec/snosi-sysupdate-stage`; updex features; Flatpak; Homebrew; fwupd; snosi-health.
 
-Both paths install package-maintainer configuration defaults at
-`/usr/share/chairlift/config.yml`. They never create or overwrite the
-administrator-owned `/etc/chairlift/config.yml` override.
+## How it works
 
-Releases also publish a small
-`frostyard-chairlift-system-integration` deb/rpm/apk for distributions that
-deliver the GUI through a user-scoped mechanism such as the Homebrew cask. It
-installs only the fixed `/usr/bin/chairlift-updex-helper`, all three PolicyKit
-policies, and `/usr/share/chairlift/config.yml`; it does not install the GUI.
-The integration and full packages conflict intentionally because they own the
-same privileged files.
+ChairLift is written in Go on [MyGo](https://mygo.egoist.dev), which draws its own widgets on GTK 3 and OpenGL loaded with purego, so it builds with no CGO. The main paths:
 
-The bootc policy deliberately retains the fixed
-`/usr/libexec/bootc-update-stage` path. A distribution must provide a trusted
-stage helper at exactly that path before enabling `bootc_updates_group`; the
-integration package does not provide a distro-specific staging implementation.
-ChairLift hides the group when the helper is absent. The sysupdate policy
-likewise retains the fixed `/usr/libexec/snosi-sysupdate-stage` path used by
-`sysupdate_updates_group` on native A/B installs; that helper (and the
-`/usr/lib/snosi/native-ab` marker gating the group) ship with the OS image.
+- `cmd/chairlift`, `cmd/chairlift-updex-helper` (the privileged helper), `cmd/chairlift-first-run` (the first-run gate)
+- `internal/app` and `internal/window`: the application, the command-center window and the first-run wizard
+- `internal/views`: the six pages and their state, drawn with the [frostui](https://github.com/frostyard/frostui) UI kit
+- `internal/cmdlog`: the command tracer behind the console
+- `internal/homebrew`, `flatpak`, `fwupd`, `bootc`, `sysupdate`, `updex`: the backends
+- `internal/config`, `navigation`, `problems`, `reporting`: configuration, pages, problem records, reports
 
-`PREFIX` can still be overridden (e.g. `make install PREFIX=$HOME/.local`)
-for a non-privileged, non-PolicyKit-integrated install — but the updex helper,
-bootc staging, and sysupdate staging will not resolve to their fixed exec-path annotations
-in that case.
+Root actions go through `pkexec` with fixed helpers and PolicyKit policies only; nothing is passwordless. The configuration is read from `/etc/chairlift/config.yml`, then `/usr/share/chairlift/config.yml`, then `config.yml` beside the executable or in the current working directory (a development fallback). See [docs/design/overview.md](docs/design/overview.md).
 
-`DESTDIR` layers underneath `PREFIX` as usual, unchanged by any of the
-above, for staged/packaged installs (`make install DESTDIR=/path/to/stage
-PREFIX=/usr`) — this is what `.goreleaser.yaml`'s nFPM packaging uses.
+## Privacy
 
-**Migrating from a prior `/usr/local` source install:** `PREFIX` used to
-default to `/usr/local`. Before reinstalling at the new `/usr` default,
-remove the old install with `sudo make uninstall PREFIX=/usr/local`.
-
-Other useful targets: `make dev` (CGO-enabled build with `-race` for development), `make fmt`, `make lint`, `make build-linux-amd64` / `make build-linux-arm64` (cross-compilation), `make uninstall`.
-
-### Dependencies
-
-- Go (see `go.mod` for the toolchain version)
-- GTK 4 and libadwaita 1 (shared libraries, loaded at runtime by puregotk — no GTK dev headers or CGO needed to build)
-- Homebrew (optional, for package management features and tap trust)
-- fwupd (optional, for firmware updates)
-- Flatpak (optional)
-- `bootc` and the snow `/usr/libexec/bootc-update-stage` script (optional; enables staged system updates on bootc installs)
-- The snow `/usr/libexec/snosi-sysupdate-stage` script and `/usr/lib/snosi/native-ab` marker (optional; enables staged system updates on native A/B installs)
-- `updex` features configured on the system (optional; toggled via the Features page)
-- Mission Center (optional, for system performance monitoring)
-
----
-
-## Usage
-
-Launch ChairLift from your application menu or run:
-
-```bash
-chairlift
-```
-
-### Main Sections
-
-1. **Applications**: Manage installed Homebrew packages, search for formulae
-   and casks, install curated bundles, and launch the configured external
-   Flatpak manager
-2. **Maintenance**: System cleanup and maintenance tools (Homebrew, Flatpak, custom scripts)
-3. **Updates**: Stage bootc or native A/B system updates, manage Homebrew updates and outdated packages, apply Flatpak updates, install firmware updates, and trust Homebrew taps
-4. **System**: Monitor deployment, health, and performance information
-5. **Features**: Enable, disable, and update configured system features
-6. **Help**: Documentation and support resources
-
-### First Run
-
-`chairlift --first-run` opens a first-login setup window: a welcome, a
-connection check, the light or dark color scheme, an optional application
-picker (user Flatpaks from Flathub), and a progress and done step. It replaces
-SNOW First Setup. `chairlift-first-run` starts it once for each user: it exits
-without loading GTK when `${XDG_CONFIG_HOME:-~/.config}/chairlift/first-run.done`
-or SNOW First Setup's `snow-first-setup.done` exists, or for root, and
-`chairlift-first-run --mark-done` records the first run as finished.
-ChairLift installs no autostart entry, so nothing starts on its own; Snow
-images ship the autostart entry and the application list. The first-run
-strings are translated (ported from SNOW First Setup). See
-[ADR-0014](docs/adr/0014-first-run-mode.md).
-
-### Keyboard Shortcuts
-
-- `Alt+1` through `Alt+N`: open the first through Nth visible page in sidebar
-  order. Pages whose configurable groups are all disabled are omitted, so the
-  numbers compact without gaps; Help is always retained.
-- `F1`: open Help (with every page visible, Help is also `Alt+7`)
-- `Ctrl+?`: show the keyboard-shortcuts window
-- `Ctrl+Q`: quit
-
-Mouse and keyboard navigation have identical behavior in a collapsed window:
-selecting a destination reveals its content as well as updating the selected
-sidebar row and page title.
-
-### Managing Packages
-
-- **Browse Installed**: Navigate to Applications → Brew Packages to see all installed formulae and casks
-- **Search**: Use the search box to find packages by name or keyword
-- **Install**: Click the install button next to search results or bundle items
-- **Pin/Unpin**: Use the formula row's Pin or Unpin action and confirm the change
-- **Remove**: Use an installed formula or cask row's Uninstall action and
-  confirm the removal
-- **Upgrade**: Click upgrade button next to outdated packages
-
-ChairLift lists and uninstalls installed user and system Flatpak applications,
-but delegates discovery and installation of new Flatpaks to the external
-manager configured by
-`applications_page.applications_installed_group.app_id` (Bazaar by default).
-
-### Bundle Installation
-
-The Applications page discovers curated `*.Brewfile` bundles from every
-directory configured in `applications_page.brew_bundles_group.bundles_paths`
-(`/usr/share/snow/bundles` by default). Each bundle row shows its source path
-and an Install action; a leading comment in the Brewfile becomes its
-description. Missing directories are harmless, while unreadable configured
-paths are reported without hiding bundles found elsewhere. Repeated clicks
-cannot start overlapping installs, and `--dry-run` shows a preview without
-leaving the row marked as installed. A failed install reports the installer's
-own error line (for example flatpak's `error: ...`), not the progress that
-preceded it; ChairLift's log keeps the complete brew output for bug reports.
-
----
-
-## Configuration
-
-ChairLift is highly configurable and can be adapted for different Linux distributions. The application uses a YAML configuration file to control which features are displayed and which applications are launched for various system management tasks.
-
-### Making ChairLift Portable
-
-While ChairLift was designed for Snow Linux, it can be easily customized for other distributions by:
-
-- **Disabling Snow-specific features**: Hide Homebrew package management if your distribution doesn't use it
-- **Customizing system tools**: Configure which applications to launch for system monitoring, Flatpak management, etc.
-- **Setting help resources**: Point users to your distribution's documentation, issue tracker, and community chat
-
-### Configuration File
-
-See [CONFIG.md](CONFIG.md) for detailed documentation on:
-
-- Available configuration options
-- How to show/hide specific feature groups
-- Customizing application launchers
-- Setting up help resource URLs
-- Example configurations for non-Snow distributions
-
-Configuration files are searched in the following locations (in order):
-
-1. `/etc/chairlift/config.yml` (system-wide - highest priority)
-2. `/usr/share/chairlift/config.yml` (package maintainer defaults)
-3. `config.yml` beside the ChairLift executable, or in the current working
-   directory when no executable-relative file exists (development fallback)
-
-The first file that exists is authoritative (a symlink with a missing target
-counts as existing). If it is unreadable, malformed,
-or contains unknown pages, groups, fields, or invalid field types, ChairLift
-does not use a lower-priority file: it hides every configurable feature group,
-logs a `CONFIGURATION ERROR`, and shows a persistent error toast with the path
-and cause. Fix the file and restart ChairLift. If every candidate is absent,
-the built-in defaults apply.
-
----
-
-## Development
-
-### Project Structure
-
-```
-chairlift/
-├── cmd/
-│   ├── chairlift/               # Main application entry point
-│   ├── chairlift-first-run/     # Pure-Go first-run gate (execs `chairlift --first-run`)
-│   └── chairlift-updex-helper/  # Privileged helper for updex writes (invoked via pkexec)
-├── internal/
-│   ├── app/       # GObject-registered Application (adw.Application subtype)
-│   ├── window/    # Main window (NavigationSplitView) and the first-run window
-│   ├── navigation/ # Canonical pages, shortcuts, and headless transition logic
-│   ├── views/     # GTK page builders plus headlessly tested view-state packages
-│   ├── config/    # YAML config loading, feature group enablement
-│   ├── homebrew/  # Homebrew CLI wrapper (incl. tap trust)
-│   ├── flatpak/   # Flatpak CLI wrapper
-│   ├── fwupd/     # fwupd CLI wrapper (unprivileged firmware updates)
-│   ├── bootc/     # bootc wrapper (status reads, pkexec stage script)
-│   ├── sysupdate/ # Native A/B wrapper (state-file reads, pkexec stage script)
-│   ├── updex/     # Updex feature manager
-│   ├── firstrun/  # First-run gate, markers, steps, apps list, actions (no GTK)
-│   ├── i18n/      # .po reader and embedded first-run translations
-│   ├── problems/  # Problems page data: sources, validation, hints, dismiss store (no GTK, no network)
-│   ├── reporting/ # The only sender: consent, sent log, HTTP, run rules (no GTK)
-│   ├── selfreport/ # ChairLift's own problem records and error codes (std problems)
-│   └── version/   # Build metadata (ldflags injection)
-├── data/          # Desktop file, icons, and PolicyKit policies
-└── Makefile       # Build configuration
-```
-
-### Key Components
-
-See [docs/design/overview.md](docs/design/overview.md) and [docs/design/package-managers.md](docs/design/package-managers.md) for detailed architecture notes (written for AI-assisted development, but equally useful as a deep-dive for humans); [docs/README.md](docs/README.md) indexes the full documentation tree.
-
-- **`internal/homebrew`**: Homebrew CLI wrapper — package listing/searching, install/uninstall, pin/unpin, bundles, updates, and Homebrew 6 tap-trust detection/management
-- **`internal/fwupd`**: unprivileged firmware updates — lists devices with an update from `fwupdmgr get-updates --json` and installs one device with `fwupdmgr update --no-reboot-check <id>`; fwupd's own PolicyKit actions authorize the daemon
-- **`internal/bootc`**: bootc status reads and pkexec-driven update staging via the snow `bootc-update-stage` script
-- **`internal/sysupdate`**: native A/B (systemd-sysupdate) status reads from the `/run/snosi` state files, rollback-candidate discovery from partition labels, and pkexec-driven update staging via the snow `snosi-sysupdate-stage` script
-- **`internal/views`**: GTK4/Adwaita UI — async operations dispatched via `sgtk.RunOnMainThread`, toast notifications for user feedback
-- **`internal/firstrun`**: the first-run mode's decisions — the `chairlift-first-run` gate, the done markers and their one writer, the step flow, the application list, the Flatpak actions, the color-scheme write, and the dry-run completion decision
-- **`internal/i18n`**: a pure-Go `.po` reader and the first-run translations embedded from SNOW First Setup
-- **`internal/views/pageview`**: pure-Go row text, page status, os-release parsing, help-link ordering, and maintenance-command selection shared by all seven page builders, plus the Problems page's row, status and detail text
-- **`internal/problems`**: the Problems page's data — snosi-health's `problems.json`/`details.json`, the user's `coredumpctl` crashes and the frostyard app records of the user journal, each value checked against schema `frostyard.problem/1`, the hints, the merge rule, the dismiss store, and the report document builder; it imports no network package
-- **`internal/reporting`**: the only sender — the per-user consent file and its schema generations, the sent log with the 20-a-day budget, the weekly count, the 24-hour pause after a failure, the one-sender lock, the HTTPS request, and the `--send-pending-reports` mode; only this package imports `net/http`, and a kind `crash` report is never sent
-- **`internal/selfreport`**: records ChairLift's own panics and its coded internal errors in the journal through `github.com/frostyard/std/problems`
-
-### Development Environment
-
-- **Build**: `make build` (see [Building from Source](#building-from-source) above)
-- **Containerized dev environment**: `distrobox.ini` describes a Debian Trixie container with the runtime and build dependencies; use `distrobox assemble create --file distrobox.ini` (or your preferred distrobox workflow) to create it, then `distrobox enter chairlift` and run `make build`/`make dev` inside. It mounts `/home/linuxbrew` (for Homebrew integration testing) and `/usr/share/snow/bundles` (for bundle management testing) from the host.
-
-### Testing
-
-Run `make verify` while you work and `make ci` before pushing; `make ci` mirrors
-the hosted verify, lint, unit, race, and cross-architecture build gates (run
-`mise install` first for the pinned golangci-lint and Node.js). Run `make e2e` on a host with GTK4,
-Libadwaita, `dbus-run-session`, and Xvfb to execute the built application's
-help path, start its dry-run window in a private headless session, poll bounded
-startup readiness, stage the complete install layout, and exercise the installed
-privileged helper's argument rejection. The hosted E2E job installs those
-runtime dependencies and runs the same target. The unit gate also scans every
-workflow and rejects external GitHub Actions references that are not pinned to
-full commit SHAs.
-
-Codecov rejects project coverage regressions greater than one percentage point.
-Coverage expectations otherwise remain risk-based, not a repository-wide
-percentage target: command wrappers must cover argument construction, dry-run,
-parsing, and failure propagation; configuration and privileged paths must keep
-exhaustive consistency tests; and GTK-independent view state belongs in
-headlessly tested leaf packages. `internal/views/pageview` table-tests the
-shared presentation decisions for every page and statically verifies each
-builder uses them. The puregotk-importing `internal/app`,
-`internal/window`, and `internal/views` packages intentionally remain
-test-binary-free because ordinary unit-test hosts lack GTK libraries; the E2E
-suite tests them only by executing the already-built application.
-
-### Contributing
-
-Contributions are welcome. See the [contributor guide](CONTRIBUTING.md) for
-local setup, the fork and pull-request workflow, testing constraints,
-documentation expectations, and required quality gates.
-
----
+The Problems page reads problem records on this computer and sends nothing until you turn "Send problem reports" on. Then it asks before each report, or sends automatically within a daily limit: [docs/specs/problem-reporting.md](docs/specs/problem-reporting.md).
 
 ## Credits
 
-ChairLift is adapted from [Vanilla OS First Setup](https://github.com/Vanilla-OS/first-setup).
+ChairLift began as an adaptation of [Vanilla OS First Setup](https://github.com/Vanilla-OS/first-setup). It has since been rewritten: none of First Setup's code, sentences or translations remain. The first run's single-word and short labels, such as Back and Next, are common UI words.
 
-### License
+## Develop
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version — SPDX identifier `GPL-3.0-or-later`. This matches the in-app About dialog's license selection and the license declared in packaged (deb/rpm/apk) metadata.
+<a id="building-from-source"></a>Go comes from `go.mod`; `mise install` provisions the pinned golangci-lint and Node.
 
-See [LICENSE](LICENSE) for details.
+```sh
+mise install   # the pinned tools
+make ci        # what CI runs
+make run       # build and start the window in dry-run mode
+```
 
----
+Views are tested headless with MyGo's `ui.NewTester`, which needs Pango and cairo but no display. `CHAIRLIFT_SNAPSHOT_DIR=/tmp/shots go test ./internal/views -run Snapshot` writes PNGs of the pages; `make build-automation` builds a window that `mygo-automation` can drive and capture. `make e2e` starts the real window under Xvfb. [CONTRIBUTING.md](CONTRIBUTING.md) has the rest.
 
-<div align="center">
-    <p>Made with ❤️ for Snow Linux</p>
-</div>
+## Where to go next
+
+- [AGENTS.md](AGENTS.md): the rules for agents and contributors.
+- [docs/README.md](docs/README.md): the decisions, designs, specs and plans.
+- [SECURITY.md](SECURITY.md): report a vulnerability privately.
+- [LICENSE](LICENSE): MIT.

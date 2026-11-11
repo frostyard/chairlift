@@ -21,26 +21,26 @@ func TestBrewBundleGroupConfigControlsRuntimeWiring(t *testing.T) {
 		t.Fatal("explicitly disabled brew_bundles_group remains enabled")
 	}
 
-	sourcePath := filepath.Join(repoRoot(), "internal", "views", "applications_page.go")
-	source, err := os.ReadFile(sourcePath)
-	if err != nil {
-		t.Fatalf("read %s: %v", sourcePath, err)
+	var text strings.Builder
+	for _, name := range []string{"brew.go", "brew_bundles.go"} {
+		source, err := os.ReadFile(filepath.Join(repoRoot(), "internal", "views", name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		text.Write(source)
 	}
-	text := string(source)
 	for _, required := range []string{
-		`if uh.config.IsGroupEnabled("applications_page", "brew_bundles_group") {`,
-		`uh.config.GetGroupConfig("applications_page", "brew_bundles_group")`,
-		`groupCfg.BundlesPaths`,
-		`go uh.loadBrewBundles(bundlePaths)`,
-		`homebrew.AvailableBundles(paths)`,
-		`bundleview.Present(len(bundles), warning, homebrewAvailable)`,
-		`pageview.BrewBundle(bundle.Name, bundle.Description, bundle.Path)`,
-		`if !gate.TryStart()`,
-		`homebrew.BundleInstall(bundle.Path)`,
-		`actionmsg.BundleInstall(homebrew.IsDryRun(), bundle.Name)`,
+		`groupBrewBundles = "brew_bundles_group"`,
+		`g.BundlesPaths`,
+		`bundles:       homebrew.AvailableBundles,`,
+		`bundleInstall: homebrew.BundleInstall,`,
+		`bundleview.Present(len(r.bundles), r.warning, r.available)`,
+		`pageview.BrewBundle(item.Name, item.Description, item.Path)`,
+		`bd.gate.TryStart()`,
+		`actionmsg.BundleInstall(dryRun, name)`,
 	} {
-		if !strings.Contains(text, required) {
-			t.Errorf("Applications-page bundle wiring does not contain %q", required)
+		if !strings.Contains(text.String(), required) {
+			t.Errorf("Homebrew bundle wiring does not contain %q", required)
 		}
 	}
 }

@@ -1,7 +1,8 @@
 # ChairLift Configuration
 # This file controls which preference groups are shown in the application
-# Set "enabled: false" to hide a preference group on any page. A functional
-# page is omitted when all of its groups are disabled; Help is always retained.
+# Set "enabled: false" to hide a group's card on any page. A page is omitted
+# when all of its groups are disabled; the Overview always shows (system_page
+# configures its cards), and help_page configures the Help dialog (F1).
 
 system_page:
   system_info_group:

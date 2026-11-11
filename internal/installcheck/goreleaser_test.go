@@ -12,14 +12,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// wantSPDXLicense is the SPDX identifier the project's actual license (GPLv3
-// text in LICENSE, gtk.LicenseGpl30Value — the GTK bindings' "GPL 3.0 or later"
-// enum value — in internal/window/window.go's about dialog) resolves to.
+// wantSPDXLicense is the SPDX identifier the project's actual license (the
+// MIT text in LICENSE, "MIT" in internal/window/main.go's About dialog)
+// resolves to (ADR-0018).
 // .goreleaser.yaml's top-level metadata.license and every nfpms[] entry's
 // license must agree with this constant; see
 // docs/design/package-managers.md's "Install-path consistency" section for the
-// MIT/GPL drift bug this guards against.
-const wantSPDXLicense = "GPL-3.0-or-later"
+// license drift bug this guards against.
+const wantSPDXLicense = "MIT"
 
 // wantHomepage is the repository URL .goreleaser.yaml's metadata.homepage must
 // declare. It is the single source of truth for the repository URL in that
@@ -195,18 +195,90 @@ func TestGoreleaserPublishesSystemPackage(t *testing.T) {
 	}
 }
 
-// TestGoreleaserLicenseIsGPL parses the real .goreleaser.yaml and asserts
+// wantDebUIDependencies are the Debian packages of the libraries MyGo loads
+// at run time with purego (GTK 3, Pango with cairo, libepoxy), in the
+// order frostyard-chairlift's deb declares them.
+var wantDebUIDependencies = []string{
+	"libgtk-3-0t64 | libgtk-3-0",
+	"libpangocairo-1.0-0",
+	"libepoxy0",
+}
+
+// nfpmDependencies is the dependency subset of an nfpms[] entry: the
+// dependencies of every format and those of each format override.
+type nfpmDependencies struct {
+	PackageName  string   `yaml:"package_name"`
+	Dependencies []string `yaml:"dependencies"`
+	Overrides    map[string]struct {
+		Dependencies []string `yaml:"dependencies"`
+	} `yaml:"overrides"`
+}
+
+// isUIDependency reports whether a package dependency names one of the UI
+// libraries in any family's spelling (libgtk-3-0, gtk3, gtk+3.0, pango,
+// libepoxy0, ...).
+func isUIDependency(dep string) bool {
+	dep = strings.ToLower(dep)
+	return strings.Contains(dep, "gtk") || strings.Contains(dep, "pango") || strings.Contains(dep, "epoxy")
+}
+
+// TestGoreleaserDebDeclaresUIDependencies parses the real .goreleaser.yaml
+// and pins the runtime closure of the window in the packages: the
+// frostyard-chairlift deb declares exactly wantDebUIDependencies through
+// overrides.deb.dependencies, and no other format of it, and no format of
+// any other package (the system-integration companion holds no GUI),
+// declares a UI library.
+func TestGoreleaserDebDeclaresUIDependencies(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(RepoRoot(), ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Nfpms []nfpmDependencies `yaml:"nfpms"`
+	}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parsing .goreleaser.yaml: %v", err)
+	}
+	fullDeb := 0
+	for i, nfpm := range cfg.Nfpms {
+		for _, dep := range nfpm.Dependencies {
+			if isUIDependency(dep) {
+				t.Errorf("nfpms[%d] (%s) declares %q for every format; only its deb may name a UI library", i, nfpm.PackageName, dep)
+			}
+		}
+		for format, override := range nfpm.Overrides {
+			if nfpm.PackageName == fullPackageName && format == "deb" {
+				fullDeb++
+				if !reflect.DeepEqual(override.Dependencies, wantDebUIDependencies) {
+					t.Errorf("%s overrides.deb.dependencies = %q, want %q", fullPackageName, override.Dependencies, wantDebUIDependencies)
+				}
+				continue
+			}
+			for _, dep := range override.Dependencies {
+				if isUIDependency(dep) {
+					t.Errorf("nfpms[%d] (%s) overrides.%s declares %q; only %s's deb may name a UI library", i, nfpm.PackageName, format, dep, fullPackageName)
+				}
+			}
+		}
+	}
+	if fullDeb != 1 {
+		t.Errorf("found overrides.deb on %d nfpms entries named %s, want 1 declaring %q", fullDeb, fullPackageName, wantDebUIDependencies)
+	}
+}
+
+// TestGoreleaserLicenseIsMIT parses the real .goreleaser.yaml and asserts
 // both the top-level metadata.license and every nfpms[] entry's license
-// equal wantSPDXLicense, so a future edit reverting either field back to
-// MIT (or any other value) — as happened before this test was added — fails
-// this test instead of silently shipping mislabeled deb/rpm/apk packages.
+// equal wantSPDXLicense, so an edit that sets either field to another value
+// than the license in LICENSE (package metadata and LICENSE once disagreed,
+// which is why this test exists) fails this test instead of silently
+// shipping mislabeled deb/rpm/apk packages.
 //
 // It iterates every nfpms[] entry rather than only nfpms[0]: per
 // docs/design/engineering-lessons.md#check-every-collection-entry,
 // a consistency check that only special-cases the first entry stops
 // protecting anything the moment a second nfpms[] entry is added or
 // reordered with the wrong license.
-func TestGoreleaserLicenseIsGPL(t *testing.T) {
+func TestGoreleaserLicenseIsMIT(t *testing.T) {
 	cfg := loadGoreleaserConfig(t)
 
 	if cfg.Metadata.License != wantSPDXLicense {

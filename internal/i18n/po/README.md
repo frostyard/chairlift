@@ -1,40 +1,46 @@
 # First-run translations
 
-These gettext `.po` files translate ChairLift's first-run strings
-(`internal/i18n/msgids.go`). `internal/i18n` embeds them with `go:embed` and
-reads them with its own pure-Go parser: there is no `msgfmt` step and no
-generated file.
+This directory holds the gettext `.po` catalogs that translate ChairLift's
+first-run strings (`internal/i18n/msgids.go`). `internal/i18n` embeds the
+directory with `go:embed` and reads each catalog with its own pure-Go parser:
+there is no `msgfmt` step and no generated file.
 
-## Source
+## Current state
 
-- Repository: [frostyard/first-setup](https://github.com/frostyard/first-setup)
-  (SNOW First Setup), directory `po/`.
-- Commit: `b5f7de3` (`origin/main`, 2026-11-04).
-- License: GPL-3.0, the license of first-setup. ChairLift is
-  GPL-3.0-or-later, so the translations stay under the GPL. The translator
-  credits are kept in the comment lines above each file's header entry.
+No translation is shipped. The first run shows its English strings in every
+locale. The catalogs ChairLift once carried were the work of SNOW First
+Setup's translators, under First Setup's license, GPL-3.0; ChairLift is
+MIT-licensed, so they were removed ([ADR-0018](../../../docs/adr/0018-relicense-mit-and-drop-inherited-translations.md)).
+The parser, the locale choice and the tests stay, so a translation can be
+added at any time.
 
-## Port rule
+## Add a translation
 
-The files were written once by a throwaway script that is not part of this
-repository. For each language in first-setup's `po/LINGUAS`:
+1. Create `<language>.po` in this directory. The name is what `Candidates`
+   (`internal/i18n/i18n.go`) looks for: `ll` (for example `de.po`) or
+   `ll_CC` (for example `pt_BR.po`); Chinese uses `zh_Hans.po` and
+   `zh_Hant.po`. The codeset and modifier of a locale are not part of the
+   name.
+2. Start with a header entry (`msgid ""`) whose `Content-Type` is
+   `text/plain; charset=UTF-8`, then add one `msgid`/`msgstr` entry per
+   string you translate. Each `msgid` is a constant of `Messages` in
+   `internal/i18n/msgids.go`, copied byte for byte; keep a `{}` placeholder
+   (in `MsgHello`) in the translation.
+3. The parser supports comment lines, multi-line strings and C escapes. It
+   skips entries with an empty `msgstr` and entries flagged `#, fuzzy`.
+   `msgctxt` and plural forms are syntax errors.
+4. Run `go test ./internal/i18n`.
+   `TestEveryEmbeddedMsgidIsAFirstRunMsgid` fails when a catalog does not
+   parse, holds no translation, or holds a msgid that is not in `Messages`.
 
-1. Keep the header entry (`msgid ""`) and the translator comment lines above
-   it.
-2. Keep only the entries whose msgid the first run uses, byte-identical to
-   first-setup's msgid. Keep their translator comments; drop the `#:` source
-   references (they name first-setup files).
-3. Drop entries with an empty translation and entries flagged `fuzzy`.
-4. Skip a language with 0 ported entries (`ne`).
+A string the catalog does not translate shows the English msgid. A new or
+changed first-run string starts untranslated in every catalog: add its msgid
+to `Messages` and update the catalogs that should translate it.
 
-One exception: the files `ar`, `be`, `ca`, `cs`, `da`, `de`, `eo`, `es`, `fa`,
-`he`, `hu`, `ka`, `ko`, `ms`, `pl`, `pt`, `ro`, `sk` and `th` translate
-"Connection available" with the text of an older msgid ("Connection
-failed"). Their entry for that msgid is not ported, so those languages show
-the English text. `TestConnectionAvailableIsNotPortedFromFailedTranslations`
-pins this.
+## License of contributions
 
-A new or changed first-run string starts untranslated: add its msgid to
-`Messages` in `internal/i18n/msgids.go`. `TestEveryEmbeddedMsgidIsAFirstRunMsgid`
-fails when a file holds a msgid that is not in `Messages`, or when a file does
-not parse.
+ChairLift is MIT-licensed (`LICENSE`). A translation is accepted only when
+its author contributes it under the MIT license. Translate from the English
+msgids: copy nothing from SNOW First Setup, Vanilla OS First Setup, or any
+other source under a copyleft or otherwise incompatible license, including
+their `.po` files and the translation memories built from them.

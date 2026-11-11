@@ -36,7 +36,7 @@ func TestCurrentDocumentationMatchesSourceFacts(t *testing.T) {
 	t.Run("bootc event contract has no duplicate error event", func(t *testing.T) {
 		for _, path := range []string{
 			filepath.Join("internal", "bootc", "stage.go"),
-			filepath.Join("internal", "views", "updates_page.go"),
+			filepath.Join("internal", "views", "system.go"),
 			filepath.Join("docs", "design", "overview.md"),
 			filepath.Join("docs", "design", "package-managers.md"),
 		} {

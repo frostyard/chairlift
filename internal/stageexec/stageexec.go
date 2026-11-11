@@ -11,6 +11,8 @@ import (
 	"io/fs"
 	"os/exec"
 	"strings"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 // EventType classifies a ProgressEvent.
@@ -62,6 +64,7 @@ func (e *NotFoundError) Unwrap() error {
 func DryRun(ctx context.Context, progressCh chan<- ProgressEvent, scriptPath string) error {
 	defer close(progressCh)
 
+	cmdlog.DryRun(scriptPath)
 	if err := send(ctx, progressCh, ProgressEvent{
 		Type:    EventMessage,
 		Message: "[DRY-RUN] would run " + scriptPath,
@@ -82,10 +85,12 @@ func DryRun(ctx context.Context, progressCh chan<- ProgressEvent, scriptPath str
 // exit, and always closes progressCh. Cancellation kills and reaps only the
 // direct child: current callers execute through pkexec, whose privileged child
 // cannot be signaled as an unprivileged process group.
-func Run(ctx context.Context, progressCh chan<- ProgressEvent, name string, args ...string) error {
+func Run(ctx context.Context, progressCh chan<- ProgressEvent, name string, args ...string) (runErr error) {
 	defer close(progressCh)
 
 	cmd := exec.CommandContext(ctx, name, args...)
+	trace := cmdlog.Start(name, args...)
+	defer func() { trace.End(runErr) }()
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return &Error{Message: fmt.Sprintf("failed to create stdout pipe: %v", err), Err: err}
@@ -124,6 +129,7 @@ func Run(ctx context.Context, progressCh chan<- ProgressEvent, name string, args
 				}
 			}
 			lastLine = result.line
+			trace.Line(result.line)
 			if err := send(ctx, progressCh, ProgressEvent{Type: EventMessage, Message: result.line}); err != nil {
 				stop(cmd, stdout)
 				return contextError(err)

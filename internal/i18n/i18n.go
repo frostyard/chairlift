@@ -2,21 +2,34 @@ package i18n
 
 import (
 	"embed"
+	"io/fs"
 	"log"
 	"os"
-	"path"
 	"strings"
 	"sync"
 )
 
-// poFiles holds the translations ported from frostyard/first-setup. See
-// po/README.md for the source, the license and the port rule.
+// poDir embeds the catalog directory po/: one gettext file "<name>.po" per
+// language, beside po/README.md. ChairLift ships no translation at the moment
+// (ADR-0018). The pattern names the directory, not "po/*.po", because an
+// embed pattern that matches no file does not build.
 //
-//go:embed po/*.po
-var poFiles embed.FS
+//go:embed po
+var poDir embed.FS
 
-// chineseScripts maps the region forms of Chinese locales to the script file
-// names that first-setup's translations use.
+// embeddedCatalogs returns the catalogs built into the binary: the po
+// directory, with one "<name>.po" file per language at its root.
+func embeddedCatalogs() fs.FS {
+	catalogs, err := fs.Sub(poDir, "po")
+	if err != nil {
+		// "po" is a valid path, so fs.Sub does not fail.
+		panic(err)
+	}
+	return catalogs
+}
+
+// chineseScripts maps the region forms of Chinese locales to the script
+// names of the catalog files (zh_Hans, zh_Hant).
 var chineseScripts = map[string]string{
 	"zh_CN": "zh_Hans",
 	"zh_SG": "zh_Hans",
@@ -90,20 +103,21 @@ type Translator struct {
 	catalogs  []map[string]string
 }
 
-// NewTranslator loads the embedded catalogs that Candidates names for the
-// environment. A candidate with no embedded file is skipped. A file that does
-// not parse is logged and skipped (the unit tests prove every embedded file
-// parses).
-func NewTranslator(getenv func(string) string) *Translator {
+// NewTranslator loads, from the root of catalogs, the "<name>.po" files that
+// Candidates names for the environment. A candidate with no file is skipped.
+// A file that does not parse is logged and skipped (the unit tests prove every
+// embedded file parses). The process translator reads the embedded catalogs;
+// tests pass their own.
+func NewTranslator(catalogs fs.FS, getenv func(string) string) *Translator {
 	t := &Translator{}
 	for _, name := range Candidates(getenv) {
-		data, err := poFiles.ReadFile(path.Join("po", name+".po"))
+		data, err := fs.ReadFile(catalogs, name+".po")
 		if err != nil {
 			continue
 		}
 		catalog, err := ParsePO(data)
 		if err != nil {
-			log.Printf("i18n: ignoring po/%s.po: %v", name, err)
+			log.Printf("i18n: ignoring %s.po: %v", name, err)
 			continue
 		}
 		t.languages = append(t.languages, name)
@@ -129,10 +143,10 @@ func (t *Translator) T(msgid string) string {
 	return msgid
 }
 
-// processTranslator is the translator for the process environment, made on
-// first use.
+// processTranslator is the translator for the process environment and the
+// embedded catalogs, made on first use.
 var processTranslator = sync.OnceValue(func() *Translator {
-	return NewTranslator(os.Getenv)
+	return NewTranslator(embeddedCatalogs(), os.Getenv)
 })
 
 // T translates msgid for the locale of the process environment.
@@ -141,8 +155,8 @@ func T(msgid string) string {
 }
 
 // Format replaces each "{}" placeholder of a translated string with the next
-// argument, in order, as first-setup's Python str.format calls did. Extra
-// placeholders stay as they are; extra arguments are ignored.
+// argument, in order. Extra placeholders stay as they are; extra arguments are
+// ignored.
 func Format(translated string, args ...string) string {
 	var out strings.Builder
 	rest := translated

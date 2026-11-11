@@ -12,9 +12,9 @@ pro: true
 project_name: chairlift
 
 metadata:
-  description: chairlift - modern GTK4/Libadwaita system management tool
+  description: chairlift - the Snow Linux command center
   homepage: "https://github.com/frostyard/chairlift"
-  license: GPL-3.0-or-later
+  license: MIT
   maintainers:
     - "Brian Ketelsen <bketelsen@gmail.com>"
 
@@ -45,11 +45,13 @@ builds:
       - amd64
       - arm64
     mod_timestamp: "{{ .CommitTimestamp }}"
+    # MyGo's production build: no inspector and no automation plugin.
     flags:
       - -trimpath
+      - -tags=mygo_noinspector
     ldflags:
-      - -s -w -X main.buildVersion={{ .Version }} -X main.buildCommit={{ .Commit }} -X main.buildDate={{ .CommitDate }} -X main.buildBy=goreleaser
-    main: ./cmd/chairlift/main.go
+      - -s -w -X main.buildVersion={{ .Version }} -X main.buildCommit={{ .Commit }} -X main.buildDate={{ .CommitDate }} -X main.buildBy=goreleaser -X github.com/egoist/mygo.production=1
+    main: ./cmd/chairlift
 
   - id: chairlift-updex-helper
     binary: chairlift-updex-helper
@@ -145,10 +147,20 @@ nfpms:
     bindir: /usr/bin
     description: |-
       System management tool for bootc-based installations.
-      Manage flatpaks, homebrew and system updates with a modern GTK4/Libadwaita interface.
-    license: GPL-3.0-or-later
+      Manage flatpaks, homebrew and system updates from one command center (MyGo, GTK 3).
+    license: MIT
     conflicts:
       - frostyard-chairlift-system-integration
+    # The libraries MyGo loads at run time with purego: GTK 3 (t64 since
+    # Debian trixie), Pango with cairo, and libepoxy. Package names differ
+    # between families, so only the deb declares them; the rpm, the apk and
+    # the system-integration package carry no UI dependency.
+    overrides:
+      deb:
+        dependencies:
+          - libgtk-3-0t64 | libgtk-3-0
+          - libpangocairo-1.0-0
+          - libepoxy0
     contents:
       # Wrapper script
       - src: ./data/chairlift-wrapper.sh
@@ -166,8 +178,6 @@ nfpms:
       # Icons
       - src: ./data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg
         dst: /usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg
-      - src: ./data/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
-        dst: /usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
       - src: ./data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
         dst: /usr/share/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
       # PolicyKit policy for bootc
@@ -204,7 +214,7 @@ nfpms:
     description: |-
       System integration for a user-scoped ChairLift installation.
       Installs the privileged updex helper, PolicyKit policies, and maintainer configuration defaults.
-    license: GPL-3.0-or-later
+    license: MIT
     conflicts:
       - frostyard-chairlift
     contents:

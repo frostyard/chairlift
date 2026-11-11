@@ -199,7 +199,6 @@ func TestInstalledBundleAndHelperBoundary(t *testing.T) {
 		"usr/share/chairlift/config.yml",
 		"usr/share/applications/org.frostyard.ChairLift.desktop",
 		"usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg",
-		"usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg",
 		"usr/share/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg",
 		"usr/share/polkit-1/actions/org.frostyard.ChairLift.bootc.policy",
 		"usr/share/polkit-1/actions/org.frostyard.ChairLift.updex.policy",
@@ -214,6 +213,11 @@ func TestInstalledBundleAndHelperBoundary(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(stage, "etc/chairlift/config.yml")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("staged install created administrator-owned /etc/chairlift/config.yml: %v", err)
+	}
+
+	// ChairLift's mark is the snowflake; the flower icon is gone.
+	if _, err := os.Stat(filepath.Join(stage, "usr/share/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("staged install still ships the flower icon: %v", err)
 	}
 
 	// ChairLift starts nothing on its own: the image that wants a first run

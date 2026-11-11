@@ -1,6 +1,6 @@
 # 0014 — Run the first-login setup as a ChairLift first-run mode
 
-- **Status:** Accepted
+- **Status:** Accepted; its decision 8 (translations) is amended by [0018](0018-relicense-mit-and-drop-inherited-translations.md) (the ported First Setup catalogs are deleted and no translation ships; the `.po` machinery stays)
 - **Date:** 2026-11-04
 
 ## Context

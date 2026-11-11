@@ -71,14 +71,16 @@ go tool cover -func=coverage.out
 
 The test-name filters are significant: ordinary unit tests must not begin with
 `TestI` or contain `Integration`, because the gated command excludes them.
-Tests for packages that import puregotk also cannot run headlessly; decidable
-logic belongs in a pure package under `internal/`, as required by `AGENTS.md`.
+Views are tested headless with MyGo's `ui.NewTester`, which needs Pango and
+cairo but no display (the unit-test jobs install `libpangocairo-1.0-0` and a
+font); decidable logic still belongs in a pure package under `internal/`, as
+`AGENTS.md` requires.
 
 ## Nightly compliance
 
 The `Nightly compliance` workflow runs every day at 04:17 UTC and can also be
 started manually. It checks out the current default branch, runs the complete
-host-independent `make ci` gate, installs the same GTK/Xvfb runtime used by the
+host-independent `make ci` gate, installs the same GTK 3/libepoxy/Mesa/Xvfb runtime used by the
 hosted E2E job and runs `make e2e`, then runs `govulncheck ./...` against the
 current Go vulnerability database. This catches dependency disclosures and
 environment drift even when no pull request is active.

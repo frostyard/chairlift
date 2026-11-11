@@ -1,11 +1,10 @@
 // Package actionstate owns the pure state transitions used by asynchronous
-// Applications- and Updates-page actions. It has no GTK or puregotk
-// dependency, so command completion, refresh ordering, and repeated-click
-// behavior can be tested headlessly.
+// Apps- and Updates-page actions. It imports no UI package, so command
+// completion, refresh ordering, and repeated-click behavior are tested as
+// plain functions.
 package actionstate
 
 import (
-	"fmt"
 	"sync/atomic"
 )
 
@@ -67,25 +66,6 @@ type Decision struct {
 type RefreshDecision struct {
 	ReplaceRows bool
 	Count       int
-}
-
-// Presentation is the outdated-packages expander state for a known count.
-type Presentation struct {
-	Subtitle   string
-	Expandable bool
-}
-
-// OutdatedPresentation derives singular/plural text and expansion state from
-// the current authoritative outdated-package count.
-func OutdatedPresentation(count int) Presentation {
-	noun := "packages"
-	if count == 1 {
-		noun = "package"
-	}
-	return Presentation{
-		Subtitle:   fmt.Sprintf("%d %s available", count, noun),
-		Expandable: count > 0,
-	}
 }
 
 // OutdatedRefresh preserves the last known count when a query fails and

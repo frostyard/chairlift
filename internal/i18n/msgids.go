@@ -1,76 +1,77 @@
 package i18n
 
 // The msgids of the first run. Every string the first-run window shows goes
-// through T with one of these constants. Ported msgids are byte-identical to
-// frostyard/first-setup's, so their translations apply; the "new" ones start
-// untranslated. TestEveryEmbeddedMsgidIsAFirstRunMsgid fails when an
-// embedded .po file holds a msgid that is not in Messages.
+// through T with one of these constants, and a string no catalog translates
+// shows the English msgid. Changing a msgid drops its translations in every
+// catalog. TestEveryEmbeddedMsgidIsAFirstRunMsgid fails when an embedded .po
+// file holds a msgid that is not in Messages. The sentences are ChairLift's
+// own: TestNoMsgidCopiesFirstSetup fails on one of First Setup's (ADR-0018).
 const (
-	// Header bar (ported).
+	// Header bar.
 	MsgBack = "Back"
 	MsgNext = "Next"
+	// Toasts: the name of the button that closes a toast.
+	MsgClose = "Close"
 
-	// Welcome step (ported). MsgHello carries one "{}" placeholder for the
+	// Welcome step. MsgHello carries one "{}" placeholder for the
 	// user's name; use Format.
-	MsgHello         = "Hello {}!"
-	MsgWelcomeDesc   = "Let's set up your user account"
+	MsgHello         = "Welcome, {}"
+	MsgWelcomeDesc   = "A few short steps get this computer ready."
 	MsgStart         = "Start"
 	MsgAccessibility = "Accessibility"
 
-	// Connectivity step (ported).
+	// Connectivity step.
 	MsgCheckingConnection  = "Checking Connection"
-	MsgCheckingDesc        = "Please wait until the connection check is done"
+	MsgCheckingDesc        = "This takes a few seconds."
 	MsgOpenSettings        = "Open Settings"
-	MsgNoInternet          = "No Internet Connection!"
+	MsgNoInternet          = "You are offline"
 	MsgConnectionAvailable = "Connection available"
-	MsgConnectionDesc      = "You have a working internet connection"
-	// Connectivity step (new).
-	MsgOfflineDesc = "You can continue without a connection and install applications later from ChairLift"
-	MsgCheckAgain  = "Check Again"
+	MsgConnectionDesc      = "This computer can reach the internet."
+	MsgOfflineDesc         = "You can continue without a connection and install applications later from ChairLift"
+	MsgCheckAgain          = "Check Again"
 
-	// Style step (ported).
+	// Style step.
 	MsgColorScheme     = "Color Scheme"
-	MsgColorSchemeDesc = "Choose a color scheme for your system"
+	MsgColorSchemeDesc = "Pick a light or dark look for the desktop."
 	MsgLight           = "Light"
 	MsgLightMode       = "Light Mode"
 	MsgDark            = "Dark"
 	MsgDarkMode        = "Dark Mode"
 
-	// Apps step (ported).
+	// Apps step.
 	MsgApplications     = "Applications"
-	MsgApplicationsDesc = "Choose which applications to install."
-	MsgSelectApps       = "Select the applications you want to install"
+	MsgApplicationsDesc = "Install a starter set from Flathub."
+	MsgSelectApps       = "Use the switches to keep only what you want."
 	MsgBrowsers         = "Browsers"
-	MsgBrowsersDesc     = "Surf the web with your favorite browsers"
+	MsgBrowsersDesc     = "Apps for browsing the web"
 	MsgUtilities        = "Common Utilities"
-	MsgUtilitiesDesc    = "Useful utilities to enhance your desktop experience"
+	MsgUtilitiesDesc    = "Small tools for everyday tasks"
 	MsgOffice           = "Office"
-	MsgOfficeDesc       = "The LibreOffice suite"
+	MsgOfficeDesc       = "Documents, spreadsheets and slides"
 
-	// Progress step (ported).
-	MsgProgress     = "Progress"
-	MsgProgressDesc = "Some steps still take some time"
-	MsgInstalling   = "Installing"
-	// Progress step (new).
+	// Progress step.
+	MsgProgress         = "Progress"
+	MsgProgressDesc     = "This can take several minutes."
+	MsgInstalling       = "Installing"
 	MsgSettingUpFlathub = "Setting up Flathub"
 
-	// Done step (ported).
+	// Done step.
 	MsgFinished     = "Finished!"
-	MsgFinishedDesc = "Your user account is ready to use"
+	MsgFinishedDesc = "This computer is ready."
 	MsgExit         = "Exit"
 	MsgSetupFailed  = "Setup failed: "
 	MsgErrorLog     = "Error log"
-	// Done step (new): the dry-run description (ADR-0009 preview wording).
+	// Done step: the dry-run description (ADR-0009 preview wording).
 	MsgDryRunFinished = "[DRY-RUN] Preview: first run finished — no changes made"
-	// Done step (new): the completion could not be recorded.
+	// Done step: the completion could not be recorded.
 	MsgCompletionFailed     = "Could not record that the first run is finished"
 	MsgCompletionFailedDesc = "The first run starts again at your next login"
-	// Done step (new): the completion failed, and the next login does not
+	// Done step: the completion failed, and the next login does not
 	// start the first run again (a marker exists) or that is unknown (no
 	// config home).
 	MsgFinishedWithErrors = "Setup finished with errors"
 
-	// Reporting step (new, ADR-0015): the optional problem-reporting consent
+	// Reporting step (ADR-0015): the optional problem-reporting consent
 	// of the first run, between Style and Apps.
 	MsgReportingTitle      = "Problem Reports"
 	MsgReportingDesc       = "ChairLift can send problem reports to frostyard so that problems get fixed. Nothing is sent until you turn this on, and you can change it at any time on the Problems page."
@@ -82,9 +83,9 @@ const (
 	MsgReportingSaveFailed = "Could not save the problem reporting setting"
 )
 
-// Messages lists every first-run msgid, ported and new.
+// Messages lists every first-run msgid.
 var Messages = []string{
-	MsgBack, MsgNext,
+	MsgBack, MsgNext, MsgClose,
 	MsgHello, MsgWelcomeDesc, MsgStart, MsgAccessibility,
 	MsgCheckingConnection, MsgCheckingDesc, MsgOpenSettings, MsgNoInternet,
 	MsgConnectionAvailable, MsgConnectionDesc, MsgOfflineDesc, MsgCheckAgain,

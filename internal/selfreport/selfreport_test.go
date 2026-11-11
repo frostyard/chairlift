@@ -107,11 +107,11 @@ func TestErrorWritesARecord(t *testing.T) {
 // that records it at its real error path.
 var codeSites = map[string][]struct{ file, call string }{
 	"CodeConfigLoadFailed": {
-		{"internal/window/window.go", "selfreport.Error(selfreport.CodeConfigLoadFailed, configErr)"},
+		{"internal/app/app.go", "selfreport.Error(selfreport.CodeConfigLoadFailed, cfgErr)"},
 		{"internal/window/firstrun.go", "selfreport.Error(selfreport.CodeConfigLoadFailed, cfgErr)"},
 	},
 	"CodeProblemsSourceInvalid": {
-		{"internal/views/problems_page.go", "selfreport.Error(selfreport.CodeProblemsSourceInvalid, err)"},
+		{"internal/views/problems.go", "selfreport.Error(selfreport.CodeProblemsSourceInvalid, err)"},
 	},
 	"CodeFirstRunCompleteFailed": {
 		{"internal/window/firstrun.go", "selfreport.Error(selfreport.CodeFirstRunCompleteFailed, decision.Err)"},

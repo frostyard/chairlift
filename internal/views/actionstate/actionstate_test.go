@@ -196,38 +196,6 @@ func TestOutdatedRefreshPreservesLastKnownStateOnFailure(t *testing.T) {
 	}
 }
 
-func TestOutdatedPresentationCoversCountStates(t *testing.T) {
-	tests := []struct {
-		name  string
-		count int
-		want  Presentation
-	}{
-		{
-			name: "zero",
-			want: Presentation{Subtitle: "0 packages available"},
-		},
-		{
-			name:  "singular",
-			count: 1,
-			want:  Presentation{Subtitle: "1 package available", Expandable: true},
-		},
-		{
-			name:  "plural",
-			count: 2,
-			want:  Presentation{Subtitle: "2 packages available", Expandable: true},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := OutdatedPresentation(tt.count)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("OutdatedPresentation(%d) = %#v, want %#v", tt.count, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestGateRejectsRepeatedConcurrentStarts(t *testing.T) {
 	var gate Gate
 	const callers = 64

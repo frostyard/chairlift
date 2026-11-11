@@ -14,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 const (
@@ -112,6 +114,7 @@ func runFlatpakCommandCtx(ctx context.Context, args ...string) (string, error) {
 	if len(args) > 0 && stateChangingCommands[args[0]] && dryRun {
 		msg := fmt.Sprintf("[DRY-RUN] Would execute: flatpak %s", strings.Join(args, " "))
 		log.Println(msg)
+		cmdlog.DryRun("flatpak", args...)
 		return msg, nil
 	}
 
@@ -138,10 +141,12 @@ func runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (strin
 	cmd.WaitDelay = waitDelay
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	trace := cmdlog.Start(exe, args...)
+	cmd.Stdout = trace.Stdout(&stdout)
+	cmd.Stderr = trace.Stderr(&stderr)
 
 	err := cmd.Run()
+	trace.End(err)
 	if err != nil {
 		display := exe
 		if len(args) > 0 {
@@ -183,7 +188,9 @@ func IsInstalled() bool {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "flatpak", "--version")
+	trace := cmdlog.Start("flatpak", "--version")
 	err := cmd.Run()
+	trace.End(err)
 	return err == nil
 }
 

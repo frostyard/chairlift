@@ -1,9 +1,9 @@
-.PHONY: all build build-app build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint lint-version-check check verify verify-static verify-template corrections-base ci build-linux-amd64 build-linux-arm64 install uninstall bump
+.PHONY: all build build-app build-automation build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint lint-version-check check verify verify-static verify-template corrections-base ci build-linux-amd64 build-linux-arm64 install uninstall bump
 
 # Binary names
 BINARY_NAME=chairlift
 HELPER_NAME=chairlift-updex-helper
-# Pure-Go first-run gate (ADR-0014); it must never import a GTK binding
+# Pure-Go first-run gate (ADR-0014); it must never import a UI toolkit
 FIRSTRUN_NAME=chairlift-first-run
 
 # Build directory
@@ -48,16 +48,24 @@ GOMOD=$(GOCMD) mod
 # --short`, which prints the bare "MAJOR.MINOR.PATCH".
 GOLANGCI_LINT_VERSION := $(strip $(shell sed -n 's/^golangci-lint = "\(.*\)"/\1/p' mise.toml))
 # The Go release this module is built with, from go.mod's go line — the only
-# Go pin (mise reads the same line). golangci-lint must be built with a Go at
-# least this new, or its embedded gofmt and typechecker disagree with the
-# toolchain.
+# Go pin (mise reads the same line). golangci-lint must be built with a Go of
+# at least this language version (MAJOR.MINOR), or its embedded gofmt and
+# typechecker disagree with the toolchain. A patch release changes neither,
+# so the check ignores the patch: a dependency such as MyGo can raise the go
+# line to a patch the linter's prebuilt release was not built with.
 GO_VERSION := $(strip $(shell sed -n 's/^go \(.*\)/\1/p' go.mod))
+GO_LANGUAGE := $(shell echo "$(GO_VERSION)" | cut -d. -f1,2)
 # The major version of the Node on PATH (mise.toml pins it), checked by
 # make verify-template so the template gate needs no package install.
 NODE_MAJOR := $(shell node -p "process.versions.node.split('.')[0]" 2>/dev/null)
 
-# CGO is not needed with puregotk!
+# CGO is not needed: MyGo loads GTK 3 and OpenGL at run time with purego.
 CGO_ENABLED=0
+
+# The window is built as MyGo's production build: no inspector (F12) and
+# no automation plugin. build-automation adds the plugin for screenshots.
+APP_TAGS=mygo_noinspector
+APP_LDFLAGS=-X github.com/egoist/mygo.production=1
 
 all: deps build
 
@@ -71,7 +79,13 @@ build: build-app build-helper build-first-run
 
 build-app:
 	@mkdir -p $(BUILD_DIR)
-	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/chairlift
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -tags $(APP_TAGS) -ldflags "$(APP_LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/chairlift
+
+# A development window that mygo-automation can drive and capture
+# (MYGO_AUTOMATION=$$XDG_RUNTIME_DIR/chairlift.sock); never shipped.
+build-automation:
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -tags automation -o $(BUILD_DIR)/$(BINARY_NAME)-automation ./cmd/chairlift
 
 build-helper:
 	@mkdir -p $(BUILD_DIR)
@@ -91,7 +105,7 @@ clean:
 test:
 	$(GOTEST) -v ./...
 
-# End-to-end smoke tests require GTK4, Libadwaita, dbus-run-session, and Xvfb.
+# End-to-end smoke tests require GTK 3, libepoxy, Pango, dbus-run-session, and Xvfb.
 # They also run the pure-Go chairlift-first-run gate against temporary homes.
 # They run separately from ci because the ordinary unit-test gate is
 # intentionally usable on hosts without those runtime libraries.
@@ -104,7 +118,7 @@ dev:
 
 # Install dependencies
 install-deps:
-	$(GOGET) codeberg.org/puregotk/puregotk
+	$(GOGET) github.com/egoist/mygo
 	$(GOGET) gopkg.in/yaml.v3
 
 # Format code
@@ -127,9 +141,9 @@ lint-version-check:
 		echo "expected golangci-lint $(GOLANGCI_LINT_VERSION), found $$installed (run: mise install)"; \
 		exit 1; \
 	fi; \
-	built="$$(golangci-lint version 2>/dev/null | sed -n 's/.*built with go\([0-9.]*\).*/\1/p')"; \
-	if [ -n "$$built" ] && [ "$$(printf '%s\n%s\n' "$(GO_VERSION)" "$$built" | sort -V | head -1)" != "$(GO_VERSION)" ]; then \
-		echo "golangci-lint $(GOLANGCI_LINT_VERSION) was built with go$$built, older than go.mod's go$(GO_VERSION): bump golangci-lint first"; \
+	built="$$(golangci-lint version 2>/dev/null | sed -n 's/.*built with go\([0-9]*\.[0-9]*\).*/\1/p')"; \
+	if [ -n "$$built" ] && [ "$$(printf '%s\n%s\n' "$(GO_LANGUAGE)" "$$built" | sort -V | head -1)" != "$(GO_LANGUAGE)" ]; then \
+		echo "golangci-lint $(GOLANGCI_LINT_VERSION) was built with go$$built, older than go.mod's go$(GO_LANGUAGE): bump golangci-lint first"; \
 		exit 1; \
 	fi
 
@@ -166,10 +180,10 @@ check: fmt verify
 
 # Cross-compile for different architectures
 build-linux-amd64:
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/chairlift
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -tags $(APP_TAGS) -ldflags "$(APP_LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/chairlift
 
 build-linux-arm64:
-	GOOS=linux GOARCH=arm64 CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/chairlift
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -tags $(APP_TAGS) -ldflags "$(APP_LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 ./cmd/chairlift
 
 # Install the application
 install: build
@@ -183,12 +197,13 @@ install: build
 	install -Dm644 config.yml $(DESTDIR)$(CONFIGDIR)/config.yml
 	# Install icons
 	install -Dm644 data/icons/hicolor/scalable/apps/org.frostyard.ChairLift.svg $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift.svg
-	install -Dm644 data/icons/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
 	install -Dm644 data/icons/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg $(DESTDIR)$(ICONSDIR)/hicolor/symbolic/apps/org.frostyard.ChairLift-symbolic.svg
 	# Install updex helper binary
 	install -Dm755 $(BUILD_DIR)/$(HELPER_NAME) $(DESTDIR)$(BINDIR)/$(HELPER_NAME)
 	# Install the first-run gate; the image, not ChairLift, ships its trigger
 	install -Dm755 $(BUILD_DIR)/$(FIRSTRUN_NAME) $(DESTDIR)$(BINDIR)/$(FIRSTRUN_NAME)
+	# Remove the flower icon earlier installs shipped: ChairLift's mark is the snowflake
+	rm -f $(DESTDIR)$(ICONSDIR)/hicolor/scalable/apps/org.frostyard.ChairLift-flower.svg
 	# Remove legacy passwordless rules from prior source installs
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.bootc.rules
 	rm -f $(DESTDIR)$(POLKITRULESDIR)/org.frostyard.ChairLift.updex.rules

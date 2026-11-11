@@ -1,12 +1,10 @@
 // Package updexhelper holds the argv-parsing and Options-building logic for
 // cmd/chairlift-updex-helper, the privileged helper binary invoked via
-// pkexec to perform updex write operations. It is deliberately free of any
-// puregotk/GTK import (only stdlib plus github.com/frostyard/updex/v2/updex and
-// github.com/frostyard/updex/v2/sysext),
-// so its logic can be unit-tested on a headless host — a test binary for a
-// package that imports puregotk panics while resolving GTK/graphene shared
-// libraries at package init, before any test function runs. See
-// docs/design/engineering-lessons.md#no-tests-in-puregotk-packages.
+// pkexec to perform updex write operations. It imports only the standard
+// library plus github.com/frostyard/updex/v2/updex and
+// github.com/frostyard/updex/v2/sysext, never a UI package, so its logic is
+// unit-tested on any host and the root helper links no UI code. See
+// docs/design/engineering-lessons.md#gates-run-only-internal-tests.
 //
 // cmd/chairlift-updex-helper/main.go is reduced to dispatching the validated
 // Invocation returned here, then passing the per-subcommand Options struct to

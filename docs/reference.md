@@ -1,6 +1,9 @@
 # Configuration Reference
 
 ChairLift is configured via a YAML file that controls which UI groups are visible and their behavior.
+The configuration keeps its page names (`system_page`, `applications_page`,
+...); each section below says where in the command-center window its groups
+show.
 
 ## File Locations
 
@@ -33,50 +36,55 @@ page_name:
     # Optional per-group fields (see below)
 ```
 
-Groups with `enabled: false` are hidden from the UI. Missing entries inherit
+Groups with `enabled: false` are hidden from the UI, and their data is never loaded. Missing entries inherit
 their built-in values. Unknown page, group, or field names and wrong field
 types are errors. Changes require restarting ChairLift.
 
-When every builder-backed group on a functional page is disabled, the page is
-also omitted from the sidebar, content stack, shortcuts dialog, and
-Alt+number bindings. Alt+number is compacted over the remaining pages in the
-order below. Help is always retained.
+When every group that a page of the window shows is disabled, the page is
+omitted from the rail, the command palette's "Go to" commands, the shortcuts
+dialog, and the Alt+number bindings. Alt+number is compacted over the
+remaining pages in rail order (Overview, Updates, Apps, Features, Problems,
+Maintenance). The Overview always shows. Help is a dialog, not a page, and is
+always reachable.
 
 ## Pages and Groups
 
-### System Page (`system_page`)
+### System Page (`system_page`): the Overview
 
 | Group | Key | Description |
 |-------|-----|-------------|
-| OS Info | `system_info_group` | Displays fields from `/etc/os-release` |
-| bootc Status | `bootc_status_group` | bootc deployment status (booted/staged/rollback image, version, digest); shown only when `bootc.IsBootcBootedCached()` reports a booted deployment |
-| Health | `health_group` | Launches a system monitor application |
+| System details | `system_info_group` | The System details card: this computer (host name, model, kernel, Secure Boot, uptime, image, build time, digest) and the fields of `/etc/os-release` |
+| Image status | `bootc_status_group` | The system image hero: OS name, channel, Secure Boot and the deployment chain (rollback, booted, staged: version, digest, pin) on a bootc host (`bootc.IsBootcBootedCached()` reports a booted deployment) or a native A/B host; also Maintenance's read-only deployment chain |
+| Health | `health_group` | The live processor and memory chart (sampled each second) and the button that launches a system monitor application |
 
 `health_group` supports:
 
 - `app_id` — Flatpak application ID to launch (default: `io.missioncenter.MissionCenter`)
 
-### Updates Page (`updates_page`)
+### Updates Page (`updates_page`): the Updates page
+
+Each group is an update source of the Updates page; the features source
+follows `features_page`'s `features_group`.
 
 | Group | Key | Description |
 |-------|-----|-------------|
 | bootc Updates | `bootc_updates_group` | Download and stage the next bootc system image update (applies on restart); shown only when bootc-booted and the fixed `/usr/libexec/bootc-update-stage` helper is present. Non-Snow distributions must provide a trusted implementation there before enabling this group; ChairLift's system-integration package does not supply one. |
-| Native A/B Updates | `sysupdate_updates_group` | Download and stage the next native A/B (systemd-sysupdate) system image update (applies on restart), plus a read-only previous-version rollback row; shown only when the `/usr/lib/snosi/native-ab` marker and the fixed `/usr/libexec/snosi-sysupdate-stage` helper are present. The OS image ships both; ChairLift's system-integration package supplies only the PolicyKit policy. |
+| Native A/B Updates | `sysupdate_updates_group` | Download and stage the next native A/B (systemd-sysupdate) system image update (applies on restart), plus a read-only previous-version line; shown only when the `/usr/lib/snosi/native-ab` marker and the fixed `/usr/libexec/snosi-sysupdate-stage` helper are present. The OS image ships both; ChairLift's system-integration package supplies only the PolicyKit policy. |
 | Flatpak Updates | `flatpak_updates_group` | Pending Flatpak application updates |
-| Homebrew Updates | `brew_updates_group` | Outdated Homebrew packages with upgrade buttons |
-| Untrusted Taps | `brew_trust_group` | Untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); trust a tap to resume its updates. Shown only when there is something to trust |
-| Firmware Updates | `firmware_updates_group` | Device firmware updates from the Linux Vendor Firmware Service (fwupd), installed one device at a time after a confirmation that warns about power and the restart or shutdown the device needs; only one install runs at a time for the whole page. A device that fwupd will not update now (for example a closed lid, a host on battery, or a recorded update error) stays in the list with its reason and without an install button, and only installable updates count in the sidebar badge. After each install ChairLift reads the device's own state, not the update offer, so an update that fwupd did not apply is reported as an error and the device stays in the list; a staged update that needs a restart says so. Every call is unprivileged: the fwupd daemon authorizes the install with its own PolicyKit actions. Shown only when `fwupdmgr` is installed; enabled by default |
+| Homebrew Updates | `brew_updates_group` | Outdated Homebrew packages with upgrade buttons, Update all, and the update of Homebrew itself; pinned formulae and packages of untrusted taps are held |
+| Untrusted Taps | `brew_trust_group` | Banners on the Homebrew card for untrusted Homebrew taps with installed packages (Homebrew 6 tap trust); trust a tap to resume its updates. Shown only when there is something to trust |
+| Firmware Updates | `firmware_updates_group` | Device firmware updates from the Linux Vendor Firmware Service (fwupd), installed one device at a time after a confirmation that warns about power and the restart or shutdown the device needs, and never by "Update everything"; only one install runs at a time. A device that fwupd will not update now (for example a closed lid, a host on battery, or a recorded update error) stays in the list as held, with its reason and without an install button; held devices count in the Updates badge like every other item. After each install ChairLift reads the device's own state, not the update offer, so an update that fwupd did not apply is reported as an error and the device stays in the list; a staged update that needs a restart says so. Every call is unprivileged: the fwupd daemon authorizes the install with its own PolicyKit actions. Shown only when `fwupdmgr` is installed; enabled by default |
 
-### Applications Page (`applications_page`)
+### Applications Page (`applications_page`): the Apps page
 
 | Group | Key | Description |
 |-------|-----|-------------|
-| Installed Apps | `applications_installed_group` | Launcher for the external Flatpak manager used for discovery and installation |
-| User Flatpak | `flatpak_user_group` | User-installed Flatpak applications with uninstall actions |
-| System Flatpak | `flatpak_system_group` | System-wide Flatpak applications with uninstall actions |
-| Homebrew | `brew_group` | Installed Homebrew formulae/casks with uninstall actions and formula pin/unpin actions |
-| Brew Search | `brew_search_group` | Search and install Homebrew formulae and casks with an explicit package-type confirmation |
-| Brew Bundles | `brew_bundles_group` | Install packages from Brewfile bundles |
+| Software center | `applications_installed_group` | The button that opens the external software center used for discovery and installation |
+| User Flatpak | `flatpak_user_group` | User-installed Flatpak applications in the Installed table, with update, open and uninstall actions |
+| System Flatpak | `flatpak_system_group` | System-wide Flatpak applications in the Installed table, with update, open and uninstall actions |
+| Homebrew | `brew_group` | Installed Homebrew formulae/casks in the Installed table with update and uninstall actions, formula pin/unpin actions, and the export to `~/Brewfile` |
+| Brew Search | `brew_search_group` | The Find more tab: search and install Homebrew formulae and casks with an explicit package-type confirmation |
+| Brew Bundles | `brew_bundles_group` | The Bundles tab: install packages from Brewfile bundles |
 
 `applications_installed_group` supports:
 
@@ -95,7 +103,10 @@ Those operations belong to the configured external manager.
   their absolute paths. The first-line `#` comment, when present, is displayed
   as the bundle description.
 
-### Maintenance Page (`maintenance_page`)
+### Maintenance Page (`maintenance_page`): the Maintenance page
+
+Each group is a row of the Clean up card; every cleanup asks first, and
+shows its command and, as it runs, its output in the console.
 
 | Group | Key | Description |
 |-------|-----|-------------|
@@ -123,41 +134,41 @@ Each action has:
 | `script` | Absolute path to the script |
 | `sudo` | If `true`, runs via `pkexec` for elevated privileges |
 
-### Features Page (`features_page`)
+### Features Page (`features_page`): the Features page
 
 | Group | Key | Description |
 |-------|-----|-------------|
-| Features | `features_group` | Toggle system features managed by updex |
+| Features | `features_group` | Toggle and update system features managed by updex; also the Updates page's features source |
 
 Feature operations (enable, disable, update) require administrator
 authentication through PolicyKit and are performed by the fixed
 `/usr/bin/chairlift-updex-helper` binary. ChairLift installs no passwordless
 authorization rule.
 
-### Problems Page (`problems_page`)
+### Problems Page (`problems_page`): the Problems page
 
 Local problem records, with opt-in reporting that is off until the user turns
 it on
 ([ADR-0015](adr/0015-problems-page-and-opt-in-reporting.md),
 [specs/problems-page.md](specs/problems-page.md),
 [specs/problem-reporting.md](specs/problem-reporting.md)). The page sits
-directly before Help, so with every page visible Help is `Alt+7`.
+between Features and Maintenance, so with every page visible it is `Alt+5`.
 
 | Group | Key | Description |
 |-------|-----|-------------|
 | System | `problems_system_group` | Problems from `/var/lib/snosi-health/problems.json` (fixed path); "System checks are not available on this system" without the file |
 | Apps | `problems_apps_group` | The user's crashes (`coredumpctl`, last 90 days) and frostyard app problem records (user journal) |
-| Reporting | `problems_reporting_group` | The opt-in switch, the Ask/Auto mode, "Sent reports", "What is sent" and the weekly count; `endpoint` may be set only in an administrator-owned file |
+| Reporting | `problems_reporting_group` | The reporting card: the opt-in switch, the Ask/Auto mode, "Sent reports", "What is sent" and the weekly count; `endpoint` may be set only in an administrator-owned file |
 
-Each problem row expands to a hint, the recorded values, the local details,
+Each problem card expands to a hint, the recorded values, the local details,
 **Copy details**, **Dismiss**, and **Report…** while reporting is on. A
 dismissed problem is kept in `$XDG_STATE_HOME/chairlift/problems-seen.json`
 and shows again when it happens again. Under `--dry-run`, Dismiss changes
 nothing, and **Report…** shows the exact report without sending it.
 
-The reporting group's rows:
+The reporting card:
 
-| Row | What it does |
+| Control | What it does |
 |-----|--------------|
 | Send problem reports | The per-user consent switch, saved in `$XDG_CONFIG_HOME/chairlift/reporting.json`. Off by default; every failure reads as off |
 | When a problem is found | **Ask each time** (only the Report dialog sends) or **Send automatically** (at most 20 reports in 24 hours, paced at 7 seconds) |
@@ -169,11 +180,13 @@ The reporting group's rows:
 exits 1 for a configuration error or a failed send; `--dry-run` prints the
 reports instead of sending them.
 
-### Help Page (`help_page`)
+### Help Page (`help_page`): the Help dialog
+
+Help is a dialog (F1, the main menu, the command palette), not a page.
 
 | Group | Key | Description |
 |-------|-----|-------------|
-| Resources | `help_resources_group` | Links to project resources |
+| Resources | `help_resources_group` | The Help dialog's links to project resources |
 
 `help_resources_group` supports:
 
@@ -185,7 +198,7 @@ reports instead of sending them.
 
 ### First-Run Page (`first_run_page`)
 
-Not a sidebar page: it configures `chairlift --first-run`
+Not a page of the rail: it configures `chairlift --first-run`
 ([ADR-0014](adr/0014-first-run-mode.md)).
 
 | Group | Key | Description |

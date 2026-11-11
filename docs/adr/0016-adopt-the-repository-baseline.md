@@ -1,6 +1,6 @@
 # 0016 — Adopt the frostyard repository baseline
 
-- **Status:** Accepted
+- **Status:** Accepted; the license its context names was replaced by MIT in [0018](0018-relicense-mit-and-drop-inherited-translations.md)
 - **Date:** 2026-11-05
 
 ## Context

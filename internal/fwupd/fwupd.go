@@ -23,15 +23,13 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/frostyard/chairlift/internal/cmdlog"
 )
 
 const (
 	// readTimeout bounds the read-only update query.
 	readTimeout = 60 * time.Second
-	// mutationTimeout bounds a firmware install, which downloads a firmware
-	// image and writes it to the device. It is far larger than the read
-	// budget because a slow device can take many minutes to flash.
-	mutationTimeout = 30 * time.Minute
 	// waitDelay bounds how long Wait blocks after the process group has been
 	// signalled, so a straggler holding the stdout/stderr pipes cannot keep
 	// Wait open forever.
@@ -48,6 +46,11 @@ var (
 	// executable is the fwupdmgr command name. It is a variable only so tests
 	// can substitute a fake script; production always uses "fwupdmgr".
 	executable = "fwupdmgr"
+
+	// runInstall runs the install command. It is a variable only so a test
+	// can see the context Install gives it; production always uses
+	// runCommandAt.
+	runInstall = runCommandAt
 )
 
 // deviceIDPattern matches a fwupd device id: exactly 40 lowercase hexadecimal
@@ -437,10 +440,9 @@ func Install(deviceID string) error {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), mutationTimeout)
-	defer cancel()
-
-	_, _, err := runCommandAt(ctx, executable, args...)
+	// No deadline: fwupd's daemon does the flash, so a deadline would kill
+	// only this client and free the job queue while the device is written.
+	_, _, err := runInstall(context.Background(), executable, args...)
 	return err
 }
 
@@ -486,10 +488,12 @@ func runCommandAt(ctx context.Context, exe string, args ...string) (string, int,
 	cmd.WaitDelay = waitDelay
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	trace := cmdlog.Start(exe, args...)
+	cmd.Stdout = trace.Stdout(&stdout)
+	cmd.Stderr = trace.Stderr(&stderr)
 
 	err := cmd.Run()
+	trace.End(err)
 	if err != nil {
 		display := exe
 		if len(args) > 0 {

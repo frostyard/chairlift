@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -15,18 +16,46 @@ import (
 )
 
 // firstRunPurePackages are the packages of the first-run gate binary and the
-// first-run logic. puregotk dlopens GTK during package initialization, so if
-// any of them pulled in a GTK binding, chairlift-first-run could no longer
-// exit before GTK loads (ADR-0014).
+// first-run logic. A done user's login runs the gate, which must exit before
+// any UI toolkit loads: if one of them pulled in a UI binding (the former
+// puregotk/snowkit GTK 4 stack, MyGo, or the frostui module on top of it),
+// chairlift-first-run would no longer be the small pure-Go process ADR-0014
+// makes it.
 var firstRunPurePackages = []string{
 	"./cmd/chairlift-first-run",
 	"./internal/firstrun",
 	"./internal/i18n",
 }
 
+// firstRunUIPackages are the import path prefixes of the UI toolkits and
+// kits the first-run packages must not depend on.
+var firstRunUIPackages = []string{
+	"codeberg.org/puregotk",
+	"github.com/frostyard/snowkit",
+	"github.com/egoist/mygo",
+	"github.com/frostyard/frostui",
+}
+
+// goListDeps returns the transitive dependencies of pkg, built pure Go.
+func goListDeps(t *testing.T, goTool, pkg string) []string {
+	t.Helper()
+	cmd := exec.Command(goTool, "list", "-deps", pkg)
+	cmd.Dir = RepoRoot()
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("go list -deps %s: %v\n%s", pkg, err, stderr.String())
+	}
+	return strings.Fields(stdout.String())
+}
+
 // TestFirstRunGateImportsNoGTK lists the transitive dependencies of the
-// first-run packages with the go tool and fails on any puregotk or snowkit
-// package.
+// first-run packages with the go tool and fails on any UI toolkit package:
+// puregotk, snowkit, MyGo or frostui. It also proves that the window
+// package, which draws the first run, does depend on MyGo and frostui, so a
+// misspelled prefix cannot make the check pass by matching nothing.
 func TestFirstRunGateImportsNoGTK(t *testing.T) {
 	goTool, err := exec.LookPath("go")
 	if err != nil {
@@ -34,24 +63,17 @@ func TestFirstRunGateImportsNoGTK(t *testing.T) {
 	}
 	for _, pkg := range firstRunPurePackages {
 		t.Run(pkg, func(t *testing.T) {
-			cmd := exec.Command(goTool, "list", "-deps", pkg)
-			cmd.Dir = RepoRoot()
-			cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-			var stdout, stderr bytes.Buffer
-			cmd.Stdout = &stdout
-			cmd.Stderr = &stderr
-			if err := cmd.Run(); err != nil {
-				t.Fatalf("go list -deps %s: %v\n%s", pkg, err, stderr.String())
-			}
-			deps := strings.Fields(stdout.String())
+			deps := goListDeps(t, goTool, pkg)
 			self := "github.com/frostyard/chairlift/" + strings.TrimPrefix(pkg, "./")
 			found := false
 			for _, dep := range deps {
 				if dep == self {
 					found = true
 				}
-				if strings.HasPrefix(dep, "codeberg.org/puregotk") || strings.HasPrefix(dep, "github.com/frostyard/snowkit") {
-					t.Errorf("%s depends on %s, which loads GTK", pkg, dep)
+				for _, ui := range firstRunUIPackages {
+					if strings.HasPrefix(dep, ui) {
+						t.Errorf("%s depends on %s, a UI toolkit package", pkg, dep)
+					}
 				}
 			}
 			if !found {
@@ -59,6 +81,14 @@ func TestFirstRunGateImportsNoGTK(t *testing.T) {
 			}
 		})
 	}
+	t.Run("the window uses the toolkit", func(t *testing.T) {
+		deps := goListDeps(t, goTool, "./internal/window")
+		for _, ui := range []string{"github.com/egoist/mygo/ui", "github.com/frostyard/frostui"} {
+			if !slices.Contains(deps, ui) {
+				t.Errorf("go list -deps ./internal/window does not list %s; the prefixes no longer match the toolkit", ui)
+			}
+		}
+	})
 }
 
 // goreleaserBuild is the subset of a builds[] entry the first-run checks

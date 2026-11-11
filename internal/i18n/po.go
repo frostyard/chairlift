@@ -1,6 +1,7 @@
-// Package i18n translates ChairLift's first-run strings. It reads the
-// gettext .po files embedded from internal/i18n/po with a small pure-Go
-// parser, so the build needs no msgfmt step, no generated files and no CGO.
+// Package i18n translates ChairLift's first-run strings. It reads gettext .po
+// catalogs, embedded from internal/i18n/po, with a small pure-Go parser, so
+// the build needs no msgfmt step, no generated files and no CGO. No catalog
+// ships at the moment (ADR-0018); po/README.md says how to add one.
 //
 // The package is puregotk-free (ADR-0007): the first-run window in
 // internal/window calls T, and every decision here is unit-tested headlessly.
@@ -13,9 +14,8 @@ import (
 )
 
 // ParsePO parses the text of a gettext .po file and returns its usable
-// translations, keyed by msgid. It supports the subset the ported first-setup
-// files use: comment lines, "msgid" and "msgstr" keywords, multi-line strings
-// and C escapes. It skips the header entry (empty msgid), entries with an
+// translations, keyed by msgid. It supports a subset of the format: comment
+// lines, "msgid" and "msgstr" keywords, multi-line strings and C escapes. It skips the header entry (empty msgid), entries with an
 // empty msgstr and entries flagged "#, fuzzy", as gettext does. msgctxt and
 // plural forms are not supported and are syntax errors, as are a string with
 // no keyword, a duplicate msgid and an unknown escape.
