@@ -1549,16 +1549,30 @@ host facts once at start (os-release, host name, kernel, model, Secure Boot,
 uptime, which `System.Info` then advances with the clock).
 
 `Live` (`internal/views/live.go`) samples on a goroutine of its own for the
-app's life, through a `sysinfo.Sampler` of the home directory's file system,
-and posts each reading. With `system_page`'s `health_group` on it samples
-everything each second and keeps one minute of processor and memory history
-for the Overview's "Right now" chart (`frostui.LiveChart`), beside the button
-that opens the configured system monitor (`app_id`, default
-`io.missioncenter.MissionCenter`). With it off it reads only the free space,
-every 5 seconds, and posts only when the shown value changes, so an idle
-window is not redrawn for nothing; the status bar, the Overview's Free space
-figure and disk card, and Maintenance use that free space whatever the
-configuration.
+app's life, through a `sysinfo.Sampler` of the home directory's file system.
+With `system_page`'s `health_group` on it samples everything each second and
+keeps one minute of processor and memory history for the Overview's "Right
+now" chart (`frostui.LiveChart`), beside the configured system monitor button
+(`app_id`, default `io.missioncenter.MissionCenter`). `liveSampler` copies its
+backend functions and publication callback before starting. Its readings go
+into `liveBuffer`, a mutex-protected transfer buffer capped at 60 samples;
+only the UI thread applies them to `Live.latest`, `cpu` and `mem`.
+
+`Main.Navigate` tells `Live.SetVisible` whether Overview is selected. `Main.View`
+also synchronizes that choice before drawing and after the shell's rail can
+change the selection. While Overview is selected, each sample requests a
+post; elsewhere, only a change to the disk's total or formatted free space
+requests one. At most one post is pending, and it drains the latest buffered
+samples. Returning to Overview takes the buffer on the UI thread immediately,
+so its first frame has the newest minute of history without an extra post.
+`TestLivePostsOnlyForVisibleChanges` counts posts and checks that hidden
+sampling leaves UI-owned history untouched until delivery;
+`TestLiveCoalescesSamplesWhileAPostWaits` covers delayed posts and navigation.
+
+With the health group off, the sampler reads only free space every 5 seconds
+and posts only when the shown value changes, whatever page is selected.
+The status bar, Overview's Free space figure and disk card, and Maintenance
+use that free space whatever the configuration.
 
 ### Recent activity (`internal/activity`)
 

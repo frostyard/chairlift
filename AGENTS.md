@@ -232,7 +232,11 @@ An agent must not break these:
   results back with `Env.Post` (MyGo's `Window.Update`, through the app's
   `poster`, which keeps posts made before the window exists). Console output
   wakes the window through `frostui.Waker` (at most every 60 ms), because
-  `Window.Update` rebuilds the view on every call.
+  `Window.Update` rebuilds the view on every call. The live sampler buffers
+  at most one minute of samples behind a mutex; only the UI thread applies
+  them to chart history. It posts for each sample while Overview is selected,
+  otherwise only for a displayed disk-space change, with at most one post
+  pending. Navigation publishes the buffered history when Overview returns.
 - **Changes run in the serial job queue.** In the command center, every
   mutation a page starts (install, update, stage, enable, clean, trust, flash)
   is a `frostui.Job` on `Env.Jobs`: one runs at a time, `Run` on a goroutine,
