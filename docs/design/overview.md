@@ -1439,11 +1439,17 @@ finish" instead. A firmware device that fwupd will not flash now is a held
 item, so it counts.
 
 Each domain keeps its items known: a live success removes its item before
-any reload (Homebrew's `finishUpgrade`, Flatpak's `finishUpdate`), a failure
+any reload (Homebrew's `finishUpgrade`, Flatpak's `finishUpdate`, Features'
+`updated`), a failure
 or a dry run keeps it, and a failed reload keeps the last known items
 (`actionstate.OutdatedRefresh` for Homebrew and for a Flatpak load in which
 no installation returned a usable result, `Firmware.applyLoad` for firmware,
-the last listing for features). The features source's items all run as one
+the last successful check minus completed live updates for features).
+`Features.updated` retires only `updex.ClassUpdated` features after a live run
+with no error, before rechecking. Held, waiting, failed, current and unreported
+features keep their items; failed runs and dry runs retire nothing. Only a
+successful, current-generation check clears these completion markers and
+replaces the summary. The features source's items all run as one
 helper `update` (`Features.updateJob`), because the helper updates every
 feature that is on.
 

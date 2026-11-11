@@ -365,7 +365,10 @@ An agent must not break these:
   owns its items; the Updates badge, the Overview figure and the status bar
   read `Store.UpdateCount()`, the sum over the sources that apply, held items
   included. A live success removes its item before any reload; a failed
-  reload keeps the last known items. Do not keep a separate counter.
+  reload keeps the last known items. Features retire only `ClassUpdated`
+  outcomes of a successful live run; a failed or dry run retires nothing.
+  Their completion markers survive failed checks and reset only on a
+  successful current-generation check. Do not keep a separate counter.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget
