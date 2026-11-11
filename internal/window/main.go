@@ -50,7 +50,7 @@ func NewMain(env *views.Env, store *views.Store) *Main {
 	m := &Main{Env: env, Store: store}
 	m.Items = navigation.VisibleItems(env.Enabled)
 	m.Shell.Brand = frostui.Brand{Name: "ChairLift", Tagline: "Snow Linux command center", Logo: ui.MustParseSVG(logoSVG)}
-	m.Shell.Selected = m.Items[0].Name
+	m.Navigate(m.Items[0].Name)
 	m.Shell.Dialogs = env.Dialogs
 	m.Shell.Console.Subtitle = "every command ChairLift runs, as it runs"
 	env.SetNavigate(m.Navigate)
@@ -67,6 +67,7 @@ func NewMain(env *views.Env, store *views.Store) *Main {
 func (m *Main) Navigate(page string) {
 	if item, ok := navigation.Resolve(page, m.Items); ok {
 		m.Shell.Selected = item.Name
+		m.Store.Live.SetVisible(item.Name == navigation.Overview)
 	}
 }
 
@@ -110,8 +111,9 @@ func (m *Main) View(c *ui.Context) {
 	}
 	m.bindShortcuts(c)
 	if _, ok := navigation.Resolve(m.Shell.Selected, m.Items); !ok {
-		m.Shell.Selected = m.Items[0].Name
+		m.Navigate(m.Items[0].Name)
 	}
+	m.Store.Live.SetVisible(m.Shell.Selected == navigation.Overview)
 	page := m.Store.Page(m.Shell.Selected)
 	m.Shell.View(c, frostui.Frame{
 		Nav:     m.nav(),
@@ -131,6 +133,8 @@ func (m *Main) View(c *ui.Context) {
 		StatusEnd:   m.statusEnd(),
 		ConsoleData: m.Env.Console,
 	})
+	// The shell's rail may select a page while drawing this frame.
+	m.Navigate(m.Shell.Selected)
 }
 
 // closeRefusedText says why the window stayed open after a close.
