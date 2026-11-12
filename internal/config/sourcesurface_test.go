@@ -225,7 +225,7 @@ func TestSourceConfigExportedSurface(t *testing.T) {
 	assertExactNameSet(t, "exported funcs", funcs,
 		[]string{"Load", "SchemaActionFields", "SchemaGroupFields", "SchemaGroups", "SchemaPages"})
 	assertExactNameSet(t, "exported methods", methods,
-		[]string{"Config.GetGroupConfig", "Config.IsGroupEnabled", "Config.ReportEndpoint", "LoadError.Error", "LoadError.LogMessage", "LoadError.ToastMessage", "LoadError.Unwrap"})
+		[]string{"Config.GetGroupConfig", "Config.IsGroupEnabled", "Config.ReportEndpoint", "LoadError.Error", "LoadError.LogMessage", "LoadError.ToastMessage", "LoadError.Unwrap", "appIDList.UnmarshalYAML"})
 	assertExactNameSet(t, "exported types", types,
 		[]string{"ActionConfig", "Config", "ErrorKind", "GroupConfig", "LoadError", "PageConfig"})
 	assertExactNameSet(t, "exported values", values,

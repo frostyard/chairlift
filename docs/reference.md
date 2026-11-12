@@ -59,7 +59,10 @@ always reachable.
 
 `health_group` supports:
 
-- `app_id` — Flatpak application ID to launch (default: `io.missioncenter.MissionCenter`)
+- `app_id` — desktop application ID or ordered list. The default tries Mission
+  Center, GNOME System Monitor, then KDE System Monitor. The first installed
+  entry visible in the desktop menu is used. An empty string or list uses
+  the default order.
 
 ### Updates Page (`updates_page`): the Updates page
 

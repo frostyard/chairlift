@@ -3,9 +3,12 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config represents the application configuration
@@ -37,6 +40,7 @@ type PageConfig map[string]GroupConfig
 type GroupConfig struct {
 	Enabled      bool           `yaml:"enabled"`
 	AppID        string         `yaml:"app_id,omitempty"`
+	AppIDs       []string       `yaml:"-"`
 	Actions      []ActionConfig `yaml:"actions,omitempty"`
 	Website      string         `yaml:"website,omitempty"`
 	Issues       string         `yaml:"issues,omitempty"`
@@ -83,7 +87,7 @@ type rawPageConfig map[string]rawGroupConfig
 // default outright.
 type rawGroupConfig struct {
 	Enabled      *bool           `yaml:"enabled"`
-	AppID        *string         `yaml:"app_id"`
+	AppID        *appIDList      `yaml:"app_id"`
 	Actions      *[]ActionConfig `yaml:"actions"`
 	Website      *string         `yaml:"website"`
 	Issues       *string         `yaml:"issues"`
@@ -91,6 +95,25 @@ type rawGroupConfig struct {
 	BundlesPaths *[]string       `yaml:"bundles_paths"`
 	AppsPath     *string         `yaml:"apps_path"`
 	Endpoint     *string         `yaml:"endpoint"`
+}
+
+// appIDList accepts a desktop ID or a preference-ordered sequence of IDs.
+type appIDList []string
+
+func (ids *appIDList) UnmarshalYAML(node *yaml.Node) error {
+	values := []*yaml.Node{node}
+	if node.Kind == yaml.SequenceNode {
+		values = node.Content
+	}
+	result := make(appIDList, 0, len(values))
+	for _, value := range values {
+		if value.Kind != yaml.ScalarNode || value.ShortTag() != "!!str" {
+			return fmt.Errorf("app_id must contain only strings (line %d)", value.Line)
+		}
+		result = append(result, value.Value)
+	}
+	*ids = result
+	return nil
 }
 
 // configPaths are the locations to search for the config file
@@ -288,7 +311,11 @@ func mergeGroup(def GroupConfig, raw rawGroupConfig) GroupConfig {
 		result.Enabled = *raw.Enabled
 	}
 	if raw.AppID != nil {
-		result.AppID = *raw.AppID
+		result.AppIDs = append([]string{}, (*raw.AppID)...)
+		result.AppID = ""
+		if len(result.AppIDs) > 0 {
+			result.AppID = result.AppIDs[0]
+		}
 	}
 	if raw.Actions != nil {
 		result.Actions = *raw.Actions
@@ -324,6 +351,7 @@ func defaultConfig() *Config {
 			"health_group": GroupConfig{
 				Enabled: true,
 				AppID:   "io.missioncenter.MissionCenter",
+				AppIDs:  []string{"io.missioncenter.MissionCenter", "org.gnome.SystemMonitor", "org.kde.plasma-systemmonitor"},
 			},
 		},
 		UpdatesPage: PageConfig{

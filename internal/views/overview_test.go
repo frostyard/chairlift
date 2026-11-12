@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/activity"
@@ -391,11 +392,100 @@ type ovLaunch struct {
 	result chan error
 }
 
-// TestOverviewOpensTheHealthApp: the button and the palette command launch
-// the configured monitor on a goroutine, since GIO's lookup and launch may
-// block. The click returns while the fake holds the launch, and a failure
-// shows only when the UI thread runs the posted result. A launch on the UI
-// thread would hold the click until the fake's timeout and toast early.
+func TestOverviewFindsPreferredMonitor(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		apps             []mygo.InstalledApp
+		wantID, wantName string
+	}{
+		{"prefers first", []mygo.InstalledApp{{ID: "org.kde.plasma-systemmonitor.desktop", Name: "KDE Monitor"}, {ID: "io.missioncenter.MissionCenter.desktop", Name: "Mission Center"}}, "io.missioncenter.MissionCenter", "Mission Center"},
+		{"uses fallback", []mygo.InstalledApp{{ID: "org.kde.plasma-systemmonitor.desktop", Name: "System Monitor"}}, "org.kde.plasma-systemmonitor", "System Monitor"},
+		{"none installed", nil, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := sysConfig(sysAllGroups...)
+			cfg.SystemPage["health_group"] = config.GroupConfig{Enabled: true, AppIDs: []string{"io.missioncenter.MissionCenter", "org.kde.plasma-systemmonitor"}}
+			s, p, q := ovStore(t, cfg, false, newSysFake())
+			s.Env.DesktopApps = func() ([]mygo.InstalledApp, error) { return tc.apps, nil }
+			p.loadHealthApp()
+			q.until(t, "desktop lookup", func() bool { return !p.healthLoading })
+			id, name := p.healthApp()
+			if id != tc.wantID || name != tc.wantName {
+				t.Fatalf("got %q, %q", id, name)
+			}
+			tt := ui.NewTester(ovView(p), 1360, 1500)
+			foundCommand := false
+			for _, cmd := range p.Commands() {
+				if cmd.ID == "open-health-app" {
+					foundCommand = true
+					if cmd.Title != "Open "+tc.wantName {
+						t.Errorf("palette title = %q, want %q", cmd.Title, "Open "+tc.wantName)
+					}
+				}
+			}
+			if foundCommand != (tc.wantID != "") {
+				t.Errorf("monitor palette command present = %t, want %t", foundCommand, tc.wantID != "")
+			}
+			if tc.wantID != "" {
+				if !tt.HasText("Open " + tc.wantName) {
+					t.Errorf("button does not show desktop name %q", tc.wantName)
+				}
+			} else if tt.HasText("Open Mission Center") {
+				t.Error("monitor button remains when none is installed")
+			}
+		})
+	}
+}
+
+func TestOverviewMonitorLookupCases(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		group  config.GroupConfig
+		err    error
+		want   string
+		called bool
+	}{
+		{"scalar override", config.GroupConfig{Enabled: true, AppID: "org.kde.plasma-systemmonitor"}, nil, "org.kde.plasma-systemmonitor", true},
+		{"empty list uses defaults", config.GroupConfig{Enabled: true, AppIDs: []string{}}, nil, "org.kde.plasma-systemmonitor", true},
+		{"empty scalar uses defaults", config.GroupConfig{Enabled: true, AppIDs: []string{""}}, nil, "org.kde.plasma-systemmonitor", true},
+		{"lookup failed", config.GroupConfig{Enabled: true}, errors.New("lookup failed"), "", true},
+		{"disabled", config.GroupConfig{Enabled: false}, nil, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := sysConfig(sysAllGroups...)
+			cfg.SystemPage["health_group"] = tc.group
+			s, p, q := ovStore(t, cfg, false, newSysFake())
+			called := make(chan struct{}, 1)
+			s.Env.DesktopApps = func() ([]mygo.InstalledApp, error) {
+				called <- struct{}{}
+				return []mygo.InstalledApp{{ID: "org.kde.plasma-systemmonitor.desktop", Name: "System Monitor"}}, tc.err
+			}
+			p.loadHealthApp()
+			if !tc.called {
+				select {
+				case <-called:
+					t.Fatal("disabled group called lookup")
+				default:
+				}
+				return
+			}
+			q.until(t, "desktop lookup", func() bool { return !p.healthLoading })
+			if id, _ := p.healthApp(); id != tc.want {
+				t.Fatalf("ID = %q, want %q", id, tc.want)
+			}
+			if tc.want == "" {
+				for _, cmd := range p.Commands() {
+					if cmd.ID == "open-health-app" {
+						t.Fatal("missing monitor has palette command")
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestOverviewOpensTheHealthApp holds a launch on a worker and checks that
+// the posted failure reaches the UI thread only after the launch returns.
 func TestOverviewOpensTheHealthApp(t *testing.T) {
 	cfg := sysConfig(sysAllGroups...)
 	cfg.SystemPage["health_group"] = config.GroupConfig{Enabled: true, AppID: "org.gnome.SystemMonitor"}

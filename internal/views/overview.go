@@ -32,7 +32,10 @@ type overviewPage struct {
 	sources func() []UpdateSource
 	// launch starts a desktop application by its ID; it runs on a
 	// goroutine (Env.launchApp).
-	launch func(appID string) error
+	launch               func(appID string) error
+	healthID, healthName string
+	healthResolved       bool
+	healthLoading        bool
 }
 
 // NewOverviewPage returns the Overview page.
@@ -246,11 +249,54 @@ func (p *overviewPage) visible(page string) bool {
 }
 
 func (p *overviewPage) healthApp() (id, name string) {
+	if p.healthResolved {
+		return p.healthID, p.healthName
+	}
 	id = defaultHealthApp
 	if g := p.s.Env.Group("system_page", "health_group"); g != nil && g.AppID != "" {
 		id = g.AppID
 	}
 	return id, pageview.AppDisplayName(id)
+}
+
+func (p *overviewPage) loadHealthApp() {
+	env := p.s.Env
+	if !env.Enabled("system_page", "health_group") || env.DesktopApps == nil {
+		return
+	}
+	group := env.Group("system_page", "health_group")
+	ids := []string{defaultHealthApp, "org.gnome.SystemMonitor", "org.kde.plasma-systemmonitor"}
+	if group != nil && len(group.AppIDs) != 0 && (len(group.AppIDs) != 1 || group.AppIDs[0] != "") {
+		ids = append([]string{}, group.AppIDs...)
+	} else if group != nil && group.AppID != "" {
+		ids = []string{group.AppID}
+	}
+	list := env.DesktopApps
+	p.healthResolved = true
+	p.healthLoading = true
+	go func() {
+		apps, err := list()
+		var id, name string
+		if err == nil {
+			for _, candidate := range ids {
+				for _, app := range apps {
+					if app.ID == strings.TrimSuffix(candidate, ".desktop")+".desktop" {
+						id, name = candidate, app.Name
+						break
+					}
+				}
+				if id != "" {
+					break
+				}
+			}
+		} else {
+			log.Printf("system monitor lookup: %v", err)
+		}
+		if id != "" && name == "" {
+			name = pageview.AppDisplayName(id)
+		}
+		env.Post(func() { p.healthID, p.healthName, p.healthLoading = id, name, false })
+	}()
 }
 
 func (p *overviewPage) openHealthApp() {
@@ -615,11 +661,11 @@ func lastValue(values []float64) float64 {
 // minute, and the button that opens the configured system monitor.
 func (p *overviewPage) liveCard(c *ui.Context, wide bool) {
 	cpu, mem := p.s.Live.CPU(), p.s.Live.Memory()
-	_, app := p.healthApp()
+	id, app := p.healthApp()
 	sideCard(c, wide, 2).Children(func() {
 		frostui.CardHeader(c, "Right now", "Processor and memory, last 60 seconds", func() {
 			frostui.Pill(c, "live", frostui.Success)
-			if frostui.LabeledButton(c, "send-to", "Open "+app, false).Tooltip("Monitor processor, memory and system resources").Clicked() {
+			if id != "" && frostui.LabeledButton(c, "send-to", "Open "+app, false).Tooltip("Monitor processor, memory and system resources").Clicked() {
 				p.openHealthApp()
 			}
 		})
@@ -841,8 +887,7 @@ func (p *overviewPage) Commands() []frostui.Command {
 		}
 		cmds = append(cmds, cmd)
 	}
-	if env.Enabled("system_page", "health_group") {
-		_, app := p.healthApp()
+	if id, app := p.healthApp(); env.Enabled("system_page", "health_group") && id != "" {
 		cmds = append(cmds, frostui.Command{ID: "open-health-app", Title: "Open " + app, Group: "Actions", Icon: "send-to",
 			Hint: "system monitor performance processor memory", Run: p.openHealthApp})
 	}

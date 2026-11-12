@@ -11,7 +11,10 @@ system_page:
     enabled: true
   health_group:
     enabled: true
-    app_id: io.missioncenter.MissionCenter
+    app_id:
+      - io.missioncenter.MissionCenter
+      - org.gnome.SystemMonitor
+      - org.kde.plasma-systemmonitor
 
 updates_page:
   bootc_updates_group:

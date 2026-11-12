@@ -24,6 +24,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"github.com/frostyard/chairlift/internal/activity"
@@ -51,6 +52,8 @@ type Env struct {
 
 	// Now is the clock, replaceable in tests.
 	Now func() time.Time
+	// DesktopApps lists visible desktop entries on a worker; nil disables lookup.
+	DesktopApps func() ([]mygo.InstalledApp, error)
 
 	toasts   []ui.Toast
 	navigate func(page string)

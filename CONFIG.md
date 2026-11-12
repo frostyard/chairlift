@@ -70,7 +70,10 @@ dialog (F1), not a page: it is always reachable, and with
   read-only deployment chain on the Maintenance page
 - `health_group`: The live processor and memory chart and the button that
   opens the system monitor
-  - `app_id`: Application ID for the system monitoring tool (default: `io.missioncenter.MissionCenter`)
+  - `app_id`: A desktop application ID or an ordered list. The default tries
+    Mission Center, GNOME System Monitor, then KDE System Monitor. The first
+    installed application visible in the desktop menu is used. An empty
+    string or list uses the default order.
 
 ### Updates Page (`updates_page`): the Updates page
 

@@ -407,13 +407,19 @@ func TestRawGroupConfigMatchesGroupConfigFields(t *testing.T) {
 	if rawType.NumField() == 0 {
 		t.Fatal("rawGroupConfig has zero fields")
 	}
-	if groupType.NumField() != rawType.NumField() {
+	if groupType.NumField() != rawType.NumField()+1 {
 		t.Fatalf("GroupConfig has %d fields, rawGroupConfig has %d", groupType.NumField(), rawType.NumField())
 	}
-
-	for i := 0; i < groupType.NumField(); i++ {
-		gf := groupType.Field(i)
+	if field, ok := groupType.FieldByName("AppIDs"); !ok || field.Tag.Get("yaml") != "-" {
+		t.Fatal("AppIDs must be the only non-YAML field")
+	}
+	for i := 0; i < rawType.NumField(); i++ {
 		rf := rawType.Field(i)
+		gf, ok := groupType.FieldByName(rf.Name)
+		if !ok {
+			t.Errorf("raw field %s missing from GroupConfig", rf.Name)
+			continue
+		}
 
 		if gf.Name != rf.Name {
 			t.Errorf("field %d: GroupConfig field name %q, rawGroupConfig field name %q", i, gf.Name, rf.Name)
@@ -425,7 +431,7 @@ func TestRawGroupConfigMatchesGroupConfigFields(t *testing.T) {
 			t.Errorf("field %d (%s): GroupConfig yaml tag %q, rawGroupConfig yaml tag %q", i, gf.Name, gTag, rTag)
 		}
 
-		if rf.Type != gf.Type && rf.Type != reflect.PointerTo(gf.Type) {
+		if rf.Name != "AppID" && rf.Type != gf.Type && rf.Type != reflect.PointerTo(gf.Type) {
 			t.Errorf("field %d (%s): rawGroupConfig type %s is neither GroupConfig's type %s nor a pointer to it", i, gf.Name, rf.Type, gf.Type)
 		}
 	}

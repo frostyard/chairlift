@@ -171,6 +171,7 @@ func openMain(o Options) *mygo.Window {
 	p := &poster{}
 	post := p.post
 	env := views.NewEnv(cfg, o.DryRun, post)
+	env.DesktopApps = mygo.Shell.InstalledApps
 	if cfgErr != nil {
 		env.ConfigErr = cfgErr
 	}

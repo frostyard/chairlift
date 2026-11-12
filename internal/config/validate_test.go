@@ -784,7 +784,11 @@ func TestParseAndValidateEveryGroupFieldAccepted(t *testing.T) {
 			t.Fatalf("no reflect.Type found for group field %q", field)
 		}
 		t.Run(field, func(t *testing.T) {
-			data := "system_page:\n  system_info_group:\n    " + field + ": " + sampleYAMLValueForType(fieldType) + "\n"
+			value := sampleYAMLValueForType(fieldType)
+			if field == "app_id" {
+				value = "org.example.App"
+			}
+			data := "system_page:\n  system_info_group:\n    " + field + ": " + value + "\n"
 			raw, loadErr := parseAndValidate(path, []byte(data))
 			if loadErr != nil {
 				t.Fatalf("parseAndValidate(%q) error = %v, want nil", data, loadErr)
@@ -1092,7 +1096,7 @@ func TestParseAndValidateExplicitZeroPreserved(t *testing.T) {
 	if group.AppID == nil {
 		t.Fatalf("group.AppID = nil, want a non-nil *string")
 	}
-	if *group.AppID != "" {
+	if len(*group.AppID) != 1 || (*group.AppID)[0] != "" {
 		t.Fatalf("*group.AppID = %q, want %q", *group.AppID, "")
 	}
 
