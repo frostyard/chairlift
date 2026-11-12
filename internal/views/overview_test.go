@@ -484,8 +484,11 @@ func TestOverviewMonitorLookupCases(t *testing.T) {
 	}
 }
 
-// TestOverviewOpensTheHealthApp holds a launch on a worker and checks that
-// the posted failure reaches the UI thread only after the launch returns.
+// TestOverviewOpensTheHealthApp: the button and the palette command launch
+// the configured monitor on a goroutine, since GIO's lookup and launch may
+// block. The click returns while the fake holds the launch, and a failure
+// shows only when the UI thread runs the posted result. A launch on the UI
+// thread would hold the click until the fake's timeout and toast early.
 func TestOverviewOpensTheHealthApp(t *testing.T) {
 	cfg := sysConfig(sysAllGroups...)
 	cfg.SystemPage["health_group"] = config.GroupConfig{Enabled: true, AppID: "org.gnome.SystemMonitor"}
