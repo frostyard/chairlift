@@ -2116,8 +2116,11 @@ running ChairLift would take the activation and the window would never show.
 marker that `make e2e` and the lab read (ADR-0008 style).
 
 The window is a MyGo wizard (`internal/window/firstrun.go` for the state and
-the flow, `firstrun_view.go` for the drawing): a centered card with a step
-indicator, the current step's content, and Back and Next under it. All its
+the flow, `firstrun_view.go` for the drawing): a centered card
+(`frostui.Card`: the panel face over a hairline, square, with no shadow)
+with a step indicator, the current step's content, and Back and Next under
+it. It draws in the kit's Frostyard themes, as the main window does
+([frostui.md](./frostui.md#the-frostyard-look)). All its
 text goes through `i18n.T`. Its state belongs to the UI thread; the
 connectivity check and the Progress worker copy their inputs and hand their
 results back through the app's poster (`Window.Update`), which keeps what is
@@ -2152,7 +2155,9 @@ Done and every transition:
   `ConnOnline`, `ConnOffline`). Next waits while the check runs, because the
   result decides whether Apps shows. Offline shows Check Again and Open
   Settings (`gnome-control-center wifi`); the user can go on.
-- **Style** — Light/Dark tiles. Each choice calls `Request` on the window's
+- **Style** — Light/Dark tiles, each with a sketch of a window in
+  `frostui.FrostyardTheme(dark)` with the desktop's preferences minus its
+  accent (`schemePreview`). Each choice calls `Request` on the window's
   one `firstrun.SchemeWriter` from the UI thread. The writer has one worker
   goroutine and a mutex-protected pending value: a request during a write
   replaces the pending value, so the latest choice wins and at most the
@@ -2162,7 +2167,8 @@ Done and every transition:
   `firstrun.ApplyColorScheme`: `gsettings set org.gnome.desktop.interface
   color-scheme prefer-light|prefer-dark`, never `gtk-theme`. The window
   shows the choice at once (`forceAppearance`: `mygo.Theme.SetSource` with
-  `ThemeLight` or `ThemeDark`); the desktop follows when the write lands.
+  `ThemeLight` or `ThemeDark`, which `frostui.Adapt` turns into Frostyard
+  light or Frostyard); the desktop follows when the write lands.
 - **Apps** — visible only when the list loaded, `first_run_apps_group` is
   enabled, and the check said online (`Flow.Visible`). One card per
   category with its switch, and under a category that is on, one switch per
@@ -2413,7 +2419,7 @@ the configuration page, not always the page of the window that shows it (see
 | Module                           | Purpose                                                                                     |
 | -------------------------------- | ------------------------------------------------------------------------------------------- |
 | `github.com/egoist/mygo`         | The window: MyGo's native UI (`mygo/ui`) on GTK 3 and OpenGL, the headless `ui.Tester`; kept behind frostui and the views ([ADR-0017](../adr/0017-mygo-command-center-window.md)) |
-| `github.com/frostyard/frostui`   | The UI kit on MyGo: shell, palette, console, job queue, dialogs, cards; `frostuitest` for the tests' UI thread ([frostui.md](./frostui.md)) |
+| `github.com/frostyard/frostui`   | The UI kit on MyGo: shell, palette, console, job queue, dialogs, cards, and the Frostyard themes the window draws in; `frostuitest` for the tests' UI thread ([frostui.md](./frostui.md)) |
 | `github.com/ebitengine/purego`   | Calling C without CGO: MyGo's library loading, and `frostui.SetAppID`'s `g_set_prgname`      |
 | `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.2.0 in go.mod) |
 | `gopkg.in/yaml.v3`               | YAML config parsing                                                                         |
@@ -2427,5 +2433,5 @@ There is no separate Go client library dependency for bootc: status/stage types 
 ## Subsystem Details
 
 - [Package Manager Wrappers](./package-managers.md) — Homebrew (including tap trust), Flatpak, fwupd, bootc, sysupdate and Updex wrapper details, and the pure view-layer leaf packages
-- [frostui](./frostui.md) — where the UI kit lives now, and what ChairLift draws itself
+- [frostui](./frostui.md) — where the UI kit lives now, what ChairLift draws itself, and how it draws in the Frostyard look
 - [Engineering lessons](./engineering-lessons.md) — binding rules learned from defects and reviews

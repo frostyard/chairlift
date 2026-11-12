@@ -189,7 +189,8 @@ shows the kind's icon, the title and subtitle of `ProblemCardText` ("<subject>
 · last seen <when>"), and a count pill ("once" or "<n> times") toned by
 `ProblemSeverity`. A click opens the card: the hint and the rows of
 `ProblemDetails` (the recorded values and what this computer adds, selectable,
-in a monospace font), "First seen <when>", and the actions **Copy details**
+in a monospace font on the kit's code face), "First seen <when>", and the
+actions **Copy details**
 (`problems.DetailsText` on the window's clipboard), **Report…**
 (`ReportButtonLabel`, or a disabled **Sent**, `ReportedLabel`, after a send
 this run), and **Dismiss**.
