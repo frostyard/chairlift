@@ -208,6 +208,7 @@ var wantDebUIDependencies = []string{
 // dependencies of every format and those of each format override.
 type nfpmDependencies struct {
 	PackageName  string   `yaml:"package_name"`
+	Formats      []string `yaml:"formats"`
 	Dependencies []string `yaml:"dependencies"`
 	Overrides    map[string]struct {
 		Dependencies []string `yaml:"dependencies"`
@@ -249,8 +250,14 @@ func TestGoreleaserDebDeclaresUIDependencies(t *testing.T) {
 		for format, override := range nfpm.Overrides {
 			if nfpm.PackageName == fullPackageName && format == "deb" {
 				fullDeb++
-				if !reflect.DeepEqual(override.Dependencies, wantDebUIDependencies) {
-					t.Errorf("%s overrides.deb.dependencies = %q, want %q", fullPackageName, override.Dependencies, wantDebUIDependencies)
+				uiDeps := []string{}
+				for _, dep := range override.Dependencies {
+					if isUIDependency(dep) {
+						uiDeps = append(uiDeps, dep)
+					}
+				}
+				if !reflect.DeepEqual(uiDeps, wantDebUIDependencies) {
+					t.Errorf("%s deb UI dependencies = %q, want %q", fullPackageName, uiDeps, wantDebUIDependencies)
 				}
 				continue
 			}
@@ -263,6 +270,46 @@ func TestGoreleaserDebDeclaresUIDependencies(t *testing.T) {
 	}
 	if fullDeb != 1 {
 		t.Errorf("found overrides.deb on %d nfpms entries named %s, want 1 declaring %q", fullDeb, fullPackageName, wantDebUIDependencies)
+	}
+}
+
+// TestGoreleaserPackagesDependOnPkexec checks each package and format, including
+// the companion used with a user-scoped GUI installation.
+func TestGoreleaserPackagesDependOnPkexec(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(RepoRoot(), ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Nfpms []nfpmDependencies `yaml:"nfpms"`
+	}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parsing .goreleaser.yaml: %v", err)
+	}
+	if len(cfg.Nfpms) == 0 {
+		t.Fatal(".goreleaser.yaml has no nfpms entries")
+	}
+	want := map[string]string{"deb": "pkexec", "rpm": "/usr/bin/pkexec", "apk": "polkit"}
+	for _, nfpm := range cfg.Nfpms {
+		t.Run(nfpm.PackageName, func(t *testing.T) {
+			if len(nfpm.Formats) == 0 {
+				t.Fatal("package has no explicit formats")
+			}
+			for _, format := range nfpm.Formats {
+				t.Run(format, func(t *testing.T) {
+					dep, ok := want[format]
+					if !ok {
+						t.Fatalf("no pkexec dependency specified for format %q", format)
+					}
+					for _, actual := range nfpm.Overrides[format].Dependencies {
+						if actual == dep {
+							return
+						}
+					}
+					t.Errorf("overrides.%s.dependencies lacks %q", format, dep)
+				})
+			}
+		})
 	}
 }
 

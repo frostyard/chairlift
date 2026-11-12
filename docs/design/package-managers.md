@@ -1629,3 +1629,6 @@ The window's own release build and runtime libraries are pinned the same way:
   dependencies (`libgtk-3-0t64 | libgtk-3-0`, `libpangocairo-1.0-0`,
   `libepoxy0`, which MyGo loads at run time with purego) and keeps them off
   every other format and off the system-integration package.
+- **`TestGoreleaserPackagesDependOnPkexec`** checks the pkexec dependency for
+  every nFPM package and format: `pkexec` for deb, `/usr/bin/pkexec` for rpm,
+  and `polkit` for apk.

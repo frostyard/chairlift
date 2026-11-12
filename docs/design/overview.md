@@ -2402,8 +2402,12 @@ the configuration page, not always the page of the window that shows it (see
   renderer). The `frostyard-chairlift` `.deb` declares them
   (`.goreleaser.yaml` `overrides.deb.dependencies`: `libgtk-3-0t64 |
   libgtk-3-0`, `libpangocairo-1.0-0`, `libepoxy0`); the `.rpm` and `.apk`
-  and the system-integration package declare none, and
+  and the system-integration package declare no UI libraries, and
   `internal/installcheck.TestGoreleaserDebDeclaresUIDependencies` pins that.
+- `pkexec` and a running PolicyKit authentication agent are needed for
+  privileged actions. Both nFPM packages depend on `pkexec` for deb,
+  `/usr/bin/pkexec` for rpm, and `polkit` for apk. A desktop session must
+  supply its own authentication agent.
 - Homebrew (optional)
 - Flatpak (optional)
 - fwupd / `fwupdmgr` (optional; the firmware-updates group is enabled by default and its source stays out of the Updates page unless `fwupdmgr` is present)

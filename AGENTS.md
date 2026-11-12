@@ -81,7 +81,8 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   the self-contained `frostyard-chairlift` package and the mutually exclusive
   `frostyard-chairlift-system-integration` companion for user-scoped GUI
   installs; every nFPM entry carrying policies must retain the same fixed
-  paths.
+  paths. Both packages depend on the system's pkexec provider; a desktop
+  session must supply a PolicyKit authentication agent.
 
 Every Makefile target is a command, not a file, so every target is declared
 `.PHONY`. Otherwise make compares the target with the file system: the
