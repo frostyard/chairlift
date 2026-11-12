@@ -12,7 +12,6 @@ system_page:
   health_group:
     enabled: true
     app_id:
-      - io.missioncenter.MissionCenter
       - org.gnome.SystemMonitor
       - org.kde.plasma-systemmonitor
 

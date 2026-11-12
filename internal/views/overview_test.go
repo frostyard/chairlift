@@ -333,7 +333,7 @@ func TestOverviewFiguresAndCards(t *testing.T) {
 	ovHas(t, tt,
 		"Updates", "12", "across 5 sources", "Free space", "288 GB", "of 512 GB on /var/home/frosty",
 		"9 updates ready",
-		"Right now", "Processor and memory, last 60 seconds", "live", "Open Mission Center",
+		"Right now", "Processor and memory, last 60 seconds", "live", "Open System Monitor",
 		"Disk", "224 GB used of 512 GB", "288 GB free",
 		"System details", "Host name", "frosty-x1", "ThinkPad X1 Carbon Gen 12", "Home Url", "https://frostyard.org/",
 		"Built", overviewBuilt("2026-11-05T10:19:52Z"), "Digest", "sha256:dd7104356c7b...",
@@ -377,7 +377,7 @@ func TestOverviewGatesItsGroups(t *testing.T) {
 		_, p, _ := ovStore(t, sysConfig("system_page/bootc_status_group", "system_page/system_info_group"), false, ovBootc(""))
 		tt := ui.NewTester(ovView(p), 1360, 1400)
 		ovHas(t, tt, "Snow Linux", "2026.11.05", "System details")
-		ovHasNot(t, tt, "Right now", "Open Mission Center", "Update everything", "Check now")
+		ovHasNot(t, tt, "Right now", "Open System Monitor", "Update everything", "Check now")
 		for _, cmd := range p.Commands() {
 			if cmd.ID == "open-health-app" || cmd.ID == "update-everything" || cmd.ID == "stage-system-image" {
 				t.Errorf("command %q without its group", cmd.ID)
@@ -398,13 +398,13 @@ func TestOverviewFindsPreferredMonitor(t *testing.T) {
 		apps             []mygo.InstalledApp
 		wantID, wantName string
 	}{
-		{"prefers first", []mygo.InstalledApp{{ID: "org.kde.plasma-systemmonitor.desktop", Name: "KDE Monitor"}, {ID: "io.missioncenter.MissionCenter.desktop", Name: "Mission Center"}}, "io.missioncenter.MissionCenter", "Mission Center"},
+		{"prefers first", []mygo.InstalledApp{{ID: "org.kde.plasma-systemmonitor.desktop", Name: "KDE Monitor"}, {ID: "org.gnome.SystemMonitor.desktop", Name: "System Monitor"}}, "org.gnome.SystemMonitor", "System Monitor"},
 		{"uses fallback", []mygo.InstalledApp{{ID: "org.kde.plasma-systemmonitor.desktop", Name: "System Monitor"}}, "org.kde.plasma-systemmonitor", "System Monitor"},
 		{"none installed", nil, "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := sysConfig(sysAllGroups...)
-			cfg.SystemPage["health_group"] = config.GroupConfig{Enabled: true, AppIDs: []string{"io.missioncenter.MissionCenter", "org.kde.plasma-systemmonitor"}}
+			cfg.SystemPage["health_group"] = config.GroupConfig{Enabled: true, AppIDs: []string{"org.gnome.SystemMonitor", "org.kde.plasma-systemmonitor"}}
 			s, p, q := ovStore(t, cfg, false, newSysFake())
 			s.Env.DesktopApps = func() ([]mygo.InstalledApp, error) { return tc.apps, nil }
 			p.loadHealthApp()
@@ -430,7 +430,7 @@ func TestOverviewFindsPreferredMonitor(t *testing.T) {
 				if !tt.HasText("Open " + tc.wantName) {
 					t.Errorf("button does not show desktop name %q", tc.wantName)
 				}
-			} else if tt.HasText("Open Mission Center") {
+			} else if tt.HasText("Open System Monitor") {
 				t.Error("monitor button remains when none is installed")
 			}
 		})
@@ -479,6 +479,39 @@ func TestOverviewMonitorLookupCases(t *testing.T) {
 						t.Fatal("missing monitor has palette command")
 					}
 				}
+			}
+		})
+	}
+}
+
+// TestOverviewDefaultMonitorOrder: with no app_id configured, the lookup
+// tries GNOME System Monitor first, then KDE System Monitor, and never
+// picks Mission Center, which is no longer a default candidate.
+func TestOverviewDefaultMonitorOrder(t *testing.T) {
+	mission := mygo.InstalledApp{ID: "io.missioncenter.MissionCenter.desktop", Name: "Mission Center"}
+	gnome := mygo.InstalledApp{ID: "org.gnome.SystemMonitor.desktop", Name: "System Monitor"}
+	kde := mygo.InstalledApp{ID: "org.kde.plasma-systemmonitor.desktop", Name: "KDE System Monitor"}
+	for _, tc := range []struct {
+		name             string
+		apps             []mygo.InstalledApp
+		wantID, wantName string
+	}{
+		{"gnome first", []mygo.InstalledApp{mission, kde, gnome}, "org.gnome.SystemMonitor", "System Monitor"},
+		{"kde second", []mygo.InstalledApp{mission, kde}, "org.kde.plasma-systemmonitor", "KDE System Monitor"},
+		{"mission center alone", []mygo.InstalledApp{mission}, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := sysConfig(sysAllGroups...)
+			cfg.SystemPage["health_group"] = config.GroupConfig{Enabled: true}
+			s, p, q := ovStore(t, cfg, false, newSysFake())
+			if id, name := p.healthApp(); id != "org.gnome.SystemMonitor" || name != "System Monitor" {
+				t.Fatalf("before the lookup: got %q, %q", id, name)
+			}
+			s.Env.DesktopApps = func() ([]mygo.InstalledApp, error) { return tc.apps, nil }
+			p.loadHealthApp()
+			q.until(t, "desktop lookup", func() bool { return !p.healthLoading })
+			if id, name := p.healthApp(); id != tc.wantID || name != tc.wantName {
+				t.Fatalf("got %q, %q; want %q, %q", id, name, tc.wantID, tc.wantName)
 			}
 		})
 	}

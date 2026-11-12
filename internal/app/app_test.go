@@ -225,7 +225,7 @@ func TestWireConsoleShowsCommandsAndTheLog(t *testing.T) {
 	failed := cmdlog.Start("brew", "upgrade", "gh")
 	failed.End(errors.New("exit status 1"))
 	cmdlog.DryRun("flatpak", "update", "org.mozilla.firefox")
-	cmdlog.Launch("io.missioncenter.MissionCenter").End(nil)
+	cmdlog.Launch("org.gnome.SystemMonitor").End(nil)
 	cmdlog.Launch("org.gnome.Software").End(errors.New("not found"))
 	log.Print("[DRY-RUN] would dismiss problem p1")
 	log.Print("homebrew: list failed")
@@ -242,7 +242,7 @@ func TestWireConsoleShowsCommandsAndTheLog(t *testing.T) {
 		{frostui.LevelDebug, "chairlift-updex-helper", "exited after"},
 		{frostui.LevelWarn, "brew", "exit status 1"},
 		{frostui.LevelDryRun, "flatpak", "would run: flatpak update org.mozilla.firefox"},
-		{frostui.LevelCommand, "launch", "in-process launch of io.missioncenter.MissionCenter (GIO)"},
+		{frostui.LevelCommand, "launch", "in-process launch of org.gnome.SystemMonitor (GIO)"},
 		{frostui.LevelDebug, "launch", "launched after"},
 		{frostui.LevelWarn, "launch", "launch failed after"},
 		{frostui.LevelWarn, "launch", "not found"},

@@ -71,7 +71,7 @@ dialog (F1), not a page: it is always reachable, and with
 - `health_group`: The live processor and memory chart and the button that
   opens the system monitor
   - `app_id`: A desktop application ID or an ordered list. The default tries
-    Mission Center, GNOME System Monitor, then KDE System Monitor. The first
+    GNOME System Monitor, then KDE System Monitor. The first
     installed application visible in the desktop menu is used. An empty
     string or list uses the default order.
 

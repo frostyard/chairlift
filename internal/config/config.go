@@ -350,8 +350,8 @@ func defaultConfig() *Config {
 			"bootc_status_group": GroupConfig{Enabled: true},
 			"health_group": GroupConfig{
 				Enabled: true,
-				AppID:   "io.missioncenter.MissionCenter",
-				AppIDs:  []string{"io.missioncenter.MissionCenter", "org.gnome.SystemMonitor", "org.kde.plasma-systemmonitor"},
+				AppID:   "org.gnome.SystemMonitor",
+				AppIDs:  []string{"org.gnome.SystemMonitor", "org.kde.plasma-systemmonitor"},
 			},
 		},
 		UpdatesPage: PageConfig{

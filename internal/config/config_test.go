@@ -503,3 +503,34 @@ func TestShippedConfigsEnableFirmwareUpdates(t *testing.T) {
 		})
 	}
 }
+
+// TestShippedConfigsDefaultSystemMonitorOrder asserts that defaultConfig()
+// and both shipped configuration files try the same system monitors in the
+// same order: GNOME System Monitor, then KDE System Monitor. A default
+// candidate that the images do not ship (Mission Center, whose Flatpak was
+// removed from the defaults) must not come back.
+func TestShippedConfigsDefaultSystemMonitorOrder(t *testing.T) {
+	want := []string{"org.gnome.SystemMonitor", "org.kde.plasma-systemmonitor"}
+	check := func(t *testing.T, g GroupConfig) {
+		t.Helper()
+		if !reflect.DeepEqual(g.AppIDs, want) {
+			t.Errorf("health_group app_id = %#v, want %#v", g.AppIDs, want)
+		}
+		if g.AppID != want[0] {
+			t.Errorf("health_group first app_id = %q, want %q", g.AppID, want[0])
+		}
+	}
+	t.Run("defaultConfig", func(t *testing.T) {
+		check(t, defaultConfig().SystemPage["health_group"])
+	})
+	for _, name := range []string{"config.yml", "config.bootc-example.yml"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(repoRoot(), name)
+			cfg, err := loadFromPath(path)
+			if err != nil {
+				t.Fatalf("loadFromPath(%q): %v", path, err)
+			}
+			check(t, cfg.SystemPage["health_group"])
+		})
+	}
+}
