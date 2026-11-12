@@ -123,6 +123,7 @@ jobs:
 
       # MyGo draws ChairLift's window on GTK 3 with OpenGL (libepoxy, Mesa's
       # software rasterizer under Xvfb) and lays text out with Pango.
+      # x11-utils gives xwininfo, which reads the windows' WM_CLASS.
       - name: Install headless GTK runtime
         run: |
           sudo apt-get update
@@ -133,6 +134,7 @@ jobs:
             libgl1-mesa-dri \
             libgtk-3-0t64 \
             libpangocairo-1.0-0 \
+            x11-utils \
             xauth \
             xvfb
 
