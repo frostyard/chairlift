@@ -17,11 +17,18 @@ import (
 // cmdlogImportPath is the package that announces commands in the console.
 const cmdlogImportPath = "github.com/frostyard/chairlift/internal/cmdlog"
 
+// frostuiImportPath is the UI kit, whose LaunchDesktopApp starts a desktop
+// application in process (through GIO) without a command.
+const frostuiImportPath = "github.com/frostyard/frostui"
+
 // commandTracing is what checkCommandTracing found in one file.
 type commandTracing struct {
 	// Commands counts the calls of exec.Command and exec.CommandContext and
 	// the exec.Cmd literals, Starts the calls of cmdlog.Start.
 	Commands, Starts int
+	// Launches counts the calls of frostui.LaunchDesktopApp, LaunchTraces
+	// the calls of cmdlog.Launch.
+	Launches, LaunchTraces int
 	// Problems holds one line per function or expression that breaks the
 	// rule.
 	Problems []string
@@ -30,12 +37,15 @@ type commandTracing struct {
 // checkCommandTracing parses one Go file and checks AGENTS.md's "Every
 // command shows in the console" for it. Every function body, declared or
 // literal, that starts commands through os/exec, under whatever name the
-// file imports it as, must call cmdlog.Start at least as often. Only call
-// expressions count, so a cmdlog.Start in a comment or a string does not,
-// and a closure is a function of its own: the trace sits next to the
+// file imports it as, must call cmdlog.Start at least as often, and one
+// that launches desktop applications through frostui.LaunchDesktopApp (in
+// process, with no command) must call cmdlog.Launch at least as often.
+// Only call expressions count, so a trace in a comment or a string does
+// not, and a closure is a function of its own: the trace sits next to the
 // command it announces. What the check cannot follow is reported too:
-// exec.Command or exec.CommandContext taken as a value, a dot import of
-// os/exec, and a command started outside any function.
+// exec.Command, exec.CommandContext or frostui.LaunchDesktopApp taken as a
+// value, a dot import of os/exec or frostui, and a command or launch
+// outside any function.
 func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 	var res commandTracing
 	fset := token.NewFileSet()
@@ -43,7 +53,7 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 	if err != nil {
 		return res, err
 	}
-	execName, cmdlogName := "", ""
+	execName, cmdlogName, frostuiName := "", "", ""
 	for _, imp := range file.Imports {
 		p, err := strconv.Unquote(imp.Path.Value)
 		if err != nil {
@@ -58,13 +68,21 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 			execName = name
 		case cmdlogImportPath:
 			cmdlogName = name
+		case frostuiImportPath:
+			frostuiName = name
 		}
 	}
-	switch execName {
-	case "", "_":
+	if execName == "_" {
+		execName = ""
+	}
+	if frostuiName == "_" {
+		frostuiName = ""
+	}
+	if execName == "." || frostuiName == "." {
+		res.Problems = append(res.Problems, filename+" dot-imports os/exec or frostui, so its commands and launches cannot be checked")
 		return res, nil
-	case ".":
-		res.Problems = append(res.Problems, filename+" dot-imports os/exec, so its commands cannot be checked")
+	}
+	if execName == "" && frostuiName == "" {
 		return res, nil
 	}
 
@@ -83,9 +101,10 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 	}
 
 	type function struct {
-		node             ast.Node
-		name             string
-		commands, starts int
+		node                   ast.Node
+		name                   string
+		commands, starts       int
+		launches, launchTraces int
 	}
 	var funcs []*function // the enclosing functions, innermost last
 	var stack []ast.Node
@@ -98,6 +117,14 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 		}
 		funcs[len(funcs)-1].commands++
 	}
+	launch := func(pos token.Pos) {
+		res.Launches++
+		if len(funcs) == 0 {
+			res.Problems = append(res.Problems, fmt.Sprintf("%s: %s.LaunchDesktopApp outside any function cannot be traced", where(pos), frostuiName))
+			return
+		}
+		funcs[len(funcs)-1].launches++
+	}
 	ast.Inspect(file, func(n ast.Node) bool {
 		if n == nil {
 			left := stack[len(stack)-1]
@@ -105,13 +132,17 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 			if len(funcs) > 0 && funcs[len(funcs)-1].node == left {
 				f := funcs[len(funcs)-1]
 				funcs = funcs[:len(funcs)-1]
+				notImported := ""
+				if cmdlogName == "" {
+					notImported = " (" + cmdlogImportPath + " is not imported)"
+				}
 				if f.commands > f.starts {
-					start := "cmdlog.Start"
-					if cmdlogName == "" {
-						start += " (" + cmdlogImportPath + " is not imported)"
-					}
-					res.Problems = append(res.Problems, fmt.Sprintf("%s: %s starts %d command(s) but calls %s %d time(s)",
-						where(f.node.Pos()), f.name, f.commands, start, f.starts))
+					res.Problems = append(res.Problems, fmt.Sprintf("%s: %s starts %d command(s) but calls cmdlog.Start%s %d time(s)",
+						where(f.node.Pos()), f.name, f.commands, notImported, f.starts))
+				}
+				if f.launches > f.launchTraces {
+					res.Problems = append(res.Problems, fmt.Sprintf("%s: %s launches %d desktop app(s) through frostui.LaunchDesktopApp but calls cmdlog.Launch%s %d time(s)",
+						where(f.node.Pos()), f.name, f.launches, notImported, f.launchTraces))
 				}
 			}
 			return true
@@ -133,6 +164,16 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 					funcs[len(funcs)-1].starts++
 				}
 			}
+			if sel, ok := pkgSel(n.Fun, frostuiName, "LaunchDesktopApp"); ok {
+				called[sel] = true
+				launch(n.Pos())
+			}
+			if _, ok := pkgSel(n.Fun, cmdlogName, "Launch"); ok {
+				res.LaunchTraces++
+				if len(funcs) > 0 {
+					funcs[len(funcs)-1].launchTraces++
+				}
+			}
 		case *ast.CompositeLit:
 			if _, ok := pkgSel(n.Type, execName, "Cmd"); ok {
 				command(n.Pos(), execName+".Cmd literal")
@@ -141,6 +182,10 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 			if _, ok := pkgSel(n, execName, "Command", "CommandContext"); ok && !called[n] {
 				res.Problems = append(res.Problems, fmt.Sprintf("%s: %s.%s is taken as a value; call it directly so its trace can be checked",
 					where(n.Pos()), execName, n.Sel.Name))
+			}
+			if _, ok := pkgSel(n, frostuiName, "LaunchDesktopApp"); ok && !called[n] {
+				res.Problems = append(res.Problems, fmt.Sprintf("%s: %s.LaunchDesktopApp is taken as a value; call it directly so its trace can be checked",
+					where(n.Pos()), frostuiName))
 			}
 		}
 		return true
@@ -152,11 +197,13 @@ func checkCommandTracing(filename string, src []byte) (commandTracing, error) {
 // console" true: each function in a production file under internal/ that
 // starts an external command also announces it through internal/cmdlog
 // (checkCommandTracing). The UI kit is a module of its own
-// (github.com/frostyard/frostui), outside this walk; the views trace what
-// they launch through it (launchDesktopApp).
+// (github.com/frostyard/frostui), outside this walk. Its LaunchDesktopApp
+// runs no command: it launches the desktop entry in process through GIO,
+// so the views' launchDesktopApp reports each call with cmdlog.Launch, and
+// the walk checks that every call under internal/ has its cmdlog.Launch.
 func TestEveryCommandIsTraced(t *testing.T) {
 	root := RepoRoot()
-	files, commands, starts := 0, 0, 0
+	files, commands, starts, launches, launchTraces := 0, 0, 0, 0, 0
 	for _, p := range goFilesUnder(t, filepath.Join(root, "internal")) {
 		rel, _ := filepath.Rel(root, p)
 		rel = filepath.ToSlash(rel)
@@ -179,10 +226,16 @@ func TestEveryCommandIsTraced(t *testing.T) {
 		}
 		commands += res.Commands
 		starts += res.Starts
+		launches += res.Launches
+		launchTraces += res.LaunchTraces
 	}
 	t.Logf("%d files start %d commands and call cmdlog.Start %d times", files, commands, starts)
+	t.Logf("%d frostui.LaunchDesktopApp calls, %d cmdlog.Launch calls", launches, launchTraces)
 	if files < 8 {
 		t.Fatalf("saw %d files that start commands, too few for the scan to be working", files)
+	}
+	if launches == 0 {
+		t.Fatal("saw no frostui.LaunchDesktopApp call; the views' launchDesktopApp should hold one")
 	}
 }
 
@@ -191,10 +244,12 @@ func TestEveryCommandIsTraced(t *testing.T) {
 // pass.
 func TestCommandTracingFixtures(t *testing.T) {
 	const header = "package p\n\nimport (\n\t\"context\"\n\t\"os/exec\"\n\n\t\"" + cmdlogImportPath + "\"\n)\n\n"
+	const launchHeader = "package p\n\nimport (\n\t\"" + frostuiImportPath + "\"\n\n\t\"" + cmdlogImportPath + "\"\n)\n\n"
 	fixtures := []struct {
 		name     string
 		src      string
 		commands int
+		launches int
 		fail     bool
 	}{
 		{
@@ -287,6 +342,43 @@ func TestCommandTracingFixtures(t *testing.T) {
 			src:      "package p\n\nimport \"os/exec\"\n\nfunc have() bool { _, err := exec.LookPath(\"brew\"); return err == nil }\n",
 			commands: 0,
 		},
+		{
+			name:     "untraced desktop launch",
+			src:      "package p\n\nimport \"" + frostuiImportPath + "\"\n\nfunc open(id string) error { return frostui.LaunchDesktopApp(id) }\n",
+			launches: 1,
+			fail:     true,
+		},
+		{
+			name: "desktop launch traced as a command",
+			src: launchHeader + "func open(id string) error {\n" +
+				"\ttrace := cmdlog.Start(\"gtk-launch\", id)\n" +
+				"\terr := frostui.LaunchDesktopApp(id)\n" +
+				"\ttrace.End(err)\n" +
+				"\treturn err\n}\n",
+			launches: 1,
+			fail:     true,
+		},
+		{
+			name:     "frostui.LaunchDesktopApp taken as a value",
+			src:      launchHeader + "var launch = frostui.LaunchDesktopApp\n\nfunc traced(id string) { t := cmdlog.Launch(id); t.End(launch(id)) }\n",
+			launches: 0,
+			fail:     true,
+		},
+		{
+			name: "traced desktop launch, aliased",
+			src: "package p\n\nimport (\n\tkit \"" + frostuiImportPath + "\"\n\n\t\"" + cmdlogImportPath + "\"\n)\n\n" +
+				"func open(id string) error {\n" +
+				"\ttrace := cmdlog.Launch(id)\n" +
+				"\terr := kit.LaunchDesktopApp(id)\n" +
+				"\ttrace.End(err)\n" +
+				"\treturn err\n}\n",
+			launches: 1,
+		},
+		{
+			name:     "frostui without launches",
+			src:      "package p\n\nimport \"" + frostuiImportPath + "\"\n\nfunc theme() string { return frostui.DesktopIconTheme() }\n",
+			launches: 0,
+		},
 	}
 	reported := 0
 	for _, fx := range fixtures {
@@ -298,6 +390,9 @@ func TestCommandTracingFixtures(t *testing.T) {
 			if res.Commands != fx.commands {
 				t.Errorf("counted %d commands, want %d", res.Commands, fx.commands)
 			}
+			if res.Launches != fx.launches {
+				t.Errorf("counted %d launches, want %d", res.Launches, fx.launches)
+			}
 			switch {
 			case fx.fail && len(res.Problems) == 0:
 				t.Errorf("the fixture breaks the rule but was not reported:\n%s", fx.src)
@@ -307,7 +402,7 @@ func TestCommandTracingFixtures(t *testing.T) {
 			if fx.fail {
 				reported += len(res.Problems)
 			}
-			t.Logf("commands=%d starts=%d problems=%q", res.Commands, res.Starts, res.Problems)
+			t.Logf("commands=%d starts=%d launches=%d launchTraces=%d problems=%q", res.Commands, res.Starts, res.Launches, res.LaunchTraces, res.Problems)
 		})
 	}
 	t.Logf("%d fixtures, %d problems reported", len(fixtures), reported)

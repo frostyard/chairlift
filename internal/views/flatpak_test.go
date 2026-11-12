@@ -2,6 +2,7 @@ package views
 
 import (
 	"errors"
+	"log"
 	"slices"
 	"strings"
 	"sync"
@@ -57,6 +58,12 @@ type fpFake struct {
 	launched              []string
 	gate                  chan struct{} // when set, an update check waits on it
 	waiting               chan struct{} // the check says here that it waits
+	// launchGate, when set, holds a launch until it is closed (or for
+	// frostuitest.Timeout at most, so a launch on the test's UI thread
+	// fails the test instead of hanging it); a held launch first sends its
+	// ID on launching.
+	launchGate chan struct{}
+	launching  chan string
 }
 
 func (k *fpFake) wire(f *Flatpak, dryRun bool) {
@@ -106,6 +113,18 @@ func (k *fpFake) wire(f *Flatpak, dryRun bool) {
 		return k.removeErr
 	}
 	f.launch = func(appID string) error {
+		k.mu.Lock()
+		gate, launching := k.launchGate, k.launching
+		k.mu.Unlock()
+		if gate != nil {
+			launching <- appID
+			select {
+			case <-gate:
+			case <-time.After(frostuitest.Timeout):
+			}
+		}
+		k.mu.Lock()
+		defer k.mu.Unlock()
 		k.launched = append(k.launched, appID)
 		return k.launchErr
 	}
@@ -116,6 +135,13 @@ func (k *fpFake) set(fn func(k *fpFake)) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	fn(k)
+}
+
+// launches returns the IDs launched so far.
+func (k *fpFake) launches() []string {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return slices.Clone(k.launched)
 }
 
 func (k *fpFake) counts() (apps, updates int) {
@@ -677,23 +703,84 @@ func TestFlatpakUninstallDryRunAndFailureChangeNothing(t *testing.T) {
 
 func TestFlatpakOpenLaunchesTheApp(t *testing.T) {
 	fake := fpSample()
-	f, env, _ := fpStarted(t, fake, fpConfig(true, true, false), true)
+	f, env, p := fpStarted(t, fake, fpConfig(true, true, false), true)
 	f.Act("flatpak:user:org.blender.Blender", ActOpen)
-	if !slices.Equal(fake.launched, []string{"org.blender.Blender"}) {
-		t.Errorf("launched = %v", fake.launched)
+	p.RunUntil(t, func() bool { return len(fake.launches()) == 1 })
+	p.Settle(10 * time.Millisecond)
+	if got := fake.launches(); !slices.Equal(got, []string{"org.blender.Blender"}) {
+		t.Errorf("launched = %v", got)
 	}
 	if env.Jobs.Busy() {
 		t.Error("Open queued a job")
 	}
-	fake.launchErr = errors.New("no gtk-launch")
+	if toasts := fpToasts(env); len(toasts) != 0 {
+		t.Errorf("toasts after a launch = %v", toasts)
+	}
+	fake.set(func(k *fpFake) { k.launchErr = errors.New("desktop application not found") })
 	f.Act("flatpak:user:org.blender.Blender", ActOpen)
-	if toasts := fpToasts(env); !slices.Equal(toasts, []string{"Failed to launch org.blender.Blender"}) {
+	var toasts []string
+	p.RunUntil(t, func() bool { toasts = append(toasts, fpToasts(env)...); return len(toasts) > 0 })
+	if !slices.Equal(toasts, []string{"Failed to launch org.blender.Blender"}) {
 		t.Errorf("toasts = %v", toasts)
 	}
 	// An unknown key does nothing.
 	f.Act("flatpak:user:nope", ActOpen)
-	if len(fake.launched) != 2 {
-		t.Errorf("launched = %v", fake.launched)
+	p.Settle(10 * time.Millisecond)
+	if got := fake.launches(); len(got) != 2 {
+		t.Errorf("launched = %v", got)
+	}
+}
+
+// TestFlatpakLaunchRunsOffTheUIThread: GIO's lookup and launch may block,
+// so Open returns while the launch still runs on its goroutine, and only
+// the UI thread's run of the posted result shows a failure, with GIO's
+// reason in the log. The test goroutine is the UI thread (the loop runs
+// posts on it): a launch that ran on it would hold Open until the fake's
+// timeout and then be found finished while held.
+func TestFlatpakLaunchRunsOffTheUIThread(t *testing.T) {
+	logs := &syncBuffer{}
+	prevOut := log.Writer()
+	log.SetOutput(logs)
+	t.Cleanup(func() { log.SetOutput(prevOut) })
+
+	fake := fpSample()
+	f, env, p := fpStarted(t, fake, fpConfig(true, true, false), false)
+	gate := make(chan struct{})
+	launching := make(chan string, 1)
+	fake.set(func(k *fpFake) {
+		k.launchGate, k.launching = gate, launching
+		k.launchErr = errors.New(`frostui: desktop application "org.blender.Blender" not found or not launchable`)
+	})
+
+	f.Act("flatpak:user:org.blender.Blender", ActOpen)
+	select {
+	case id := <-launching:
+		if id != "org.blender.Blender" {
+			t.Errorf("launching %q", id)
+		}
+	case <-time.After(frostuitest.Timeout):
+		t.Fatal("Open returned but no launch started")
+	}
+	// The launch is held: Open has returned and nothing came back yet.
+	p.Flush()
+	if toasts := fpToasts(env); len(toasts) != 0 {
+		t.Errorf("toasts before the launch returned = %v", toasts)
+	}
+	if got := fake.launches(); len(got) != 0 {
+		t.Errorf("launch finished while held: %v", got)
+	}
+	if env.Jobs.Busy() {
+		t.Error("a launch queued a job")
+	}
+
+	close(gate)
+	var toasts []string
+	p.RunUntil(t, func() bool { toasts = append(toasts, fpToasts(env)...); return len(toasts) > 0 })
+	if !slices.Equal(toasts, []string{"Failed to launch org.blender.Blender"}) {
+		t.Errorf("toasts = %v", toasts)
+	}
+	if !strings.Contains(logs.String(), `Failed to launch app org.blender.Blender: frostui: desktop application "org.blender.Blender" not found or not launchable`) {
+		t.Errorf("the log lacks the launch's reason:\n%s", logs.String())
 	}
 }
 

@@ -3,6 +3,7 @@ package views
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -46,6 +47,7 @@ func appsBrew() []AppEntry {
 type appsFixture struct {
 	page   *appsPage
 	env    *Env
+	loop   *frostuitest.Loop
 	fake   *fpFake
 	brew   []AppEntry
 	brewSt AppsStatus
@@ -65,7 +67,7 @@ func newAppsFixture(t *testing.T, cfg *config.Config, withBrew bool) *appsFixtur
 	fake.wire(s.Flatpak, false)
 	s.Flatpak.Start()
 	p.RunUntil(t, func() bool { return !s.Flatpak.appsLoading && !s.Flatpak.updatesChecking })
-	fx := &appsFixture{env: env, fake: fake}
+	fx := &appsFixture{env: env, loop: p, fake: fake}
 	if withBrew {
 		fx.brew, fx.brewSt = appsBrew(), AppsStatus{Available: true}
 	}
@@ -358,8 +360,10 @@ func TestAppsPageSoftwareCenter(t *testing.T) {
 	if err := tt.Click("Open Software"); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(fx.fake.launched, []string{"org.gnome.Software"}) {
-		t.Errorf("launched = %v", fx.fake.launched)
+	// The launch runs on a goroutine.
+	fx.loop.RunUntil(t, func() bool { return len(fx.fake.launches()) == 1 })
+	if got := fx.fake.launches(); !slices.Equal(got, []string{"org.gnome.Software"}) {
+		t.Errorf("launched = %v", got)
 	}
 	var cmd *frostui.Command
 	for _, c := range fx.page.Commands() {
@@ -371,8 +375,10 @@ func TestAppsPageSoftwareCenter(t *testing.T) {
 		t.Fatalf("commands = %+v", fx.page.Commands())
 	}
 	cmd.Run()
-	if len(fx.fake.launched) != 2 {
-		t.Errorf("the palette did not launch: %v", fx.fake.launched)
+	fx.loop.RunUntil(t, func() bool { return len(fx.fake.launches()) == 2 })
+	fx.loop.Settle(10 * time.Millisecond)
+	if toasts := fx.env.TakeToasts(); len(toasts) != 0 {
+		t.Errorf("toasts after two launches: %+v", toasts)
 	}
 
 	// The center alone: no group lists apps.

@@ -1474,37 +1474,47 @@ dropped the item, until the next batch or Check now.
 
 `internal/cmdlog` is the command tracer. A backend announces a command with
 `cmdlog.Start(name, args...)`, tees its stdout and stderr through
-`Run.Stdout`/`Run.Stderr` (or reports lines it reads itself with
-`Run.Line`), and ends it with `Run.End(err)`; a dry-run preview that starts no
-process is reported with `cmdlog.DryRun`. With no sink every call is a cheap
+`Run.Stdout`/`Run.Stderr` (or reports lines it reads itself with `Run.Line`),
+and ends it with `Run.End(err)`; a dry-run preview that starts no process is
+reported with `cmdlog.DryRun`. A desktop app that ChairLift starts in process,
+with no command of its own, is reported with `cmdlog.Launch(id)`: its events
+carry the desktop file ID and `Event.Launch`, and its `End` comes when the
+launch returns, not when the app exits. With no sink every call is a cheap
 no-op (a nil `*Run` is valid), so the backends and their tests behave as
-before. Lines are split on `\n` or `\r`, trimmed, and cut at
-`cmdlog.MaxLine` (4096 bytes), so one runaway line cannot hold the console's
-memory. The package is a leaf: it imports no UI package and no backend.
+before. Lines are split on `\n` or `\r`, trimmed, and cut at `cmdlog.MaxLine`
+(4096 bytes), so one runaway line cannot hold the console's memory. The
+package is a leaf: it imports no UI package and no backend.
 
 Who reports: `homebrew.runBrewCommandAt` and its dry-run skip, Flatpak's
-`runFlatpakCommandAt` and its dry-run skip, fwupd's `runCommandAt`,
-`bootc.GetStatus`, `updex.runHelper` (the pkexec helper, and `cmdlog.DryRun`
-in dry run), `stageexec.Run` and `stageexec.DryRun` (both stage scripts),
-`views.runMaintenanceCommand` (the configured maintenance scripts) and the
-Overview's `overviewLaunchApp` (`gtk-launch` of the system monitor). Not
-reported today: sysupdate's `lsblk` read of the rollback slot, the Problems
-page's `coredumpctl` and `journalctl` reads, `launchFlatpakApp`'s
-`gtk-launch` (the Apps page's Open and the software center), and the first
-run's `gsettings` and settings launcher (the first-run window has no
-console).
+`runFlatpakCommandAt` and its dry-run skip, the Homebrew and Flatpak
+`IsInstalled` version probes, fwupd's `runCommandAt`, `bootc.GetStatus`,
+`updex.runHelper` (the pkexec helper, and `cmdlog.DryRun` in dry run),
+`stageexec.Run` and `stageexec.DryRun` (both stage scripts),
+`views.runMaintenanceCommand` (the configured maintenance scripts),
+sysupdate's `runLsblk` (the rollback slot read) and the Problems page's
+`execStream` (its `coredumpctl` and `journalctl` reads, whose machine output
+is not teed). `views.launchDesktopApp` reports each desktop app launch with
+`cmdlog.Launch`: the Overview's system monitor, the Apps page's software
+center and a Flatpak app's Open. The first run's `gsettings` and settings
+launcher call `cmdlog.Start` too, but only the main window installs a sink,
+so nothing shows them (the first-run window has no console).
+`internal/installcheck.TestEveryCommandIsTraced` requires a `cmdlog.Start`
+beside every `exec.Command` under `internal/` and a `cmdlog.Launch` beside
+every `frostui.LaunchDesktopApp` call.
 
 `app.wireConsole` connects it to the window: `cmdlog.SetSink` turns each event
 into a console line — `KindStart` a `Command` line (`$ argv`, its source the
 program's base name, through pkexec to the program it runs), `KindLine` an
-`Output` line, `KindDryRun` a `Dry run` line (`would run: …`), and `KindEnd`
-a `Debug` line `exited after <time>` or a `Warn` line `exited after <time>:
-<err>`. It also tees the standard logger into the console
-(`Console.Writer(LevelDebug, "log")` beside stderr, with the timestamp
-stripped): a line with `[DRY-RUN]` is a `Dry run` line, a line with "error"
-or "failed" a `Warn` line, anything else `Debug`. The job queue adds `Info`,
-`Warn` and `Error` lines for each job's start and end, and a job's
-`Progress.Log` adds lines under its source.
+`Output` line, `KindDryRun` a `Dry run` line (`would run: …`), and `KindEnd` a
+`Debug` line `exited after <time>` or a `Warn` line `exited after <time>:
+<err>`. A launch (`Event.Launch`) is a `Command` line `in-process launch of
+<id> (GIO)` with the source `launch`, and its end a `Debug` line `launched
+after <time>` or a `Warn` line `launch failed after <time>: <err>`. It also
+tees the standard logger into the console (`Console.Writer(LevelDebug, "log")`
+beside stderr, with the timestamp stripped): a line with `[DRY-RUN]` is a `Dry
+run` line, a line with "error" or "failed" a `Warn` line, anything else
+`Debug`. The job queue adds `Info`, `Warn` and `Error` lines for each job's
+start and end, and a job's `Progress.Log` adds lines under its source.
 
 The console (`frostui.Console`, `frostui.ConsoleView`) keeps the newest 5000
 lines in a ring buffer and is safe from any goroutine; its notify wakes the
@@ -1790,13 +1800,23 @@ sent" opens the URL with the desktop's default handler (MyGo's URL opener,
 GIO's `g_app_info_launch_default_for_uri` on Linux); the first run's Reporting
 step calls `c.OpenURLThen` and logs a failure. No `xdg-open` is run.
 
-Desktop applications start with `gtk-launch <desktop file ID>`, which finds
-the desktop file and launches the app as the desktop would; ChairLift starts
-it and waits for it on a goroutine, so no zombie stays. The Overview's system
-monitor button uses `overviewLaunchApp` (reported through `cmdlog`); the
-Apps page's software center button and a Flatpak app's Open use
-`Flatpak.LaunchApp` (`launchFlatpakApp`). A launch is not a state change, so
-it also runs in dry run; a failure is an error toast.
+Desktop applications start by their desktop file ID through
+`frostui.LaunchDesktopApp` (frostui v0.5.1 and later): it resolves the desktop
+entry and launches it in process through GIO (`g_desktop_app_info_new` and
+`g_desktop_app_info_launch_uris_as_manager`, from `libgio-2.0.so.0` loaded
+with purego), detached from ChairLift's stdout and stderr, and does not wait
+for the app. No launcher program runs. A missing, deleted (`Hidden=true`) or
+unlaunchable entry fails before the call returns, with GIO's reason in the
+error. The lookup and the launch are synchronous and can block, so
+`Env.launchApp` runs the page's `launch` backend (`launchDesktopApp`, which
+reports through `cmdlog.Launch`) on a goroutine and hands the result back with
+`Env.Post`; a failure is an error toast ("Failed to launch <id>") with GIO's
+reason in the log. The Overview's system monitor button and palette command
+use it through `overviewPage.openHealthApp`; the Apps page's software center
+button and palette command and a Flatpak app's Open use it through
+`Flatpak.LaunchApp`. A launch is not a state change and is not a job, so it
+also runs in dry run. GIO gets no display launch context, so startup
+notification and Wayland focus activation are not supplied.
 
 ### Known limits
 
@@ -1807,12 +1827,14 @@ and again after the MyGo port.
 
 - **App launch:** `launchDesktopApp` (`internal/views/env.go`, over
   `frostui.LaunchDesktopApp` in the frostui module) passes the
-  application ID to `gtk-launch` without a check of its form. The IDs come
+  application ID to GIO without a check of its form beyond frostui's (not
+  empty, no NUL byte). GIO launches any desktop entry it finds by that ID,
+  including one hidden from the menu (`NoDisplay`). The IDs come
   from the configuration (`app_id` of `applications_installed_group`, default
   `io.github.kolunmi.Bazaar`, and of `system_page`'s `health_group`, default
   `io.missioncenter.MissionCenter`) or from flatpak's own list of installed
-  apps (the Apps inspector's Open), never from typed input, and
-  `exec.Command` uses no shell.
+  apps (the Apps inspector's Open), never from typed input, and no shell
+  runs.
 - **Maintenance scripts with `sudo: true`:** `runMaintenanceCommand` runs
   `pkexec <script>` with the script path from the configuration
   (`pageview.MaintenanceCommand`), outside the fixed helper set of
@@ -1825,10 +1847,10 @@ and again after the MyGo port.
   console through `cmdlog`, and shows a failure as an error toast and on the
   cleanup's row; the output is not kept after the console's 5000 lines or the
   end of the session.
-- **Commands outside the console:** sysupdate's `lsblk` read, the Problems
-  page's `coredumpctl` and `journalctl` reads, `launchFlatpakApp` and the
-  first run's `gsettings` and settings launcher do not report through
-  `cmdlog` (see [The console](#the-console-internalcmdlog)).
+- **Commands outside the console:** the first run's `gsettings` and
+  settings launcher report through `cmdlog`, but only the main window
+  installs a sink, so the first-run window shows neither (see
+  [The console](#the-console-internalcmdlog)).
 - **A job that cannot stop:** Stop (the rail's job card, the palette) drops
   the queued jobs and cancels a stoppable running job, but an `Unstoppable`
   job has no deadline and no way to be stopped. If one hangs, it holds the
@@ -2414,7 +2436,7 @@ the configuration page, not always the page of the window that shows it (see
 - `bootc` + `/usr/libexec/bootc-update-stage` (both optional; the image source and the hero's deployments are gated on `bootc.IsBootcBootedCached()`, i.e. `bootc status` reporting a non-null `booted` deployment — not on any sentinel file)
 - `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` (both optional, shipped by native A/B OS images; gated on `sysupdate.IsNativeABCached()` and `sysupdate.StageScriptAvailable()`)
 - Updex features configured on the system (optional; read via Go library, writes via `chairlift-updex-helper`)
-- `gtk-launch` for the system monitor, the software center and a Flatpak app's Open
+- GIO (`libgio-2.0.so.0`, part of GLib, which GTK 3 itself requires) for the system monitor, the software center and a Flatpak app's Open: `frostui.LaunchDesktopApp` loads it with purego and launches the desktop entry in process, so no launcher program is needed
 - Problems page: `/var/lib/snosi-health/problems.json` and `details.json` (optional, written by snosi-health), `coredumpctl` (optional), and `journalctl` (the user journal)
 - First run only: `gsettings` (the Style step), `flatpak` (the Apps step), and `gnome-control-center` (optional; the settings buttons show only when it is on `PATH`)
 
@@ -2424,7 +2446,7 @@ the configuration page, not always the page of the window that shows it (see
 | -------------------------------- | ------------------------------------------------------------------------------------------- |
 | `github.com/egoist/mygo`         | The window: MyGo's native UI (`mygo/ui`) on GTK 3 and OpenGL, the headless `ui.Tester`; kept behind frostui and the views ([ADR-0017](../adr/0017-mygo-command-center-window.md)) |
 | `github.com/frostyard/frostui`   | The UI kit on MyGo: shell, palette, console, job queue, dialogs, cards, and the Frostyard themes the window draws in; `frostuitest` for the tests' UI thread ([frostui.md](./frostui.md)) |
-| `github.com/ebitengine/purego`   | Calling C without CGO: MyGo's library loading, and `frostui.SetAppID`'s `g_set_prgname`      |
+| `github.com/ebitengine/purego`   | Calling C without CGO: MyGo's library loading, `frostui.SetAppID`'s `g_set_prgname`, and `frostui.LaunchDesktopApp`'s GIO launch |
 | `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.2.0 in go.mod) |
 | `gopkg.in/yaml.v3`               | YAML config parsing                                                                         |
 | `golang.org/x/text`              | Title-casing OS release info keys                                                           |

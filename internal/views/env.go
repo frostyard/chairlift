@@ -20,6 +20,7 @@ package views
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
@@ -140,12 +141,32 @@ func (e *Env) Record(source, title, detail string) {
 	}
 }
 
-// launchDesktopApp starts a desktop application by its desktop file ID
-// (frostui.LaunchDesktopApp: `gtk-launch <id>`, not waited for) and shows
-// the command in the console.
+// launchDesktopApp starts a desktop application by its desktop file ID and
+// shows the launch in the console (cmdlog.Launch). frostui.LaunchDesktopApp
+// resolves the desktop entry and launches it in process through GIO: no
+// launcher program runs, and the app does not inherit ChairLift's stdout or
+// stderr. A missing or unlaunchable entry fails with GIO's reason. The
+// lookup and the launch are synchronous and may block, so it runs on a
+// worker (launchApp), never on the UI thread.
 func launchDesktopApp(id string) error {
-	trace := cmdlog.Start("gtk-launch", id)
+	trace := cmdlog.Launch(id)
 	err := frostui.LaunchDesktopApp(id)
 	trace.End(err)
 	return err
+}
+
+// launchApp starts the desktop application id with launch, a page's
+// backend (launchDesktopApp, or a test's fake), and does not wait for the
+// application. Called on the UI thread, it runs launch on a goroutine and
+// hands the result back with Post: a failure is an error toast, with the
+// reason in the log. A launch changes nothing on the system, so a dry run
+// launches too.
+func (e *Env) launchApp(launch func(id string) error, id string) {
+	log.Printf("Launching app: %s", id)
+	Go(e, func() error { return launch(id) }, func(err error) {
+		if err != nil {
+			log.Printf("Failed to launch app %s: %v", id, err)
+			e.ToastError(fmt.Sprintf("Failed to launch %s", id))
+		}
+	})
 }

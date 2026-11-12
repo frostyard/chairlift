@@ -44,6 +44,9 @@ func TestWithoutSinkEverythingIsANoOp(t *testing.T) {
 	r.Line("ignored")
 	r.End(nil)
 	DryRun("brew", "upgrade")
+	if l := Launch("org.gnome.Software"); l != nil {
+		t.Fatalf("Launch without a sink = %v, want nil", l)
+	}
 }
 
 func TestRunReportsStartLinesAndEnd(t *testing.T) {
@@ -126,5 +129,33 @@ func TestDryRunReportsTheCommand(t *testing.T) {
 	}
 	if got := strings.Join(rec.events[0].Argv, " "); got != "pkexec /usr/bin/chairlift-updex-helper update" {
 		t.Errorf("argv = %q", got)
+	}
+}
+
+// TestLaunchReportsAnInProcessLaunch: a desktop launch is no command, so
+// its start carries the desktop file ID alone and both events are marked
+// Launch, while Start's events are not.
+func TestLaunchReportsAnInProcessLaunch(t *testing.T) {
+	rec := &recorder{}
+	SetSink(rec.sink)
+	t.Cleanup(func() { SetSink(nil) })
+
+	failure := errors.New("not found")
+	Launch("org.gnome.Software").End(failure)
+	Start("flatpak", "list").End(nil)
+	if len(rec.events) != 4 {
+		t.Fatalf("events = %+v, want two starts and two ends", rec.events)
+	}
+	start, end := rec.events[0], rec.events[1]
+	if start.Kind != KindStart || !start.Launch || strings.Join(start.Argv, "|") != "org.gnome.Software" {
+		t.Errorf("launch start = %+v, want the desktop file ID marked Launch", start)
+	}
+	if end.Kind != KindEnd || !end.Launch || end.ID != start.ID || !errors.Is(end.Err, failure) {
+		t.Errorf("launch end = %+v, want its error marked Launch", end)
+	}
+	for _, e := range rec.events[2:] {
+		if e.Launch {
+			t.Errorf("a command's event is marked Launch: %+v", e)
+		}
 	}
 }

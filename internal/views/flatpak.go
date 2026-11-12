@@ -42,9 +42,9 @@ import (
 type Flatpak struct {
 	env *Env
 
-	// The backend, replaceable in tests. present, the lists and the
-	// changes run on goroutines; launch runs on the UI thread and only
-	// starts the app; dryRun is read on the UI thread.
+	// The backend, replaceable in tests. present, the lists, the changes
+	// and launch run on goroutines (launch through Env.launchApp: GIO's
+	// lookup may block); dryRun is read on the UI thread.
 	present     func() bool
 	listApps    func(user bool) ([]flatpak.Application, error)
 	listUpdates func(user bool) ([]flatpak.UpdateInfo, error)
@@ -287,15 +287,11 @@ func (f *Flatpak) Act(key string, action AppAction) {
 }
 
 // LaunchApp starts the desktop app with the ID appID (a Flatpak app, or
-// the configured software center) and does not wait for it; a failure is
-// an error toast. It changes nothing on the system, so a dry run launches
-// too, as the old page did.
+// the configured software center) on a goroutine and does not wait for it;
+// a failure comes back as an error toast (Env.launchApp). It changes
+// nothing on the system, so a dry run launches too, as the old page did.
 func (f *Flatpak) LaunchApp(appID string) {
-	log.Printf("Launching app: %s", appID)
-	if err := f.launch(appID); err != nil {
-		log.Printf("Failed to launch app %s: %v", appID, err)
-		f.env.ToastError(fmt.Sprintf("Failed to launch %s", appID))
-	}
+	f.env.launchApp(f.launch, appID)
 }
 
 func (f *Flatpak) confirmUninstall(e AppEntry) {

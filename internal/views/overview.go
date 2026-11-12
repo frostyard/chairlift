@@ -30,7 +30,8 @@ type overviewPage struct {
 	// sources are the update sources the hero and the figures count:
 	// Store.Sources, which tests replace.
 	sources func() []UpdateSource
-	// launch starts a desktop application by its ID.
+	// launch starts a desktop application by its ID; it runs on a
+	// goroutine (Env.launchApp).
 	launch func(appID string) error
 }
 
@@ -254,11 +255,7 @@ func (p *overviewPage) healthApp() (id, name string) {
 
 func (p *overviewPage) openHealthApp() {
 	id, _ := p.healthApp()
-	log.Printf("Launching app: %s", id)
-	if err := p.launch(id); err != nil {
-		log.Printf("Failed to launch app %s: %v", id, err)
-		p.s.Env.ToastError(fmt.Sprintf("Failed to launch %s", id))
-	}
+	p.s.Env.launchApp(p.launch, id)
 }
 
 func (p *overviewPage) state(t updateTally, info SystemInfo) heroState {

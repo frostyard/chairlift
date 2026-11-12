@@ -234,8 +234,8 @@ func openFirstRun() *mygo.Window {
 	return win
 }
 
-// wireConsole sends every command the backends run, and every log line,
-// to the console. Redraws are coalesced: Window.Update rebuilds the view
+// wireConsole sends every command the backends run, every in-process
+// desktop launch, and every log line, to the console. Redraws are coalesced: Window.Update rebuilds the view
 // on every call.
 func wireConsole(con *frostui.Console, post func(func())) {
 	waker := frostui.NewWaker(post, 60*time.Millisecond)
@@ -252,11 +252,15 @@ func wireConsole(con *frostui.Console, post func(func())) {
 	cmdlog.SetSink(func(e cmdlog.Event) {
 		switch e.Kind {
 		case cmdlog.KindStart:
-			src := sourceOf(e.Argv)
+			src, text := sourceOf(e.Argv), strings.Join(e.Argv, " ")
+			if e.Launch {
+				// No command runs: GIO starts the app in process.
+				src, text = launchSource, "in-process launch of "+text+" (GIO)"
+			}
 			mu.Lock()
 			sources[e.ID] = src
 			mu.Unlock()
-			con.Add(frostui.LevelCommand, src, strings.Join(e.Argv, " "))
+			con.Add(frostui.LevelCommand, src, text)
 		case cmdlog.KindLine:
 			// stdout and stderr are both the command's output
 			con.Add(frostui.LevelOutput, sourceFor(e.ID), e.Text)
@@ -267,10 +271,16 @@ func wireConsole(con *frostui.Console, post func(func())) {
 			mu.Lock()
 			delete(sources, e.ID)
 			mu.Unlock()
-			if e.Err != nil {
-				con.Addf(frostui.LevelWarn, src, "exited after %s: %v", e.Elapsed.Round(time.Millisecond), e.Err)
-			} else {
-				con.Addf(frostui.LevelDebug, src, "exited after %s", e.Elapsed.Round(time.Millisecond))
+			// A launch ends when GIO returns; the app goes on running.
+			switch elapsed := e.Elapsed.Round(time.Millisecond); {
+			case e.Launch && e.Err != nil:
+				con.Addf(frostui.LevelWarn, src, "launch failed after %s: %v", elapsed, e.Err)
+			case e.Launch:
+				con.Addf(frostui.LevelDebug, src, "launched after %s", elapsed)
+			case e.Err != nil:
+				con.Addf(frostui.LevelWarn, src, "exited after %s: %v", elapsed, e.Err)
+			default:
+				con.Addf(frostui.LevelDebug, src, "exited after %s", elapsed)
 			}
 		}
 	})
@@ -286,6 +296,10 @@ func wireConsole(con *frostui.Console, post func(func())) {
 	}
 	log.SetOutput(io.MultiWriter(os.Stderr, stripTimestamp{w}))
 }
+
+// launchSource is the console source of an in-process desktop launch
+// (cmdlog.Launch).
+const launchSource = "launch"
 
 func sourceOf(argv []string) string {
 	if len(argv) == 0 {
