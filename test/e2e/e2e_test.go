@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -93,15 +95,9 @@ func TestApplicationStartsInDryRun(t *testing.T) {
 
 	dbusRunSession := requireCommand(t, "dbus-run-session")
 	xvfbRun := requireCommand(t, "xvfb-run")
+	xwininfo := requireCommand(t, "xwininfo")
 
-	cmd := exec.Command(
-		dbusRunSession,
-		"--",
-		xvfbRun,
-		"-a",
-		app,
-		"--dry-run",
-	)
+	cmd := exec.Command(dbusRunSession, underXvfb(xvfbRun, app, "--dry-run")...)
 	cmd.Dir = repoRoot(t)
 	cmd.Env = append(
 		os.Environ(),
@@ -154,8 +150,12 @@ func TestApplicationStartsInDryRun(t *testing.T) {
 				continue
 			}
 			if time.Since(readyAt) >= stabilityWindow {
+				classProblem := windowClassProblem(xwininfo, output.String(), mainWindowClass)
 				stopProcessGroup(t, cmd, done)
 				logLinesWith(t, output.String(), "problems: ")
+				if classProblem != "" {
+					t.Error(classProblem)
+				}
 				return
 			}
 		case <-timer.C:
@@ -277,18 +277,11 @@ func TestFirstRunStartsInDryRun(t *testing.T) {
 
 	dbusRunSession := requireCommand(t, "dbus-run-session")
 	xvfbRun := requireCommand(t, "xvfb-run")
+	xwininfo := requireCommand(t, "xwininfo")
 
 	home := t.TempDir()
 	configHome := filepath.Join(home, "config")
-	cmd := exec.Command(
-		dbusRunSession,
-		"--",
-		xvfbRun,
-		"-a",
-		app,
-		"--first-run",
-		"--dry-run",
-	)
+	cmd := exec.Command(dbusRunSession, underXvfb(xvfbRun, app, "--first-run", "--dry-run")...)
 	cmd.Dir = repoRoot(t)
 	cmd.Env = append(
 		os.Environ(),
@@ -321,6 +314,7 @@ func TestFirstRunStartsInDryRun(t *testing.T) {
 	timer := time.NewTimer(startupTimeout)
 	defer timer.Stop()
 	var readyAt time.Time
+	var classProblem string
 
 	for ready := false; !ready; {
 		select {
@@ -335,6 +329,7 @@ func TestFirstRunStartsInDryRun(t *testing.T) {
 				continue
 			}
 			if time.Since(readyAt) >= stabilityWindow {
+				classProblem = windowClassProblem(xwininfo, output.String(), firstRunWindowClass)
 				stopProcessGroup(t, cmd, done)
 				ready = true
 			}
@@ -344,6 +339,9 @@ func TestFirstRunStartsInDryRun(t *testing.T) {
 			t.Fatalf("ChairLift first run did not become ready within %s; missing %s\noutput:\n%s",
 				startupTimeout, missing, output.String())
 		}
+	}
+	if classProblem != "" {
+		t.Error(classProblem)
 	}
 
 	for _, marker := range []string{
@@ -631,6 +629,104 @@ func requireExecutable(t *testing.T, path string) {
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
 		t.Fatalf("required executable %s has mode %s", path, info.Mode())
+	}
+}
+
+// The WM_CLASS instance of ChairLift's windows: GTK names it after GLib's
+// program name, as it names the Wayland app ID, and GNOME matches it with
+// the desktop entry's StartupWMClass. A window named after the executable
+// ("chairlift") gets a generic icon in the dock and the taskbar.
+const (
+	mainWindowClass     = "org.frostyard.ChairLift"
+	firstRunWindowClass = "org.frostyard.ChairLift.FirstRun"
+)
+
+// xDisplayMarker starts the line the shell under xvfb-run prints before it
+// runs ChairLift: the display and authority file xvfb-run chose, so the
+// test can ask that X server about ChairLift's windows.
+const xDisplayMarker = "e2e: X display "
+
+// underXvfb returns xvfb-run's arguments that run app with args on a free
+// display, through a shell that prints the display first and then becomes
+// app, so the process group is unchanged.
+func underXvfb(xvfbRun, app string, args ...string) []string {
+	script := `printf '` + xDisplayMarker + `%s %s\n' "$DISPLAY" "$XAUTHORITY"; exec "$0" "$@"`
+	return append([]string{"--", xvfbRun, "-a", "sh", "-c", script, app}, args...)
+}
+
+// xDisplay reads the display and authority file underXvfb's shell printed.
+func xDisplay(output string) (display, xauthority string, ok bool) {
+	for _, line := range strings.Split(output, "\n") {
+		rest, found := strings.CutPrefix(line, xDisplayMarker)
+		if !found {
+			continue
+		}
+		display, xauthority, _ = strings.Cut(strings.TrimSpace(rest), " ")
+		return display, xauthority, display != ""
+	}
+	return "", "", false
+}
+
+// xwininfoClass matches the WM_CLASS that `xwininfo -tree` prints after a
+// window's name: ("instance" "class").
+var xwininfoClass = regexp.MustCompile(`\("([^"]*)" "([^"]*)"\)`)
+
+// windowInstances returns the WM_CLASS instance of every window in
+// `xwininfo -root -tree` output.
+func windowInstances(tree string) []string {
+	var instances []string
+	for _, line := range strings.Split(tree, "\n") {
+		if m := xwininfoClass.FindStringSubmatch(line); m != nil {
+			instances = append(instances, m[1])
+		}
+	}
+	return instances
+}
+
+// windowClassProblem asks the X server the app runs on for its windows and
+// says what is wrong unless one has the WM_CLASS instance want, or returns
+// "". GDK's client leader window keeps the name GLib had when GTK opened
+// the display, so only one window must have it. It reports instead of
+// failing, so the caller stops the app first.
+func windowClassProblem(xwininfo, output, want string) string {
+	display, xauthority, ok := xDisplay(output)
+	if !ok {
+		return fmt.Sprintf("the shell under xvfb-run printed no %q line\noutput:\n%s", xDisplayMarker, output)
+	}
+	cmd := exec.Command(xwininfo, "-root", "-tree")
+	cmd.Env = append(os.Environ(), "DISPLAY="+display, "XAUTHORITY="+xauthority)
+	tree, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("xwininfo -root -tree on %s failed: %v\n%s", display, err, tree)
+	}
+	instances := windowInstances(string(tree))
+	if !slices.Contains(instances, want) {
+		return fmt.Sprintf("no window has the WM_CLASS instance %q, so the desktop shows a generic icon for it; window instances: %q", want, instances)
+	}
+	return ""
+}
+
+func TestWindowInstancesReadsXwininfoTree(t *testing.T) {
+	tree := `
+xwininfo: Window id: 0x1e8 (the root window) (has no name)
+
+  Root window id: 0x1e8 (the root window) (has no name)
+  Parent window id: 0x0 (none)
+     3 children:
+     0x800012 "ChairLift": ("mutter-x11-frames" "mutter-x11-frames")  882x839+1279+341  +1279+341
+        1 child:
+        0x60000c "ChairLift": ("org.frostyard.ChairLift.FirstRun" "Chairlift")  760x680+61+92  +1340+433
+     0x600001 "ChairLift": ("chairlift" "Chairlift")  10x10+10+10  +10+10
+     0x400001 (has no name): ()  1x1+-1+-1  +-1+-1
+`
+	got := windowInstances(tree)
+	want := []string{"mutter-x11-frames", "org.frostyard.ChairLift.FirstRun", "chairlift"}
+	if !slices.Equal(got, want) {
+		t.Errorf("windowInstances = %q, want %q", got, want)
+	}
+	display, xauthority, ok := xDisplay("Running in dry-run mode\n" + xDisplayMarker + ":99 /tmp/xvfb-run.abc/Xauthority\nChairLift activated\n")
+	if !ok || display != ":99" || xauthority != "/tmp/xvfb-run.abc/Xauthority" {
+		t.Errorf("xDisplay = %q, %q, %v", display, xauthority, ok)
 	}
 }
 

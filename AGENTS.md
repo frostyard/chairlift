@@ -66,9 +66,15 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   `CHAIRLIFT_PROBLEMS_FIXTURES` set to `test/e2e/testdata/problems/` and
   polls the four readiness log markers (the fourth is `problems: page built
   system=16 apps=7 source=ok`) for up to 30 seconds, requires one additional second of process stability, and
-  terminates the private process group as soon as the smoke check passes. It
+  terminates the private process group as soon as the smoke check passes.
+  Before it stops either window, it reads the X server's windows with
+  `xwininfo -root -tree` and requires one whose `WM_CLASS` instance is the
+  app ID (`org.frostyard.ChairLift`, or `org.frostyard.ChairLift.FirstRun`):
+  GTK names it, and the Wayland app ID, after GLib's program name, and GNOME
+  matches it with the desktop entry, so a window named after the executable
+  gets a generic icon. It
   requires GTK 3, libepoxy and Mesa (MyGo draws with llvmpipe under Xvfb),
-  Pango, `dbus-run-session`, and `xvfb-run`; the hosted E2E job installs those
+  Pango, `dbus-run-session`, `xvfb-run`, and `xwininfo` (x11-utils); the hosted E2E job installs those
   runtime dependencies explicitly because ordinary unit-test hosts carry only
   Pango and cairo for the Tester.
 - `make install`'s default `PREFIX` is `/usr` — the only prefix under which

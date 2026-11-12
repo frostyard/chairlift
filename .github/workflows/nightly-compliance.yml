@@ -50,6 +50,7 @@ jobs:
             dbus-x11 \
             libadwaita-1-0 \
             libgtk-4-1 \
+            x11-utils \
             xauth \
             xvfb
 
