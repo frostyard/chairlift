@@ -59,7 +59,7 @@ func newAppsFixture(t *testing.T, cfg *config.Config, withBrew bool) *appsFixtur
 	fake := fpSample()
 	fake.system = append(fake.system,
 		fpApp("Extension Manager", "com.mattjakeman.ExtensionManager", "0.6.3", "flathub", false),
-		fpApp("Mission Center", "io.missioncenter.MissionCenter", "1.1.0", "flathub", false),
+		fpApp("Resources", "net.nokyan.Resources", "1.8.0", "flathub", false),
 	)
 	p := frostuitest.NewLoop()
 	env := NewEnv(cfg, false, p.Post)

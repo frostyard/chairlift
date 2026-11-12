@@ -16,7 +16,9 @@ system_page:
     enabled: true  # Show bootc system status
   health_group:
     enabled: true  # Show system health monitoring
-    app_id: io.missioncenter.MissionCenter  # App to launch for system monitoring
+    app_id:  # Apps to try for system monitoring; the first installed one is used
+      - org.gnome.SystemMonitor
+      - org.kde.plasma-systemmonitor
 
 updates_page:
   bootc_updates_group:

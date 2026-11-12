@@ -19,8 +19,14 @@ import (
 )
 
 // defaultHealthApp is the system monitor the health group opens when its
-// configuration names none, as the old System page did.
-const defaultHealthApp = "io.missioncenter.MissionCenter"
+// configuration names none: GNOME System Monitor, the first entry of
+// defaultHealthApps.
+const defaultHealthApp = "org.gnome.SystemMonitor"
+
+// defaultHealthApps is the default order of system monitor candidates:
+// GNOME System Monitor, then KDE System Monitor. It matches
+// defaultConfig's health_group and the shipped configuration files.
+var defaultHealthApps = []string{defaultHealthApp, "org.kde.plasma-systemmonitor"}
 
 // overviewPage is the Overview: the system image hero with the one main
 // action, figures of the other pages, the live chart, the disk, the recent
@@ -265,7 +271,7 @@ func (p *overviewPage) loadHealthApp() {
 		return
 	}
 	group := env.Group("system_page", "health_group")
-	ids := []string{defaultHealthApp, "org.gnome.SystemMonitor", "org.kde.plasma-systemmonitor"}
+	ids := append([]string{}, defaultHealthApps...)
 	if group != nil && len(group.AppIDs) != 0 && (len(group.AppIDs) != 1 || group.AppIDs[0] != "") {
 		ids = append([]string{}, group.AppIDs...)
 	} else if group != nil && group.AppID != "" {

@@ -82,7 +82,7 @@ configuration enables, not on runtime tool availability.
 | bootc + `/usr/libexec/bootc-update-stage` | Staged bootc system updates |
 | `/usr/lib/snosi/native-ab` marker + `/usr/libexec/snosi-sysupdate-stage` | Staged native A/B (systemd-sysupdate) system updates |
 | Updex | System feature toggles and updates |
-| System monitor | Overview opens the first installed configured monitor: Mission Center, GNOME System Monitor, or KDE System Monitor by default |
+| System monitor | Overview opens the first installed configured monitor: GNOME System Monitor or KDE System Monitor by default |
 
 The window itself needs GTK 3, libepoxy with an OpenGL driver (Mesa), and
 Pango at run time. MyGo loads them when the window opens and draws on the
