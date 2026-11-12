@@ -262,6 +262,9 @@ func validateGroupFieldEntries(path, group string, fieldsNode *yaml.Node) *LoadE
 			}
 			continue
 		}
+		if name == "app_id" && group != "health_group" && value.Kind == yaml.SequenceNode {
+			return sourceGraphError(path, fmt.Sprintf("field %q accepts a list only in health_group (line %d)", name, effectiveNodeLine(value)))
+		}
 
 		target := reflect.New(fieldType)
 		if err := value.Decode(target.Interface()); err != nil {

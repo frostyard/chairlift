@@ -51,6 +51,9 @@ func NewStore(env *Env) *Store {
 // Start begins every domain's first load. Each domain loads only what its
 // enabled groups need.
 func (s *Store) Start() {
+	if page, ok := s.pages[navigation.Overview].(*overviewPage); ok {
+		page.loadHealthApp()
+	}
 	s.System.Start()
 	s.Live.Start()
 	s.Features.Start()

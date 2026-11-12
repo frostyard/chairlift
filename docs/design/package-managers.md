@@ -299,7 +299,8 @@ Its exported outcomes are:
   one; a reference by digest or without a tag names none), `StagedNote` is
   the system image source's note while an image is staged ("Staged <version>
   · applies on restart"), and `AppDisplayName` names a desktop application by
-  its ID for a button that opens it ("Mission Center" of
+  its ID only until the Overview's desktop lookup supplies the installed
+  entry's localized name ("Mission Center" of
   `io.missioncenter.MissionCenter`; an ID with no capitals stays as it is).
 - `Feature` maps the updex description/name to title/subtitle (the Features
   page takes its title), while `FeatureGroupDescription` formats the loaded

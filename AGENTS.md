@@ -233,7 +233,9 @@ An agent must not break these:
   results back with `Env.Post` (MyGo's `Window.Update`, through the app's
   `poster`, which keeps posts made before the window exists). So do desktop
   app launches (`Env.launchApp`): `frostui.LaunchDesktopApp`'s GIO lookup
-  and launch are synchronous and may block. Console output
+  and launch are synchronous and may block. The monitor lookup uses MyGo's
+  menu-visible desktop entries and their localized names, selecting the first
+  installed `health_group.app_id` candidate. Console output
   wakes the window through `frostui.Waker` (at most every 60 ms), because
   `Window.Update` rebuilds the view on every call. The live sampler buffers
   at most one minute of samples behind a mutex; only the UI thread applies

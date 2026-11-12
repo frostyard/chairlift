@@ -1568,8 +1568,11 @@ uptime, which `System.Info` then advances with the clock).
 app's life, through a `sysinfo.Sampler` of the home directory's file system.
 With `system_page`'s `health_group` on it samples everything each second and
 keeps one minute of processor and memory history for the Overview's "Right
-now" chart (`frostui.LiveChart`), beside the configured system monitor button
-(`app_id`, default `io.missioncenter.MissionCenter`). `liveSampler` copies its
+now" chart (`frostui.LiveChart`), beside the system monitor button. A worker
+resolves the configured `app_id` or ordered list against visible desktop
+entries and publishes the first match and its localized name. No match hides
+the button. The default order is Mission Center, GNOME System Monitor, KDE
+System Monitor. `liveSampler` copies its
 backend functions and publication callback before starting. Its readings go
 into `liveBuffer`, a mutex-protected transfer buffer capped at 60 samples;
 only the UI thread applies them to `Live.latest`, `cpu` and `mem`.
@@ -1831,10 +1834,10 @@ and again after the MyGo port.
   empty, no NUL byte). GIO launches any desktop entry it finds by that ID,
   including one hidden from the menu (`NoDisplay`). The IDs come
   from the configuration (`app_id` of `applications_installed_group`, default
-  `io.github.kolunmi.Bazaar`, and of `system_page`'s `health_group`, default
-  `io.missioncenter.MissionCenter`) or from flatpak's own list of installed
-  apps (the Apps inspector's Open), never from typed input, and no shell
-  runs.
+  `io.github.kolunmi.Bazaar`, and the first installed menu-visible candidate
+  from `system_page.health_group.app_id`, defaulting to Mission Center, GNOME
+  System Monitor, then KDE System Monitor) or from Flatpak's installed-app
+  list (the Apps inspector's Open), never from typed input. No shell runs.
 - **Maintenance scripts with `sudo: true`:** `runMaintenanceCommand` runs
   `pkexec <script>` with the script path from the configuration
   (`pageview.MaintenanceCommand`), outside the fixed helper set of
@@ -2377,7 +2380,7 @@ the configuration page, not always the page of the window that shows it (see
 | ------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `system_page`       | `system_info_group`              | The Overview's System details card: the computer (host name, model, kernel, Secure Boot, uptime, image, build time, digest) and the fields of `/etc/os-release`                                         |
 | `system_page`       | `bootc_status_group`             | The Overview's system image hero with the deployment chain (gated on `bootc.IsBootcBootedCached()` or the native A/B marker), and Maintenance's read-only deployment chain                              |
-| `system_page`       | `health_group`                   | The Overview's live processor and memory chart (sampled each second) and the system monitor button (configurable `app_id`, default: Mission Center)                                                    |
+| `system_page`       | `health_group`                   | The Overview's live processor and memory chart and system monitor button. `app_id` is a desktop ID or ordered list; the default tries Mission Center, GNOME System Monitor, then KDE System Monitor. |
 | `updates_page`      | `bootc_updates_group`            | The system image source on a bootc host — stage via `bootc-update-stage`, apply on restart (gated on `bootc.IsBootcBootedCached()` and stage script availability)                                      |
 | `updates_page`      | `sysupdate_updates_group`        | The system image source on a native A/B host — stage via `snosi-sysupdate-stage`, apply on restart, with a read-only previous-version line (gated on `sysupdate.IsNativeABCached()` and stage script availability) |
 | `updates_page`      | `firmware_updates_group`         | The firmware source: device firmware through fwupd, one device at a time after a confirmation (gated on `fwupd.IsInstalledCached()`); enabled by default since [ADR-0013](../adr/0013-firmware-updates-are-on-by-default.md) |
