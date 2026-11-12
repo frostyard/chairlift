@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -109,8 +110,19 @@ func runFlatpakCommand(args ...string) (string, error) {
 // the command's timeout class (commandTimeout) layered on top, so whichever
 // deadline is nearer wins and cancelling ctx stops the command. It is the
 // single dry-run gate: a state-changing command is skipped before any
-// exec.Cmd exists.
+// exec.Cmd exists. See runFlatpakCommandEnv.
 func runFlatpakCommandCtx(ctx context.Context, args ...string) (string, error) {
+	return runFlatpakCommandEnv(ctx, nil, args...)
+}
+
+// runFlatpakCommandEnv executes a flatpak command under the caller's ctx with
+// the command's timeout class (commandTimeout) layered on top, so whichever
+// deadline is nearer wins and cancelling ctx stops the command. It is the
+// single dry-run gate: a state-changing command is skipped before any
+// exec.Cmd exists. env entries are added to the inherited process
+// environment; a nil env inherits it unchanged. The alt-id query passes
+// LC_ALL=C, because flatpak translates the labels it prints with gettext.
+func runFlatpakCommandEnv(ctx context.Context, env []string, args ...string) (string, error) {
 	if len(args) > 0 && stateChangingCommands[args[0]] && dryRun {
 		msg := fmt.Sprintf("[DRY-RUN] Would execute: flatpak %s", strings.Join(args, " "))
 		log.Println(msg)
@@ -121,19 +133,25 @@ func runFlatpakCommandCtx(ctx context.Context, args ...string) (string, error) {
 	runCtx, cancel := context.WithTimeout(ctx, commandTimeout(args))
 	defer cancel()
 
-	return runFlatpakCommandAt(runCtx, "flatpak", args...)
+	return runFlatpakCommandAt(runCtx, "flatpak", env, args...)
 }
 
 // runFlatpakCommandAt runs exe with args under ctx and returns its stdout. The
-// executable and context are parameters so tests can drive a fake script and
-// control the deadline; runFlatpakCommandCtx is the only production caller
-// and always passes "flatpak".
+// executable, extra environment entries and context are parameters so tests
+// can drive a fake script, hand it a locale and control the deadline;
+// runFlatpakCommandEnv is the only production caller and always passes
+// "flatpak". A nil env leaves the child's environment exactly as inherited;
+// otherwise the entries are appended to it, so a later value of a variable
+// wins over the inherited one.
 //
 // The command runs in its own process group and cancellation signals the
 // whole group, so flatpak's helper processes (download workers, ostree pulls)
 // die with it rather than being orphaned. cmd.Run still reaps the child.
-func runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error) {
+func runFlatpakCommandAt(ctx context.Context, exe string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, exe, args...)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -377,21 +395,32 @@ func updateRemoteListArgs(user bool) []string {
 	return []string{"remotes", installationFlag(user), "--columns=name,options"}
 }
 
+// updateRemote is one remote an update query covers. oci is true when the
+// remote's options include "oci", which makes it an OCI registry rather than
+// an OSTree repository: its refs are named by image digest (see
+// isInstalledImage).
+type updateRemote struct {
+	name string
+	oci  bool
+}
+
 // parseUpdateRemotes returns the remotes an update query covers, in listed
 // order: every listed remote except one whose options include "disabled",
-// which is the set flatpak's own remote-less `remote-ls` visits.
-func parseUpdateRemotes(output string) []string {
-	var remotes []string
+// which is the set flatpak's own remote-less `remote-ls` visits. Each remote
+// reports whether its options also include "oci".
+func parseUpdateRemotes(output string) []updateRemote {
+	var remotes []updateRemote
 	for _, line := range strings.Split(output, "\n") {
 		name, options, _ := strings.Cut(strings.TrimSpace(line), "\t")
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		if slices.Contains(strings.Split(strings.TrimSpace(options), ","), "disabled") {
+		optionList := strings.Split(strings.TrimSpace(options), ",")
+		if slices.Contains(optionList, "disabled") {
 			continue
 		}
-		remotes = append(remotes, name)
+		remotes = append(remotes, updateRemote{name: name, oci: slices.Contains(optionList, "oci")})
 	}
 	return remotes
 }
@@ -419,9 +448,12 @@ func parseOrigins(output string) map[string]bool {
 
 // updateListArgs builds the flatpak argument list used to query one remote's
 // available updates. "--app" restricts the query to applications so runtimes
-// never appear as updates.
+// never appear as updates. The commit column is last and only read for OCI
+// remotes, where it carries the leading hex digits of the image digest; the
+// remote stays the final argument, which the fake scripts in the tests rely
+// on.
 func updateListArgs(user bool, remote string) []string {
-	return []string{"remote-ls", "--updates", "--app", "--columns=name,application,version,branch,origin", installationFlag(user), remote}
+	return []string{"remote-ls", "--updates", "--app", "--columns=name,application,version,branch,origin,commit", installationFlag(user), remote}
 }
 
 // RemoteError reports a remote whose update query failed while an installed
@@ -479,16 +511,28 @@ func listUpdates(ctx context.Context, user bool) ([]UpdateInfo, error) {
 	var updates []UpdateInfo
 	var failed []*RemoteError
 	for _, remote := range parseUpdateRemotes(remotesOutput) {
-		output, err := runFlatpakCommandCtx(ctx, updateListArgs(user, remote)...)
+		output, err := runFlatpakCommandCtx(ctx, updateListArgs(user, remote.name)...)
 		if err != nil {
 			if abortsUpdateQuery(ctx, err) {
 				return nil, err
 			}
-			failed = append(failed, &RemoteError{Remote: remote, Installation: installation, Err: err})
+			failed = append(failed, &RemoteError{Remote: remote.name, Installation: installation, Err: err})
 			continue
 		}
-		remoteUpdates, _ := parseUpdateList(output, user)
-		updates = append(updates, remoteUpdates...)
+		for _, row := range parseUpdateRows(output, user) {
+			// A non-OCI remote (Flathub) is listed exactly as before: no
+			// extra query, no filtering.
+			if remote.oci {
+				installed, err := isInstalledOCIUpdate(ctx, user, row)
+				if err != nil {
+					return nil, err
+				}
+				if installed {
+					continue
+				}
+			}
+			updates = append(updates, row.info)
+		}
 	}
 	if len(failed) == 0 {
 		return updates, nil
@@ -518,17 +562,24 @@ func listUpdates(ctx context.Context, user bool) ([]UpdateInfo, error) {
 	return updates, errors.Join(errs...)
 }
 
-// parseUpdateList parses the tabular output from the flatpak update query
-func parseUpdateList(output string, user bool) ([]UpdateInfo, error) {
-	var updates []UpdateInfo
-	lines := strings.Split(strings.TrimSpace(output), "\n")
+// updateRow is one parsed row of a remote's update query: the update itself
+// plus the commit the remote offers, which is only meaningful for an OCI
+// remote. UpdateInfo stays free of it, so the exported contract does not
+// change.
+type updateRow struct {
+	info   UpdateInfo
+	commit string
+}
 
-	installation := "system"
-	if user {
-		installation = "user"
-	}
+// parseUpdateRows parses the tabular output of one remote's update query. The
+// commit is the sixth tab-separated field; the whitespace fallback cannot
+// tell an empty field from a missing one, so it leaves the commit empty
+// (unknown), which keeps the row.
+func parseUpdateRows(output string, user bool) []updateRow {
+	var rows []updateRow
+	installation := installationName(user)
 
-	for _, line := range lines {
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -536,38 +587,114 @@ func parseUpdateList(output string, user bool) ([]UpdateInfo, error) {
 
 		// Split by tab (flatpak uses tabs as column separators)
 		fields := strings.Split(line, "\t")
+		tabbed := true
 		if len(fields) < 5 {
 			// Try splitting by multiple spaces for systems that might use spaces
+			tabbed = false
 			fields = strings.Fields(line)
 			if len(fields) < 2 {
 				continue
 			}
 		}
 
-		update := UpdateInfo{
-			Installation: installation,
-		}
+		row := updateRow{info: UpdateInfo{Installation: installation}}
 
 		if len(fields) >= 1 {
-			update.Name = strings.TrimSpace(fields[0])
+			row.info.Name = strings.TrimSpace(fields[0])
 		}
 		if len(fields) >= 2 {
-			update.ApplicationID = strings.TrimSpace(fields[1])
+			row.info.ApplicationID = strings.TrimSpace(fields[1])
 		}
 		if len(fields) >= 3 {
-			update.NewVersion = strings.TrimSpace(fields[2])
+			row.info.NewVersion = strings.TrimSpace(fields[2])
 		}
 		if len(fields) >= 4 {
-			update.Branch = strings.TrimSpace(fields[3])
+			row.info.Branch = strings.TrimSpace(fields[3])
 		}
 		if len(fields) >= 5 {
-			update.Origin = strings.TrimSpace(fields[4])
+			row.info.Origin = strings.TrimSpace(fields[4])
+		}
+		if tabbed && len(fields) >= 6 {
+			row.commit = strings.TrimSpace(fields[5])
 		}
 
-		updates = append(updates, update)
+		rows = append(rows, row)
 	}
 
-	return updates, nil
+	return rows
+}
+
+// altIDInfoArgs builds the argument list of the `flatpak info` call that reads
+// one installed application's Alt-id. The ref is spelled <application>//<branch>
+// so that it names the deployment the update row is about when several
+// branches are installed; with no branch, flatpak chooses the installed one.
+func altIDInfoArgs(user bool, appID, branch string) []string {
+	ref := appID
+	if branch != "" {
+		ref = appID + "//" + branch
+	}
+	return []string{"info", installationFlag(user), ref}
+}
+
+// parseAltID returns the value of the `Alt-id:` line of `flatpak info` output,
+// or "" when the output has none. flatpak prints labels padded on the left, so
+// the line's trimmed text is what is matched; the label itself goes through
+// gettext, which is why the query runs with LC_ALL=C.
+func parseAltID(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(trimmed, "Alt-id:"); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return ""
+}
+
+// isInstalledImage reports whether a listed update commit is the image that
+// installation already holds, named by its Alt-id. An OCI remote names each
+// ref by its image digest, which flatpak keeps as the deployment's Alt-id
+// after importing the image, so the listed commit is a prefix of the Alt-id
+// (flatpak prints the first 12 characters of a commit). Both values may carry
+// a "sha256:" prefix. Every unknown case returns false, because wrongly
+// dropping a row would hide a real update.
+func isInstalledImage(commit, altID string) bool {
+	commit = strings.TrimPrefix(strings.TrimSpace(commit), "sha256:")
+	altID = strings.TrimPrefix(strings.TrimSpace(altID), "sha256:")
+	if len(commit) < 12 || altID == "" {
+		return false
+	}
+	return strings.HasPrefix(altID, commit)
+}
+
+// isInstalledOCIUpdate reports whether one row of an OCI remote's update query
+// is the image the installation already holds, and so not an update at all. A
+// row whose commit is unknown is kept, and a failed `flatpak info` affects only
+// its own row: only a cancelled caller context or a missing executable ends the
+// whole query, exactly as for a failed remote query (abortsUpdateQuery).
+//
+// Workaround for Flatpak releases before flatpak/flatpak@a819741d13
+// (https://github.com/flatpak/flatpak/pull/6875): `remote-ls --updates`
+// compares the remote commit with the installed commit only, while
+// `flatpak update` also compares it with the deployment's Alt-id. Remove this
+// check once the oldest Flatpak that ChairLift supports includes that commit.
+func isInstalledOCIUpdate(ctx context.Context, user bool, row updateRow) (bool, error) {
+	if row.commit == "" {
+		return false, nil
+	}
+	// LC_ALL=C keeps the "Alt-id:" label untranslated.
+	output, err := runFlatpakCommandEnv(ctx, []string{"LC_ALL=C"}, altIDInfoArgs(user, row.info.ApplicationID, row.info.Branch)...)
+	if err != nil {
+		if abortsUpdateQuery(ctx, err) {
+			return false, err
+		}
+		log.Printf("flatpak: cannot read the installed image of %s in the %s installation, keeping its update: %v", row.info.ApplicationID, row.info.Installation, err)
+		return false, nil
+	}
+	if isInstalledImage(row.commit, parseAltID(output)) {
+		log.Printf("flatpak: %s in the %s installation is the installed OCI image, not an update", row.info.ApplicationID, row.info.Installation)
+		return true, nil
+	}
+	return false, nil
 }
 
 // GetRemotes returns the list of configured remotes

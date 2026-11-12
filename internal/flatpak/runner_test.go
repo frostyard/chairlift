@@ -60,7 +60,7 @@ func readPID(pidFile string) (int, error) {
 func runInBackground(ctx context.Context, exe string, args ...string) <-chan error {
 	done := make(chan error, 1)
 	go func() {
-		_, err := runFlatpakCommandAt(ctx, exe, args...)
+		_, err := runFlatpakCommandAt(ctx, exe, nil, args...)
 		done <- err
 	}()
 	return done
@@ -86,12 +86,46 @@ func TestRunFlatpakCommandAt(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		out, err := runFlatpakCommandAt(ctx, script)
+		out, err := runFlatpakCommandAt(ctx, script, nil)
 		if err != nil {
 			t.Fatalf("runFlatpakCommandAt: %v", err)
 		}
 		if strings.TrimSpace(out) != "hello from flatpak" {
 			t.Errorf("stdout = %q, want %q", out, "hello from flatpak")
+		}
+	})
+
+	t.Run("env entries reach the child", func(t *testing.T) {
+		// The fake prints the variable the test sets, so the output shows
+		// whether the entry replaced the inherited value.
+		t.Setenv("LC_ALL", "de_DE.UTF-8")
+		script := fakeFlatpak(t, `printf '%s' "$LC_ALL"`)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		out, err := runFlatpakCommandAt(ctx, script, []string{"LC_ALL=C"})
+		if err != nil {
+			t.Fatalf("runFlatpakCommandAt: %v", err)
+		}
+		if strings.TrimSpace(out) != "C" {
+			t.Errorf("LC_ALL in the child = %q, want C from the env entry", strings.TrimSpace(out))
+		}
+	})
+
+	t.Run("no env keeps the inherited environment", func(t *testing.T) {
+		t.Setenv("LC_ALL", "de_DE.UTF-8")
+		script := fakeFlatpak(t, `printf '%s' "$LC_ALL"`)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		out, err := runFlatpakCommandAt(ctx, script, nil)
+		if err != nil {
+			t.Fatalf("runFlatpakCommandAt: %v", err)
+		}
+		if strings.TrimSpace(out) != "de_DE.UTF-8" {
+			t.Errorf("LC_ALL in the child = %q, want the inherited value", strings.TrimSpace(out))
 		}
 	})
 
@@ -102,7 +136,7 @@ exit 3`)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		_, err := runFlatpakCommandAt(ctx, script, "info", "nope")
+		_, err := runFlatpakCommandAt(ctx, script, nil, "info", "nope")
 		if err == nil {
 			t.Fatal("runFlatpakCommandAt = nil error, want failure")
 		}
@@ -127,7 +161,7 @@ exit 3`)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		_, err := runFlatpakCommandAt(ctx, missing, "--version")
+		_, err := runFlatpakCommandAt(ctx, missing, nil, "--version")
 		var notFound *NotFoundError
 		if !errors.As(err, &notFound) {
 			t.Fatalf("err = %T (%v), want *NotFoundError", err, err)
@@ -138,7 +172,7 @@ exit 3`)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		_, err := runFlatpakCommandAt(ctx, "chairlift-no-such-flatpak-binary", "--version")
+		_, err := runFlatpakCommandAt(ctx, "chairlift-no-such-flatpak-binary", nil, "--version")
 		var notFound *NotFoundError
 		if !errors.As(err, &notFound) {
 			t.Fatalf("err = %T (%v), want *NotFoundError", err, err)
