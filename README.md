@@ -11,7 +11,7 @@ ChairLift is a desktop app for people who run [Snow Linux](https://github.com/fr
 
 **Documentation:** [docs/index.md](docs/index.md)
 
-![The Overview page: the system image, the updates waiting, live processor and memory use, the disk and recent activity](data/screenshots/overview.png)
+![The Overview page in the dark theme: the six pages in the rail, the system image, the updates waiting, live processor and memory use, the disk and recent activity](data/screenshots/overview.png)
 
 ## What it does
 
@@ -20,10 +20,11 @@ ChairLift is a desktop app for people who run [Snow Linux](https://github.com/fr
 - **Apps.** Every installed Flatpak app and Homebrew package in one table, curated Brewfile bundles, and Homebrew search.
 - **Features, Problems and Maintenance.** System extensions through updex, the problems recorded on this computer, and cleanups.
 - **Command palette, console and status bar.** Ctrl K finds and runs an action, Ctrl J shows the console, and the status bar shows the running job.
+- **Dark and light.** ChairLift draws Frostyard's dark theme when the desktop is dark and its light theme otherwise, and follows the desktop's text size and high-contrast setting.
 
 Every card sits behind a configuration group, so other distributions can turn off what they do not ship: [CONFIG.md](CONFIG.md).
 
-![The Updates page during an update run](data/screenshots/updates.png)
+![The Updates page in the light theme during an update run: each source's steps and state, with firmware waiting to be confirmed](data/screenshots/updates.png)
 
 ## Install
 

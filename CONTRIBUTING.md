@@ -75,9 +75,11 @@ function fields, so no test runs brew, flatpak, bootc, fwupdmgr, updex or
 pkexec, and keep decisions in the pure leaf packages under `internal/views/`.
 Set `CHAIRLIFT_SNAPSHOT_DIR` to make the snapshot tests write PNGs of the
 pages (`CHAIRLIFT_SNAPSHOT_DIR=/tmp/shots go test ./internal/views -run
-Snapshot`). To drive the real window, `make build-automation` builds
-`build/chairlift-automation`, which `mygo-automation` can control and capture
-(`MYGO_AUTOMATION=<socket>`); release builds carry no automation plugin. Name ordinary unit tests so they do not begin with `TestI` or contain
+Snapshot`). The README's pictures come from that run:
+`overview-full-dark.png` is `data/screenshots/overview.png` and
+`updates-running-light.png` is `data/screenshots/updates.png`. To drive the
+real window, `make build-automation` builds `build/chairlift-automation`, which
+`mygo-automation` can control and capture (`MYGO_AUTOMATION=<socket>`); release builds carry no automation plugin. Name ordinary unit tests so they do not begin with `TestI` or contain
 `Integration`; CI reserves those names for tests requiring a real environment.
 
 The enforced unit and race gates run tests under `internal/...`. Logic moved
