@@ -7,7 +7,8 @@
 // announces a command with Start, tees the command's stdout and stderr
 // through Run.Stdout and Run.Stderr (or reports lines it already reads with
 // Run.Line), and ends it with Run.End. A dry-run preview that starts no
-// process is reported with DryRun.
+// process is reported with DryRun. A desktop application that ChairLift
+// starts in process, with no command of its own, is reported with Launch.
 package cmdlog
 
 import (
@@ -23,7 +24,8 @@ import (
 type Kind uint8
 
 const (
-	// KindStart announces a command; Event.Argv holds its argument vector.
+	// KindStart announces a command; Event.Argv holds its argument vector
+	// (with Event.Launch, the desktop file ID of an in-process launch).
 	KindStart Kind = iota
 	// KindLine is one line of a running command's output.
 	KindLine
@@ -59,6 +61,11 @@ type Event struct {
 	Text    string
 	Err     error
 	Elapsed time.Duration
+	// Launch marks the start and the end of an in-process desktop launch
+	// (Launch): Argv is then the desktop file ID alone, not a command,
+	// and the end comes when the launch returns, not when the application
+	// exits.
+	Launch bool
 }
 
 // Sink receives events. It is called from the goroutine that runs the
@@ -91,6 +98,7 @@ func emit(e Event) {
 type Run struct {
 	id      uint64
 	started time.Time
+	launch  bool
 	once    sync.Once
 	out     *lineWriter
 	err     *lineWriter
@@ -102,11 +110,27 @@ func Start(name string, args ...string) *Run {
 	if current.Load() == nil {
 		return nil
 	}
-	r := &Run{id: nextID.Add(1), started: time.Now()}
+	return start(append([]string{name}, args...), false)
+}
+
+// Launch announces a desktop application, by its desktop file ID, that
+// ChairLift starts in process (frostui.LaunchDesktopApp resolves the entry
+// and launches it through GIO) rather than by running a command. Its Run's
+// End reports the launch's result; the application goes on running, and
+// its output does not reach ChairLift. It returns nil when no sink is
+// installed.
+func Launch(id string) *Run {
+	if current.Load() == nil {
+		return nil
+	}
+	return start([]string{id}, true)
+}
+
+func start(argv []string, launch bool) *Run {
+	r := &Run{id: nextID.Add(1), started: time.Now(), launch: launch}
 	r.out = &lineWriter{run: r, stream: Stdout}
 	r.err = &lineWriter{run: r, stream: Stderr}
-	argv := append([]string{name}, args...)
-	emit(Event{ID: r.id, Kind: KindStart, Argv: argv})
+	emit(Event{ID: r.id, Kind: KindStart, Argv: argv, Launch: launch})
 	return r
 }
 
@@ -145,7 +169,7 @@ func (r *Run) End(err error) {
 	r.once.Do(func() {
 		r.out.flush()
 		r.err.flush()
-		emit(Event{ID: r.id, Kind: KindEnd, Err: err, Elapsed: time.Since(r.started)})
+		emit(Event{ID: r.id, Kind: KindEnd, Err: err, Elapsed: time.Since(r.started), Launch: r.launch})
 	})
 }
 

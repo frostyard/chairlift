@@ -19,6 +19,7 @@ import (
 	"github.com/frostyard/chairlift/internal/navigation"
 	"github.com/frostyard/chairlift/internal/sysinfo"
 	"github.com/frostyard/frostui"
+	"github.com/frostyard/frostui/frostuitest"
 )
 
 // ovSource is an update source with the items a test gives it.
@@ -384,28 +385,52 @@ func TestOverviewGatesItsGroups(t *testing.T) {
 	})
 }
 
+// ovLaunch is one launch a test holds: the fake returns what result gets.
+type ovLaunch struct {
+	id     string
+	result chan error
+}
+
+// TestOverviewOpensTheHealthApp: the button and the palette command launch
+// the configured monitor on a goroutine, since GIO's lookup and launch may
+// block. The click returns while the fake holds the launch, and a failure
+// shows only when the UI thread runs the posted result. A launch on the UI
+// thread would hold the click until the fake's timeout and toast early.
 func TestOverviewOpensTheHealthApp(t *testing.T) {
 	cfg := sysConfig(sysAllGroups...)
 	cfg.SystemPage["health_group"] = config.GroupConfig{Enabled: true, AppID: "org.gnome.SystemMonitor"}
-	s, p, _ := ovStore(t, cfg, false, newSysFake())
-	var launched []string
+	s, p, q := ovStore(t, cfg, false, newSysFake())
+	launches := make(chan ovLaunch, 2)
 	p.launch = func(id string) error {
-		launched = append(launched, id)
-		if len(launched) > 1 {
-			return errors.New("gtk-launch: no such app")
+		l := ovLaunch{id: id, result: make(chan error, 1)}
+		launches <- l
+		select {
+		case err := <-l.result:
+			return err
+		case <-time.After(frostuitest.Timeout):
+			return errors.New("the launch was held on the UI thread")
 		}
-		return nil
+	}
+	held := func() ovLaunch {
+		t.Helper()
+		select {
+		case l := <-launches:
+			return l
+		case <-time.After(frostuitest.Timeout):
+			t.Fatal("no launch started")
+		}
+		return ovLaunch{}
 	}
 	tt := ui.NewTester(ovView(p), 1360, 1500)
 	if err := tt.Click("Open System Monitor"); err != nil {
 		t.Fatal(err)
 	}
-	if len(launched) != 1 || launched[0] != "org.gnome.SystemMonitor" {
-		t.Errorf("launched %v", launched)
+	first := held()
+	if first.id != "org.gnome.SystemMonitor" {
+		t.Errorf("launched %q", first.id)
 	}
-	if toasts := s.Env.TakeToasts(); len(toasts) != 0 {
-		t.Errorf("toasts after a launch: %+v", toasts)
-	}
+	first.result <- nil
+
 	var open *frostui.Command
 	for _, cmd := range p.Commands() {
 		if cmd.ID == "open-health-app" {
@@ -416,8 +441,19 @@ func TestOverviewOpensTheHealthApp(t *testing.T) {
 		t.Fatalf("no palette command opens the monitor: %+v", open)
 	}
 	open.Run()
-	if toasts := s.Env.TakeToasts(); len(toasts) != 1 || toasts[0].Title != "Failed to launch org.gnome.SystemMonitor" || toasts[0].Type != "error" {
-		t.Errorf("toasts after a failed launch = %+v", toasts)
+	second := held()
+	q.drain()
+	if toasts := s.Env.TakeToasts(); len(toasts) != 0 {
+		t.Errorf("toasts while the launch runs: %+v", toasts)
+	}
+	second.result <- errors.New(`frostui: desktop application "org.gnome.SystemMonitor" not found or not launchable`)
+	var toasts []ui.Toast
+	q.until(t, "the failed launch's toast", func() bool {
+		toasts = append(toasts, s.Env.TakeToasts()...)
+		return len(toasts) > 0
+	})
+	if len(toasts) != 1 || toasts[0].Title != "Failed to launch org.gnome.SystemMonitor" || toasts[0].Type != "error" {
+		t.Errorf("toasts after a launch and a failed launch = %+v", toasts)
 	}
 }
 

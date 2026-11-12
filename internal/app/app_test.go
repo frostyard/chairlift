@@ -225,6 +225,8 @@ func TestWireConsoleShowsCommandsAndTheLog(t *testing.T) {
 	failed := cmdlog.Start("brew", "upgrade", "gh")
 	failed.End(errors.New("exit status 1"))
 	cmdlog.DryRun("flatpak", "update", "org.mozilla.firefox")
+	cmdlog.Launch("io.missioncenter.MissionCenter").End(nil)
+	cmdlog.Launch("org.gnome.Software").End(errors.New("not found"))
 	log.Print("[DRY-RUN] would dismiss problem p1")
 	log.Print("homebrew: list failed")
 	log.Print("window: built")
@@ -240,6 +242,10 @@ func TestWireConsoleShowsCommandsAndTheLog(t *testing.T) {
 		{frostui.LevelDebug, "chairlift-updex-helper", "exited after"},
 		{frostui.LevelWarn, "brew", "exit status 1"},
 		{frostui.LevelDryRun, "flatpak", "would run: flatpak update org.mozilla.firefox"},
+		{frostui.LevelCommand, "launch", "in-process launch of io.missioncenter.MissionCenter (GIO)"},
+		{frostui.LevelDebug, "launch", "launched after"},
+		{frostui.LevelWarn, "launch", "launch failed after"},
+		{frostui.LevelWarn, "launch", "not found"},
 		{frostui.LevelDryRun, "log", "[DRY-RUN] would dismiss problem p1"},
 		{frostui.LevelWarn, "log", "homebrew: list failed"},
 		{frostui.LevelDebug, "log", "window: built"},
@@ -252,6 +258,11 @@ func TestWireConsoleShowsCommandsAndTheLog(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("no %s line from %q with %q in %+v", frostui.LevelNames[w.level], w.source, w.text, con.Lines(nil, ""))
+		}
+	}
+	for _, l := range con.Lines(nil, "") {
+		if l.Source == "launch" && strings.Contains(l.Text, "exited") {
+			t.Errorf("a launch is reported as an exited command: %q", l.Text)
 		}
 	}
 	for _, l := range con.Lines(nil, "log") {
