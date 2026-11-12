@@ -154,13 +154,21 @@ nfpms:
     # The libraries MyGo loads at run time with purego: GTK 3 (t64 since
     # Debian trixie), Pango with cairo, and libepoxy. Package names differ
     # between families, so only the deb declares them; the rpm, the apk and
-    # the system-integration package carry no UI dependency.
+    # the system-integration package carry no UI dependency. Each format also
+    # requires the package or file that supplies pkexec.
     overrides:
       deb:
         dependencies:
           - libgtk-3-0t64 | libgtk-3-0
           - libpangocairo-1.0-0
           - libepoxy0
+          - pkexec
+      rpm:
+        dependencies:
+          - /usr/bin/pkexec
+      apk:
+        dependencies:
+          - polkit
     contents:
       # Wrapper script
       - src: ./data/chairlift-wrapper.sh
@@ -217,6 +225,16 @@ nfpms:
     license: MIT
     conflicts:
       - frostyard-chairlift
+    overrides:
+      deb:
+        dependencies:
+          - pkexec
+      rpm:
+        dependencies:
+          - /usr/bin/pkexec
+      apk:
+        dependencies:
+          - polkit
     contents:
       - src: ./config.yml
         dst: /usr/share/chairlift/config.yml

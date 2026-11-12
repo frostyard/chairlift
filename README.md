@@ -34,7 +34,7 @@ grep -F "  frostyard-chairlift_<version>_amd64.deb" checksums.txt | sha256sum --
 sudo apt install ./frostyard-chairlift_<version>_amd64.deb   # or: sudo dnf install ./….rpm, sudo apk add --allow-untrusted ./….apk
 ```
 
-Install `frostyard-chairlift-system-integration` instead only when the GUI comes from a user-scoped install such as the Homebrew cask: it holds the privileged helper, the PolicyKit policies and the default configuration. The two packages conflict. [docs/index.md](docs/index.md#installation) covers both packages and installing from source.
+Install `frostyard-chairlift-system-integration` instead only when the GUI comes from a user-scoped install such as the Homebrew cask: it holds the privileged helper, the PolicyKit policies and the default configuration. The two packages conflict. Both depend on the system's pkexec provider; privileged actions also need a desktop PolicyKit authentication agent. [docs/index.md](docs/index.md#installation) covers both packages and installing from source.
 
 ## Remove
 

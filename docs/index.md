@@ -117,7 +117,9 @@ configuration. For distributions that install the GUI through a user-scoped
 Homebrew cask, releases also provide a `frostyard-chairlift-system-integration`
 deb/rpm/apk. It installs the fixed-path updex helper, PolicyKit policies, and
 maintainer configuration without installing the GUI. It intentionally
-conflicts with the self-contained `frostyard-chairlift` package. Bootc staging
+conflicts with the self-contained `frostyard-chairlift` package. Both packages
+depend on the system's pkexec provider. Privileged actions also need a running
+PolicyKit authentication agent in the desktop session. Bootc staging
 additionally requires the distribution to provide its trusted implementation
 at `/usr/libexec/bootc-update-stage`; the integration package does not supply
 one. Native A/B staging uses `/usr/libexec/snosi-sysupdate-stage`, which
