@@ -558,7 +558,7 @@ func TestSnapshotUpdates(t *testing.T) {
 		env, q, p, _, fakes, _, _ := updSetup(t)
 		release := make(chan struct{})
 		fakes[2].hold = map[string]chan struct{}{"bazaar": release}
-		tt := ui.NewTesterWith(updView(env, p), 1128, 2300, ui.TesterOptions{Dark: dark})
+		tt := ui.NewTesterWith(updView(env, p), 1128, 1780, ui.TesterOptions{Dark: dark})
 		snapshot(t, tt, "updates-idle-"+theme)
 
 		if err := tt.Click("Install UEFI dbx"); err != nil {

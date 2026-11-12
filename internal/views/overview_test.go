@@ -334,7 +334,7 @@ func TestOverviewFiguresAndCards(t *testing.T) {
 		"Right now", "Processor and memory, last 60 seconds", "live", "Open Mission Center",
 		"Disk", "224 GB used of 512 GB", "288 GB free",
 		"System details", "Host name", "frosty-x1", "ThinkPad X1 Carbon Gen 12", "Home Url", "https://frostyard.org/",
-		"Built", overviewBuilt("2026-11-05T10:19:52Z"), "Digest", "sha256:111111111111...",
+		"Built", overviewBuilt("2026-11-05T10:19:52Z"), "Digest", "sha256:dd7104356c7b...",
 		"Recent activity", "Upgraded 6 Homebrew packages", "3 h ago", "Yesterday",
 	)
 	// Pages whose summaries are not known show no figure.
@@ -535,9 +535,17 @@ func TestSnapshotOverview(t *testing.T) {
 	if os.Getenv("CHAIRLIFT_SNAPSHOT_DIR") == "" {
 		t.Skip("CHAIRLIFT_SNAPSHOT_DIR is not set")
 	}
+	// Every group is on, as in a stock Snow Linux configuration, so the
+	// rail shows all six pages. Only the System domain loads.
+	var every []string
+	for _, item := range navigation.Items() {
+		for _, g := range item.Groups {
+			every = append(every, item.ConfigPage+"/"+g)
+		}
+	}
 	build := func(t *testing.T, staged string) (*Store, *overviewPage, *sysPosts) {
 		f := ovBootc(staged)
-		s, p, q := ovStore(t, sysConfig(sysAllGroups...), false, f)
+		s, p, q := ovStore(t, sysConfig(every...), false, f)
 		ovFillLive(s.Live)
 		ovActivity(t, s.Env)
 		checked := sysFixedNow.Add(-12 * time.Minute)
@@ -560,7 +568,7 @@ func TestSnapshotOverview(t *testing.T) {
 		}
 		t.Run("full"+suffix, func(t *testing.T) {
 			s, p, _ := build(t, "")
-			tt := ui.NewTesterWith(ovShell(s, p), 1440, 1500, ui.TesterOptions{Dark: dark})
+			tt := ui.NewTesterWith(ovShell(s, p), 1360, 1140, ui.TesterOptions{Dark: dark})
 			snapshot(t, tt, "overview-full"+suffix)
 		})
 		t.Run("running"+suffix, func(t *testing.T) {
