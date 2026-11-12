@@ -151,7 +151,7 @@ esac`
 				}
 				return err
 			},
-			want: []string{"remote-ls", "--updates", "--app", "--columns=name,application,version,branch,origin", "--user", "vendor"},
+			want: []string{"remote-ls", "--updates", "--app", "--columns=name,application,version,branch,origin,commit", "--user", "vendor"},
 		},
 		{
 			name: "list remotes",
@@ -291,7 +291,7 @@ func TestUpdateListArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := updateListArgs(tt.user, "flathub")
-			want := []string{"remote-ls", "--updates", "--app", "--columns=name,application,version,branch,origin", tt.wantFlag, "flathub"}
+			want := []string{"remote-ls", "--updates", "--app", "--columns=name,application,version,branch,origin,commit", tt.wantFlag, "flathub"}
 			if !reflect.DeepEqual(args, want) {
 				t.Errorf("updateListArgs(%v, flathub) = %v, want %v", tt.user, args, want)
 			}
@@ -325,16 +325,20 @@ func TestPerInstallationQueryArgs(t *testing.T) {
 
 func TestParseUpdateRemotesSkipsOnlyDisabledRemotes(t *testing.T) {
 	output := "flathub\n" +
-		"testhub\toci,no-gpg-verify\n" +
+		"testhub\tuser,oci,no-gpg-verify\n" +
 		"goose-origin\tdisabled,no-enumerate,no-gpg-verify\n" +
 		"flathub-beta\tno-enumerate\n" +
 		"\n"
-	want := []string{"flathub", "testhub", "flathub-beta"}
+	want := []updateRemote{
+		{name: "flathub", oci: false},
+		{name: "testhub", oci: true},
+		{name: "flathub-beta", oci: false},
+	}
 	if got := parseUpdateRemotes(output); !reflect.DeepEqual(got, want) {
-		t.Fatalf("parseUpdateRemotes = %q, want %q", got, want)
+		t.Fatalf("parseUpdateRemotes = %v, want %v", got, want)
 	}
 	if got := parseUpdateRemotes(""); len(got) != 0 {
-		t.Fatalf("parseUpdateRemotes(\"\") = %q, want none", got)
+		t.Fatalf("parseUpdateRemotes(\"\") = %v, want none", got)
 	}
 }
 
@@ -437,9 +441,9 @@ func TestListUpdatesIgnoresABrokenUnusedRemote(t *testing.T) {
 	}
 	want := []string{
 		"remotes --user --columns=name,options",
-		"remote-ls --updates --app --columns=name,application,version,branch,origin --user flathub",
-		"remote-ls --updates --app --columns=name,application,version,branch,origin --user test-center",
-		"remote-ls --updates --app --columns=name,application,version,branch,origin --user fedora",
+		"remote-ls --updates --app --columns=name,application,version,branch,origin,commit --user flathub",
+		"remote-ls --updates --app --columns=name,application,version,branch,origin,commit --user test-center",
+		"remote-ls --updates --app --columns=name,application,version,branch,origin,commit --user fedora",
 		"list --user --app --columns=origin",
 	}
 	if got := loggedCalls(t, logPath); !reflect.DeepEqual(got, want) {
@@ -581,54 +585,113 @@ esac`)
 			t.Fatalf("cancellation was reported as a remote failure: %v", err)
 		}
 	})
+
+	t.Run("during an OCI alt-id query", func(t *testing.T) {
+		dir := t.TempDir()
+		started := filepath.Join(dir, "started")
+		// The fake replaces PATH, so resolve the tools it needs first.
+		touch, err := exec.LookPath("touch")
+		if err != nil {
+			t.Skip("touch not available")
+		}
+		sleep, err := exec.LookPath("sleep")
+		if err != nil {
+			t.Skip("sleep not available")
+		}
+		fakeFlatpakScript(t, `case "$1" in
+remotes) printf 'frostyard\tuser,oci\n' ;;
+remote-ls) printf 'Frostnotes\torg.frostyard.Frostnotes\t0.6.0\tstable\tfrostyard\t6a4d13a462af\n' ;;
+info) "`+touch+`" "`+started+`"; exec "`+sleep+`" 30 ;;
+esac`)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			deadline := time.Now().Add(10 * time.Second)
+			for time.Now().Before(deadline) {
+				if _, err := os.Stat(started); err == nil {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			cancel()
+		}()
+		updates, err := listUpdates(ctx, true)
+		if !errors.Is(err, context.Canceled) || updates != nil {
+			t.Fatalf("listUpdates = %v, %v; want nil updates and context.Canceled", updates, err)
+		}
+		var remoteErr *RemoteError
+		if errors.As(err, &remoteErr) {
+			t.Fatalf("cancellation was reported as a remote failure: %v", err)
+		}
+	})
 }
 
-func TestParseUpdateList(t *testing.T) {
+func TestParseUpdateRows(t *testing.T) {
+	system := func(name, id, version, branch, origin string) UpdateInfo {
+		return UpdateInfo{Name: name, ApplicationID: id, NewVersion: version, Branch: branch, Origin: origin, Installation: "system"}
+	}
+
 	tests := []struct {
 		name   string
 		output string
 		user   bool
-		want   []UpdateInfo
+		want   []updateRow
 	}{
 		{
 			name:   "tab separated rows",
 			output: "Firefox\torg.mozilla.firefox\t120.0\tstable\tflathub\nGIMP\torg.gimp.GIMP\t2.10.36\tstable\tflathub\n",
 			user:   false,
-			want: []UpdateInfo{
-				{Name: "Firefox", ApplicationID: "org.mozilla.firefox", NewVersion: "120.0", Branch: "stable", Origin: "flathub", Installation: "system"},
-				{Name: "GIMP", ApplicationID: "org.gimp.GIMP", NewVersion: "2.10.36", Branch: "stable", Origin: "flathub", Installation: "system"},
+			want: []updateRow{
+				{info: system("Firefox", "org.mozilla.firefox", "120.0", "stable", "flathub")},
+				{info: system("GIMP", "org.gimp.GIMP", "2.10.36", "stable", "flathub")},
 			},
 		},
 		{
-			name:   "whitespace separated fallback",
-			output: "Firefox   org.mozilla.firefox   120.0   stable   flathub",
+			name:   "tab separated rows with a commit column",
+			output: "Frostnotes\torg.frostyard.Frostnotes\t0.6.0\tstable\tfrostyard\t6a4d13a462af\n",
 			user:   false,
-			want: []UpdateInfo{
-				{Name: "Firefox", ApplicationID: "org.mozilla.firefox", NewVersion: "120.0", Branch: "stable", Origin: "flathub", Installation: "system"},
+			want: []updateRow{
+				{info: system("Frostnotes", "org.frostyard.Frostnotes", "0.6.0", "stable", "frostyard"), commit: "6a4d13a462af"},
+			},
+		},
+		{
+			name:   "empty commit column stays unknown",
+			output: "Frostnotes\torg.frostyard.Frostnotes\t0.6.0\tstable\tfrostyard\t\n",
+			user:   false,
+			want: []updateRow{
+				{info: system("Frostnotes", "org.frostyard.Frostnotes", "0.6.0", "stable", "frostyard")},
+			},
+		},
+		{
+			name:   "whitespace separated fallback leaves the commit unknown",
+			output: "Firefox   org.mozilla.firefox   120.0   stable   flathub   6a4d13a462af",
+			user:   false,
+			want: []updateRow{
+				{info: system("Firefox", "org.mozilla.firefox", "120.0", "stable", "flathub")},
 			},
 		},
 		{
 			name:   "short row is partially parsed",
 			output: "Firefox org.mozilla.firefox 120.0",
 			user:   false,
-			want: []UpdateInfo{
-				{Name: "Firefox", ApplicationID: "org.mozilla.firefox", NewVersion: "120.0", Installation: "system"},
+			want: []updateRow{
+				{info: system("Firefox", "org.mozilla.firefox", "120.0", "", "")},
 			},
 		},
 		{
 			name:   "row with fewer than two fields is skipped",
 			output: "Firefox\nGIMP\torg.gimp.GIMP\t2.10.36\tstable\tflathub",
 			user:   false,
-			want: []UpdateInfo{
-				{Name: "GIMP", ApplicationID: "org.gimp.GIMP", NewVersion: "2.10.36", Branch: "stable", Origin: "flathub", Installation: "system"},
+			want: []updateRow{
+				{info: system("GIMP", "org.gimp.GIMP", "2.10.36", "stable", "flathub")},
 			},
 		},
 		{
 			name:   "blank and whitespace-only lines are skipped",
 			output: "\n   \nFirefox\torg.mozilla.firefox\t120.0\tstable\tflathub\n\t\n",
 			user:   false,
-			want: []UpdateInfo{
-				{Name: "Firefox", ApplicationID: "org.mozilla.firefox", NewVersion: "120.0", Branch: "stable", Origin: "flathub", Installation: "system"},
+			want: []updateRow{
+				{info: system("Firefox", "org.mozilla.firefox", "120.0", "stable", "flathub")},
 			},
 		},
 		{
@@ -641,25 +704,268 @@ func TestParseUpdateList(t *testing.T) {
 			name:   "user installation label",
 			output: "Firefox\torg.mozilla.firefox\t120.0\tstable\tflathub",
 			user:   true,
-			want: []UpdateInfo{
-				{Name: "Firefox", ApplicationID: "org.mozilla.firefox", NewVersion: "120.0", Branch: "stable", Origin: "flathub", Installation: "user"},
+			want: []updateRow{
+				{info: UpdateInfo{Name: "Firefox", ApplicationID: "org.mozilla.firefox", NewVersion: "120.0", Branch: "stable", Origin: "flathub", Installation: "user"}},
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseUpdateList(tt.output, tt.user)
-			if err != nil {
-				t.Fatalf("parseUpdateList() unexpected error: %v", err)
-			}
+			got := parseUpdateRows(tt.output, tt.user)
 			if len(got) != len(tt.want) {
-				t.Fatalf("parseUpdateList() = %+v, want %+v", got, tt.want)
+				t.Fatalf("parseUpdateRows() = %+v, want %+v", got, tt.want)
 			}
 			for i := range tt.want {
 				if got[i] != tt.want[i] {
-					t.Errorf("parseUpdateList()[%d] = %+v, want %+v", i, got[i], tt.want[i])
+					t.Errorf("parseUpdateRows()[%d] = %+v, want %+v", i, got[i], tt.want[i])
 				}
+			}
+		})
+	}
+}
+
+// A Flatpak release before flatpak/flatpak@a819741d13 lists every installed
+// OCI image as an update, because `remote-ls --updates` compares the remote
+// digest with the installed commit only. A listed commit equal to the
+// installed deployment's Alt-id is the image the installation already holds,
+// so ListUpdates drops that row and keeps the rest.
+func TestListUpdatesDropsTheInstalledOCIImage(t *testing.T) {
+	SetDryRun(false)
+	logPath := fakeFlatpakScript(t, `case "$1" in
+remotes) printf 'frostyard\tuser,oci,no-gpg-verify\n' ;;
+remote-ls) printf 'Frostnotes\torg.frostyard.Frostnotes\t0.6.0\tstable\tfrostyard\t6a4d13a462af\nFrostmail\torg.frostyard.Frostmail\t0.7.0\tstable\tfrostyard\ta28092da7134\n' ;;
+info)
+	case "$3" in
+	org.frostyard.Frostnotes//stable) printf '      Commit: 873064a9ff32f6e529a9eb1a62badbe13fd06b0d9c703dc9c6cefaa40dff715c\n      Alt-id: 6a4d13a462afe0e62a656f36c24bbe63d777b573dde6710dadab9114c487398b\n' ;;
+	*) printf '      Commit: 4ca67169dc6cf6e529a9eb1a62badbe13fd06b0d9c703dc9c6cefaa40dff715c\n      Alt-id: ffff92da7134e0e62a656f36c24bbe63d777b573dde6710dadab9114c487398b\n' ;;
+	esac ;;
+esac`)
+
+	updates, err := ListUpdates(true)
+	if err != nil {
+		t.Fatalf("ListUpdates error = %v", err)
+	}
+	want := []UpdateInfo{{
+		Name: "Frostmail", ApplicationID: "org.frostyard.Frostmail", NewVersion: "0.7.0",
+		Branch: "stable", Origin: "frostyard", Installation: "user",
+	}}
+	if !reflect.DeepEqual(updates, want) {
+		t.Fatalf("ListUpdates = %#v, want only the real update %#v", updates, want)
+	}
+	wantCalls := []string{
+		"remotes --user --columns=name,options",
+		"remote-ls --updates --app --columns=name,application,version,branch,origin,commit --user frostyard",
+		"info --user org.frostyard.Frostnotes//stable",
+		"info --user org.frostyard.Frostmail//stable",
+	}
+	if got := loggedCalls(t, logPath); !reflect.DeepEqual(got, wantCalls) {
+		t.Fatalf("ListUpdates ran %q, want %q", got, wantCalls)
+	}
+}
+
+// A remote without the oci option behaves exactly as before: the row is kept
+// and no alt-id query runs for it.
+func TestListUpdatesKeepsRowsFromANonOCIRemote(t *testing.T) {
+	SetDryRun(false)
+	logPath := fakeFlatpakScript(t, `case "$1" in
+remotes) printf 'flathub\tno-gpg-verify\n' ;;
+remote-ls) printf 'Firefox\torg.mozilla.firefox\t131.0\tstable\tflathub\t3f2a09c1de44\n' ;;
+*) exit 1 ;;
+esac`)
+
+	updates, err := ListUpdates(true)
+	if err != nil {
+		t.Fatalf("ListUpdates error = %v", err)
+	}
+	want := []UpdateInfo{{
+		Name: "Firefox", ApplicationID: "org.mozilla.firefox", NewVersion: "131.0",
+		Branch: "stable", Origin: "flathub", Installation: "user",
+	}}
+	if !reflect.DeepEqual(updates, want) {
+		t.Fatalf("ListUpdates = %#v, want %#v", updates, want)
+	}
+	wantCalls := []string{
+		"remotes --user --columns=name,options",
+		"remote-ls --updates --app --columns=name,application,version,branch,origin,commit --user flathub",
+	}
+	if got := loggedCalls(t, logPath); !reflect.DeepEqual(got, wantCalls) {
+		t.Fatalf("ListUpdates ran %q, want exactly %q with no info call", got, wantCalls)
+	}
+}
+
+// Every unknown case keeps the row: wrongly dropping one would hide a real
+// update behind a failed or unhelpful `flatpak info`.
+func TestListUpdatesKeepsAnOCIRowWhoseAltIDIsUnknown(t *testing.T) {
+	SetDryRun(false)
+
+	tests := []struct {
+		name string
+		info string
+	}{
+		{name: "the info query fails", info: `echo "error: not installed" >&2; exit 1`},
+		{name: "the info output has no Alt-id line", info: `printf '      Commit: 873064a9ff32\n'`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeFlatpakScript(t, `case "$1" in
+remotes) printf 'frostyard\tuser,oci\n' ;;
+remote-ls) printf 'Frostnotes\torg.frostyard.Frostnotes\t0.6.0\tstable\tfrostyard\t6a4d13a462af\n' ;;
+info) `+tt.info+` ;;
+esac`)
+
+			updates, err := ListUpdates(true)
+			if err != nil {
+				t.Fatalf("ListUpdates error = %v, want the row kept", err)
+			}
+			want := []UpdateInfo{{
+				Name: "Frostnotes", ApplicationID: "org.frostyard.Frostnotes", NewVersion: "0.6.0",
+				Branch: "stable", Origin: "frostyard", Installation: "user",
+			}}
+			if !reflect.DeepEqual(updates, want) {
+				t.Fatalf("ListUpdates = %#v, want the row kept as %#v", updates, want)
+			}
+		})
+	}
+}
+
+// A row whose commit column is empty says nothing about the installed image,
+// so it is kept without an alt-id query.
+func TestListUpdatesKeepsAnOCIRowWithoutACommit(t *testing.T) {
+	SetDryRun(false)
+	logPath := fakeFlatpakScript(t, `case "$1" in
+remotes) printf 'frostyard\tuser,oci\n' ;;
+remote-ls) printf 'Frostnotes\torg.frostyard.Frostnotes\t0.6.0\tstable\tfrostyard\t\n' ;;
+*) exit 1 ;;
+esac`)
+
+	updates, err := ListUpdates(true)
+	if err != nil {
+		t.Fatalf("ListUpdates error = %v", err)
+	}
+	want := []UpdateInfo{{
+		Name: "Frostnotes", ApplicationID: "org.frostyard.Frostnotes", NewVersion: "0.6.0",
+		Branch: "stable", Origin: "frostyard", Installation: "user",
+	}}
+	if !reflect.DeepEqual(updates, want) {
+		t.Fatalf("ListUpdates = %#v, want the row kept as %#v", updates, want)
+	}
+	wantCalls := []string{
+		"remotes --user --columns=name,options",
+		"remote-ls --updates --app --columns=name,application,version,branch,origin,commit --user frostyard",
+	}
+	if got := loggedCalls(t, logPath); !reflect.DeepEqual(got, wantCalls) {
+		t.Fatalf("ListUpdates ran %q, want exactly %q with no info call", got, wantCalls)
+	}
+}
+
+// flatpak translates the Alt-id label with gettext, so the query must run in
+// the C locale. The fake keeps the row unless LC_ALL is C, so a dropped row
+// proves the variable arrived.
+func TestListUpdatesAltIDQueryRunsWithTheCLocale(t *testing.T) {
+	SetDryRun(false)
+	fakeFlatpakScript(t, `case "$1" in
+remotes) printf 'frostyard\tuser,oci\n' ;;
+remote-ls) printf 'Frostnotes\torg.frostyard.Frostnotes\t0.6.0\tstable\tfrostyard\t6a4d13a462af\n' ;;
+info)
+	if [ "$LC_ALL" != C ]; then
+		exit 1
+	fi
+	printf '      Alt-id: 6a4d13a462afe0e62a656f36c24bbe63d777b573dde6710dadab9114c487398b\n' ;;
+esac`)
+
+	updates, err := ListUpdates(true)
+	if err != nil {
+		t.Fatalf("ListUpdates error = %v", err)
+	}
+	if len(updates) != 0 {
+		t.Fatalf("ListUpdates = %#v, want the installed image dropped; the info query did not run with LC_ALL=C", updates)
+	}
+}
+
+// Named without the TestI prefix: CI filters tests with -run "^Test[^I]"
+// and internal/installcheck fails when that filter hides a hermetic test.
+func TestFlatpakInstalledImage(t *testing.T) {
+	const digest = "6a4d13a462afe0e62a656f36c24bbe63d777b573dde6710dadab9114c487398b"
+
+	tests := []struct {
+		name   string
+		commit string
+		altID  string
+		want   bool
+	}{
+		{name: "12-character prefix matches", commit: "6a4d13a462af", altID: digest, want: true},
+		{name: "full-length digest matches", commit: digest, altID: digest, want: true},
+		{name: "both carry a sha256 prefix", commit: "sha256:6a4d13a462af", altID: "sha256:" + digest, want: true},
+		{name: "only the commit carries a sha256 prefix", commit: "sha256:6a4d13a462af", altID: digest, want: true},
+		{name: "only the alt-id carries a sha256 prefix", commit: "6a4d13a462af", altID: "sha256:" + digest, want: true},
+		{name: "surrounding space is trimmed", commit: " 6a4d13a462af ", altID: " " + digest + " ", want: true},
+		{name: "short commit is unknown", commit: "6a4d13a462a", altID: digest, want: false},
+		{name: "empty commit is unknown", commit: "", altID: digest, want: false},
+		{name: "empty alt-id is unknown", commit: "6a4d13a462af", altID: "", want: false},
+		{name: "different digest is an update", commit: "a28092da7134", altID: digest, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isInstalledImage(tt.commit, tt.altID); got != tt.want {
+				t.Fatalf("isInstalledImage(%q, %q) = %v, want %v", tt.commit, tt.altID, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseAltID(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   string
+	}{
+		{
+			name:   "labelled line among others",
+			output: "Frostnotes\n          ID: org.frostyard.Frostnotes\n      Commit: 873064a9ff32\n      Alt-id: 6a4d13a462afe0e62a656f36c24bbe63d777b573dde6710dadab9114c487398b\n",
+			want:   "6a4d13a462afe0e62a656f36c24bbe63d777b573dde6710dadab9114c487398b",
+		},
+		{name: "no Alt-id line", output: "      Commit: 873064a9ff32\n", want: ""},
+		{name: "empty output", output: "", want: ""},
+		{name: "empty value", output: "      Alt-id:\n", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseAltID(tt.output); got != tt.want {
+				t.Fatalf("parseAltID(%q) = %q, want %q", tt.output, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAltIDInfoArgs(t *testing.T) {
+	tests := []struct {
+		name   string
+		user   bool
+		appID  string
+		branch string
+		want   []string
+	}{
+		{
+			name: "user installation with a branch",
+			user: true, appID: "org.frostyard.Frostnotes", branch: "stable",
+			want: []string{"info", "--user", "org.frostyard.Frostnotes//stable"},
+		},
+		{
+			name: "system installation with a branch",
+			user: false, appID: "org.frostyard.Igloo", branch: "stable",
+			want: []string{"info", "--system", "org.frostyard.Igloo//stable"},
+		},
+		{
+			name: "empty branch asks for the ref alone",
+			user: true, appID: "org.frostyard.Frostmail", branch: "",
+			want: []string{"info", "--user", "org.frostyard.Frostmail"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := altIDInfoArgs(tt.user, tt.appID, tt.branch); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("altIDInfoArgs(%v, %q, %q) = %v, want %v", tt.user, tt.appID, tt.branch, got, tt.want)
 			}
 		})
 	}

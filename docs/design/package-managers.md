@@ -584,7 +584,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 |----------|------------|---------|-------|
 | `ListUserApplications()` | `flatpak list --user --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
 | `ListSystemApplications()` | `flatpak list --system --app --columns=name,application,version,branch,origin,ref` | 30s | Tabular parsed |
-| `ListUpdates(user)` | `flatpak remotes [--user\|--system] --columns=name,options`, then `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin [--user\|--system] <remote>` per enabled remote, and `flatpak list [--user\|--system] --app --columns=origin` only when a remote failed | 30s per query | Separate calls for user/system; `--app` excludes runtimes; see [Update queries run per remote](#update-queries-run-per-remote) |
+| `ListUpdates(user)` | `flatpak remotes [--user\|--system] --columns=name,options`, then `flatpak remote-ls --updates --app --columns=name,application,version,branch,origin,commit [--user\|--system] <remote>` per enabled remote, `flatpak info [--user\|--system] <app>//<branch>` with `LC_ALL=C` once per listed update of an OCI remote, and `flatpak list [--user\|--system] --app --columns=origin` only when a remote failed | 30s per query | Separate calls for user/system; `--app` excludes runtimes; see [Update queries run per remote](#update-queries-run-per-remote) and [OCI remotes list the installed image as an update](#oci-remotes-list-the-installed-image-as-an-update) |
 | `Install(appID, user)` | `flatpak install -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Uninstall(appID, user)` | `flatpak uninstall -y [--user\|--system] <appID>` | 30m | State-changing |
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
@@ -599,7 +599,7 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 ### Error handling
 
-`runFlatpakCommand` is a thin wrapper that calls `runFlatpakCommandCtx(context.Background(), args...)`. `runFlatpakCommandCtx(ctx, args...)` is the single dry-run gate (it skips state-changing commands before any `exec.Cmd` exists, logs `[DRY-RUN] Would execute: flatpak ...` and reports the command with `cmdlog.DryRun`), layers `commandTimeout(args)` onto the caller's `ctx` with `context.WithTimeout` (so the nearer deadline wins and cancelling `ctx` stops the command), and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, args ...string) (string, error)`, always passing `"flatpak"`. The executable path and context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()` and control the deadline — the same seam `stageexec.Run` gives OS staging and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
+`runFlatpakCommand` is a thin wrapper that calls `runFlatpakCommandCtx(context.Background(), args...)`, which in turn calls `runFlatpakCommandEnv(ctx, nil, args...)`. `runFlatpakCommandEnv(ctx, env, args...)` is the single dry-run gate (it skips state-changing commands before any `exec.Cmd` exists, logs `[DRY-RUN] Would execute: flatpak ...` and reports the command with `cmdlog.DryRun`), layers `commandTimeout(args)` onto the caller's `ctx` with `context.WithTimeout` (so the nearer deadline wins and cancelling `ctx` stops the command), and delegates to the unexported `runFlatpakCommandAt(ctx context.Context, exe string, env []string, args ...string) (string, error)`, always passing `"flatpak"`. A non-empty `env` is appended to `os.Environ()`, so a later value of a variable wins; a nil `env` leaves the child's environment as inherited. Only the OCI alt-id query passes one (`LC_ALL=C`). The executable path, the environment and the context are parameters purely so `runner_test.go` can drive a `#!/bin/sh` script from `t.TempDir()`, hand it a locale and control the deadline — the same seam `stageexec.Run` gives OS staging and `runBrewCommandAt` gives `internal/homebrew`. No exported function takes a `context.Context`: callers get deadlines, not cancellation. flatpak runs unprivileged; no `pkexec` is involved on this path.
 
 `runFlatpakCommandAt` starts the command in its own process group (`cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}`) and sets `cmd.Cancel` to `syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)`, so flatpak's download helpers (download workers, ostree pulls) are killed with the command instead of being orphaned when only the direct child is signalled. `cmd.WaitDelay` (5s) bounds the wait, because those helpers inherit the stdout/stderr pipes and a straggler would otherwise hold `Wait` open indefinitely. `cmd.Run` still reaps the child. Like `runBrewCommandAt`, it announces the command with `cmdlog.Start`, tees stdout and stderr through the trace while buffering both, and ends it with `trace.End(err)`, so the console shows every flatpak command and its output as it runs.
 
@@ -657,10 +657,12 @@ delegates to the unexported `listUpdates(ctx, user)`, which:
 1. lists the installation's remotes with `updateRemoteListArgs`
    (`remotes <scope> --columns=name,options`) and keeps, in listed order, every
    remote whose options do not include `disabled` (`parseUpdateRemotes`) — the
-   set flatpak's own remote-less query visits;
-2. queries each of those remotes with `updateListArgs(user, remote)`, each
+   set flatpak's own remote-less query visits. Each kept remote also records
+   whether its options include `oci`;
+2. queries each of those remotes with `updateListArgs(user, remote.name)`, each
    under its own 30-second read budget, so one slow remote cannot starve the
-   others;
+   others. The query asks for six columns; the sixth, `commit`, is only used
+   for an OCI remote (see the next section);
 3. only when at least one remote query failed, lists the origin of every
    installed **application** in the installation with `originListArgs`
    (`list <scope> --app --columns=origin`, parsed by `parseOrigins`). `--app`
@@ -691,6 +693,51 @@ load is authoritative when at least one installation has a usable result: no
 error, or one or more returned updates together with an error. It keeps the
 last known rows and count only when both installations failed and neither
 returned an update. `flatpak_test.go` covers each row of the table plus the argument builders and parsers directly.
+
+### OCI remotes list the installed image as an update
+
+An OCI remote (options include `oci`, as in the Frostyard remote's
+`user,oci,no-gpg-verify`) names each ref by its image digest. When Flatpak
+installs one, it imports the image as a new local OSTree commit and keeps the
+digest as the deployment's Alt-id. In Flatpak 1.16.6 — and in any release
+before the fix below — `flatpak update` compares the remote commit with both
+the installed commit and the Alt-id, but `remote-ls --updates` compares it
+with the installed commit only, which never equals a digest. Every application
+installed from an OCI remote is therefore listed as an update forever,
+although an update to it does nothing. Upstream fixed `remote-ls` in flatpak/flatpak@a819741d13
+([flatpak/flatpak#6875](https://github.com/flatpak/flatpak/pull/6875)), which is
+in no release yet.
+
+`ListUpdates` applies the same check `flatpak update` makes, for OCI remotes
+only. `parseUpdateRows` keeps the `commit` column (the first 12 hex characters
+Flatpak prints) in an unexported `updateRow`, so the exported `UpdateInfo` is
+unchanged. For each row from an OCI remote, `isInstalledOCIUpdate` runs
+`flatpak info <scope> <application>//<branch>` with `LC_ALL=C` — the Alt-id
+label goes through gettext, so the locale must be the C one for
+`parseAltID` to find the line — and `isInstalledImage(commit, altID)` drops the
+row when the Alt-id starts with the commit, after trimming both and removing
+an optional `sha256:` prefix.
+
+Every unknown case keeps the row, because a wrong drop hides a real update:
+
+- the commit column is empty;
+- `flatpak info` fails; only a cancelled caller context or a missing
+  executable ends the whole query, exactly as for a failed remote query;
+- its output has no `Alt-id:` line.
+
+A remote without the `oci` option is queried exactly as before: same
+`remote-ls` arguments apart from the appended column, the same rows, and no
+`flatpak info` call. The cost is one `flatpak info` per listed update from an
+OCI remote — at most a handful today — and none when the installation has no
+OCI remote. Remove the check once the oldest Flatpak that ChairLift supports
+includes flatpak/flatpak@a819741d13; the comment at
+`isInstalledOCIUpdate` says so. `flatpak_test.go`
+(`TestListUpdatesDropsTheInstalledOCIImage`,
+`TestListUpdatesKeepsRowsFromANonOCIRemote`,
+`TestListUpdatesKeepsAnOCIRowWhoseAltIDIsUnknown`,
+`TestListUpdatesKeepsAnOCIRowWithoutACommit`,
+`TestListUpdatesAltIDQueryRunsWithTheCLocale`, `TestFlatpakInstalledImage`,
+`TestParseAltID`, `TestAltIDInfoArgs`) covers this.
 
 ## fwupd (`internal/fwupd/fwupd.go`)
 
