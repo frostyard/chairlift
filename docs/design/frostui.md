@@ -12,8 +12,14 @@ The kit's parts, rules, tests and API changes are documented in the module:
 
 - **`Pipeline`'s name.** The module names a pipeline "Pipeline" for screen
   readers. The Updates page chains `.Label("Update run")`.
-- **Command tracing.** The kit cannot import `internal/cmdlog`, so a view that
-  launches through it traces the command itself (`launchDesktopApp`).
+- **Launch tracing.** The kit cannot import `internal/cmdlog`, so a view that
+  launches a desktop app through it reports the launch itself
+  (`launchDesktopApp`, with `cmdlog.Launch`). Since frostui v0.5.1,
+  `LaunchDesktopApp` starts no launcher program: it resolves the desktop
+  entry and launches it in process through GIO, detached from ChairLift's
+  stdout and stderr, and fails with GIO's reason when the entry is missing
+  or cannot be launched. The lookup and the launch are synchronous, so the
+  views call it on a goroutine (`Env.launchApp`) and post the result back.
 - **The waker.** MyGo's `Window.Update` rebuilds the view on every call, so
   ChairLift wakes the window from a burst of console lines through
   `frostui.Waker`.

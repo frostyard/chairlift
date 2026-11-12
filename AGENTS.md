@@ -231,7 +231,9 @@ An agent must not break these:
   and `internal/window` belong to the UI thread. All external tool calls run
   in goroutines that copy their inputs first, never read state, and hand
   results back with `Env.Post` (MyGo's `Window.Update`, through the app's
-  `poster`, which keeps posts made before the window exists). Console output
+  `poster`, which keeps posts made before the window exists). So do desktop
+  app launches (`Env.launchApp`): `frostui.LaunchDesktopApp`'s GIO lookup
+  and launch are synchronous and may block. Console output
   wakes the window through `frostui.Waker` (at most every 60 ms), because
   `Window.Update` rebuilds the view on every call. The live sampler buffers
   at most one minute of samples behind a mutex; only the UI thread applies
@@ -260,8 +262,12 @@ An agent must not break these:
   and lsblk's JSON is not teed. A new `exec.Command` under `internal/` must do
   the same (`internal/installcheck.TestEveryCommandIsTraced` parses each
   file and counts `cmdlog.Start` calls per function, closures included). The
-  frostui module is outside that walk, so the views trace what they launch
-  through it (`launchDesktopApp`). The rail's job card and the palette stop the queue
+  frostui module is outside that walk, and its `LaunchDesktopApp` runs no
+  command: it launches the desktop entry in process through GIO. The views
+  report each launch with `cmdlog.Launch` (`launchDesktopApp`), which the
+  console shows as an in-process launch, not as a command, and the same
+  test requires a `cmdlog.Launch` beside every `frostui.LaunchDesktopApp`
+  call. The rail's job card and the palette stop the queue
   (`Jobs.CancelAll`); a job that finished despite the cancel keeps its result.
 - **The UI kit is a module.** ChairLift depends on
   `github.com/frostyard/frostui` (version in go.mod) and holds no copy of it;
