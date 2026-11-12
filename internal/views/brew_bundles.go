@@ -242,7 +242,6 @@ func (bd *brewBundles) sameName(item *brewBundle) bool {
 }
 
 func (b *Brew) drawBundle(c *ui.Context, item *brewBundle) {
-	t := c.Theme()
 	presentation := pageview.BrewBundle(item.Name, item.Description, item.Path)
 	frostui.Card(c).Key(item.Path).Children(func() {
 		ui.Row(c).Gap(10).AlignItems(ui.Center).Tooltip(presentation.Subtitle).Children(func() {
@@ -267,7 +266,7 @@ func (b *Brew) drawBundle(c *ui.Context, item *brewBundle) {
 			})
 		}
 		if b.bundles.sameName(item) {
-			frostui.Mono(c, item.Path).FontSize(11.5).TextColor(t.TextMuted).SingleLine()
+			frostui.Caption(c, item.Path).Font("monospace").SingleLine()
 		}
 		// The footer sits at the bottom, level with its neighbours'.
 		ui.Spacer(c)
@@ -295,10 +294,12 @@ func (b *Brew) drawBundle(c *ui.Context, item *brewBundle) {
 	})
 }
 
-// brewChip is a package name on a bundle card: a quiet rounded tag.
+// brewChip is a package name on a bundle card: the brand's quiet tag, the
+// tag text inside a neutral hairline. Unlike a kit pill it keeps the name
+// as written, since package names are lowercase.
 func brewChip(c *ui.Context, text string) ui.Element {
 	t := c.Theme()
-	return ui.Row(c).Padding(2, 7).Radius(5).Background(t.Border.Alpha(0.55)).Children(func() {
-		ui.Text(c, text).FontSize(11.5).SingleLine()
+	return ui.Row(c).Padding(2, 7).Radius(frostui.RadiusChip).Border(1, frostui.ToneLine(t, frostui.Neutral)).Children(func() {
+		frostui.Caption(c, text).TextColor(frostui.ColorsOf(t).TagText).SingleLine()
 	})
 }

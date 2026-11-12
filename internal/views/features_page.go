@@ -276,7 +276,7 @@ func (p *featuresView) listRow(c *ui.Context, t *ui.Theme, row featureRow) {
 		ui.Column(c).Grow(1).Basis(0).Gap(2).Children(func() {
 			ui.Row(c).Gap(frostui.SpaceS).AlignItems(ui.Baseline).Children(func() {
 				frostui.Strong(c, title).SingleLine().Shrink(1)
-				frostui.Mono(c, row.Name).FontSize(11.5).TextColor(t.TextMuted).SingleLine().Shrink(0)
+				frostui.Caption(c, row.Name).Font("monospace").SingleLine().Shrink(0)
 			})
 			if line == "" {
 				// Nothing to say beyond the switch and the version.

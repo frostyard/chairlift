@@ -521,7 +521,7 @@ func ovShell(s *Store, page Page) func(c *ui.Context) {
 				ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 					ui.Avatar(c, info.Hostname, nil).Size(32, 32)
 					ui.Column(c).Children(func() {
-						ui.Text(c, info.Hostname).Bold().FontSize(13)
+						frostui.Strong(c, info.Hostname)
 						frostui.Caption(c, info.Model)
 					})
 				})
@@ -599,6 +599,39 @@ func TestSnapshotOverview(t *testing.T) {
 		tt := ui.NewTesterWith(ovShell(s, p), 1024, 1300, ui.TesterOptions{Dark: true})
 		snapshot(t, tt, "overview-narrow-dark")
 	})
+}
+
+// TestOverviewTextFollowsTheDesktopTextSize draws the Overview at the
+// usual text size and at 1.5 times it: the Overview's own sizes (the hero's
+// headline, the deployments, the chart's scale, the free space, the System
+// details' values) must grow with it, as the kit's text styles do
+// (frostui.TextSize).
+func TestOverviewTextFollowsTheDesktopTextSize(t *testing.T) {
+	heights := func(scale float32) map[string]float32 {
+		s, p, _ := ovStore(t, sysConfig(sysAllGroups...), false, ovBootc(""))
+		ovFillLive(s.Live)
+		checked := sysFixedNow.Add(-12 * time.Minute)
+		p.sources = func() []UpdateSource {
+			return []UpdateSource{s.System.Source(), ovFake(SourceFlatpak, checked, ovItems("app", 3, nil)...)}
+		}
+		tt := ui.NewTesterWith(ovView(p), 1360, 2400, ui.TesterOptions{Preferences: ui.Preferences{TextScale: scale}})
+		got := map[string]float32{}
+		for _, text := range []string{"4 updates ready", "2026.11.05", "100%", "288 GB free", "https://frostyard.org/", "ThinkPad X1 Carbon Gen 12"} {
+			r, ok := tt.Find(text)
+			if !ok {
+				t.Fatalf("scale %v: no %q in %q", scale, text, tt.Texts())
+			}
+			got[text] = r.H
+		}
+		return got
+	}
+	usual, large := heights(1), heights(1.5)
+	for text, h := range usual {
+		if ratio := large[text] / h; ratio < 1.3 {
+			t.Errorf("%q is %v tall at the usual text size and %v at 1.5 times it (ratio %.2f): it does not follow the text size",
+				text, h, large[text], ratio)
+		}
+	}
 }
 
 func TestOverviewHeroShowsTheSnowflake(t *testing.T) {

@@ -196,7 +196,6 @@ func (b *Brew) drawResults(c *ui.Context) {
 }
 
 func (b *Brew) drawResult(c *ui.Context, r homebrew.SearchResult) {
-	t := c.Theme()
 	key := brewKey(r.Kind, r.Name)
 	cask := r.Kind == homebrew.Cask
 	presentation := pageview.SearchResult(r.Name, r.Kind.DisplayName())
@@ -211,7 +210,7 @@ func (b *Brew) drawResult(c *ui.Context, r homebrew.SearchResult) {
 				}
 				frostui.Pill(c, presentation.Subtitle, tone)
 			})
-			frostui.Mono(c, pageview.BrewInstallCommand(r.Name, cask)).FontSize(11.5).TextColor(t.TextMuted).SingleLine()
+			frostui.Caption(c, pageview.BrewInstallCommand(r.Name, cask)).Font("monospace").SingleLine()
 		})
 		ui.Row(c).Width(130).Justify(ui.End).Children(func() {
 			a := b.search.rows[key]

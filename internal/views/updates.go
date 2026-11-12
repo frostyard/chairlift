@@ -334,7 +334,7 @@ func (p *updatesPage) runCard(c *ui.Context, srcs []UpdateSource) {
 					frac := q.BatchFraction()
 					ui.Row(c).Gap(frostui.SpaceS).AlignItems(ui.Center).Children(func() {
 						frostui.Caption(c, fmt.Sprintf("Job %d of %d", min(done+1, total), total)).SingleLine()
-						ui.Text(c, strconv.Itoa(int(frac*100))+"%").FontSize(12.5).Bold().SingleLine()
+						ui.Text(c, strconv.Itoa(int(frac*100))+"%").FontSize(frostui.TextSize(c, 12.5)).Bold().SingleLine()
 					})
 					ui.Progress(c, frac).Width(160).Label("Update run progress")
 				})
