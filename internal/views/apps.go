@@ -326,8 +326,8 @@ func (p *appsPage) drawTable(c *ui.Context, rows []AppEntry) {
 				ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 					frostui.SquareAvatar(c, e.Name, 28)
 					ui.Column(c).Gap(1).Grow(1).MinWidth(0).Children(func() {
-						ui.Text(c, e.Name).FontSize(13.5).FontWeight(600).TextColor(t.Text).SingleLine()
-						ui.Text(c, e.ID).FontSize(11.5).TextColor(t.TextMuted).SingleLine()
+						frostui.Body(c, e.Name).FontWeight(600).TextColor(t.Text).SingleLine()
+						frostui.Caption(c, e.ID).TextColor(t.TextMuted).SingleLine()
 					})
 				})
 			case 1:
@@ -360,7 +360,7 @@ func (p *appsPage) inspector(c *ui.Context, e *AppEntry) {
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			frostui.SquareAvatar(c, e.Name, 52)
 			ui.Column(c).Gap(5).Grow(1).MinWidth(0).AlignItems(ui.Start).Children(func() {
-				ui.Text(c, e.Name).FontSize(17).Bold().MaxLines(2)
+				ui.Text(c, e.Name).FontSize(frostui.TextSize(c, 17)).Bold().MaxLines(2)
 				frostui.ColorPill(c, appsKindLabel(e.Kind), appsKindColor(t, e.Kind))
 			})
 		})
@@ -381,7 +381,7 @@ func (p *appsPage) inspector(c *ui.Context, e *AppEntry) {
 		if e.Pinned {
 			facts = append(facts, frostui.KeyValue{Key: "Pinned", Value: "Upgrades leave it at this version"})
 		}
-		frostui.KeyValues(c, facts, frostui.KeyValuesStyle{KeyWidth: 72, Gap: 10, FontSize: 12.5})
+		frostui.KeyValues(c, facts, frostui.KeyValuesStyle{KeyWidth: 72, Gap: 10, FontSize: frostui.TextSize(c, 12.5)})
 		if len(e.Actions) == 0 {
 			return
 		}
@@ -685,7 +685,7 @@ func appsStatusPill(c *ui.Context, t *ui.Theme, e AppEntry) {
 	case e.Busy:
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 			ui.Spinner(c).Size(14, 14).Label("Working")
-			ui.Text(c, "Working").FontSize(11.5).TextColor(t.TextMuted)
+			frostui.Caption(c, "Working").TextColor(t.TextMuted)
 		})
 	case e.Update != "":
 		frostui.DotPill(c, "Update", t.Accent).Tooltip("Update to " + e.Update)

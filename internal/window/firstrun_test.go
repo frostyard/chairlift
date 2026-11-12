@@ -523,6 +523,40 @@ func TestFirstRunStyleWritesSchemeSerially(t *testing.T) {
 	}
 }
 
+// TestFirstRunSchemeTilesDrawTheFrostyardThemes reads the window sketch of
+// each Color Scheme tile: each draws the kit's Frostyard theme of its
+// darkness, the one frostui.Adapt sets for the window, whatever the
+// window's own theme.
+func TestFirstRunSchemeTilesDrawTheFrostyardThemes(t *testing.T) {
+	for _, dark := range []bool{false, true} {
+		f := newFRFixture(t, frOptions{online: true, dark: dark})
+		f.toConnectivity()
+		f.click(i18n.T(i18n.MsgNext))
+		f.wantStep(firstrun.StepStyle)
+		img := f.tt.Image()
+		for _, tile := range []struct {
+			name string
+			dark bool
+		}{{i18n.T(i18n.MsgLight), false}, {i18n.T(i18n.MsgDark), true}} {
+			info, ok := f.tt.AccessByRole(ui.RoleRadio, tile.name)
+			if !ok {
+				t.Fatalf("no %s tile", tile.name)
+			}
+			// The sketch's window ground, between its side bar and its
+			// card: the tile's padding (10) plus the sketch's title bar (18)
+			// and the side bar (28% of 196), a few DIPs in.
+			x := int(info.Bounds.X + 10 + 196*0.28 + 5)
+			y := int(info.Bounds.Y + 10 + 18 + 5)
+			got := img.RGBAAt(x, y)
+			want := frostui.FrostyardTheme(tile.dark).Background
+			if got.R != want.R || got.G != want.G || got.B != want.B {
+				t.Errorf("window dark=%v: the %s sketch's ground at (%d, %d) is %v, want the Frostyard ground %v",
+					dark, tile.name, x, y, got, want)
+			}
+		}
+	}
+}
+
 func TestFirstRunReportingConsentIsOffAndSaves(t *testing.T) {
 	f := newFRFixture(t, frOptions{online: true, apps: true, reporting: true})
 	f.toConnectivity()

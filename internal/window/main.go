@@ -342,16 +342,15 @@ func (m *Main) hostCard(c *ui.Context) {
 	if host == "" {
 		return
 	}
-	t := c.Theme()
 	ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 		ui.Avatar(c, host, nil).Size(32, 32)
 		ui.Column(c).Grow(1).Children(func() {
-			ui.Text(c, host).Bold().FontSize(13).SingleLine()
+			frostui.Strong(c, host).SingleLine()
 			sub := info.Model
 			if sub == "" && info.OSVersion != "" {
 				sub = strings.TrimSpace(info.OSName + " " + info.OSVersion)
 			}
-			ui.Text(c, sub).FontSize(11).TextColor(t.TextMuted).SingleLine()
+			frostui.Caption(c, sub).SingleLine()
 		})
 	})
 }

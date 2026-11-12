@@ -31,9 +31,10 @@ func (w *FirstRun) View(c *ui.Context) {
 
 	step := w.flow.Current()
 	ui.Column(c).Fill().Background(t.Background).Padding(frostui.SpaceXL).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
-		ui.Column(c).WidthPercent(100).MaxWidth(wizardWidth).Grow(1).MaxHeight(wizardMaxHeight).
-			Padding(28, 32, 24, 32).Gap(18).Radius(16).Background(frostui.Panel(t)).Border(1, t.Border).
-			Shadow(0, 8, 28, 0, ui.RGBA(0, 0, 0, 0.10)).AlignItems(ui.Stretch).Children(func() {
+		// The kit's card: the panel face over a hairline, square and with
+		// no shadow, as the brand draws every card (frostui ADR-0011).
+		frostui.Card(c).WidthPercent(100).MaxWidth(wizardWidth).Grow(1).MaxHeight(wizardMaxHeight).
+			Padding(28, 32, 24, 32).Gap(18).Children(func() {
 			w.stepDots(c)
 			// Keyed by step, so each step starts with fresh local state
 			// (focus, scroll) and the Done step's Exit takes the focus.
@@ -177,22 +178,20 @@ func (w *FirstRun) styleStep(c *ui.Context) {
 }
 
 // schemeTile is a radio tile with a small drawing of a window in the light
-// or dark theme, and its label under it.
+// or dark theme, and its label under it. The chosen tile is the selected
+// row of the brand: the selected fill inside an accent hairline.
 func schemeTile(c *ui.Context, dark bool, label, tooltip string, selected bool) ui.Element {
 	t := c.Theme()
-	preview := ui.LightTheme()
-	if dark {
-		preview = ui.DarkTheme()
-	}
-	border, width := t.Border, float32(1)
+	preview := schemePreview(c, dark)
+	border, face := t.Border, ui.Transparent
 	if selected {
-		border, width = t.Accent, 2
+		border, face = t.Accent, frostui.ColorsOf(t).SelectedFill
 	}
 	tile := ui.ButtonBase(c).Role(ui.RoleRadio).Checked(selected).Label(label).Tooltip(tooltip).Cursor(ui.CursorPointer)
 	tile.Children(func() {
-		ui.Column(c).Gap(10).Padding(10).Radius(frostui.RadiusCard).Border(width, border).AlignItems(ui.Center).Children(func() {
+		ui.Column(c).Gap(10).Padding(10).Radius(frostui.RadiusCard).Background(face).Border(1, border).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(196, 118).Draw(func(p *ui.Painter, r ui.Rect) {
-				drawWindowSketch(p, r, preview, t.Accent)
+				drawWindowSketch(p, r, preview)
 			})
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				icon, color := "radio", t.TextMuted
@@ -200,33 +199,48 @@ func schemeTile(c *ui.Context, dark bool, label, tooltip string, selected bool) 
 					icon, color = "object-select", t.Accent
 				}
 				frostui.Icon(c, icon).TextColor(color)
-				ui.Text(c, label).FontSize(13.5).Bold().SingleLine()
+				frostui.Strong(c, label).SingleLine()
 			})
 		})
 	})
 	return tile
 }
 
-// drawWindowSketch paints a tiny window in theme pt: a title bar, a side
-// bar and a card with two lines of text and an accent button.
-func drawWindowSketch(p *ui.Painter, r ui.Rect, pt *ui.Theme, accent ui.Color) {
-	const radius, bar = 8, 18
+// schemePreview is the theme a scheme tile draws its window in: the kit's
+// Frostyard theme of that darkness with the desktop's preferences but not
+// its accent, as frostui.Adapt sets the window's own theme.
+func schemePreview(c *ui.Context, dark bool) *ui.Theme {
+	p := c.Preferences()
+	p.Accent = ui.Color{}
+	return frostui.FrostyardTheme(dark).WithPreferences(p)
+}
+
+// drawWindowSketch paints a tiny window in theme pt, as the brand draws
+// one: the chrome's title bar and side bar, and a square card on the panel
+// gradient over a hairline, with two lines of text and a primary button on
+// the brand gradient.
+func drawWindowSketch(p *ui.Painter, r ui.Rect, pt *ui.Theme) {
+	const bar = 18
+	k := frostui.ColorsOf(pt)
+	radius := pt.Radius
 	p.Fill(r, pt.Background, radius)
-	p.FillRadii(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: bar}, [4]float32{radius, radius, 0, 0}, frostui.Chrome(pt))
+	p.FillRadii(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: bar}, [4]float32{radius, radius, 0, 0}, k.Chrome)
 	for i := range 3 {
 		p.Fill(ui.Rect{X: r.X + r.W - 14 - float32(i)*10, Y: r.Y + 6, W: 6, H: 6}, pt.TextMuted.Alpha(0.5), 3)
 	}
 	side := ui.Rect{X: r.X, Y: r.Y + bar, W: r.W * 0.28, H: r.H - bar}
-	p.FillRadii(side, [4]float32{0, 0, 0, radius}, frostui.Chrome(pt))
+	p.FillRadii(side, [4]float32{0, 0, 0, radius}, k.Chrome)
 	for i := range 3 {
-		p.Fill(ui.Rect{X: side.X + 8, Y: side.Y + 10 + float32(i)*12, W: side.W - 16, H: 5}, pt.TextMuted.Alpha(0.45), 2.5)
+		p.Fill(ui.Rect{X: side.X + 8, Y: side.Y + 10 + float32(i)*12, W: side.W - 16, H: 5}, pt.TextMuted.Alpha(0.45), frostui.RadiusChip)
 	}
 	card := ui.Rect{X: side.X + side.W + 10, Y: r.Y + bar + 10, W: r.W - side.W - 20, H: r.H - bar - 20}
-	p.Fill(card, frostui.Panel(pt), 6)
-	p.Stroke(card, pt.Border, 6, 1)
-	p.Fill(ui.Rect{X: card.X + 8, Y: card.Y + 10, W: card.W * 0.62, H: 6}, pt.Text.Alpha(0.75), 3)
-	p.Fill(ui.Rect{X: card.X + 8, Y: card.Y + 22, W: card.W * 0.42, H: 5}, pt.TextMuted.Alpha(0.6), 2.5)
-	p.Fill(ui.Rect{X: card.X + 8, Y: card.Y + card.H - 18, W: 40, H: 10}, accent, 5)
+	p.Fill(card, k.Panel, frostui.RadiusCard)
+	p.FillGradient(card, ui.LinearGradient{From: k.PanelFrom, To: k.PanelTo, Angle: 160, End: 0.62}, frostui.RadiusCard)
+	p.Stroke(card, pt.Border, frostui.RadiusCard, 1)
+	p.Fill(ui.Rect{X: card.X + 8, Y: card.Y + 10, W: card.W * 0.62, H: 6}, pt.Text.Alpha(0.75), frostui.RadiusChip)
+	p.Fill(ui.Rect{X: card.X + 8, Y: card.Y + 22, W: card.W * 0.42, H: 5}, pt.TextMuted.Alpha(0.6), frostui.RadiusChip)
+	button := ui.Rect{X: card.X + 8, Y: card.Y + card.H - 18, W: 40, H: 10}
+	p.FillGradient(button, ui.LinearGradient{From: k.GradientFrom, To: k.GradientTo, Angle: 135}, frostui.RadiusChip)
 	p.Stroke(r, pt.Border, radius, 1)
 }
 

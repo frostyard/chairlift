@@ -214,11 +214,14 @@ func (p *Problems) problemBody(c *ui.Context, it problems.Item, text pageview.Pr
 		frostui.Body(c, details[0].Subtitle).Wrap()
 	}
 	if len(details) > 1 {
-		ui.Column(c).Padding(10, 12).Radius(frostui.RadiusChip).Background(t.Background).Gap(frostui.SpaceS).AlignItems(ui.Stretch).Children(func() {
+		// The details sit on the kit's code face, as the console does,
+		// inside a hairline.
+		ui.Column(c).Padding(10, 12).Radius(frostui.RadiusChip).Background(frostui.ColorsOf(t).Code).Border(1, t.Border).
+			Gap(frostui.SpaceS).AlignItems(ui.Stretch).Children(func() {
 			for i, row := range details[1:] {
 				ui.Column(c.Key(i)).Gap(3).AlignItems(ui.Stretch).Children(func() {
 					frostui.Caption(c, row.Title)
-					frostui.Mono(c, row.Subtitle).FontSize(12).Wrap().Selectable()
+					frostui.Mono(c, row.Subtitle).Wrap().Selectable()
 				})
 			}
 		})
@@ -322,8 +325,8 @@ func (p *Problems) sentList(c *ui.Context, consent reporting.Consent, state *rep
 			ui.Column(c).Gap(frostui.SpaceS).AlignItems(ui.Stretch).Padding(frostui.SpaceS, 0, 0, 0).Children(func() {
 				for i, row := range rows {
 					ui.Column(c.Key(i)).Gap(2).AlignItems(ui.Stretch).Children(func() {
-						frostui.Body(c, row.Title).FontSize(12.5)
-						frostui.Mono(c, row.Subtitle).FontSize(11.5).TextColor(t.TextMuted).Selectable()
+						frostui.Body(c, row.Title).FontSize(frostui.TextSize(c, 12.5))
+						frostui.Caption(c, row.Subtitle).Font("monospace").Selectable()
 					})
 				}
 			})

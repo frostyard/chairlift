@@ -268,6 +268,13 @@ An agent must not break these:
   ChairLift-specific UI in `internal/views` or `internal/window`, and propose
   a view helper that is not ChairLift-specific to the module. See
   [docs/design/frostui.md](docs/design/frostui.md).
+- **The window draws in the kit's Frostyard look.** `frostui.Adapt` sets
+  Frostyard or Frostyard light each frame, without the desktop's accent.
+  Views take corners, text sizes and surfaces from the kit (its metrics,
+  text styles, `frostui.TextSize`, `frostui.ColorsOf`), never a literal
+  radius or font size, and draw no shadow
+  (`internal/installcheck.TestViewsDrawInKitMetrics`). See
+  [the Frostyard look](docs/design/frostui.md#the-frostyard-look).
 - **Views are tested headless.** `internal/views`, `internal/window` and
   `internal/app` hold tests that render with `ui.NewTester`; backends are injected as function fields, so no test runs
   brew, flatpak, bootc, fwupdmgr, updex or pkexec. A test that stands in for

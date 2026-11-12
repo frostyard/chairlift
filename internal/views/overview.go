@@ -346,13 +346,17 @@ func (p *overviewPage) heroCard(c *ui.Context, info SystemInfo, tally updateTall
 	t := c.Theme()
 	frostui.Card(c).Padding(22).Gap(18).Children(func() {
 		ui.Row(c).Gap(18).AlignItems(ui.Center).Children(func() {
-			// frostyard's deep-blue panel (design-system --panel): the pale
-			// snowflake reads on it in light and dark themes alike.
-			ui.Box(c).Size(64, 64).Radius(16).Background(ui.RGB(0x0f, 0x30, 0x48)).Border(1, t.Accent.Alpha(0.35)).Center().Children(func() {
+			// frostyard's deep-blue panel, the Frostyard theme's card face,
+			// in both themes: the pale snowflake reads on it in light and
+			// dark alike. Its corners are the brand tile's (the theme's
+			// Radius), its outline the accent's line.
+			ui.Box(c).Size(heroLogo, heroLogo).Radius(t.Radius).Background(heroLogoFace()).Border(1, frostui.ToneLine(t, frostui.Accent)).Center().Children(func() {
 				if bmp := overviewSnowflake(); bmp != nil {
-					ui.Image(c, bmp).Size(62, 62).Label("Snowflake")
+					ui.Image(c, bmp).Size(heroLogo-2, heroLogo-2).Label("Snowflake")
 				} else {
-					frostui.Icon(c, "weather-snow").FontSize(36).TextColor(t.Accent)
+					// Sized to the tile, as frostui.IconTile sizes its
+					// icon, not to the text.
+					frostui.Icon(c, "weather-snow").FontSize(heroLogo * 9 / 16).TextColor(t.Accent)
 				}
 			})
 			ui.Column(c).Grow(1).Gap(8).AlignItems(ui.Start).Children(func() {
@@ -361,7 +365,7 @@ func (p *overviewPage) heroCard(c *ui.Context, info SystemInfo, tally updateTall
 					if name == "" {
 						name = "This computer"
 					}
-					ui.Text(c, name).FontSize(26).Bold().SingleLine().Role(ui.RoleHeading)
+					frostui.Title(c, name).SingleLine().Role(ui.RoleHeading)
 					if info.Channel != "" {
 						frostui.Pill(c, info.Channel, frostui.Accent)
 					}
@@ -386,6 +390,15 @@ func (p *overviewPage) heroCard(c *ui.Context, info SystemInfo, tally updateTall
 			p.heroStatus(c, info, tally, state, ui.Start)
 		}
 	})
+}
+
+// heroLogo is the side of the hero's snowflake tile, in DIPs.
+const heroLogo = 64
+
+// heroLogoFace is the snowflake tile's face: the Frostyard (dark) theme's
+// card face, whatever the window's theme.
+func heroLogoFace() ui.Color {
+	return frostui.ColorsOf(frostui.FrostyardTheme(true)).PanelFrom
 }
 
 // overviewSnowflake is ChairLift's snowflake, its application icon
@@ -439,11 +452,13 @@ func (p *overviewPage) deploymentChain(c *ui.Context, info SystemInfo) {
 	})
 }
 
+// deploymentChip is one deployment of the chain. The booted one is drawn
+// in the accent: the kit's accent fill inside an accent hairline.
 func deploymentChip(c *ui.Context, role, icon string, d Deployment, booted bool, empty string) {
 	t := c.Theme()
 	bg, border, iconColor := t.Background, t.Border, t.TextMuted
 	if booted {
-		bg, border, iconColor = t.Accent.Alpha(0.14), t.Accent, t.Accent
+		bg, border, iconColor = frostui.ToneFill(t, frostui.Accent), t.Accent, t.Accent
 	}
 	version := d.Version
 	if version == "" {
@@ -456,7 +471,7 @@ func deploymentChip(c *ui.Context, role, icon string, d Deployment, booted bool,
 	if d.Pinned {
 		label += ", pinned"
 	}
-	row := ui.Row(c).Gap(10).Padding(8, 12).Radius(10).Background(bg).Border(1, border).AlignItems(ui.Center).
+	row := ui.Row(c).Gap(10).Padding(8, 12).Radius(frostui.RadiusChip).Background(bg).Border(1, border).AlignItems(ui.Center).
 		Role(ui.RoleListItem).Label(label)
 	if !d.Present {
 		row.Opacity(0.55)
@@ -470,10 +485,10 @@ func deploymentChip(c *ui.Context, role, icon string, d Deployment, booted bool,
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 				frostui.Caption(c, role)
 				if d.Pinned {
-					frostui.Icon(c, "view-pin").FontSize(11).TextColor(t.TextMuted)
+					frostui.Icon(c, "view-pin").FontSize(frostui.TextSize(c, 11)).TextColor(t.TextMuted)
 				}
 			})
-			frostui.Mono(c, version).FontSize(13).SingleLine()
+			frostui.Mono(c, version).FontSize(frostui.TextSize(c, 13)).SingleLine()
 		})
 	})
 }
@@ -498,7 +513,7 @@ func (p *overviewPage) heroStatus(c *ui.Context, info SystemInfo, tally updateTa
 			if cur != nil {
 				title = cur.Title
 			}
-			ui.Text(c, title).FontSize(18).Bold().SingleLine()
+			ui.Text(c, title).FontSize(frostui.TextSize(c, 18)).Bold().SingleLine()
 			ui.Progress(c, env.Jobs.BatchFraction()).Width(260).Label("Progress of the running jobs")
 			status := fmt.Sprintf("Job %d of %d · output in the console", min(done+1, max(total, 1)), max(total, 1))
 			frostui.Muted(c, status).SingleLine()
@@ -508,7 +523,7 @@ func (p *overviewPage) heroStatus(c *ui.Context, info SystemInfo, tally updateTa
 			return
 		}
 		title, note := heroText(state, info, tally, env.Now())
-		ui.Text(c, title).FontSize(22).Bold().SingleLine()
+		ui.Text(c, title).FontSize(frostui.TextSize(c, 22)).Bold().SingleLine()
 		if note != "" {
 			frostui.Muted(c, note).Wrap().TextAlign(align)
 		}
@@ -628,13 +643,14 @@ func (p *overviewPage) liveCard(c *ui.Context, wide bool) {
 const liveChartHeight = 170
 
 // chartScale labels LiveChart's grid lines (0, 25, 50, 75 and 100 %) at
-// their heights, beside a chart height tall.
+// their heights, beside a chart height tall. The labels and their line
+// height follow the text size; the chart's height does not.
 func chartScale(c *ui.Context, height float32) {
-	const label = 14 // a caption's line height
+	label := frostui.TextSize(c, 14) // a label's line height
 	ui.Column(c).Height(height+label).Margin(-label/2, 0, -label/2, 0).Justify(ui.SpaceBetween).AlignItems(ui.End).
 		Children(func() {
 			for i, l := range []string{"100%", "75%", "50%", "25%", "0%"} {
-				frostui.Caption(c.Key(i), l).FontSize(11).Height(label).SingleLine()
+				frostui.Caption(c.Key(i), l).FontSize(frostui.TextSize(c, 11)).Height(label).SingleLine()
 			}
 		})
 }
@@ -663,7 +679,7 @@ func (p *overviewPage) diskCard(c *ui.Context, d sysinfo.Disk, wide bool) {
 		ui.Row(c).Grow(1).Gap(frostui.SpaceL).AlignItems(ui.Center).Children(func() {
 			frostui.Gauge(c, float64(d.Used()), float64(d.Total), fmt.Sprintf("%.0f%%", used), "in use", tone, 132)
 			ui.Column(c).Grow(1).Gap(4).Children(func() {
-				ui.Text(c, sysinfo.FormatBytes(d.Free)+" free").FontSize(20).Bold().SingleLine()
+				ui.Text(c, sysinfo.FormatBytes(d.Free)+" free").FontSize(frostui.TextSize(c, 20)).Bold().SingleLine()
 				frostui.Muted(c, sysinfo.FormatBytes(d.Used())+" used of "+sysinfo.FormatBytes(d.Total))
 				frostui.Mono(c, d.Path).TextColor(c.Theme().TextMuted).SingleLine()
 			})
@@ -695,7 +711,6 @@ func (p *overviewPage) activityCard(c *ui.Context, wide bool) {
 	env := p.s.Env
 	entries := env.Activity.Recent(5)
 	now := env.Now()
-	t := c.Theme()
 	sideCard(c, wide, 1).Children(func() {
 		frostui.CardHeader(c, "Recent activity", "What ChairLift changed on this computer", nil)
 		if len(entries) == 0 {
@@ -704,11 +719,9 @@ func (p *overviewPage) activityCard(c *ui.Context, wide bool) {
 		}
 		for i, e := range entries {
 			ui.Row(c.Key(i)).Gap(12).AlignItems(ui.Start).Children(func() {
-				ui.Box(c).Size(30, 30).Radius(15).Background(t.Background).Border(1, t.Border).Center().Children(func() {
-					frostui.Icon(c, activityIcon(e.Source)).TextColor(t.Accent)
-				})
+				frostui.IconTile(c, activityIcon(e.Source), frostui.Accent, 30)
 				ui.Column(c).Grow(1).Gap(2).Children(func() {
-					ui.Text(c, e.Title).Bold().FontSize(13).Wrap()
+					frostui.Strong(c, e.Title).Wrap()
 					if e.Detail != "" {
 						frostui.Muted(c, e.Detail).Wrap()
 					}
@@ -766,7 +779,7 @@ func (p *overviewPage) detailsCard(c *ui.Context, info SystemInfo, wide bool) {
 			ui.Column(c).Grow(1).Basis(0).Gap(frostui.SpaceS).AlignItems(ui.Stretch).Children(func() {
 				frostui.Caption(c, "This computer")
 				if rows := computerRows(info, p.s.System.ImageBuilt()); len(rows) > 0 {
-					frostui.KeyValues(c, rows)
+					frostui.KeyValues(c, rows, detailsStyle(c))
 				} else {
 					frostui.Muted(c, "Not available")
 				}
@@ -782,18 +795,25 @@ func (p *overviewPage) detailsCard(c *ui.Context, info SystemInfo, wide bool) {
 	})
 }
 
-// osReleaseRows draws os-release's fields as KeyValues does, with the URL
-// fields as links.
+// detailsStyle is the System details card's KeyValues style: the kit's
+// default rows, with the values at 13 DIPs scaled to the text size.
+func detailsStyle(c *ui.Context) frostui.KeyValuesStyle {
+	return frostui.KeyValuesStyle{KeyWidth: 120, Gap: 6, FontSize: frostui.TextSize(c, 13)}
+}
+
+// osReleaseRows draws os-release's fields as KeyValues does in
+// detailsStyle, with the URL fields as links.
 func osReleaseRows(c *ui.Context, entries []pageview.OSReleaseEntry) {
-	ui.Column(c).Gap(6).AlignItems(ui.Stretch).Children(func() {
+	st := detailsStyle(c)
+	ui.Column(c).Gap(st.Gap).AlignItems(ui.Stretch).Children(func() {
 		for i, e := range entries {
 			ui.Row(c.Key(i)).Gap(frostui.SpaceM).AlignItems(ui.Start).Children(func() {
-				frostui.Muted(c, e.Title).Width(120)
+				frostui.Muted(c, e.Title).Width(st.KeyWidth)
 				if e.IsURL {
-					ui.Link(c, e.Value, e.Value).FontSize(13)
+					ui.Link(c, e.Value, e.Value).FontSize(st.FontSize)
 					return
 				}
-				ui.Text(c, e.Value).FontSize(13).Grow(1).Wrap().Selectable()
+				ui.Text(c, e.Value).FontSize(st.FontSize).Grow(1).Wrap().Selectable()
 			})
 		}
 	})
