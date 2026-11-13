@@ -7,7 +7,7 @@ require (
 	github.com/frostyard/frostui v0.5.2
 	github.com/frostyard/std v0.5.0
 	github.com/frostyard/updex/v2 v2.2.0
-	golang.org/x/text v0.43.0
+	golang.org/x/text v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
