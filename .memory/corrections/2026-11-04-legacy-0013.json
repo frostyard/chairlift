@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/firstrun/schemewriter.go, internal/window/firstrun.go",
+  "correction": "PR #265 believed one gsettings goroutine per Style toggle was safe. Reality: the goroutines can finish out of order and leave the color scheme the user did not choose last. One SchemeWriter now writes serially and the latest choice wins.",
+  "evidence": "PR #265 cross-review; internal/firstrun.TestSchemeWriterLatestChoiceWins and TestWindowWritesColorSchemeSerially",
+  "promoted_to": "docs/design/overview.md"
+}

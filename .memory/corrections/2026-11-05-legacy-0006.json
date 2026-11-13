@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "internal/window/window.go",
+  "correction": "PR #260 disabled Pango markup on toasts but no test guarded it: with window.go reverted, every test still passed. The change was unprotected because internal/window cannot host a test binary.",
+  "evidence": "cross-review of frostyard/chairlift#260 at 6e51495e; internal/installcheck.TestToastsRenderPlainText now parses production Go files and fails when an adw.NewToast result is shown without SetUseMarkup(false)",
+  "promoted_to": "docs/design/overview.md"
+}

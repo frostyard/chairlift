@@ -151,7 +151,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The corrections check compares .memory/corrections.jsonl with the
+          # The corrections check compares .memory/corrections/ with the
           # PR base, which needs the base commit's history.
           fetch-depth: 0
 

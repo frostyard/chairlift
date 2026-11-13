@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "internal/views/problems_page.go",
+  "correction": "The T857 t19 live consent gate believed Stricter(memory, file) covered a local withdrawal during a send. Reality: Go evaluates memory first, so a withdrawal made while the file read blocked was lost and both values read On. reporting.LiveConsent now reads the file first, then memory. The load guard and the dry-run Auto preview of the page had only helper tests; source guards now pin their wiring.",
+  "evidence": "re-review 3 of chairlift#267 (P1, P2); internal/reporting.TestLiveConsentReadsTheFileFirst fails with the old order; internal/installcheck.TestLiveSendsUseTheFileFirstGate, TestReportingControlsWaitForTheFirstLoad, TestDryRunAutoChoiceStartsThePreviewRun",
+  "promoted_to": "docs/specs/problem-reporting.md"
+}

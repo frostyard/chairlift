@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/firstrun/completion.go, internal/firstrun/schemewriter.go, internal/window/firstrun.go",
+  "correction": "PR #265 believed the serial SchemeWriter alone kept the last color-scheme choice. Reality: nothing drained it, so Progress could record completion, release the hold and show Exit while a write was pending, and Exit ended the process first. RunProgress now runs the actions, drains the writer (SchemeWriter.Wait), then records completion, on the worker goroutine.",
+  "evidence": "PR #265 re-review 1; internal/firstrun.TestRunProgressDrainsSchemeWriterBeforeCompletion and TestWindowDrainsSchemeWriterBeforeCompletion",
+  "promoted_to": "docs/adr/0014-first-run-mode.md and docs/design/overview.md"
+}

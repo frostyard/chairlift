@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/firstrun/completion.go, internal/firstrun/markers.go",
+  "correction": "PR #265 believed 'not done' after a completion failure meant the gate starts the first run again. Reality: with no config home the window's DoneAt was false too, but the gate in that environment exits 1 and starts nothing, so 'starts again at your next login' was false. DoneState now takes a 3-state GateState (GateRunsAgain, GateDone, GateUnknown) from GateStateAt and promises another run only for GateRunsAgain; GateUnknown is the zero value.",
+  "evidence": "PR #265 re-review 2; internal/firstrun.TestCompleteAtReportsMissingConfigHome, TestDoneState and TestGateStateAt",
+  "promoted_to": "docs/adr/0014-first-run-mode.md and docs/design/overview.md"
+}

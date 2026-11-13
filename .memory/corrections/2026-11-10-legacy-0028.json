@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "Makefile (lint-version-check), golangci-lint",
+  "correction": "The lint gate believed golangci-lint must be built with a Go no older than go.mod's full go line (patch included). Reality: gofmt and the typechecker follow the language version (MAJOR.MINOR); golangci-lint 2.15.0 built with go1.27.0 lints the go 1.27.3 module (raised by MyGo) with 0 issues. The gate compares MAJOR.MINOR now.",
+  "evidence": "CGO_ENABLED=0 golangci-lint run with the mise-pinned 2.15.0 (built with go1.27.0) on feat/mygo: 0 issues",
+  "promoted_to": "Makefile"
+}

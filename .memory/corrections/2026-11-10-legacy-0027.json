@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "internal/bootc (IsBootcBooted), internal/views/system.go",
+  "correction": "docs/design/overview.md's bootc boot gate section believed that running bootc status --format json unprivileged and checking status.booted detects every snow bootc host. Reality: the bootc on current Snow answers status only as root ('This command must be executed as the root user'), so IsBootcBootedCached is false on a Snow bootc host and the deployment chain and the image source stayed hidden. The snosi stager records the image, the running and remote versions and the staged digest in /run/snosi on bootc hosts too; System now reads them there when status is refused.",
+  "evidence": "bootc status --format json on a Snow bootc host (2026-11-10) printed the root-only error; /run/snosi/update-check held image=ghcr.io/frostyard/snow:latest, running_version and remote_version; internal/views.TestSystemReadsBootcFromSnosiWhenStatusNeedsRoot",
+  "promoted_to": ""
+}

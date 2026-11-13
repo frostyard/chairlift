@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "internal/problems/schema.go",
+  "correction": "The Problems page (T857 t6) believed decoding a v1 integer field into json.Number checked its JSON type. Reality: json.Number also accepts a JSON string of digits, so \"retries\": \"1\" passed and the item became reportable. An integer field now must be a JSON number token (decodeNumber); other numbers and booleans decode into Go int, int64 or bool, which reject JSON text.",
+  "evidence": "cross-review of the T857 t6 change; internal/problems.TestForgedValuesAreShownButNotReportable (retries as text), TestQuotedNumbersAndBooleansAreNotTrusted and TestDecodeNumber",
+  "promoted_to": "docs/specs/problems-page.md"
+}

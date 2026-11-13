@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "internal/window/main.go, internal/views/live.go",
+  "correction": "AGENTS.md said rail navigation went through Main.Navigate, but frostui Shell.rail assigns Shell.Selected directly during Shell.View. A sampler visibility change wired only to Main.Navigate would miss rail clicks. Main.View now synchronizes visibility before drawing and routes the selection through Main.Navigate after the shell can change it.",
+  "evidence": "github.com/frostyard/frostui@v0.3.1/shell.go Shell.rail; internal/window/main.go Main.View and Main.Navigate; issue #288",
+  "promoted_to": "docs/design/overview.md"
+}

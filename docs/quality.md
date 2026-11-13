@@ -40,7 +40,7 @@ The repository's `Tests` workflow runs on pushes and pull requests targeting
 - **Verify** — `make ci` with the PR base: tidy-module, `go vet`, `gofmt`,
   the pinned lint, the template gate (instruction aliases, the `docs/README.md`
   index, risk paths, corrections, vendored files), the unit tests, the
-  append-only corrections check, the race detector and the build matrix.
+  corrections record check, the race detector and the build matrix.
 - **Build** — Linux builds for amd64 and arm64.
 
 `make ci` mirrors those credential-free checks locally in fail-fast order

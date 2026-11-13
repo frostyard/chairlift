@@ -105,7 +105,7 @@ rest of the host-independent checks in the repository's `Tests` workflow
 | Unit tests | Headless tests under `internal/...` pass with the CI name filters |
 | Race detection | The same internal test scope passes with the race detector |
 | Build | Linux amd64, Linux arm64, and the native binaries compile |
-| Corrections | With `BASE` set (`make ci BASE=origin/main`), `.memory/corrections.jsonl` only gains lines |
+| Corrections | With `BASE` set (`make ci BASE=origin/main`), no record in `.memory/corrections/` is removed, renamed or changed, except a filled empty `promoted_to` |
 
 The hosted workflow additionally runs `make e2e` with its runtime dependencies.
 Codecov reports the same internal test scope and rejects project coverage

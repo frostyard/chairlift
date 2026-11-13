@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/firstrun/markers_test.go",
+  "correction": "PR #265 believed a 0700 mode check on the config home proved MarkDone's directory mode. Reality: the test pre-created the config home with touch (0755), so the check passed only under a 077 umask and failed in CI (umask 022). The mode check now uses a fresh config home that only MarkDone creates, and the legacy autostart removal has its own test.",
+  "evidence": "PR #265 CI (Unit Tests, Race Detection) at 60c7a28; internal/firstrun.TestMarkDoneWritesBothMarkersInPrivateDirectories and TestMarkDoneRemovesLegacyAutostart, run under umask 022 and 077",
+  "promoted_to": "internal/firstrun/markers_test.go"
+}

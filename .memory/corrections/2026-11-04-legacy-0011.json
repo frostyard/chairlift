@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/window/firstrun.go, internal/firstrun/flow.go",
+  "correction": "PR #265 believed the Progress worker could run on its own after the window closed. Reality: the worker had no application hold and no close guard, so a close ended ChairLift while flatpak still ran and the completion markers were never written. The window now blocks close-request while Flow.CanClose is false and holds the application until the worker ends.",
+  "evidence": "PR #265 cross-review; internal/firstrun.TestFlowCanClose and TestWindowGuardsCloseDuringProgress",
+  "promoted_to": "docs/adr/0014-first-run-mode.md and docs/design/overview.md"
+}

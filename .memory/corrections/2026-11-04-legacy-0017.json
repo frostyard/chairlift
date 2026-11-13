@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/firstrun/completion.go",
+  "correction": "PR #265 believed every completion error meant the first run starts again at the next login. Reality: MarkDone can fail after it wrote the markers (for example when the legacy autostart path is a non-empty directory), and the gate then skips the next login. DoneState now takes the gate state (DoneAt) and shows 'starts again' only when no marker exists, else 'Setup finished with errors'.",
+  "evidence": "PR #265 re-review 1; internal/firstrun.TestCompletePartialFailureDoesNotPromiseAnotherRun and TestDoneState",
+  "promoted_to": "docs/adr/0014-first-run-mode.md and docs/design/overview.md"
+}

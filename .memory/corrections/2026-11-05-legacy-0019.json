@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "internal/problems/load.go",
+  "correction": "The Problems page (T857 t6) believed std v0.4.0 problems.Read with Limit 500 bounded the journal read. Reality: Read keeps all journalctl stdout and stderr in unbounded bytes.Buffer values, and 500 entries do not bound bytes, so a forged entry with a huge field could exhaust memory. ChairLift now runs journalctl itself with Read's arguments (problems.JournalArgs), reads at most 8 MiB of stdout and 4 KiB of stderr, kills journalctl at the cap, parses only the complete lines before it with problems.ParseJSON, and logs the truncation; the coredumpctl read stops and kills at its 4 MiB cap too.",
+  "evidence": "cross-review of the T857 t6 change; github.com/frostyard/std@v0.4.0 problems/read_linux.go Read (bytes.Buffer stdout/stderr); internal/problems.TestJournalReadIsCapped and TestCoredumpReadIsCapped",
+  "promoted_to": "docs/specs/problems-page.md"
+}

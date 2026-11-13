@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "internal/i18n/msgids.go, docs/adr/0018-relicense-mit-and-drop-inherited-translations.md",
+  "correction": "ADR-0018 believed that deleting the .po catalogs left none of First Setup's work. Reality: the catalogs' English msgids were First Setup's text too, and about 25 stayed byte-identical in msgids.go. The sentence-length msgids are now ChairLift's own; single words and short labels stay as common UI words.",
+  "evidence": "PR #282 re-review M8; git show 34407d4^:internal/i18n/msgids.go; internal/i18n.TestNoMsgidCopiesFirstSetup",
+  "promoted_to": "docs/adr/0018-relicense-mit-and-drop-inherited-translations.md"
+}

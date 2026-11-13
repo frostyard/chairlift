@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/firstrun/completion.go, internal/window/firstrun.go",
+  "correction": "PR #265 believed a logged completion failure was enough. Reality: a ResolvePaths or MarkDone error left the Done step saying 'Your user account is ready to use'. Completion now carries Err and ShowWarning, and DoneState shows the warning and an error-log entry. The 'starts again at your next login' text shows only when no marker exists after the failure (DoneAt is false); a partial failure that left a marker shows 'Setup finished with errors'.",
+  "evidence": "PR #265 cross-review and re-review 1; internal/firstrun.TestCompleteReportsMarkDoneFailure, TestCompleteAtReportsMissingConfigHome and TestCompletePartialFailureDoesNotPromiseAnotherRun",
+  "promoted_to": "docs/adr/0014-first-run-mode.md and docs/design/overview.md"
+}

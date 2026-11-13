@@ -187,8 +187,8 @@ FAQ sections, and changes them in the same change. See
 ## Operational notes
 
 - Add a lesson here when a defect or a review finding shows a rule that a
-  test cannot enforce or that applies to more than one change. Record the
-  correction itself in `.memory/corrections.jsonl` (ADR-0016).
+  test cannot enforce or that applies to more than one change. Add a record file
+  under `.memory/corrections/` (ADR-0016).
 - Remove a lesson when the code it names is gone.
 
 ## References

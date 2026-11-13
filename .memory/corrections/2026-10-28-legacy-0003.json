@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-28",
+  "scope": "internal/updex, internal/views/features_page.go",
+  "correction": "ChairLift assumed that a nil error from updex Client.UpdateFeatures meant every enabled feature updated, and always showed 'Features updated. Changes apply after reboot.'. Since updex v2.1.0 a nil error also covers features the next-boot image gate holds (transfer NeedsImage or NotLinked, Installed=false) and features held by a rollback record. updex v2.1.3 can also return an error wrapping sysext.ErrActivationIncomplete (merged, activation unfinished), and a per-transfer failure returns the results together with the error. Only the per-feature results say what happened.",
+  "evidence": "github.com/frostyard/updex/v2@v2.1.3 updex/features.go UpdateFeatures (NeedsImage/NotLinked/Held branches, 'return allResults, errors.Join(...)'), updex/results.go UpdateResult, sysext/runner.go ErrActivationIncomplete; chairlift PR #253",
+  "promoted_to": "docs/design/package-managers.md"
+}
