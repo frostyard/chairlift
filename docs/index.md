@@ -108,8 +108,8 @@ grep -F "  $package" checksums.txt | sha256sum --check -
 ```
 
 Tag releases also publish the `.deb` packages to Frostyard's APT repository,
-`https://repository.frostyard.org/debian/`, from which Snow Linux images
-install ChairLift.
+`https://repository.frostyard.org/debian/`, for Debian 13 (`trixie`) and
+Debian 14 (`forky`). Snow Linux images install ChairLift from there.
 
 The full `frostyard-chairlift` package includes the GUI, the privileged
 helper, desktop assets, PolicyKit policies, and package-maintainer
