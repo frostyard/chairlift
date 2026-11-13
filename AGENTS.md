@@ -169,7 +169,8 @@ control is hand-written Go, YAML, and data assets.
   ([core Plan 0009](https://github.com/frostyard/core/blob/main/docs/plans/0009-debian-publication-through-apt-publisher.md),
   Phase 6). This works because the binaries are static and the deb's
   `Depends` name packages that both codenames ship
-  (`TestGoreleaserDebDeclaresUIDependencies` pins them). Before a change to
+  (`TestGoreleaserDebDeclaresUIDependencies` pins the UI libraries, and
+  `TestGoreleaserPackagesDependOnPkexec` checks `pkexec`). Before a change to
   those `Depends` merges, install the package and start its dry-run window on
   each codename; a name that differs between them needs `~deb13` and `~deb14`
   builds instead.
