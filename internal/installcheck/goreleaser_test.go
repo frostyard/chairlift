@@ -197,7 +197,9 @@ func TestGoreleaserPublishesSystemPackage(t *testing.T) {
 
 // wantDebUIDependencies are the Debian packages of the libraries MyGo loads
 // at run time with purego (GTK 3, Pango with cairo, libepoxy), in the
-// order frostyard-chairlift's deb declares them.
+// order frostyard-chairlift's deb declares them. apt-publisher publishes the
+// same unmarked deb to trixie and forky, so each name must exist in both
+// codenames: check a change on each of them (AGENTS.md, Debian codenames).
 var wantDebUIDependencies = []string{
 	"libgtk-3-0t64 | libgtk-3-0",
 	"libpangocairo-1.0-0",

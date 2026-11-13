@@ -164,6 +164,16 @@ control is hand-written Go, YAML, and data assets.
   it by path, so a change to the archive's contents needs a matching cask
   change. It runs on the host's libraries, so its users need GTK 3, Pango and
   libepoxy, which the deb declares and the cask cannot.
+- **Debian codenames.** apt-publisher publishes the 1 unmarked build of each
+  `.deb` to every codename it registers for chairlift: `trixie` and `forky`
+  ([core Plan 0009](https://github.com/frostyard/core/blob/main/docs/plans/0009-debian-publication-through-apt-publisher.md),
+  Phase 6). This works because the binaries are static and the deb's
+  `Depends` name packages that both codenames ship
+  (`TestGoreleaserDebDeclaresUIDependencies` pins the UI libraries, and
+  `TestGoreleaserPackagesDependOnPkexec` checks `pkexec`). Before a change to
+  those `Depends` merges, install the package and start its dry-run window on
+  each codename; a name that differs between them needs `~deb13` and `~deb14`
+  builds instead.
 
 ## Repository invariants
 
