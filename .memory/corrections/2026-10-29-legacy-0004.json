@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-29",
+  "scope": "internal/updex, internal/views/features_page.go",
+  "correction": "ChairLift believed the unprivileged Features update check reported NeedsImage on bootc hosts. Reality: bootc status --json needs root, so updex's minimum image version gate erred on every component, and ChairLift's partitionFeatureChecks dropped those components, so the 'waiting for a newer OS image' row never appeared after a restart on a bootc host.",
+  "evidence": "bootc status --json as uid 1001 on bootc 1.17.1 prints 'This command must be executed as the root user'; updex v2.1.3 imagecompat/bootc.go NextBootImageVersion falls back only on exec.ErrNotFound; internal/updex/partitionFeatureChecks drops component errors",
+  "promoted_to": "docs/adr/0011-unprivileged-feature-check-compares-with-the-booted-image.md"
+}

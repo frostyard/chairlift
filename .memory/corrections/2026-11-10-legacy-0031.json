@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "internal/window/main.go (Main.View), frostui Palette.RunPending",
+  "correction": "The port believed that running Palette.RunPending at the top of Shell.View makes a palette command show in the same frame. Reality: an app's View that captures the page and takes its toasts before it calls Shell.View draws the old page and holds the command's toast for a frame. An app that captures state before Shell.View must call Palette.RunPending first.",
+  "evidence": "PR #282 cross-review M11, re-review M14; TestPaletteCommandDrawsItsPageInTheFrameThatRunsIt and TestPaletteCommandToastShowsInTheFrameThatRunsIt in internal/window/main_test.go, both failing with the call removed",
+  "promoted_to": "AGENTS.md"
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "Makefile (corrections-base)",
+  "correction": "PR #272 at 964bf91 believed that git cat-file -e BASE:scripts/check-corrections.mjs failing meant BASE predates the corrections gate. Reality: it also fails when BASE does not resolve (a typo or an unfetched ref), so make ci skipped the append-only comparison and passed. corrections-base now requires BASE to resolve to a commit first.",
+  "evidence": "cross-review of frostyard/chairlift#272 at 964bf91; internal/installcheck.TestCorrectionsBaseRejectsUnresolvableBase fails with the old single cat-file form",
+  "promoted_to": "internal/installcheck/corrections_base_test.go"
+}

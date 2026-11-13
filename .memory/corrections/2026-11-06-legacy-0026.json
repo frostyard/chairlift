@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": ".agents/skills (core skills sync)",
+  "correction": "Sync PR #273 was believed safe to merge because its checks were green. Reality: its branch was cut while .agents was a symlink to docs/agents, so the sync wrote frostyard-readme to docs/agents/skills/. PR #272 made .agents a real directory before #273 merged, and the merge left the skill outside .agents/skills/; the docs-index gate then failed on main. The skill now lives in .agents/skills/, and a test pins that every synced skill lives there.",
+  "evidence": "Tests run 42203927812 (Verify, FAIL docs-index: docs/agents/skills/frostyard-readme/SKILL.md); internal/installcheck.TestSyncedSkillsLiveInAgentsSkills fails with the old layout",
+  "promoted_to": "AGENTS.md"
+}

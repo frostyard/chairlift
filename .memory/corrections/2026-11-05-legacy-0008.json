@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "internal/flatpak",
+  "correction": "PR #262 believed a scope-less `flatpak uninstall --unused` cleaned only the system installation and split it into --user and --system runs. Reality: flatpak parses uninstall with FLATPAK_BUILTIN_FLAG_ALL_DIRS, so the scope-less command already cleans the user, the default system and every extra system installation; the split dropped the extra installations.",
+  "evidence": "flatpak app/flatpak-builtins-uninstall.c (ALL_DIRS flag, --unused loop over dirs) and app/flatpak-main.c (no scope flag selects user, system and installations.d dirs), tags 1.10.0, 1.14.0, 1.16.0; internal/flatpak.TestUninstallUnusedCoversEveryInstallation",
+  "promoted_to": "docs/design/package-managers.md"
+}

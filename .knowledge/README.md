@@ -10,15 +10,15 @@ drifting between stores.
 1. Read `AGENTS.md` for current repository invariants and required workflows.
 2. Read `docs/design/engineering-lessons.md` for durable lessons from prior
    defects and reviews.
-3. Read `.memory/README.md` and `.memory/corrections.jsonl`, when present, for
-   verified corrections.
+3. Read `.memory/README.md` and the records in `.memory/corrections/`, when
+   present, for verified corrections.
 4. Read `.claude/session-summary.md` for the latest in-progress handoff.
 5. Read `docs/design/overview.md` and the relevant `docs/design/` subsystem
    documents (formerly `yeti/`) for architecture and decision rationale.
 
 ## Record knowledge in its canonical location
 
-- Put verified corrections in `.memory/corrections.jsonl`.
+- Add a record file for each verified correction in `.memory/corrections/`.
 - Replace `.claude/session-summary.md` when another session must continue
   active work.
 - Promote stable operating rules to `AGENTS.md`, reusable lessons to

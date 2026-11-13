@@ -631,7 +631,7 @@ default system installation and every extra system installation from
 `/etc/flatpak/installations.d`, and the `--unused` branch visits each of them.
 This holds in flatpak 1.10, 1.14 and 1.16. Do not add a scope flag: running
 `--user` then `--system` would skip the extra installations
-(`.memory/corrections.jsonl`, 2026-11-05). `flatpak_test.go`
+(`.memory/corrections/2026-11-05-legacy-0008.json`). `flatpak_test.go`
 (`TestUninstallUnusedCoversEveryInstallation` and the "remove unused" row of
 `TestCommandWrappersUseExpectedArguments`) asserts exactly one invocation with
 no scope flag.

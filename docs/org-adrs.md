@@ -33,6 +33,7 @@ The ones that bind ChairLift:
 - [ADR-0076 — Require status checks on every default branch](https://github.com/frostyard/core/blob/main/docs/adr/0076-require-status-checks-on-every-default-branch.md) — the `main` branch requires status checks; the names are on frostyard/core#222
 - [ADR-0077 — Bind ready-for-human to the head commit](https://github.com/frostyard/core/blob/main/docs/adr/0077-bind-ready-for-human-to-the-head-commit.md) — the `PR triage` caller removes `ready-for-human` when the PR head moves after the label, or when the label comes while CI at the head is not green
 - [ADR-0078 — Sort pull requests by levels L1 to L4](https://github.com/frostyard/core/blob/main/docs/adr/0078-sort-pull-requests-by-levels-l1-to-l4.md) — `.github/risk-paths.json` is schema version 2 with a level per entry, and `PR triage` adds one `level:*` label
+- [ADR-0081 — Store each correction in a file of its own](https://github.com/frostyard/core/blob/main/docs/adr/0081-store-each-correction-in-a-file-of-its-own.md) — each correction is 1 file in [`.memory/corrections/`](../.memory/README.md) in canonical form. `make verify` refuses a tree with both forms. `make ci BASE=<ref>` (CI sets the PR base) also refuses a removed or renamed record, a changed record other than a filled empty `promoted_to`, and the old single corrections file when `<ref>` has the folder.
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

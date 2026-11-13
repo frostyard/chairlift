@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/window/firstrun.go",
+  "correction": "PR #265 believed logging a configuration error was enough in the first-run window. Reality: AGENTS.md requires a configuration error to stay visible as a persistent toast. The first-run window now shows LoadError.ToastMessage in a toast with timeout 0 and markup off.",
+  "evidence": "PR #265 cross-review; internal/firstrun.TestWindowShowsConfigErrorToast and internal/installcheck.TestToastsRenderPlainText",
+  "promoted_to": "docs/design/overview.md"
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "docs/design/overview.md (The console, Known limits)",
+  "correction": "docs/design/overview.md said sysupdate's lsblk read, the Problems page's coredumpctl and journalctl reads and launchFlatpakApp's gtk-launch were not reported through cmdlog, and named overviewLaunchApp as the Overview's traced launch. Reality: runLsblk and the Problems page's execStream call cmdlog.Start, launchFlatpakApp and overviewLaunchApp no longer exist, and both launch callers went through views.launchDesktopApp, which traced every launch. Only the first run's gsettings and settings launcher stay out of view, because the first-run window installs no sink. Since frostui v0.5.1 a launch runs no command, so launchDesktopApp reports it with cmdlog.Launch.",
+  "evidence": "internal/sysupdate/rollback.go:122, internal/problems/command.go:57, internal/app/app.go (wireConsole only in openMain), internal/views/env.go launchDesktopApp; internal/installcheck.TestEveryCommandIsTraced",
+  "promoted_to": "docs/design/overview.md"
+}

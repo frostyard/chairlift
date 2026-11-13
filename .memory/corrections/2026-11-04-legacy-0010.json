@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "internal/views/flatpakstatus, internal/views/updates_page.go",
+  "correction": "ChairLift treated a RemoteError from both Flatpak installations as a total failure even when each query returned healthy-remotes updates. Partial updates are now authoritative and publishable; only two failed installations with zero updates keep the last known rows and count.",
+  "evidence": "issue #263; internal/views/flatpakstatus/flatpakstatus.go; internal/views/flatpakstatus/flatpakstatus_test.go TestBothInstallationsPartialPublishesHealthyUpdates",
+  "promoted_to": "AGENTS.md and docs/design/package-managers.md"
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "internal/views jobs (Stop, deadlines), internal/fwupd, internal/app close guard",
+  "correction": "The port believed that cancelling a job's context, giving it a deadline, or closing the app stops a pkexec or fwupd job. Reality: only the unprivileged client dies; the root helper or the fwupd daemon goes on while the job ends and the queue frees. Such jobs are Unstoppable, have no deadline, and hold the window open while they run.",
+  "evidence": "PR #282 review B1 and M10, re-review Minor 3; TestStopLetsAnUnstoppableJobFinishFirst (frostui), TestPrivilegedJobsCannotBeStopped, TestMaintenanceOnlyUnprivilegedScriptsHaveADeadline, TestFeatureHelperJobsHaveNoDeadline, TestSystemStageHasNoDeadline, TestFwupdInstallPassesNoDeadline, TestCloseRefusedWhileAnUnstoppableJobRuns, TestMainWindowCloseGuard",
+  "promoted_to": "AGENTS.md"
+}

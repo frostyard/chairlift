@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-12",
+  "scope": "docs/design/overview.md (app.Run, step 2)",
+  "correction": "The overview said frostui.SetAppID's g_set_prgname before MyGo opens the display makes the Wayland app ID and WM_CLASS match org.frostyard.ChairLift.desktop. Since MyGo v0.9.0, App.Run names the program after its executable after that call (egoist/mygo#1640), and GLib keeps the last name, so v0.17.0's windows had the app ID \"chairlift\" and GNOME showed a generic icon in the taskbar. frostui v0.5.2 names the program again from mygo.App.WhenReady, and make e2e now checks the windows' WM_CLASS instance",
+  "evidence": "WAYLAND_DEBUG=client of /usr/bin/chairlift v0.17.0 --first-run --dry-run: xdg_toplevel.set_app_id(\"chairlift\"); xwininfo -root -tree under XWayland: (\"chairlift\" \"Chairlift\"); MyGo v0.9.0 internal/linux/app.go:124-125; frostyard/frostui#24; egoist/mygo#1761",
+  "promoted_to": "docs/design/overview.md, AGENTS.md, test/e2e/e2e_test.go"
+}

@@ -38,7 +38,7 @@ The app builds pure-Go (`CGO_ENABLED=0`); the race detector needs CGO.
   `test/check-template.test.mjs`, Node 22 or later), then the unit tests.
   The template gate checks the instruction aliases, that every doc under
   `docs/` is linked from `docs/README.md`, `.github/risk-paths.json`,
-  `.memory/corrections.jsonl`, and the hashes of the 2 files vendored from
+  `.memory/corrections/`, and the hashes of the 2 files vendored from
   core. The `scripts/` files and `test/check-template.test.mjs` are
   byte-identical copies from `bketelsen/agentic-template`: copy them again,
   never edit them here.
@@ -489,7 +489,7 @@ secrets or personal data because the directory is version-controlled.
   key identity, a check for every collection entry, and others) are binding
   guidance, not suggestions. Code comments link its anchors; keep them stable.
   Add a lesson there when a defect or review shows a rule that a test cannot
-  enforce; record the correction itself in `.memory/corrections.jsonl`.
+  enforce; add a record file under `.memory/corrections/`.
 - **Skills.** `.agents/skills/` holds the skills that frostyard/core syncs
   (core ADR-0026; each has a `.synced-from-core` marker: edit it in core, not
   here) and `TEMPLATE/` for a repo-local skill. `.claude/skills` is a symlink

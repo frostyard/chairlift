@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "internal/reporting",
+  "correction": "The opt-in reporting sender (T857 t19) believed reading the consent once per run, and once before the pace wait, was enough, and that asynchronous consent writes were safe. Reality: a withdrawal by another ChairLift process during the pace, or between the reservation save and the request, could still send, and a queued consent write could restore an older value or lose an Off. The consent is now read again after the pace and again after the reservation save, just before the request (a withdrawal rolls the reservation back and stops without a pause), the page and the first run write the small consent file synchronously on the main thread with 1 in-memory authority, and a live send reloads the consent file before every request (reporting.FileConsent).",
+  "evidence": "re-review 1 of the T857 t19 change (frostyard/chairlift#267); internal/reporting TestRunWithdrawDuringThePaceStopsTheNextRequest (fails with 4 saves when the post-pace check is removed), TestRunWithdrawAfterTheReservationStopsTheRequest, TestSendReportWithdrawAfterTheReservationSendsNothing, TestFileConsentReloads, TestRunFailedRollbackSaveKeepsTheReservation",
+  "promoted_to": "docs/specs/problem-reporting.md"
+}

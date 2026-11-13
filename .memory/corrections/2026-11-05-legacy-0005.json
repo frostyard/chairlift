@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "internal/config/paths.go",
+  "correction": "PR #261 believed the danglingSymlink check in Load made every dangling config symlink fail closed. Reality: resolveCandidatePath probed the executable-relative config.yml with os.Stat, so a dangling symlink there resolved to the working-directory file instead and Load fell through to it or to enabled defaults. The probe is now os.Lstat.",
+  "evidence": "cross-review of frostyard/chairlift#261 at 471d36e5; internal/config.TestLoadDanglingExecutableRelativeSymlinkFailsClosed and the dangling subtest of TestResolveCandidatePathBranches fail with statPath = os.Stat",
+  "promoted_to": "docs/design/overview.md"
+}

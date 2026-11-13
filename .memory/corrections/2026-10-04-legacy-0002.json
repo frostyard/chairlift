@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-04",
+  "scope": "Makefile",
+  "correction": "AGENTS.md documented `make test` as running `go test ./...`, and the frostyard-go-repo skill documents `make bump` as running build/test/fmt/lint before tagging. `test` was missing from `.PHONY`, so make treated the target as the top-level `test/` directory, reported it up to date and ran nothing; `make bump` tagged v0.11.2 without running the tests. Every Makefile target is now declared `.PHONY`, and a test enforces it.",
+  "evidence": "`make test` on 3505e94 printed \"make: 'test' is up to date.\" and exited 0; `make bump` printed \"make[1]: 'test' is up to date.\" while tagging v0.11.2; internal/installcheck/makefile_phony_test.go",
+  "promoted_to": "AGENTS.md"
+}
