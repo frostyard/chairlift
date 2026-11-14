@@ -1223,7 +1223,8 @@ authorized for direct test calls;
 `groupFieldTypes`, `validatorGroupFieldTypesError`,
 `validateActionsEntries`, `validatorActionsValueShapeError`,
 `validatorActionEntryShapeError`, `validateActionFieldEntries`,
-`actionFieldTypes`, and `validatorActionFieldTypesError` are all exercised
+`actionFieldTypes`, `structFieldTypes` (the walk that `groupFieldTypes` and
+`actionFieldTypes` share), and `validatorActionFieldTypesError` are all exercised
 only indirectly, through `parseAndValidate`, in `validate_test.go`.
 
 **Runtime loading, precedence, and diagnostics

@@ -303,15 +303,7 @@ func parseApplicationList(output string, installFlag string) ([]Application, err
 
 // Install installs a Flatpak application
 func Install(appID string, user bool) error {
-	args := []string{"install", "-y"}
-	if user {
-		args = append(args, "--user")
-	} else {
-		args = append(args, "--system")
-	}
-	args = append(args, appID)
-
-	_, err := runFlatpakCommand(args...)
+	_, err := runFlatpakCommand("install", "-y", installationFlag(user), appID)
 	return err
 }
 
@@ -333,26 +325,13 @@ func AddRemote(name, url string, user bool) error {
 
 // Uninstall removes a Flatpak application
 func Uninstall(appID string, user bool) error {
-	args := []string{"uninstall", "-y"}
-	if user {
-		args = append(args, "--user")
-	} else {
-		args = append(args, "--system")
-	}
-	args = append(args, appID)
-
-	_, err := runFlatpakCommand(args...)
+	_, err := runFlatpakCommand("uninstall", "-y", installationFlag(user), appID)
 	return err
 }
 
 // Update updates a Flatpak application or all applications
 func Update(appID string, user bool) error {
-	args := []string{"update", "-y"}
-	if user {
-		args = append(args, "--user")
-	} else {
-		args = append(args, "--system")
-	}
+	args := []string{"update", "-y", installationFlag(user)}
 	if appID != "" {
 		args = append(args, appID)
 	}
