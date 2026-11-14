@@ -426,27 +426,35 @@ func defaultConfig() *Config {
 // step (ADR-0014).
 const defaultFirstRunAppsPath = "/usr/share/snow/first-run/apps.json"
 
-// IsGroupEnabled checks if a preference group is enabled
-func (c *Config) IsGroupEnabled(pageName, groupName string) bool {
-	var page PageConfig
+// lookupPage returns the configuration of the page named pageName, and false
+// when no page has that name.
+func (c *Config) lookupPage(pageName string) (PageConfig, bool) {
 	switch pageName {
 	case "system_page":
-		page = c.SystemPage
+		return c.SystemPage, true
 	case "updates_page":
-		page = c.UpdatesPage
+		return c.UpdatesPage, true
 	case "applications_page":
-		page = c.ApplicationsPage
+		return c.ApplicationsPage, true
 	case "maintenance_page":
-		page = c.MaintenancePage
+		return c.MaintenancePage, true
 	case "features_page":
-		page = c.FeaturesPage
+		return c.FeaturesPage, true
 	case "problems_page":
-		page = c.ProblemsPage
+		return c.ProblemsPage, true
 	case "help_page":
-		page = c.HelpPage
+		return c.HelpPage, true
 	case "first_run_page":
-		page = c.FirstRunPage
+		return c.FirstRunPage, true
 	default:
+		return nil, false
+	}
+}
+
+// IsGroupEnabled checks if a preference group is enabled
+func (c *Config) IsGroupEnabled(pageName, groupName string) bool {
+	page, ok := c.lookupPage(pageName)
+	if !ok {
 		return true
 	}
 
@@ -459,25 +467,8 @@ func (c *Config) IsGroupEnabled(pageName, groupName string) bool {
 
 // GetGroupConfig returns the configuration for a specific group
 func (c *Config) GetGroupConfig(pageName, groupName string) *GroupConfig {
-	var page PageConfig
-	switch pageName {
-	case "system_page":
-		page = c.SystemPage
-	case "updates_page":
-		page = c.UpdatesPage
-	case "applications_page":
-		page = c.ApplicationsPage
-	case "maintenance_page":
-		page = c.MaintenancePage
-	case "features_page":
-		page = c.FeaturesPage
-	case "problems_page":
-		page = c.ProblemsPage
-	case "help_page":
-		page = c.HelpPage
-	case "first_run_page":
-		page = c.FirstRunPage
-	default:
+	page, ok := c.lookupPage(pageName)
+	if !ok {
 		return nil
 	}
 

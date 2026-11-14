@@ -344,33 +344,10 @@ func validateActionFieldEntries(path string, entryNode *yaml.Node) *LoadError {
 // actionFieldTypes reflects over ActionConfig's exported fields, returning
 // a freshly allocated map from each field's yaml tag name to its declared
 // Go type — the type-carrying counterpart to SchemaActionFields (schema.go),
-// matching groupFieldTypes one schema level down.
+// matching groupFieldTypes one schema level down. structFieldTypes does the
+// walk; its errors start with "actionFieldTypes: ".
 func actionFieldTypes() (map[string]reflect.Type, error) {
-	t := reflect.TypeOf(ActionConfig{})
-	result := make(map[string]reflect.Type, t.NumField())
-
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		if field.PkgPath != "" {
-			continue // unexported
-		}
-
-		tag, ok := field.Tag.Lookup("yaml")
-		if !ok || tag == "" || tag == "-" {
-			continue
-		}
-
-		name := yamlTagName(tag)
-		if name == "" {
-			return nil, fmt.Errorf("actionFieldTypes: field %s has a yaml tag with an empty name (%q)", field.Name, tag)
-		}
-		if _, dup := result[name]; dup {
-			return nil, fmt.Errorf("actionFieldTypes: duplicate yaml name %q (field %s)", name, field.Name)
-		}
-		result[name] = field.Type
-	}
-
-	return result, nil
+	return structFieldTypes(reflect.TypeOf(ActionConfig{}), "actionFieldTypes")
 }
 
 // groupFieldTypes reflects over rawGroupConfig's exported fields, returning
@@ -379,8 +356,18 @@ func actionFieldTypes() (map[string]reflect.Type, error) {
 // (schema.go), built by walking the same struct's fields so the two cannot
 // silently drift apart. It errors under the same conditions yamlFieldNames
 // does, which cannot happen for rawGroupConfig's canonical field list.
+// structFieldTypes does the walk; its errors start with "groupFieldTypes: ".
 func groupFieldTypes() (map[string]reflect.Type, error) {
-	t := reflect.TypeOf(rawGroupConfig{})
+	return structFieldTypes(reflect.TypeOf(rawGroupConfig{}), "groupFieldTypes")
+}
+
+// structFieldTypes is the walk that actionFieldTypes and groupFieldTypes
+// share: it returns a freshly allocated map from the yaml tag name of each
+// exported field of the struct type t to the field's declared Go type. It
+// skips a field with no yaml tag, an empty tag, or the tag "-", and errors on
+// a tag whose name is empty or on a duplicate name. caller prefixes each
+// error, so an error names the wrapper that the validator called.
+func structFieldTypes(t reflect.Type, caller string) (map[string]reflect.Type, error) {
 	result := make(map[string]reflect.Type, t.NumField())
 
 	for i := 0; i < t.NumField(); i++ {
@@ -396,10 +383,10 @@ func groupFieldTypes() (map[string]reflect.Type, error) {
 
 		name := yamlTagName(tag)
 		if name == "" {
-			return nil, fmt.Errorf("groupFieldTypes: field %s has a yaml tag with an empty name (%q)", field.Name, tag)
+			return nil, fmt.Errorf("%s: field %s has a yaml tag with an empty name (%q)", caller, field.Name, tag)
 		}
 		if _, dup := result[name]; dup {
-			return nil, fmt.Errorf("groupFieldTypes: duplicate yaml name %q (field %s)", name, field.Name)
+			return nil, fmt.Errorf("%s: duplicate yaml name %q (field %s)", caller, name, field.Name)
 		}
 		result[name] = field.Type
 	}
