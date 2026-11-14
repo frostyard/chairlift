@@ -153,29 +153,6 @@ esac`
 			},
 			want: []string{"remote-ls", "--updates", "--app", "--columns=name,application,version,branch,origin,commit", "--user", "vendor"},
 		},
-		{
-			name: "list remotes",
-			run: func() error {
-				remotes, err := GetRemotes(false)
-				if err == nil && !reflect.DeepEqual(remotes, []string{"flathub", "vendor"}) {
-					return errors.New("remote result was not parsed")
-				}
-				return err
-			},
-			want: []string{"remotes", "--columns=name", "--system"},
-		},
-		{
-			name: "application info",
-			run: func() error {
-				info, err := Info("org.mozilla.firefox", true)
-				if err == nil && (info.Name != "Firefox" || info.Installation != "user" ||
-					info.Runtime != "org.freedesktop.Platform") {
-					return errors.New("application info was not parsed")
-				}
-				return err
-			},
-			want: []string{"info", "--show-metadata", "--user", "org.mozilla.firefox"},
-		},
 		{name: "remove unused", run: func() error { _, err := UninstallUnused(); return err }, want: []string{"uninstall", "--unused", "-y"}},
 	}
 
@@ -242,8 +219,6 @@ func TestQueryFailuresPropagate(t *testing.T) {
 	}{
 		{name: "applications", run: func() error { _, err := ListUserApplications(); return err }},
 		{name: "updates", run: func() error { _, err := ListUpdates(false); return err }},
-		{name: "remotes", run: func() error { _, err := GetRemotes(true); return err }},
-		{name: "info", run: func() error { _, err := Info("org.example.App", false); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

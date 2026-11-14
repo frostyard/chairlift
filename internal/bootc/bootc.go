@@ -38,11 +38,6 @@ func IsDryRun() bool {
 	return dryRun
 }
 
-// DefaultContext returns a context with the default 30-minute timeout
-func DefaultContext() (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.Background(), DefaultTimeout)
-}
-
 // Error represents a bootc-related error. Err, when non-nil, carries the
 // underlying cause (for example context.DeadlineExceeded or
 // context.Canceled) so callers can classify it with errors.Is.
