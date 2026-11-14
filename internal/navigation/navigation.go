@@ -200,13 +200,6 @@ func Resolve(pageName string, visible []Item) (Item, bool) {
 	return Item{}, false
 }
 
-// GroupEnabled reports whether the page holding group shows it: the page
-// must be visible and the group enabled. Cards use it for cross-page
-// content, as the Updates page's Features source.
-func GroupEnabled(enabled func(page, group string) bool, page, group string) bool {
-	return enabled != nil && enabled(page, group)
-}
-
 func anyGroupEnabled(item Item, enabled func(page, group string) bool) bool {
 	if enabled == nil {
 		return false

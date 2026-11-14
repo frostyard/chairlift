@@ -271,15 +271,6 @@ func ParseSecureBoot(data []byte) SecureBootState {
 	return SecureBootOff
 }
 
-// ReadSecureBoot reads SecureBootVariable.
-func ReadSecureBoot() SecureBootState {
-	data, err := os.ReadFile(SecureBootVariable)
-	if err != nil {
-		return SecureBootUnknown
-	}
-	return ParseSecureBoot(data)
-}
-
 // Sample is one reading of the live figures.
 type Sample struct {
 	CPU    float64 // percent busy since the previous reading

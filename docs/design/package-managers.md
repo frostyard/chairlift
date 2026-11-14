@@ -576,7 +576,6 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 
 - **`Application`** — name, applicationID, version, branch, origin, installation (user/system), ref
 - **`UpdateInfo`** — name, applicationID, newVersion, branch, origin, installation
-- **`ApplicationInfo`** — embeds `Application`, adds description, runtime, permissions map
 
 ### Operations
 
@@ -590,8 +589,6 @@ Wraps the `flatpak` CLI. Parses tabular (tab-delimited, falling back to whitespa
 | `Update(appID, user)` | `flatpak update -y [--user\|--system] [<appID>]` | 30m | State-changing; empty appID updates all |
 | `AddRemote(name, url, user)` | `flatpak remote-add [--user\|--system] --if-not-exists <name> <url>` | 30m | State-changing; the first run's Progress step adds `FlathubRemoteName`/`FlathubRepoURL` to the user installation before it installs applications |
 | `UninstallUnused()` | `flatpak uninstall --unused -y` (no scope flag) | 30m | Maintenance cleanup of every installation; see below |
-| `Info(appID, user)` | `flatpak info --show-metadata [--user\|--system] <appID>` | 30s | Key-value parsed |
-| `GetRemotes(user)` | `flatpak remotes --columns=name [--user\|--system]` | 30s | Lists configured remotes |
 
 ### State-changing commands
 
@@ -1064,7 +1061,7 @@ That part is tested in `internal/bootc/stage_test.go`. The view keeps its toast 
 
 | Function | Command | Privilege | Timeout | Notes |
 |----------|---------|-----------|---------|-------|
-| `GetStatus(ctx)` | `bootc status --format json` | none | 30min (`DefaultContext`); the system domain uses `bootc.DefaultTimeout` too | JSON parsed into `Status` |
+| `GetStatus(ctx)` | `bootc status --format json` | none | caller's ctx; the system domain uses `bootc.DefaultTimeout` | JSON parsed into `Status` |
 | `IsBootcBooted(ctx)` / `IsBootcBootedCached()` | (calls `GetStatus`) | none | 5s (cached variant) | Boot gate; cached variant memoizes via `sync.Once` |
 | `StageUpdate(ctx, progressCh)` | `pkexec /usr/libexec/bootc-update-stage` | pkexec (`org.frostyard.ChairLift.bootc.stage`) | caller's ctx; `System.stageJob` gives it no deadline | Streaming; idempotent; dry-run aware |
 | `StageScriptAvailable()` | `os.Stat(StageScriptPath)` | none | — | Without the script the system image source is unavailable (`System.sourceAvailable`) |
