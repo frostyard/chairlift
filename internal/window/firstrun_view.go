@@ -98,7 +98,7 @@ func (w *FirstRun) footer(c *ui.Context, step firstrun.Step) {
 			ui.Button(c.Key("back"), i18n.T(i18n.MsgBack)).OnClick(w.goBack)
 		}
 		ui.Spacer(c.Key("spacer"))
-		ui.PrimaryButton(c.Key("next"), i18n.T(i18n.MsgNext)).Disabled(!w.flow.CanNext()).OnClick(w.goNext)
+		frostui.PrimaryButton(c.Key("next"), i18n.T(i18n.MsgNext)).Disabled(!w.flow.CanNext()).OnClick(w.goNext)
 	})
 }
 
@@ -108,7 +108,7 @@ func (w *FirstRun) welcomeStep(c *ui.Context) {
 	ui.Column(c).Grow(1).Gap(28).Justify(ui.Center).AlignItems(ui.Stretch).Children(func() {
 		frostui.Hero(c, frostui.HeroIcon{Logo: w.logo}, i18n.Format(i18n.T(i18n.MsgHello), w.name), i18n.T(i18n.MsgWelcomeDesc))
 		ui.Column(c).Gap(frostui.SpaceM).AlignItems(ui.Center).Children(func() {
-			ui.PrimaryButton(c, i18n.T(i18n.MsgStart)).MinWidth(200).AutoFocus().OnClick(w.goNext)
+			frostui.PrimaryButton(c, i18n.T(i18n.MsgStart)).MinWidth(200).AutoFocus().OnClick(w.goNext)
 			if w.settings {
 				frostui.LabeledButton(c, "preferences-desktop-accessibility", i18n.T(i18n.MsgAccessibility), false).MinWidth(200).
 					OnClick(func() { w.launchSettings(firstrun.PanelAccessibility) })
@@ -359,7 +359,7 @@ func (w *FirstRun) doneStep(c *ui.Context) {
 	ui.Column(c).Grow(1).Gap(24).Justify(ui.Center).AlignItems(ui.Stretch).Children(func() {
 		frostui.Hero(c, icon, i18n.T(i18n.MsgFinished), i18n.T(done.Description))
 		ui.Row(c).Justify(ui.Center).Children(func() {
-			ui.PrimaryButton(c, i18n.T(i18n.MsgExit)).MinWidth(200).AutoFocus().OnClick(w.exit)
+			frostui.PrimaryButton(c, i18n.T(i18n.MsgExit)).MinWidth(200).AutoFocus().OnClick(w.exit)
 		})
 		if len(done.Entries) == 0 {
 			return

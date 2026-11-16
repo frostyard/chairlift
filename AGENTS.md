@@ -297,7 +297,9 @@ An agent must not break these:
   Frostyard or Frostyard light each frame, without the desktop's accent.
   Views take corners, text sizes and surfaces from the kit (its metrics,
   text styles, `frostui.TextSize`, `frostui.ColorsOf`), never a literal
-  radius or font size, and draw no shadow
+  radius or font size, and draw no shadow. A main action is
+  `frostui.PrimaryButton` or `frostui.LabeledButton` with `primary`, on the
+  brand gradient, never MyGo's flat `ui.PrimaryButton`
   (`internal/installcheck.TestViewsDrawInKitMetrics`). See
   [the Frostyard look](docs/design/frostui.md#the-frostyard-look).
 - **Views are tested headless.** `internal/views`, `internal/window` and

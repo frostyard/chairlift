@@ -14,13 +14,15 @@ import (
 // The views draw in the kit's metrics and text styles (frostui ADR-0011,
 // docs/design/frostui.md): a literal corner radius misses the brand's
 // nearly square corners, a literal font size misses the desktop's text
-// size (frostui.TextSize), and the brand separates with hairlines, never
-// shadows.
+// size (frostui.TextSize), the brand separates with hairlines, never
+// shadows, and the main action is on the brand gradient
+// (frostui.PrimaryButton, or frostui.LabeledButton with primary), not on
+// MyGo's flat accent (ui.PrimaryButton).
 
 // kitMetricProblems parses one Go file and reports, one line each, every
 // .Radius or .FontSize call and every FontSize field (a
-// frostui.KeyValuesStyle) whose value is a number literal, and every
-// .Shadow call.
+// frostui.KeyValuesStyle) whose value is a number literal, every .Shadow
+// call, and every ui.PrimaryButton call.
 func kitMetricProblems(name string, src []byte) ([]string, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, name, src, 0)
@@ -39,6 +41,10 @@ func kitMetricProblems(name string, src []byte) ([]string, error) {
 				return true
 			}
 			switch sel.Sel.Name {
+			case "PrimaryButton":
+				if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "ui" {
+					report(n.Pos(), "ui.PrimaryButton: the main action is on the brand gradient (frostui.PrimaryButton, or frostui.LabeledButton with primary)")
+				}
 			case "Shadow":
 				report(n.Pos(), "a shadow: the brand separates with a hairline (Border)")
 			case "Radius", "FontSize":
@@ -73,7 +79,8 @@ func isNumberLiteral(e ast.Expr) bool {
 }
 
 // TestViewsDrawInKitMetrics scans every non-test Go file under internal/
-// for a literal radius, a literal font size and a shadow.
+// for a literal radius, a literal font size, a shadow and MyGo's flat
+// primary button.
 func TestViewsDrawInKitMetrics(t *testing.T) {
 	root := RepoRoot()
 	scanned, ui := 0, 0
@@ -118,6 +125,8 @@ func TestKitMetricFixtures(t *testing.T) {
 		{"signed literal in parentheses", "\tui.Text(c, s).FontSize((-1))\n", 1},
 		{"style field", "\tfrostui.KeyValues(c, rows, frostui.KeyValuesStyle{KeyWidth: 72, FontSize: 12.5})\n", 1},
 		{"shadow", "\tui.Column(c).Shadow(0, 8, 28, 0, color)\n", 1},
+		{"MyGo's primary button", "\tui.PrimaryButton(c, \"Install\").Disabled(busy)\n", 1},
+		{"kit's primary buttons", "\tfrostui.PrimaryButton(c, \"Install\")\n\tfrostui.LabeledButton(c, \"edit-find\", \"Search\", true)\n", 0},
 		{"two in one chain", "\tui.Box(c).Radius(10).Child(ui.Text(c, s).FontSize(11))\n", 2},
 		{"kit metrics", "\tui.Box(c).Radius(frostui.RadiusChip).Radius(t.Radius)\n\tui.Text(c, s).FontSize(frostui.TextSize(c, 13))\n", 0},
 		{"derived from a constant", "\tfrostui.Icon(c, n).FontSize(heroLogo * 9 / 16)\n", 0},

@@ -74,10 +74,20 @@ choice into Frostyard or Frostyard light.
   tile is the selected fill inside an accent hairline.
   `TestFirstRunSchemeTilesDrawTheFrostyardThemes` reads both sketches'
   grounds.
+- **The main action.** A view's main action is on the brand gradient with
+  the kit's on-gradient text: `frostui.PrimaryButton` for a text label (a
+  bundle's Install, the first run's Start, Next and Exit), and
+  `frostui.LabeledButton` with `primary` for an icon and a label (Homebrew
+  Search, Update everything). The kit draws the action of a
+  non-destructive `frostui.Confirm` and of `frostui.CodeDialog` (the
+  Problems page's Report dialog) the same way since frostui v0.8.0; a
+  destructive confirmation keeps the danger fill.
+  `TestViewsDrawInKitMetrics` fails on a `ui.PrimaryButton` call under
+  `internal/`, MyGo's flat accent.
 
 **Known gaps, which belong to the module.** The views' plain MyGo buttons
-(`ui.Button`, `ui.PrimaryButton`) keep MyGo's faces, a surface and the flat
-accent, not the brand's ghost and gradient. The kit's branded buttons
-(`IconButton`, `LabeledButton`) carry an icon, and it exports no text-only
-one. Some of the kit's own sizes are literal too, as `KeyValues`' default
-and the `Figures` notes, and do not follow the desktop's text size.
+(`ui.Button`) keep MyGo's face, a surface, not the brand's ghost: the kit's
+ghosts (`IconButton`, `LabeledButton` without `primary`) carry an icon, and
+it exports no text-only one. Some of the kit's own sizes are literal too, as
+`KeyValues`' default and the `Figures` notes, and do not follow the
+desktop's text size.

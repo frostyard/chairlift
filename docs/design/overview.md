@@ -84,13 +84,12 @@ No package may load a UI library at init: MyGo loads GTK only in `App.Run`
    `org.frostyard.ChairLift.desktop` without renaming the binary.
    `Options.ID` is `app.AppID` (`org.frostyard.ChairLift`) or, with
    `--first-run`, `app.FirstRunAppID` (`org.frostyard.ChairLift.FirstRun`).
-   MyGo since v0.9.0 names the program after its executable (`chairlift`)
-   when `App.Run` starts (egoist/mygo#1640), after this call, so frostui
-   (since v0.5.2) names it again from `mygo.App.WhenReady`. That callback
-   runs before ChairLift's own `WhenReady`, which opens the window, because
-   `SetAppID` registers it first; GTK reads the name when it creates the
-   window. GDK's client leader window keeps `chairlift`, since GDK named it
-   when it opened the display. `make e2e` checks the windows' `WM_CLASS`.
+   It must run before `mygo.App.Run`: `App.Run` names the program after
+   its executable (`chairlift`) only while GLib has no name for it
+   (egoist/mygo#1761, MyGo v0.9.1 and later), so the name `SetAppID` gave
+   holds, and GTK reads it when it creates the window. GDK's client leader
+   window keeps `chairlift`, since GDK named it when it opened the display.
+   `make e2e` checks the windows' `WM_CLASS`.
 3. `mygo.App.SetName` and `mygo.App.RequestSingleInstanceLock` keep one
    process per ID: a second start asks the first to show its window
    (`OnSecondInstance` calls `Show` and `Focus`) and exits 0.
