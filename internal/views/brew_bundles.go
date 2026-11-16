@@ -282,7 +282,7 @@ func (b *Brew) drawBundle(c *ui.Context, item *brewBundle) {
 			case item.running || b.pending("bundle:"+item.Path):
 				ui.Button(c, "Installing…").Disabled(true)
 			default:
-				btn := ui.PrimaryButton(c, "Install").Label("Install the " + item.Name + " bundle").Disabled(!b.bundles.homebrew)
+				btn := frostui.PrimaryButton(c, "Install").Label("Install the " + item.Name + " bundle").Disabled(!b.bundles.homebrew)
 				if !b.bundles.homebrew {
 					btn.Tooltip("Homebrew is not installed")
 				}

@@ -3,8 +3,8 @@ module github.com/frostyard/chairlift
 go 1.27.4
 
 require (
-	github.com/egoist/mygo v0.9.0
-	github.com/frostyard/frostui v0.5.2
+	github.com/egoist/mygo v0.9.1
+	github.com/frostyard/frostui v0.8.1
 	github.com/frostyard/std v0.5.0
 	github.com/frostyard/updex/v2 v2.3.1
 	golang.org/x/text v0.44.0

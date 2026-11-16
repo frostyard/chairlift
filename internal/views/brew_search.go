@@ -150,12 +150,7 @@ func (b *Brew) DrawSearch(c *ui.Context) {
 				b.runSearch()
 			}
 			empty := strings.TrimSpace(s.query) == ""
-			search := ui.PrimaryButton(c, "").Label("Search").Disabled(empty || s.loading != 0).Children(func() {
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					frostui.Icon(c, "edit-find")
-					ui.Text(c, "Search").SingleLine()
-				})
-			})
+			search := frostui.LabeledButton(c, "edit-find", "Search", true).Disabled(empty || s.loading != 0)
 			if search.Clicked() {
 				b.runSearch()
 			}
