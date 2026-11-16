@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -22,7 +23,8 @@ import (
 // kitMetricProblems parses one Go file and reports, one line each, every
 // .Radius or .FontSize call and every FontSize field (a
 // frostui.KeyValuesStyle) whose value is a number literal, every .Shadow
-// call, and every ui.PrimaryButton call.
+// call, and every call of MyGo's ui.PrimaryButton, under any import name
+// of github.com/egoist/mygo/ui.
 func kitMetricProblems(name string, src []byte) ([]string, error) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, name, src, 0)
@@ -33,17 +35,23 @@ func kitMetricProblems(name string, src []byte) ([]string, error) {
 	report := func(at token.Pos, format string, args ...any) {
 		problems = append(problems, fmt.Sprintf("%s: %s", fset.Position(at), fmt.Sprintf(format, args...)))
 	}
+	uiNames, uiDot := myGoUINames(file)
+	const flatPrimary = "ui.PrimaryButton: the main action is on the brand gradient (frostui.PrimaryButton, or frostui.LabeledButton with primary)"
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch n := n.(type) {
 		case *ast.CallExpr:
+			if id, ok := n.Fun.(*ast.Ident); ok && uiDot && id.Name == "PrimaryButton" {
+				report(n.Pos(), flatPrimary)
+				return true
+			}
 			sel, ok := n.Fun.(*ast.SelectorExpr)
 			if !ok {
 				return true
 			}
 			switch sel.Sel.Name {
 			case "PrimaryButton":
-				if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "ui" {
-					report(n.Pos(), "ui.PrimaryButton: the main action is on the brand gradient (frostui.PrimaryButton, or frostui.LabeledButton with primary)")
+				if pkg, ok := sel.X.(*ast.Ident); ok && uiNames[pkg.Name] {
+					report(n.Pos(), flatPrimary)
 				}
 			case "Shadow":
 				report(n.Pos(), "a shadow: the brand separates with a hairline (Border)")
@@ -62,6 +70,27 @@ func kitMetricProblems(name string, src []byte) ([]string, error) {
 		return true
 	})
 	return problems, nil
+}
+
+// myGoUINames returns the names under which file imports MyGo's ui
+// package (github.com/egoist/mygo/ui): "ui", or the import's alias. dot
+// is true for a dot import, whose names need no qualifier.
+func myGoUINames(file *ast.File) (names map[string]bool, dot bool) {
+	names = map[string]bool{}
+	for _, imp := range file.Imports {
+		if path, err := strconv.Unquote(imp.Path.Value); err != nil || path != "github.com/egoist/mygo/ui" {
+			continue
+		}
+		switch {
+		case imp.Name == nil:
+			names["ui"] = true
+		case imp.Name.Name == ".":
+			dot = true
+		case imp.Name.Name != "_":
+			names[imp.Name.Name] = true
+		}
+	}
+	return names, dot
 }
 
 // isNumberLiteral reports whether e is a number literal, signed or in
@@ -114,27 +143,36 @@ func TestViewsDrawInKitMetrics(t *testing.T) {
 // TestKitMetricFixtures proves kitMetricProblems can fail: each fixture
 // that breaks the rule is reported, and the kit's metrics pass.
 func TestKitMetricFixtures(t *testing.T) {
-	const header = "package p\n\nfunc f() {\n"
+	const myGoUI = "import \"github.com/egoist/mygo/ui\"\n\n"
 	fixtures := []struct {
 		name, body string
 		problems   int
+		// imports replaces the fixture's import of MyGo's ui package.
+		imports string
 	}{
-		{"literal radius", "\tui.Box(c).Radius(16)\n", 1},
-		{"literal float radius", "\tui.Box(c).Radius(2.5)\n", 1},
-		{"literal font size", "\tui.Text(c, s).FontSize(13)\n", 1},
-		{"signed literal in parentheses", "\tui.Text(c, s).FontSize((-1))\n", 1},
-		{"style field", "\tfrostui.KeyValues(c, rows, frostui.KeyValuesStyle{KeyWidth: 72, FontSize: 12.5})\n", 1},
-		{"shadow", "\tui.Column(c).Shadow(0, 8, 28, 0, color)\n", 1},
-		{"MyGo's primary button", "\tui.PrimaryButton(c, \"Install\").Disabled(busy)\n", 1},
-		{"kit's primary buttons", "\tfrostui.PrimaryButton(c, \"Install\")\n\tfrostui.LabeledButton(c, \"edit-find\", \"Search\", true)\n", 0},
-		{"two in one chain", "\tui.Box(c).Radius(10).Child(ui.Text(c, s).FontSize(11))\n", 2},
-		{"kit metrics", "\tui.Box(c).Radius(frostui.RadiusChip).Radius(t.Radius)\n\tui.Text(c, s).FontSize(frostui.TextSize(c, 13))\n", 0},
-		{"derived from a constant", "\tfrostui.Icon(c, n).FontSize(heroLogo * 9 / 16)\n", 0},
-		{"scaled style field", "\t_ = frostui.KeyValuesStyle{KeyWidth: 72, FontSize: frostui.TextSize(c, 12.5)}\n", 0},
+		{"literal radius", "\tui.Box(c).Radius(16)\n", 1, ""},
+		{"literal float radius", "\tui.Box(c).Radius(2.5)\n", 1, ""},
+		{"literal font size", "\tui.Text(c, s).FontSize(13)\n", 1, ""},
+		{"signed literal in parentheses", "\tui.Text(c, s).FontSize((-1))\n", 1, ""},
+		{"style field", "\tfrostui.KeyValues(c, rows, frostui.KeyValuesStyle{KeyWidth: 72, FontSize: 12.5})\n", 1, ""},
+		{"shadow", "\tui.Column(c).Shadow(0, 8, 28, 0, color)\n", 1, ""},
+		{"MyGo's primary button", "\tui.PrimaryButton(c, \"Install\").Disabled(busy)\n", 1, ""},
+		{"kit's primary buttons", "\tfrostui.PrimaryButton(c, \"Install\")\n\tfrostui.LabeledButton(c, \"edit-find\", \"Search\", true)\n", 0, ""},
+		{"MyGo's primary button under an alias", "\twidgets.PrimaryButton(c, \"Install\")\n", 1, "import widgets \"github.com/egoist/mygo/ui\"\n\n"},
+		{"MyGo's primary button by a dot import", "\tPrimaryButton(c, \"Install\")\n", 1, "import . \"github.com/egoist/mygo/ui\"\n\n"},
+		{"another package named ui", "\tui.PrimaryButton(c, \"Install\")\n", 0, "import ui \"example.com/other/ui\"\n\n"},
+		{"two in one chain", "\tui.Box(c).Radius(10).Child(ui.Text(c, s).FontSize(11))\n", 2, ""},
+		{"kit metrics", "\tui.Box(c).Radius(frostui.RadiusChip).Radius(t.Radius)\n\tui.Text(c, s).FontSize(frostui.TextSize(c, 13))\n", 0, ""},
+		{"derived from a constant", "\tfrostui.Icon(c, n).FontSize(heroLogo * 9 / 16)\n", 0, ""},
+		{"scaled style field", "\t_ = frostui.KeyValuesStyle{KeyWidth: 72, FontSize: frostui.TextSize(c, 12.5)}\n", 0, ""},
 	}
 	for _, fx := range fixtures {
 		t.Run(fx.name, func(t *testing.T) {
-			problems, err := kitMetricProblems("fixture.go", []byte(header+fx.body+"}\n"))
+			imports := fx.imports
+			if imports == "" {
+				imports = myGoUI
+			}
+			problems, err := kitMetricProblems("fixture.go", []byte("package p\n\n"+imports+"func f() {\n"+fx.body+"}\n"))
 			if err != nil {
 				t.Fatal(err)
 			}
