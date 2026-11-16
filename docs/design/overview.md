@@ -2457,7 +2457,7 @@ the configuration page, not always the page of the window that shows it (see
 | `github.com/egoist/mygo`         | The window: MyGo's native UI (`mygo/ui`) on GTK 3 and OpenGL, the headless `ui.Tester`; kept behind frostui and the views ([ADR-0017](../adr/0017-mygo-command-center-window.md)) |
 | `github.com/frostyard/frostui`   | The UI kit on MyGo: shell, palette, console, job queue, dialogs, cards, and the Frostyard themes the window draws in; `frostuitest` for the tests' UI thread ([frostui.md](./frostui.md)) |
 | `github.com/ebitengine/purego`   | Calling C without CGO: MyGo's library loading, `frostui.SetAppID`'s `g_set_prgname`, and `frostui.LaunchDesktopApp`'s GIO launch |
-| `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.2.0 in go.mod) |
+| `github.com/frostyard/updex/v2`  | Updex Go library for feature reads and helper binary (currently pinned to v2.3.1 in go.mod) |
 | `gopkg.in/yaml.v3`               | YAML config parsing                                                                         |
 | `golang.org/x/text`              | Title-casing OS release info keys                                                           |
 | `github.com/frostyard/std`       | `problems`: ChairLift's own problem records and the journal reader of the Problems page    |
