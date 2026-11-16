@@ -6,7 +6,7 @@ require (
 	github.com/egoist/mygo v0.9.0
 	github.com/frostyard/frostui v0.5.2
 	github.com/frostyard/std v0.5.0
-	github.com/frostyard/updex/v2 v2.2.0
+	github.com/frostyard/updex/v2 v2.3.1
 	golang.org/x/text v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
 )

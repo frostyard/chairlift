@@ -1280,7 +1280,7 @@ Type aliases to `github.com/frostyard/updex/v2/updex`:
 
 | Function | Implementation | Mode | Timeout | Notes |
 |----------|---------------|------|---------|-------|
-| `IsInstalled()` | Go library: `client.Features()` (through the unexported `featuresLister` test seam) | Direct | 3s | Checks if updex features are configured: requires `err == nil` **and** `len(features) > 0`, because updex v2.2.0's `Features` returns an empty list with a nil error when no feature definitions exist; an empty list makes the Features page show "Feature Manager Not Available" and the features update source unavailable |
+| `IsInstalled()` | Go library: `client.Features()` (through the unexported `featuresLister` test seam) | Direct | 3s | Checks if updex features are configured: requires `err == nil` **and** `len(features) > 0`, because updex v2's `Features` (checked at v2.3.1) returns an empty list with a nil error when no feature definitions exist; an empty list makes the Features page show "Feature Manager Not Available" and the features update source unavailable |
 | `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
 | `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
 | `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Preserves successful components when v2 reports structured partial failures, logs failed-component metadata, and returns `[]FeatureCheck`; true request failures still return an error |
@@ -1299,6 +1299,22 @@ therefore does not mean every feature updated. updex v2.1.3 and later can also r
 `sysext.ErrActivationIncomplete`: the extensions merged, but activation did
 not finish, and a reboot finishes it. On a per-transfer failure updex returns
 the results and an error together.
+
+Since updex v2.3.0, every `UpdateFeatures` run that is not a dry run writes
+updex's last-run record (`/var/lib/updex/last-run.json`, updex ADR-0020), so
+the helper's `update` writes it as root: an update from ChairLift shows as
+the last update in `updex daemon status`. A failed write is only a warning; the
+results and the error stay the same. updex also marks its errors with an error
+class for that record; the mark keeps the error text byte for byte and
+`errors.Is` sees through it, so `ExitCode` and the toasts do not change.
+Since updex v2.3.1, the vacuum after an install also removes old staged images
+of other suites (for a transfer whose target pattern holds `%w`), and a
+`ProtectVersion=` with an empty specifier stops the vacuum of that transfer
+with a warning. ChairLift passes no `Now` option (`EnableOptions`,
+`DisableOptions`) and no `SuiteSwitchOnly`, so disable removes no file and the
+suite-switch run of updex's boot unit is not part of ChairLift. A dry run's
+`RemovedOtherSuiteImages` is a new `UpdateResult` field; the helper never runs
+under ChairLift's dry run, so ChairLift does not read it.
 
 The helper prints the results on stdout in every one of those cases
 (`updexhelper.WriteUpdateResult`) and exits 0, 1, or 3 (see the exit-code
