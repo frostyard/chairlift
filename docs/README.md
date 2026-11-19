@@ -13,9 +13,10 @@ the question they answer:
 | [specs/](specs/) | **What exactly** is the contract? | Precise, testable interface definitions, changed only alongside implementing code |
 | [plans/](plans/) | **When/in what order** do we build? | Phased plans with "Done when" outcomes |
 
-The user-facing docs-site home is [index.md](index.md) (rendered by
-`mkdocs.yml`); this file is the contributor-facing index of everything under
-`docs/`.
+The user guide is on frostyard.org:
+[frostyard.org/docs/tools/chairlift](https://frostyard.org/docs/tools/chairlift/)
+(core ADR-0084; its source is in frostyard/frostyard-org). This file is the
+contributor-facing index of everything under `docs/`.
 
 ## Index
 
@@ -147,7 +148,7 @@ The finished plans of past automated runs were deleted with
 ### Process and policy docs (uncategorized, indexed in place)
 
 - [index.md](index.md) — user-facing overview: pages, shortcuts, optional
-  dependencies, building and installing (docs-site home)
+  dependencies, building and installing
 - [reference.md](reference.md) — user-facing configuration/behavior reference
 - [quality.md](quality.md) — quality dashboard: CI, coverage, release signals
 - [metrics.md](metrics.md) and [metrics/README.md](metrics/README.md) —

@@ -7,18 +7,19 @@ on:
     tags:
       - "*"
 
-permissions:
-  contents: write
-  # id-token and attestations let actions/attest-build-provenance sign the
-  # release assets with GitHub's Sigstore instance. frostyard/apt-publisher
-  # verifies every .deb with `gh attestation verify --source-ref
-  # refs/tags/<tag>` before publishing it.
-  id-token: write
-  attestations: write
+permissions: {}
 
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # id-token and attestations let actions/attest-build-provenance sign the
+      # release assets with GitHub's Sigstore instance. frostyard/apt-publisher
+      # verifies every .deb with `gh attestation verify --source-ref
+      # refs/tags/<tag>` before publishing it.
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,7 +29,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: stable
+          go-version-file: go.mod
       # More assembly might be required: Docker logins, GPG, etc.
       # It all depends on your needs.
       - name: Run GoReleaser

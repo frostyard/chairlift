@@ -9,7 +9,7 @@ ChairLift is a desktop app for people who run [Snow Linux](https://github.com/fr
 
 **Status:** in production. Snow Linux images install it from Frostyard's APT repository.
 
-**Documentation:** [docs/index.md](docs/index.md)
+**Documentation:** [frostyard.org/docs/tools/chairlift](https://frostyard.org/docs/tools/chairlift/)
 
 ![The Overview page in the dark theme: the six pages in the rail, the system image, the updates waiting, live processor and memory use, the disk and recent activity](data/screenshots/overview.png)
 

@@ -4,7 +4,9 @@ ChairLift is the command center of [Snow Linux](https://github.com/frostyard/sno
 
 The UI is YAML-configuration-driven, making it portable to other Linux distributions by toggling feature groups on or off ([CONFIG.md](https://github.com/frostyard/chairlift/blob/main/CONFIG.md), [reference](reference.md)).
 
-This page is the user-facing docs-site home. Contributor- and agent-facing
+The user guide is on frostyard.org:
+[frostyard.org/docs/tools/chairlift](https://frostyard.org/docs/tools/chairlift/).
+This page is the user-facing overview in the repository. Contributor- and agent-facing
 documentation — architecture, ADRs, specs, and plans — is indexed in
 [docs/README.md](README.md), with
 [docs/design/overview.md](design/overview.md) as the architecture entry

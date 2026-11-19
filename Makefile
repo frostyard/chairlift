@@ -1,4 +1,4 @@
-.PHONY: all build build-app build-automation build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint lint-version-check check verify verify-static verify-template corrections-base ci build-linux-amd64 build-linux-arm64 install uninstall bump
+.PHONY: all build build-app build-automation build-helper build-first-run run clean deps tidy test e2e dev install-deps fmt lint lint-version-check check verify verify-static verify-template corrections-base ci build-linux-amd64 build-linux-arm64 install uninstall bump-guard bump
 
 # Binary names
 BINARY_NAME=chairlift
@@ -273,7 +273,13 @@ corrections-base:
 		echo "==> corrections: BASE $(BASE) predates the corrections gate; append-only comparison skipped"; \
 	fi
 
+bump-guard: ## refuse to tag unless HEAD is main at origin/main (core ADR-0012)
+	@test "$$(git branch --show-current)" = main || { echo "make bump runs only on main (core ADR-0012)."; exit 1; }
+	@git fetch --quiet --tags origin main
+	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || { echo "HEAD is not origin/main; pull or push first (core ADR-0012)."; exit 1; }
+
 bump: ## generate a new version with svu
+	@$(MAKE) bump-guard
 	@$(MAKE) build
 	@$(MAKE) test
 	@$(MAKE) fmt

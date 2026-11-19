@@ -127,9 +127,11 @@ control is hand-written Go, YAML, and data assets.
 
 - **Tags.** Release tags are `vMAJOR.MINOR.PATCH` (`git tag -l 'v*'` lists
   them). `.svu.yml` sets `tag.prefix: "v"`, `v0: true` and `always: true`.
-- **Version rule.** `make bump` builds, tests, formats and lints, refuses a
-  dirty tree, then tags `$(svu next)` with an annotated tag and pushes it to
-  `origin`. [svu](https://github.com/caarlos0/svu) derives the next version
+- **Version rule.** `make bump` first runs `make bump-guard`, which refuses
+  any branch but `main` and a `HEAD` that is not `origin/main` after a fetch
+  (core ADR-0012; `internal/installcheck/makefile_bump_test.go`). Then it
+  builds, tests, formats and lints, refuses a dirty tree, and tags
+  `$(svu next)` with an annotated tag and pushes it to `origin`. [svu](https://github.com/caarlos0/svu) derives the next version
   from the commit messages since the last tag (Conventional Commits). `v0: true`
   keeps the major version at 0.
 - **Who tags.** Brian. Agents never run `make bump`, create or push a tag, or

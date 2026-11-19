@@ -65,7 +65,7 @@ type releaseWorkflow struct {
 		Branches       []string `yaml:"branches"`
 		BranchesIgnore []string `yaml:"branches-ignore"`
 	} `yaml:"on"`
-	Permissions map[string]string      `yaml:"permissions"`
+	Permissions *map[string]string     `yaml:"permissions"`
 	Jobs        map[string]workflowJob `yaml:"jobs"`
 }
 
@@ -154,9 +154,10 @@ func TestReleaseWorkflowRequestsAptPublicationForTags(t *testing.T) {
 }
 
 // TestReleaseWorkflowAttestsBuildProvenance pins the provenance apt-publisher
-// verifies: the workflow may mint OIDC tokens and write attestations (and no
-// more than it needs), and the attestation covers checksums.txt, the archives
-// and every package format .goreleaser.yaml builds, including every .deb.
+// verifies: the workflow defaults to no permissions, and only the goreleaser
+// job may write release contents, mint OIDC tokens, and write attestations.
+// The attestation covers checksums.txt, the archives and every package format
+// .goreleaser.yaml builds, including every .deb.
 func TestReleaseWorkflowAttestsBuildProvenance(t *testing.T) {
 	workflow, job := loadReleaseWorkflow(t)
 
@@ -165,11 +166,11 @@ func TestReleaseWorkflowAttestsBuildProvenance(t *testing.T) {
 		"id-token":     "write",
 		"attestations": "write",
 	}
-	if !reflect.DeepEqual(workflow.Permissions, wantPermissions) {
-		t.Errorf("release workflow permissions = %v, want exactly %v", workflow.Permissions, wantPermissions)
+	if workflow.Permissions == nil || len(*workflow.Permissions) != 0 {
+		t.Errorf("release workflow permissions = %v, want explicit empty permissions", workflow.Permissions)
 	}
-	if job.Permissions != nil {
-		t.Errorf("goreleaser job overrides permissions with %v; keep the workflow-level set", job.Permissions)
+	if !reflect.DeepEqual(job.Permissions, wantPermissions) {
+		t.Errorf("goreleaser job permissions = %v, want exactly %v", job.Permissions, wantPermissions)
 	}
 
 	var attest *workflowStep
@@ -259,6 +260,10 @@ func TestSnapshotWorkflowPublishesOnlyTheDevPrerelease(t *testing.T) {
 	job, ok := workflow.Jobs["snapshot"]
 	if !ok {
 		t.Fatal("snapshot workflow is missing the snapshot job")
+	}
+	wantPermissions := map[string]string{"contents": "write"}
+	if !reflect.DeepEqual(job.Permissions, wantPermissions) {
+		t.Errorf("snapshot job permissions = %v, want exactly %v", job.Permissions, wantPermissions)
 	}
 
 	wantActions := []string{
