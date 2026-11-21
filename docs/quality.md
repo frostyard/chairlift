@@ -92,10 +92,18 @@ installed at explicit versions. A nightly failure is an investigation signal;
 it does not replace pull-request checks or authorize an automatic merge.
 
 Every external action used by any workflow is pinned to a full 40-character
-commit SHA; trailing comments retain the corresponding version or source ref
-for maintainers. `TestWorkflowActionsUseImmutableCommitSHAs` scans every `.yml` and
-`.yaml` file in `.github/workflows/`, so adding a floating tag or branch fails
-the ordinary unit-test gate.
+commit SHA with a trailing `# vX.Y.Z` comment (or `# vX.Y` when upstream's
+release tags have 2 parts; a frostyard/core reusable workflow carries a comment
+that names its core commit). `TestWorkflowActionsUseImmutableCommitSHAs` scans
+every `.yml` and `.yaml` file in `.github/workflows/` and `.github/actions/`,
+so a floating tag or branch, a missing or major-only comment, or a second SHA
+for the same action fails the ordinary unit-test gate (core ADR-0021,
+ADR-0090). It also fails when it finds no pin at all, and
+`TestPinCheckSelfTest` runs each rule on synthetic fixtures. Other tests check
+an action by its name and the 40-hex form, never by a SHA written in the test,
+so a Dependabot bump that keeps these rules needs no test edit (core
+ADR-0088). The owner's review of the bump pull request (`level:L2`,
+`risk:high`) checks the new commit itself.
 
 ## Reviewing agent changes
 
