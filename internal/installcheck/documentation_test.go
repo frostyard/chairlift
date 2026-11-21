@@ -151,7 +151,6 @@ func TestAIFixRequestedWorkflowIsLabelScoped(t *testing.T) {
 		"issues: write",
 		"github.event.issue.state == 'open'",
 		"github.event.label.name == 'ai-fix-requested'",
-		"actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3",
 		"<!-- ai-fix-requested:${issueNumber} -->",
 		"comments.some((comment) => comment.body?.includes(marker))",
 		"@copilot Please implement",
@@ -173,6 +172,20 @@ func TestAIFixRequestedWorkflowIsLabelScoped(t *testing.T) {
 	} {
 		if strings.Contains(workflow, unsafe) {
 			t.Errorf("%s contains unsafe or unnecessary workflow surface %q", path, unsafe)
+		}
+	}
+
+	// The action by name at a full commit SHA, never a SHA written here (core
+	// ADR-0088); TestWorkflowActionsUseImmutableCommitSHAs checks its comment
+	// and that it is the action's only SHA across the workflows.
+	const githubScript = "actions/github-script"
+	scripts := usesOf(&document, githubScript)
+	if len(scripts) != 1 {
+		t.Errorf("%s has %d %s steps, want 1", path, len(scripts), githubScript)
+	}
+	for _, uses := range scripts {
+		if m := actionPin.FindStringSubmatch(uses.Value); m == nil || m[1] != githubScript {
+			t.Errorf("%s:%d: uses %q, want %s at a full 40-hex commit SHA", path, uses.Line, uses.Value, githubScript)
 		}
 	}
 

@@ -422,10 +422,15 @@ An agent must not break these:
   group, emit the `CONFIGURATION ERROR` diagnostic, and remain visible in the
   UI as a persistent toast until the file is fixed and ChairLift is restarted.
 - **CI actions are immutable.** Every external `uses:` reference under
-  `.github/workflows/` must use a full 40-character commit SHA. Keep the
-  human-readable version or source ref in a trailing comment and update both
-  intentionally. Local actions referenced with `./` are exempt. The
-  `internal/installcheck` workflow scan enforces this across every workflow.
+  `.github/workflows/` (and `.github/actions/`, if added) must use a full
+  40-character commit SHA with a trailing `# vX.Y.Z` comment, or `# vX.Y` when
+  upstream's release tags have 2 parts; a major-only `# v7` is not enough. A
+  frostyard/core reusable workflow needs only a comment that names the core
+  commit on `main`. Each action keeps 1 SHA across every file, so update every
+  copy together. Local actions referenced with `./` are exempt.
+  `TestWorkflowActionsUseImmutableCommitSHAs` enforces all of this
+  repository-wide (core ADR-0021, ADR-0090). Other tests check an action by its
+  name and the 40-hex form, never by a SHA written in the test (core ADR-0088).
 - **Debian packages publish only through frostyard/apt-publisher.**
   `.github/workflows/release.yml` runs on tag pushes. GoReleaser creates the
   GitHub release, then `actions/attest-build-provenance` attests

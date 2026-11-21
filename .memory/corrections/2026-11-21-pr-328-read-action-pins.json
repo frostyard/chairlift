@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-21",
+  "scope": "workflow pin tests",
+  "correction": "Belief: TestAIFixRequestedWorkflowIsLabelScoped guards the github-script pin best with its literal SHA, and the ADR-0021 scan needs only the 40-hex form. Reality: the literal fails every Dependabot bump, and nothing checked the version comment or 1 SHA for each action; per core ADR-0088 and ADR-0090, tests check the action name and the 40-hex form, and TestWorkflowActionsUseImmutableCommitSHAs checks the # vX.Y.Z or # vX.Y comment and 1 SHA for each action repository-wide",
+  "evidence": "frostyard/core#281 (ADR-0088) and #283 (ADR-0090), file list for chairlift at 4cb584a",
+  "promoted_to": "AGENTS.md"
+}
