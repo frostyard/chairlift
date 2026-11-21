@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-21",
+  "scope": "ci workflows",
+  "correction": "Belief: the maintainer-triggered Claude code review (.github/workflows/claude-code-review.yml, anthropics/claude-code-action, ANTHROPIC_API_KEY) is a quality signal to keep or restore. Reality: Brian removed it on 2026-11-21 across the frostyard corpus; do not add it, or another workflow that needs an Anthropic key, back without a new decision from him",
+  "evidence": "Brian, chat 2026-11-21: \"drop claude-code-action (and that should be across the corpus too)\"; frostyard/chairlift#329",
+  "promoted_to": "internal/installcheck/removed_ai_review_test.go"
+}
