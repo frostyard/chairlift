@@ -275,8 +275,8 @@ corrections-base:
 
 bump-guard: ## refuse to tag unless HEAD is main at origin/main (core ADR-0012)
 	@test "$$(git branch --show-current)" = main || { echo "make bump runs only on main (core ADR-0012)."; exit 1; }
-	@git fetch --quiet --tags origin main
-	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse origin/main)" || { echo "HEAD is not origin/main; pull or push first (core ADR-0012)."; exit 1; }
+	@git fetch --quiet --tags origin main || { echo "git fetch origin main failed; cannot compare HEAD with origin/main (core ADR-0012)."; exit 1; }
+	@test "$$(git rev-parse HEAD)" = "$$(git rev-parse refs/remotes/origin/main)" || { echo "HEAD is not origin/main; pull or push first (core ADR-0012)."; exit 1; }
 
 bump: ## generate a new version with svu
 	@$(MAKE) bump-guard

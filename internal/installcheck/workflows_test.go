@@ -384,6 +384,9 @@ func workflowHasReadOnlyDefault(node *yaml.Node) bool {
 }
 
 func TestWorkflowReadOnlyDefaultClassification(t *testing.T) {
+	// Classification is deliberately stricter than core ADR-0021 needs: none
+	// values and the read-all shorthand are refused, so only an empty or
+	// all-read mapping passes.
 	for _, tc := range []struct {
 		name string
 		yaml string
@@ -392,6 +395,8 @@ func TestWorkflowReadOnlyDefaultClassification(t *testing.T) {
 		{name: "absent", yaml: "name: test", want: false},
 		{name: "empty", yaml: "permissions: {}", want: true},
 		{name: "read", yaml: "permissions: {contents: read}", want: true},
+		{name: "none", yaml: "permissions: {contents: none}", want: false},
+		{name: "read and none", yaml: "permissions: {contents: read, issues: none}", want: false},
 		{name: "mixed", yaml: "permissions: {contents: read, issues: write}", want: false},
 		{name: "write", yaml: "permissions: {contents: write}", want: false},
 		{name: "read all", yaml: "permissions: read-all", want: false},
@@ -488,6 +493,9 @@ func TestWorkflowGoVersionClassification(t *testing.T) {
 		want bool
 	}{
 		{name: "go mod", yaml: "uses: actions/setup-go@sha\nwith: {go-version-file: go.mod}", want: true},
+		{name: "stable in job step", yaml: "jobs: {a: {steps: [{uses: actions/setup-go@sha, with: {go-version: stable}}]}}", want: false},
+		{name: "other file in job step", yaml: "jobs: {a: {steps: [{uses: actions/setup-go@sha, with: {go-version-file: other.mod}}]}}", want: false},
+		{name: "go mod in job step", yaml: "jobs: {a: {steps: [{uses: actions/setup-go@sha, with: {go-version-file: go.mod}}]}}", want: true},
 		{name: "stable", yaml: "uses: actions/setup-go@sha\nwith: {go-version: stable}", want: false},
 		{name: "explicit version", yaml: "uses: actions/setup-go@sha\nwith: {go-version: '1.27.4'}", want: false},
 		{name: "missing version", yaml: "uses: actions/setup-go@sha", want: false},
