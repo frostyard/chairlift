@@ -39,6 +39,13 @@ accent. ChairLift sets no theme of its own. The first run's Style step
 changes MyGo's theme source (`forceAppearance`), and `Adapt` turns that
 choice into Frostyard or Frostyard light.
 
+Since frostui v0.10.0, with the desktop's high contrast on, `Adapt` also
+sets the kit's own high-contrast values in both themes, so every text pair
+holds 7:1 (frostui's ADR-0013); without high contrast nothing changes.
+ChairLift has no high-contrast code: its views paint no literal color and
+take their colors from the theme and `frostui.ColorsOf`, so they draw in
+those values.
+
 - **Corners, text and shadows.** Views take corners from the kit
   (`frostui.RadiusCard`, 0; `frostui.RadiusChip`, 2; the theme's `Radius`,
   4, for tiles) and text from its styles (`Title`, `Heading`, `Strong`,
@@ -70,8 +77,10 @@ choice into Frostyard or Frostyard light.
 - **The first run.** Its card is `frostui.Card`: the panel face over a
   hairline, square, with no shadow. The Style step's tiles sketch a window
   in `frostui.FrostyardTheme(dark)` with the desktop's preferences minus
-  its accent (`schemePreview`), as `Adapt` will draw the window; the chosen
-  tile is the selected fill inside an accent hairline.
+  its accent (`schemePreview`), as `Adapt` will draw the window without
+  high contrast; the chosen tile is the selected fill inside an accent
+  hairline. Under high contrast the sketches keep MyGo's mix, because the
+  kit does not export its high-contrast values.
   `TestFirstRunSchemeTilesDrawTheFrostyardThemes` reads both sketches'
   grounds.
 - **The main action.** A view's main action is on the brand gradient with
