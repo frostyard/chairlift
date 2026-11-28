@@ -1280,7 +1280,7 @@ Type aliases to `github.com/frostyard/updex/v2/updex`:
 
 | Function | Implementation | Mode | Timeout | Notes |
 |----------|---------------|------|---------|-------|
-| `IsInstalled()` | Go library: `client.Features()` (through the unexported `featuresLister` test seam) | Direct | 3s | Checks if updex features are configured: requires `err == nil` **and** `len(features) > 0`, because updex v2's `Features` (checked at v2.3.1) returns an empty list with a nil error when no feature definitions exist; an empty list makes the Features page show "Feature Manager Not Available" and the features update source unavailable |
+| `IsInstalled()` | Go library: `client.Features()` (through the unexported `featuresLister` test seam) | Direct | 3s | Checks if updex features are configured: requires `err == nil` **and** `len(features) > 0`, because updex v2's `Features` (checked at v2.4.0) returns an empty list with a nil error when no feature definitions exist; an empty list makes the Features page show "Feature Manager Not Available" and the features update source unavailable |
 | `IsInstalledCached()` | Cached `IsInstalled()` | Direct | — | `sync.Once`, runs check at most once |
 | `ListFeatures()` | Go library: `client.Features()` | Direct | 5min | Returns `[]Feature` |
 | `CheckFeatures()` | Go library: `client.CheckFeatures()` | Direct | 5min | Preserves successful components when v2 reports structured partial failures, logs failed-component metadata, and returns `[]FeatureCheck`; true request failures still return an error |
